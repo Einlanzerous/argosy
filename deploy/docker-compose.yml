@@ -34,9 +34,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - path: .env        # local secrets (TMDB_API_*), gitignored
+        required: false
     environment:
       ARGOSY_ADDR: ":8096"
       ARGOSY_MEDIA_DIR: "/media"
+      ARGOSY_ARTWORK_DIR: "/artwork"
       # DSN is assembled from these parts at runtime (no connection-string literal).
       ARGOSY_DB_HOST: "db"
       ARGOSY_DB_PORT: "5432"
@@ -55,6 +59,7 @@ services:
       - gocache:/root/.cache/go-build                        # persist Go build cache
       - gomod:/go/pkg/mod                                    # persist module cache
       - ${ARGOSY_MEDIA_DIR_HOST:-./sample-media}:/media:ro   # your media library
+      - artwork:/artwork                                     # cached posters/artwork
 
   # Optional Vite dev server with HMR. Enable with: make compose-web
   web:
@@ -78,3 +83,4 @@ volumes:
   gocache:
   gomod:
   webnode:
+  artwork:
