@@ -1,0 +1,27 @@
+# Go
+/bin/
+*.test
+*.out
+
+# Node / web
+node_modules/
+.vite/
+*.local
+
+# Built SPA — embedded into the Go binary at build time; keep the placeholder
+/internal/webui/dist/*
+!/internal/webui/dist/.gitkeep
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local agent workspace
+.claude/
