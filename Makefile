@@ -9,7 +9,7 @@ LDFLAGS := -X github.com/Einlanzerous/argosy/internal/version.Version=$(VERSION)
 COMPOSE := docker compose -f deploy/docker-compose.yml
 GO_PKGS := ./cmd/... ./internal/...   # scope go tooling; keep it out of web/node_modules
 
-.PHONY: all build web-build go-build ensure-embed server-dev web-dev lint fmt test tidy clean help \
+.PHONY: all build web-build go-build ensure-embed server-dev web-dev lint fmt test tidy generate clean help \
 	compose-up compose-web compose-down compose-logs compose-reset docker-build
 
 all: build
@@ -18,6 +18,7 @@ build: web-build go-build ## Build the single artifact: web UI embedded into the
 
 web-build: ## Build the Vue SPA into the Go embed dir (internal/webui/dist)
 	cd $(WEB) && $(NPM) install && $(NPM) run build
+	@touch $(EMBED_DIR)/.gitkeep   # Vite's emptyOutDir wipes it; keep it tracked
 
 ensure-embed: ## Guarantee the embed dir is non-empty so go:embed compiles
 	@mkdir -p $(EMBED_DIR)
@@ -64,6 +65,9 @@ test: ensure-embed ## Run Go tests
 
 tidy: ## Tidy go.mod
 	$(GO) mod tidy
+
+generate: ## Regenerate code from the OpenAPI spec (implemented in ARGY-13)
+	@echo "no codegen yet — implemented in ARGY-13 (OpenAPI spec + codegen)"
 
 clean: ## Remove build artifacts (restores the embed placeholder)
 	rm -rf bin $(EMBED_DIR)
