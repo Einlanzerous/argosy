@@ -37,8 +37,13 @@ services:
     environment:
       ARGOSY_ADDR: ":8096"
       ARGOSY_MEDIA_DIR: "/media"
-      # ARGOSY_DATABASE_URL is wired in ARGY-11 (DB driver + migrations), e.g.:
-      #   postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      # DSN is assembled from these parts at runtime (no connection-string literal).
+      ARGOSY_DB_HOST: "db"
+      ARGOSY_DB_PORT: "5432"
+      ARGOSY_DB_USER: "${POSTGRES_USER:-argosy}"
+      ARGOSY_DB_PASSWORD: "${POSTGRES_PASSWORD:-changeme}"
+      ARGOSY_DB_NAME: "${POSTGRES_DB:-argosy}"
+      ARGOSY_DB_SSLMODE: "disable"
     ports:
       - "${ARGOSY_HOST_PORT:-8096}:8096"
     working_dir: /app

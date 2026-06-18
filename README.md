@@ -94,10 +94,18 @@ make docker-build    # -> argosy:dev
 
 ## Configuration
 
-| Env var                | Default   | Purpose                                   |
-| ---------------------- | --------- | ----------------------------------------- |
-| `ARGOSY_ADDR`          | `:8096`   | HTTP listen address                       |
-| `ARGOSY_DATABASE_URL`  | _(unset)_ | PostgreSQL DSN (used from the schema work) |
-| `ARGOSY_MEDIA_DIR`     | `/media`  | Ingestion root (storage abstraction in P1) |
+| Env var               | Default   | Purpose                                          |
+| --------------------- | --------- | ------------------------------------------------ |
+| `ARGOSY_ADDR`         | `:8096`   | HTTP listen address                              |
+| `ARGOSY_MEDIA_DIR`    | `/media`  | Ingestion root (storage abstraction in P1)       |
+| `ARGOSY_DATABASE_URL` | _(unset)_ | Full PostgreSQL DSN; overrides the parts below   |
+| `ARGOSY_DB_HOST`      | _(unset)_ | DB host; when set, a DSN is built from the parts |
+| `ARGOSY_DB_PORT`      | `5432`    | DB port                                          |
+| `ARGOSY_DB_USER`      | `argosy`  | DB user                                          |
+| `ARGOSY_DB_PASSWORD`  | _(unset)_ | DB password                                      |
+| `ARGOSY_DB_NAME`      | `argosy`  | DB name                                          |
+| `ARGOSY_DB_SSLMODE`   | `disable` | DB sslmode                                       |
+
+> No database is required to boot — without one the server still serves the API and web UI (handy for `make server-dev`). The dev stack sets the `ARGOSY_DB_*` parts; schema migrations (goose) run automatically on startup, and `make seed` loads a demo account + two profiles.
 
 > **Port choice:** `:8096` is picked to avoid clashing with the `construct-server` Docker stack, which already publishes `80, 3000, 3001, 3002, 3923, 5432 (loopback), 5678, 8080, 8090, 8091, 8888, 11434`. When the P0 docker-compose lands (ARGY-10), Argosy's Postgres should likewise avoid host `5432` (publish `5433`, or don't publish it at all).
