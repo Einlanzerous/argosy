@@ -1,0 +1,200 @@
+<script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue'
+import { api } from '@/api/client'
+import { formatRelative } from '@/lib/format'
+import { setPage } from '@/lib/page'
+import type { components } from '@/api/schema'
+
+type ScanStatus = components['schemas']['ScanStatus']
+
+const status = ref<ScanStatus | null>(null)
+const message = ref('')
+const triggering = ref(false)
+let poll: ReturnType<typeof setInterval> | null = null
+
+async function refresh(): Promise<void> {
+  const { data } = await api.GET('/api/v1/scan/status')
+  if (data) status.value = data
+  // Poll while a sweep is running so progress stays live.
+  if (data?.running && !poll) {
+    poll = setInterval(refresh, 2000)
+  } else if (!data?.running && poll) {
+    clearInterval(poll)
+    poll = null
+  }
+}
+
+async function rebuild(): Promise<void> {
+  triggering.value = true
+  message.value = ''
+  const { response } = await api.POST('/api/v1/scan')
+  if (response.status === 202) message.value = 'Stevedore is loading the hold — rebuilding the Manifest.'
+  else if (response.status === 409) message.value = 'A sweep is already running.'
+  else message.value = 'Could not start a scan.'
+  triggering.value = false
+  await refresh()
+}
+
+onMounted(() => {
+  setPage('Settings', 'The Helm · keep the Manifest current.')
+  void refresh()
+})
+onUnmounted(() => {
+  if (poll) clearInterval(poll)
+})
+</script>
+
+<template>
+  <div class="settings">
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Library scan</h2>
+          <p>Stevedore re-sweeps your media so the Manifest stays current.</p>
+        </div>
+        <button class="rebuild" type="button" :disabled="triggering || status?.running" @click="rebuild">
+          <span>⟲</span> {{ status?.running ? 'Rebuilding…' : 'Rebuild the Manifest' }}
+        </button>
+      </div>
+
+      <div class="state">
+        <span class="badge" :class="{ live: status?.running }">
+          <span class="dot" /> {{ status?.running ? 'Sweeping' : 'Idle' }}
+        </span>
+        <span v-if="status?.finishedAt" class="when">last swept {{ formatRelative(status.finishedAt) }}</span>
+      </div>
+
+      <p v-if="message" class="message">{{ message }}</p>
+
+      <div v-if="status?.libraries?.length" class="libs">
+        <div v-for="l in status.libraries" :key="l.libraryId" class="lib">
+          <span class="lib-name">{{ l.name }}</span>
+          <span class="lib-counts">
+            <span>{{ l.scanned }} scanned</span>
+            <span v-if="l.errors" class="err">{{ l.errors }} errors</span>
+            <span v-if="l.error" class="err" :title="l.error">unreadable root</span>
+          </span>
+        </div>
+      </div>
+      <p v-else class="hint">No libraries registered yet.</p>
+    </section>
+  </div>
+</template>
+
+<style scoped>
+.settings {
+  max-width: 760px;
+}
+.panel {
+  padding: 24px;
+  border-radius: var(--arg-r-lg);
+  border: 1px solid var(--arg-line);
+  background: var(--arg-panel);
+}
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+h2 {
+  margin: 0;
+  font: 700 18px var(--arg-display);
+}
+.panel-head p {
+  margin: 6px 0 0;
+  font: 400 13.5px var(--arg-body);
+  color: var(--arg-dim);
+}
+.rebuild {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: var(--arg-r);
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+  font: 700 13px var(--arg-display);
+  cursor: pointer;
+}
+.rebuild:hover {
+  background: var(--arg-accent-hi);
+}
+.rebuild:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.state {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--arg-line-2);
+  font: 600 12px var(--arg-body);
+  color: var(--arg-dim);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--arg-faint);
+}
+.badge.live {
+  color: var(--arg-accent-soft);
+  border-color: var(--arg-accent-line);
+}
+.badge.live .dot {
+  background: var(--arg-accent);
+  box-shadow: 0 0 8px var(--arg-accent);
+}
+.when {
+  font: 500 12px var(--arg-body);
+  color: var(--arg-faint);
+}
+.message {
+  margin-top: 14px;
+  font: 500 13px var(--arg-body);
+  color: var(--arg-accent-soft);
+}
+.libs {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lib {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: var(--arg-r-sm);
+  background: var(--arg-bg-2);
+  border: 1px solid var(--arg-line);
+}
+.lib-name {
+  font: 600 13.5px var(--arg-body);
+}
+.lib-counts {
+  display: flex;
+  gap: 12px;
+  font: 500 12px var(--arg-body);
+  color: var(--arg-dim);
+}
+.err {
+  color: var(--arg-danger);
+}
+.hint {
+  margin-top: 18px;
+  font: 500 13px var(--arg-body);
+  color: var(--arg-faint);
+}
+</style>
