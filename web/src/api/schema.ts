@@ -283,6 +283,7 @@ export interface components {
             title: string;
             year?: number | null;
             posterUrl?: string | null;
+            tags: string[];
         };
         MediaItemDetail: {
             /** Format: uuid */
@@ -297,6 +298,7 @@ export interface components {
             container?: string | null;
             filePath: string;
             reviewRequired: boolean;
+            tags: string[];
         };
         MediaItemPage: {
             items: components["schemas"]["MediaItemSummary"][];
@@ -310,6 +312,7 @@ export interface components {
             title: string;
             year?: number | null;
             posterUrl?: string | null;
+            tags: string[];
         };
         SeriesPage: {
             items: components["schemas"]["SeriesSummary"][];
@@ -340,6 +343,7 @@ export interface components {
             overview?: string | null;
             posterUrl?: string | null;
             seasons: components["schemas"]["SeasonSummary"][];
+            tags: string[];
         };
     };
     responses: {
@@ -567,6 +571,8 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 sort?: "title" | "added" | "year";
+                /** @description Filter to items carrying this tag (e.g. anime). */
+                tag?: string;
             };
             header?: never;
             path: {
@@ -594,6 +600,8 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 sort?: "title" | "year";
+                /** @description Filter to series carrying this tag (e.g. anime). */
+                tag?: string;
             };
             header?: never;
             path: {

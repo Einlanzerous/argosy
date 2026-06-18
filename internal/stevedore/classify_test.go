@@ -89,6 +89,8 @@ func TestClassifyDB(t *testing.T) {
 	insert("episode", "My Show/Season 1/My Show S01E02.mkv", "My Show S01E02")
 	insert("movie", "Big Buck Bunny (2008).mkv", "Big Buck Bunny (2008)")
 	insert("episode", "Extras/loose clip.mkv", "loose clip") // unparseable
+	// An anime series episode: Classify should tag the parent series 'anime'.
+	insert("episode", "anime/Cowboy Bebop/Season 1/Cowboy Bebop S01E01.mkv", "Cowboy Bebop S01E01")
 
 	sc := NewScanner(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), "")
 	if err := sc.Classify(ctx, libID); err != nil {
@@ -107,8 +109,14 @@ func TestClassifyDB(t *testing.T) {
 	seasons := queryInt(`SELECT count(*) FROM seasons s JOIN series r ON r.id=s.series_id WHERE r.library_id=$1`)
 	episodes := queryInt(`SELECT count(*) FROM episodes e JOIN seasons s ON s.id=e.season_id JOIN series r ON r.id=s.series_id WHERE r.library_id=$1`)
 	linked := queryInt(`SELECT count(*) FROM episodes e JOIN seasons s ON s.id=e.season_id JOIN series r ON r.id=s.series_id WHERE r.library_id=$1 AND e.media_item_id IS NOT NULL`)
-	if series != 1 || seasons != 1 || episodes != 2 || linked != 2 {
-		t.Fatalf("hierarchy series=%d seasons=%d episodes=%d linked=%d, want 1/1/2/2", series, seasons, episodes, linked)
+	if series != 2 || seasons != 2 || episodes != 3 || linked != 3 {
+		t.Fatalf("hierarchy series=%d seasons=%d episodes=%d linked=%d, want 2/2/3/3", series, seasons, episodes, linked)
+	}
+
+	// The anime series picked up its 'anime' tag from the episode path; the
+	// non-anime series did not.
+	if n := queryInt(`SELECT count(*) FROM series WHERE library_id=$1 AND 'anime' = ANY(tags)`); n != 1 {
+		t.Fatalf("series tagged anime = %d, want 1 (Cowboy Bebop only)", n)
 	}
 
 	var movieYear *int

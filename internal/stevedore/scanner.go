@@ -142,10 +142,17 @@ func (s *Scanner) ingest(ctx context.Context, libraryID string, src mediasource.
 		contentHash = h
 	}
 
+	// Tags are derived from the path (e.g. an `anime/` segment) and refreshed
+	// on every scan, so a file that moves out of a tagged dir loses the tag.
+	tags := deriveTags(e.Path)
+	if tags == nil {
+		tags = []string{}
+	}
+
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO media_items
-			(library_id, kind, title, sort_title, file_path, container, duration_seconds, content_hash, technical)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			(library_id, kind, title, sort_title, file_path, container, duration_seconds, content_hash, technical, tags)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (library_id, file_path) DO UPDATE SET
 			kind = EXCLUDED.kind,
 			title = EXCLUDED.title,
@@ -154,8 +161,9 @@ func (s *Scanner) ingest(ctx context.Context, libraryID string, src mediasource.
 			duration_seconds = EXCLUDED.duration_seconds,
 			content_hash = EXCLUDED.content_hash,
 			technical = EXCLUDED.technical,
+			tags = EXCLUDED.tags,
 			updated_at = now()`,
-		libraryID, kind, title, sortTitle(title), e.Path, container, duration, contentHash, technical)
+		libraryID, kind, title, sortTitle(title), e.Path, container, duration, contentHash, technical, tags)
 	return err
 }
 

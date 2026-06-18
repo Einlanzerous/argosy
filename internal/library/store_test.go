@@ -39,8 +39,8 @@ func TestBrowseStore(t *testing.T) {
 	// Movie: scanned title overlaid by provider, then NFO override.
 	var movieID string
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO media_items (library_id, kind, title, sort_title, year, container, duration_seconds, file_path, provider_metadata, metadata)
-		 VALUES ($1,'movie','raw movie','raw movie',2008,'matroska',1380.5,$2,$3::jsonb,$4::jsonb) RETURNING id::text`,
+		`INSERT INTO media_items (library_id, kind, title, sort_title, year, container, duration_seconds, file_path, tags, provider_metadata, metadata)
+		 VALUES ($1,'movie','raw movie','raw movie',2008,'matroska',1380.5,$2,'{anime}',$3::jsonb,$4::jsonb) RETURNING id::text`,
 		libID, "m-"+suffix+".mkv",
 		`{"title":"Provider Movie","poster":"movies/9.jpg","overview":"prov ov"}`,
 		`{"title":"NFO Movie"}`).Scan(&movieID); err != nil {
@@ -73,7 +73,7 @@ func TestBrowseStore(t *testing.T) {
 		t.Fatalf("libraries = %v (err %v), want 1", libs, err)
 	}
 
-	movies, err := s.ListMovies(ctx, accID, libID, 50, 0, "title")
+	movies, err := s.ListMovies(ctx, accID, libID, 50, 0, "title", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,8 +90,19 @@ func TestBrowseStore(t *testing.T) {
 	if m.Year == nil || *m.Year != 2008 {
 		t.Errorf("movie year = %v, want 2008", m.Year)
 	}
+	if len(m.Tags) != 1 || m.Tags[0] != "anime" {
+		t.Errorf("movie tags = %v, want [anime]", m.Tags)
+	}
 
-	series, err := s.ListSeries(ctx, accID, libID, 50, 0, "title")
+	// Tag filter: 'anime' matches the movie; an unknown tag matches nothing.
+	if tagged, err := s.ListMovies(ctx, accID, libID, 50, 0, "title", "anime"); err != nil || tagged.Total != 1 {
+		t.Fatalf("ListMovies tag=anime = %+v (err %v), want total 1", tagged, err)
+	}
+	if none, err := s.ListMovies(ctx, accID, libID, 50, 0, "title", "nope"); err != nil || none.Total != 0 {
+		t.Fatalf("ListMovies tag=nope = %+v (err %v), want total 0", none, err)
+	}
+
+	series, err := s.ListSeries(ctx, accID, libID, 50, 0, "title", "")
 	if err != nil || series.Total != 1 || series.Items[0].Title != "Provider Show" {
 		t.Fatalf("series page = %+v (err %v), want 1 'Provider Show'", series, err)
 	}

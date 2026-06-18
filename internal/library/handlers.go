@@ -43,7 +43,7 @@ func (h *handlers) listLibraries(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
-	page, err := h.store.ListMovies(r.Context(), accountOf(r), r.PathValue("libraryId"), limit, offset, r.URL.Query().Get("sort"))
+	page, err := h.store.ListMovies(r.Context(), accountOf(r), r.PathValue("libraryId"), limit, offset, r.URL.Query().Get("sort"), r.URL.Query().Get("tag"))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -53,7 +53,7 @@ func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) listSeries(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
-	page, err := h.store.ListSeries(r.Context(), accountOf(r), r.PathValue("libraryId"), limit, offset, r.URL.Query().Get("sort"))
+	page, err := h.store.ListSeries(r.Context(), accountOf(r), r.PathValue("libraryId"), limit, offset, r.URL.Query().Get("sort"), r.URL.Query().Get("tag"))
 	if err != nil {
 		h.fail(w, err)
 		return

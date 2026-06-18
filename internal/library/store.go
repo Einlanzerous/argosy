@@ -52,25 +52,30 @@ func (s *Store) ListLibraries(ctx context.Context, accountID string) ([]api.Libr
 	return out, rows.Err()
 }
 
-// ListMovies returns a paginated page of movies in a library.
-func (s *Store) ListMovies(ctx context.Context, accountID, libraryID string, limit, offset int, sort string) (api.MediaItemPage, error) {
+// ListMovies returns a paginated page of movies in a library. A non-empty tag
+// filters to movies carrying it.
+func (s *Store) ListMovies(ctx context.Context, accountID, libraryID string, limit, offset int, sort, tag string) (api.MediaItemPage, error) {
 	order := movieSort[sort]
 	if order == "" {
 		order = movieSort["title"]
 	}
 	page := api.MediaItemPage{Items: []api.MediaItemSummary{}, Limit: limit, Offset: offset}
+	where := `WHERE l.account_id = $1 AND mi.library_id = $2 AND mi.kind = 'movie'`
+	args := []any{accountID, libraryID}
+	if tag != "" {
+		args = append(args, tag)
+		where += ` AND $3 = ANY(mi.tags)`
+	}
 	if err := s.pool.QueryRow(ctx,
-		`SELECT count(*) FROM media_items mi JOIN libraries l ON l.id = mi.library_id
-		 WHERE l.account_id = $1 AND mi.library_id = $2 AND mi.kind = 'movie'`,
-		accountID, libraryID).Scan(&page.Total); err != nil {
+		`SELECT count(*) FROM media_items mi JOIN libraries l ON l.id = mi.library_id `+where,
+		args...).Scan(&page.Total); err != nil {
 		return page, err
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.provider_metadata, mi.metadata
-		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id
-		 WHERE l.account_id = $1 AND mi.library_id = $2 AND mi.kind = 'movie'
-		 ORDER BY `+order+` LIMIT $3 OFFSET $4`,
-		accountID, libraryID, limit, offset)
+		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.tags, mi.provider_metadata, mi.metadata
+		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id `+where+`
+		 ORDER BY `+order+` LIMIT $`+itoa(len(args)+1)+` OFFSET $`+itoa(len(args)+2),
+		append(args, limit, offset)...)
 	if err != nil {
 		return page, err
 	}
@@ -78,34 +83,40 @@ func (s *Store) ListMovies(ctx context.Context, accountID, libraryID string, lim
 	for rows.Next() {
 		var id, kind, title string
 		var year *int
+		var tags []string
 		var prov, over []byte
-		if err := rows.Scan(&id, &kind, &title, &year, &prov, &over); err != nil {
+		if err := rows.Scan(&id, &kind, &title, &year, &tags, &prov, &over); err != nil {
 			return page, err
 		}
-		page.Items = append(page.Items, s.summary(id, kind, title, year, prov, over))
+		page.Items = append(page.Items, s.summary(id, kind, title, year, tags, prov, over))
 	}
 	return page, rows.Err()
 }
 
-// ListSeries returns a paginated page of series in a library.
-func (s *Store) ListSeries(ctx context.Context, accountID, libraryID string, limit, offset int, sort string) (api.SeriesPage, error) {
+// ListSeries returns a paginated page of series in a library. A non-empty tag
+// filters to series carrying it.
+func (s *Store) ListSeries(ctx context.Context, accountID, libraryID string, limit, offset int, sort, tag string) (api.SeriesPage, error) {
 	order := seriesSort[sort]
 	if order == "" {
 		order = seriesSort["title"]
 	}
 	page := api.SeriesPage{Items: []api.SeriesSummary{}, Limit: limit, Offset: offset}
+	where := `WHERE l.account_id = $1 AND r.library_id = $2`
+	args := []any{accountID, libraryID}
+	if tag != "" {
+		args = append(args, tag)
+		where += ` AND $3 = ANY(r.tags)`
+	}
 	if err := s.pool.QueryRow(ctx,
-		`SELECT count(*) FROM series r JOIN libraries l ON l.id = r.library_id
-		 WHERE l.account_id = $1 AND r.library_id = $2`,
-		accountID, libraryID).Scan(&page.Total); err != nil {
+		`SELECT count(*) FROM series r JOIN libraries l ON l.id = r.library_id `+where,
+		args...).Scan(&page.Total); err != nil {
 		return page, err
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT r.id::text, r.title, r.year, r.provider_metadata, r.metadata
-		 FROM series r JOIN libraries l ON l.id = r.library_id
-		 WHERE l.account_id = $1 AND r.library_id = $2
-		 ORDER BY `+order+` LIMIT $3 OFFSET $4`,
-		accountID, libraryID, limit, offset)
+		`SELECT r.id::text, r.title, r.year, r.tags, r.provider_metadata, r.metadata
+		 FROM series r JOIN libraries l ON l.id = r.library_id `+where+`
+		 ORDER BY `+order+` LIMIT $`+itoa(len(args)+1)+` OFFSET $`+itoa(len(args)+2),
+		append(args, limit, offset)...)
 	if err != nil {
 		return page, err
 	}
@@ -113,12 +124,13 @@ func (s *Store) ListSeries(ctx context.Context, accountID, libraryID string, lim
 	for rows.Next() {
 		var id, title string
 		var year *int
+		var tags []string
 		var prov, over []byte
-		if err := rows.Scan(&id, &title, &year, &prov, &over); err != nil {
+		if err := rows.Scan(&id, &title, &year, &tags, &prov, &over); err != nil {
 			return page, err
 		}
 		p, o := decodeMap(prov), decodeMap(over)
-		item := api.SeriesSummary{Id: parseUUID(id), Title: effectiveTitle(o, p, title), Year: effectiveYear(o, p, year), PosterUrl: posterURL(s.artworkBase, o, p)}
+		item := api.SeriesSummary{Id: parseUUID(id), Title: effectiveTitle(o, p, title), Year: effectiveYear(o, p, year), PosterUrl: posterURL(s.artworkBase, o, p), Tags: nonNil(tags)}
 		page.Items = append(page.Items, item)
 	}
 	return page, rows.Err()
@@ -131,13 +143,14 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 	var container *string
 	var duration *float64
 	var reviewRequired bool
+	var tags []string
 	var prov, over []byte
 	err := s.pool.QueryRow(ctx,
 		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.container, mi.duration_seconds,
-		        mi.file_path, mi.review_required, mi.provider_metadata, mi.metadata
+		        mi.file_path, mi.review_required, mi.tags, mi.provider_metadata, mi.metadata
 		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id
 		 WHERE l.account_id = $1 AND mi.id = $2`,
-		accountID, itemID).Scan(&id, &kind, &title, &year, &container, &duration, &filePath, &reviewRequired, &prov, &over)
+		accountID, itemID).Scan(&id, &kind, &title, &year, &container, &duration, &filePath, &reviewRequired, &tags, &prov, &over)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -156,6 +169,7 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 		Container:      container,
 		FilePath:       filePath,
 		ReviewRequired: reviewRequired,
+		Tags:           nonNil(tags),
 	}
 	if duration != nil {
 		f := float32(*duration)
@@ -168,12 +182,13 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 func (s *Store) GetSeries(ctx context.Context, accountID, seriesID string) (*api.SeriesDetail, error) {
 	var id, title string
 	var year *int
+	var tags []string
 	var prov, over []byte
 	err := s.pool.QueryRow(ctx,
-		`SELECT r.id::text, r.title, r.year, r.provider_metadata, r.metadata
+		`SELECT r.id::text, r.title, r.year, r.tags, r.provider_metadata, r.metadata
 		 FROM series r JOIN libraries l ON l.id = r.library_id
 		 WHERE l.account_id = $1 AND r.id = $2`,
-		accountID, seriesID).Scan(&id, &title, &year, &prov, &over)
+		accountID, seriesID).Scan(&id, &title, &year, &tags, &prov, &over)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -188,6 +203,7 @@ func (s *Store) GetSeries(ctx context.Context, accountID, seriesID string) (*api
 		Overview:  effectiveOverview(o, p),
 		PosterUrl: posterURL(s.artworkBase, o, p),
 		Seasons:   []api.SeasonSummary{},
+		Tags:      nonNil(tags),
 	}
 
 	rows, err := s.pool.Query(ctx,
@@ -232,7 +248,7 @@ func (s *Store) GetSeries(ctx context.Context, accountID, seriesID string) (*api
 	return &detail, rows.Err()
 }
 
-func (s *Store) summary(id, kind, title string, year *int, prov, over []byte) api.MediaItemSummary {
+func (s *Store) summary(id, kind, title string, year *int, tags []string, prov, over []byte) api.MediaItemSummary {
 	p, o := decodeMap(prov), decodeMap(over)
 	return api.MediaItemSummary{
 		Id:        parseUUID(id),
@@ -240,5 +256,6 @@ func (s *Store) summary(id, kind, title string, year *int, prov, over []byte) ap
 		Title:     effectiveTitle(o, p, title),
 		Year:      effectiveYear(o, p, year),
 		PosterUrl: posterURL(s.artworkBase, o, p),
+		Tags:      nonNil(tags),
 	}
 }
