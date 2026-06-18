@@ -64,7 +64,7 @@ func runScan(cfg config.Config, logger *slog.Logger, args []string) {
 		os.Exit(1)
 	}
 
-	res, err := stevedore.NewScanner(pool, logger).Scan(ctx, libraryID, mediasource.NewLocalFS(*root))
+	res, err := stevedore.NewScanner(pool, logger, cfg.ArtworkDir).Scan(ctx, libraryID, mediasource.NewLocalFS(*root))
 	if err != nil {
 		logger.Error("scan failed", "err", err)
 		os.Exit(1)

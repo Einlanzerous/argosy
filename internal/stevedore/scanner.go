@@ -33,15 +33,16 @@ type Prober func(ctx context.Context, path string) (mediatool.Probe, error)
 // Scanner walks a library source and upserts media_items, enriching each with
 // ffprobe technical metadata.
 type Scanner struct {
-	pool    *pgxpool.Pool
-	logger  *slog.Logger
-	probe   Prober
-	workers int
+	pool       *pgxpool.Pool
+	logger     *slog.Logger
+	probe      Prober
+	workers    int
+	artworkDir string // where local-poster overrides are cached ("" disables copying)
 }
 
 // NewScanner returns a Scanner using the real ffprobe-backed prober.
-func NewScanner(pool *pgxpool.Pool, logger *slog.Logger) *Scanner {
-	return &Scanner{pool: pool, logger: logger, probe: mediatool.ProbeFile, workers: 4}
+func NewScanner(pool *pgxpool.Pool, logger *slog.Logger, artworkDir string) *Scanner {
+	return &Scanner{pool: pool, logger: logger, probe: mediatool.ProbeFile, workers: 4, artworkDir: artworkDir}
 }
 
 // Result summarizes a scan.
@@ -101,6 +102,10 @@ func (s *Scanner) Scan(ctx context.Context, libraryID string, src mediasource.So
 
 	// Group episodes into series/seasons and parse movie years (single-threaded).
 	if err := s.Classify(ctx, libraryID); err != nil {
+		return res, err
+	}
+	// Apply local NFO/sidecar + artwork overrides.
+	if err := s.ApplyOverrides(ctx, libraryID, src); err != nil {
 		return res, err
 	}
 	return res, nil
