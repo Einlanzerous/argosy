@@ -41,6 +41,10 @@ services:
       ARGOSY_ADDR: ":8096"
       ARGOSY_MEDIA_DIR: "/media"
       ARGOSY_ARTWORK_DIR: "/artwork"
+      # Stevedore re-sweeps every library on this interval to keep the Manifest
+      # current (fsnotify is unreliable over the SMB mount). Empty/0 disables
+      # the periodic sweep; on-demand POST /api/v1/scan still works.
+      ARGOSY_SCAN_INTERVAL: "${ARGOSY_SCAN_INTERVAL:-15m}"
       # DSN is assembled from these parts at runtime (no connection-string literal).
       ARGOSY_DB_HOST: "db"
       ARGOSY_DB_PORT: "5432"

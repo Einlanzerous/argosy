@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"time"
 )
 
 // Config holds runtime configuration for the Argosy server.
@@ -26,6 +27,10 @@ type Config struct {
 	TMDBAPIKey    string
 	// ArtworkDir is where downloaded poster/artwork files are cached.
 	ArtworkDir string
+	// ScanInterval is how often Stevedore re-sweeps every library to keep the
+	// Manifest current (fsnotify is unreliable over the SMB mount, ARGY-53).
+	// Zero disables the periodic sweep; on-demand scans still work.
+	ScanInterval time.Duration
 }
 
 // Load reads configuration from the environment, applying sensible defaults.
@@ -39,7 +44,18 @@ func Load() Config {
 		TMDBReadToken: os.Getenv("TMDB_API_READ_ACCESS_KEY"),
 		TMDBAPIKey:    os.Getenv("TMDB_API_KEY"),
 		ArtworkDir:    getenv("ARGOSY_ARTWORK_DIR", "artwork"),
+		ScanInterval:  parseDuration(os.Getenv("ARGOSY_SCAN_INTERVAL")),
 	}
+}
+
+// parseDuration parses a Go duration string (e.g. "15m", "1h"). It returns 0
+// for an empty or invalid value, leaving the periodic sweep disabled.
+func parseDuration(s string) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
 // resolveDatabaseURL prefers an explicit ARGOSY_DATABASE_URL, otherwise builds a
