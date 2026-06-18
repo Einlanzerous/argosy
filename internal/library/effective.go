@@ -2,6 +2,7 @@ package library
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -101,4 +102,15 @@ func posterURL(base string, over, prov map[string]any) *string {
 func parseUUID(s string) openapi_types.UUID {
 	u, _ := uuid.Parse(s)
 	return u
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }
+
+// nonNil normalizes a nil slice to an empty one so required JSON arrays
+// serialize as [] rather than null.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

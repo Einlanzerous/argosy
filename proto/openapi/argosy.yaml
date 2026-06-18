@@ -172,6 +172,7 @@ paths:
         - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
         - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0 } }
         - { name: sort, in: query, schema: { type: string, enum: [title, added, year], default: title } }
+        - { name: tag, in: query, description: "Filter to items carrying this tag (e.g. anime).", schema: { type: string } }
       responses:
         "200":
           description: OK
@@ -192,6 +193,7 @@ paths:
         - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
         - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0 } }
         - { name: sort, in: query, schema: { type: string, enum: [title, year], default: title } }
+        - { name: tag, in: query, description: "Filter to series carrying this tag (e.g. anime).", schema: { type: string } }
       responses:
         "200":
           description: OK
@@ -411,17 +413,18 @@ components:
 
     MediaItemSummary:
       type: object
-      required: [id, kind, title]
+      required: [id, kind, title, tags]
       properties:
         id: { type: string, format: uuid }
         kind: { type: string }
         title: { type: string }
         year: { type: integer, nullable: true }
         posterUrl: { type: string, nullable: true }
+        tags: { type: array, items: { type: string } }
 
     MediaItemDetail:
       type: object
-      required: [id, kind, title, filePath, reviewRequired]
+      required: [id, kind, title, filePath, reviewRequired, tags]
       properties:
         id: { type: string, format: uuid }
         kind: { type: string }
@@ -434,6 +437,7 @@ components:
         container: { type: string, nullable: true }
         filePath: { type: string }
         reviewRequired: { type: boolean }
+        tags: { type: array, items: { type: string } }
 
     MediaItemPage:
       type: object
@@ -446,12 +450,13 @@ components:
 
     SeriesSummary:
       type: object
-      required: [id, title]
+      required: [id, title, tags]
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
         year: { type: integer, nullable: true }
         posterUrl: { type: string, nullable: true }
+        tags: { type: array, items: { type: string } }
 
     SeriesPage:
       type: object
@@ -482,7 +487,7 @@ components:
 
     SeriesDetail:
       type: object
-      required: [id, title, seasons]
+      required: [id, title, seasons, tags]
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
@@ -490,6 +495,7 @@ components:
         overview: { type: string, nullable: true }
         posterUrl: { type: string, nullable: true }
         seasons: { type: array, items: { $ref: "#/components/schemas/SeasonSummary" } }
+        tags: { type: array, items: { type: string } }
 
 security:
   - bearerAuth: []

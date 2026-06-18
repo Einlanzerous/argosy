@@ -62,7 +62,8 @@ func TestScan(t *testing.T) {
 	src := &fakeSource{files: map[string][]byte{
 		"Some Movie (2021).mkv":         []byte("movie-bytes"),
 		"Show/Season 1/Show S01E02.mp4": []byte("episode-bytes"),
-		"poster.jpg":                    []byte("not-media"), // ignored (extension)
+		"anime/Akira (1988).mkv":        []byte("anime-film-bytes"), // film under anime/
+		"poster.jpg":                    []byte("not-media"),        // ignored (extension)
 	}}
 	sc := NewScanner(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), "")
 
@@ -70,8 +71,8 @@ func TestScan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	if res.Scanned != 2 || res.Errors != 0 {
-		t.Fatalf("result = %+v, want 2 scanned / 0 errors", res)
+	if res.Scanned != 3 || res.Errors != 0 {
+		t.Fatalf("result = %+v, want 3 scanned / 0 errors", res)
 	}
 
 	// idempotent
@@ -88,10 +89,32 @@ func TestScan(t *testing.T) {
 		FROM media_items WHERE library_id = $1`, libID).Scan(&total, &movies, &episodes, &hashed); err != nil {
 		t.Fatal(err)
 	}
-	if total != 2 || movies != 1 || episodes != 1 {
-		t.Fatalf("rows total=%d movies=%d episodes=%d, want 2/1/1", total, movies, episodes)
+	if total != 3 || movies != 2 || episodes != 1 {
+		t.Fatalf("rows total=%d movies=%d episodes=%d, want 3/2/1", total, movies, episodes)
 	}
-	if hashed != 2 {
-		t.Fatalf("content_hash set on %d rows, want 2", hashed)
+	if hashed != 3 {
+		t.Fatalf("content_hash set on %d rows, want 3", hashed)
+	}
+
+	// The anime film stays a movie (not forced to series) and is tagged 'anime'.
+	var kind string
+	var tags []string
+	if err := pool.QueryRow(ctx,
+		`SELECT kind, tags FROM media_items WHERE library_id = $1 AND file_path = $2`,
+		libID, "anime/Akira (1988).mkv").Scan(&kind, &tags); err != nil {
+		t.Fatal(err)
+	}
+	if kind != "movie" || len(tags) != 1 || tags[0] != "anime" {
+		t.Fatalf("anime film = kind %q tags %v, want movie/[anime]", kind, tags)
+	}
+	// A non-anime movie has no tags.
+	var plainTags []string
+	if err := pool.QueryRow(ctx,
+		`SELECT tags FROM media_items WHERE library_id = $1 AND file_path = $2`,
+		libID, "Some Movie (2021).mkv").Scan(&plainTags); err != nil {
+		t.Fatal(err)
+	}
+	if len(plainTags) != 0 {
+		t.Fatalf("plain movie tags = %v, want empty", plainTags)
 	}
 }
