@@ -64,7 +64,7 @@ func TestScan(t *testing.T) {
 		"Show/Season 1/Show S01E02.mp4": []byte("episode-bytes"),
 		"poster.jpg":                    []byte("not-media"), // ignored (extension)
 	}}
-	sc := NewScanner(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	sc := NewScanner(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), "")
 
 	res, err := sc.Scan(ctx, libID, src)
 	if err != nil {

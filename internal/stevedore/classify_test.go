@@ -90,7 +90,7 @@ func TestClassifyDB(t *testing.T) {
 	insert("movie", "Big Buck Bunny (2008).mkv", "Big Buck Bunny (2008)")
 	insert("episode", "Extras/loose clip.mkv", "loose clip") // unparseable
 
-	sc := NewScanner(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	sc := NewScanner(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), "")
 	if err := sc.Classify(ctx, libID); err != nil {
 		t.Fatalf("classify: %v", err)
 	}
