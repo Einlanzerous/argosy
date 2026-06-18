@@ -1,0 +1,7 @@
+# Config for oapi-codegen (run via `go tool oapi-codegen` in `make generate`).
+package: api
+output: internal/api/argosy.gen.go
+generate:
+  models: true
+  std-http-server: true
+  embedded-spec: true

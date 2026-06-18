@@ -1,3 +1,0 @@
-# Placeholder so `go:embed all:dist` compiles before/without a web build.
-# The real contents of this directory are produced by `vite build` and are git-ignored.
-# Do not delete — `make web-build` restores it after Vite empties the dir.

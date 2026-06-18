@@ -69,8 +69,9 @@ test: ensure-embed ## Run Go tests
 tidy: ## Tidy go.mod
 	$(GO) mod tidy
 
-generate: ## Regenerate code from the OpenAPI spec (implemented in ARGY-13)
-	@echo "no codegen yet — implemented in ARGY-13 (OpenAPI spec + codegen)"
+generate: ## Regenerate the Go server interface + TS client from the OpenAPI spec
+	$(GO) tool oapi-codegen -config proto/openapi/oapi-codegen.yaml proto/openapi/argosy.yaml
+	cd $(WEB) && $(NPM) install && $(NPM) run gen:api
 
 clean: ## Remove build artifacts (restores the embed placeholder)
 	rm -rf bin $(EMBED_DIR)

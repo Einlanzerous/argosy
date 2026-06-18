@@ -1,24 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useSessionStore } from '@/stores/session'
+import { api } from '@/api/client'
 
 const session = useSessionStore()
 const ping = ref('…')
 
-interface PingResponse {
-  service: string
-  status: string
-  version: string
-}
-
 onMounted(async () => {
-  try {
-    const res = await fetch('/api/v1/ping')
-    const body = (await res.json()) as PingResponse
-    ping.value = `${body.service} ${body.version} — ${body.status}`
-  } catch {
-    ping.value = 'unreachable'
-  }
+  // Typed call generated from the OpenAPI spec.
+  const { data } = await api.GET('/api/v1/ping')
+  ping.value = data ? `${data.service} ${data.version} — ${data.status}` : 'unreachable'
 })
 </script>
 
