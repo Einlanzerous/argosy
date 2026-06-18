@@ -1,0 +1,10 @@
+.git
+.github
+.claude
+bin
+tmp
+**/node_modules
+internal/webui/dist
+*.log
+deploy/.env
+deploy/sample-media

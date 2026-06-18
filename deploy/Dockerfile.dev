@@ -1,0 +1,16 @@
+# Dev image: Go toolchain + air (hot reload) + ffmpeg/ffprobe.
+# The source tree is bind-mounted by docker-compose; this image only provides
+# the toolchain, so code edits rebuild in-container without an image rebuild.
+FROM golang:1.26-bookworm
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
+# air for live reload (github.com/air-verse/air is the maintained fork).
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+EXPOSE 8096
+
+CMD ["air", "-c", ".air.toml"]

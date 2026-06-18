@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+
+# Production image: one self-contained artifact. The Vue SPA is built and
+# embedded into the Go binary (go:embed), then dropped onto a slim base that
+# carries ffmpeg/ffprobe. Build from the repo root:
+#   docker build -f deploy/Dockerfile -t argosy:latest .
+
+# 1) Build the Vue SPA -> internal/webui/dist
+FROM node:24-bookworm-slim AS web
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+# 2) Build the Go binary with the SPA embedded
+FROM golang:1.26-bookworm AS build
+WORKDIR /app
+COPY go.mod ./
+RUN go mod download
+COPY . .
+COPY --from=web /app/internal/webui/dist ./internal/webui/dist
+ARG VERSION=docker
+RUN CGO_ENABLED=0 go build \
+    -ldflags "-s -w -X github.com/Einlanzerous/argosy/internal/version.Version=${VERSION}" \
+    -o /out/argosy ./cmd/argosy
+
+# 3) Runtime: slim base + ffmpeg
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=build /out/argosy /usr/local/bin/argosy
+ENV ARGOSY_ADDR=":8096"
+EXPOSE 8096
+ENTRYPOINT ["argosy"]
