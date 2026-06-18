@@ -92,20 +92,28 @@ func handleMe() http.HandlerFunc {
 	}
 }
 
+// Middleware authenticates the bearer token and injects the session into the
+// request context (read it with SessionFromContext). 401 on missing/invalid.
+func Middleware(store *Store) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token := bearerToken(r)
+			if token == "" {
+				writeError(w, http.StatusUnauthorized, "missing bearer token")
+				return
+			}
+			sess, err := store.AuthenticateDevice(r.Context(), token)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "invalid or revoked token")
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionKey, sess)))
+		})
+	}
+}
+
 func requireAuth(store *Store, next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := bearerToken(r)
-		if token == "" {
-			writeError(w, http.StatusUnauthorized, "missing bearer token")
-			return
-		}
-		sess, err := store.AuthenticateDevice(r.Context(), token)
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "invalid or revoked token")
-			return
-		}
-		next(w, r.WithContext(context.WithValue(r.Context(), sessionKey, sess)))
-	})
+	return Middleware(store)(next)
 }
 
 // SessionFromContext returns the authenticated session set by requireAuth.

@@ -10,6 +10,7 @@ import (
 	"compress/flate"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -38,6 +39,45 @@ func (e Role) Valid() bool {
 	case Admin:
 		return true
 	case Viewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListMoviesParamsSort.
+const (
+	ListMoviesParamsSortAdded ListMoviesParamsSort = "added"
+	ListMoviesParamsSortTitle ListMoviesParamsSort = "title"
+	ListMoviesParamsSortYear  ListMoviesParamsSort = "year"
+)
+
+// Valid indicates whether the value is a known member of the ListMoviesParamsSort enum.
+func (e ListMoviesParamsSort) Valid() bool {
+	switch e {
+	case ListMoviesParamsSortAdded:
+		return true
+	case ListMoviesParamsSortTitle:
+		return true
+	case ListMoviesParamsSortYear:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSeriesParamsSort.
+const (
+	ListSeriesParamsSortTitle ListSeriesParamsSort = "title"
+	ListSeriesParamsSortYear  ListSeriesParamsSort = "year"
+)
+
+// Valid indicates whether the value is a known member of the ListSeriesParamsSort enum.
+func (e ListSeriesParamsSort) Valid() bool {
+	switch e {
+	case ListSeriesParamsSortTitle:
+		return true
+	case ListSeriesParamsSortYear:
 		return true
 	default:
 		return false
@@ -78,9 +118,24 @@ type DeviceRegistrationResponse struct {
 	Token string `json:"token"`
 }
 
+// EpisodeSummary defines model for EpisodeSummary.
+type EpisodeSummary struct {
+	EpisodeNumber int                 `json:"episodeNumber"`
+	Id            openapi_types.UUID  `json:"id"`
+	MediaItemId   *openapi_types.UUID `json:"mediaItemId,omitempty"`
+	Title         *string             `json:"title,omitempty"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	Error string `json:"error"`
+}
+
+// Library defines model for Library.
+type Library struct {
+	Id   openapi_types.UUID `json:"id"`
+	Kind string             `json:"kind"`
+	Name string             `json:"name"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -95,6 +150,38 @@ type LoginResponse struct {
 	Profiles []UserProfile `json:"profiles"`
 }
 
+// MediaItemDetail defines model for MediaItemDetail.
+type MediaItemDetail struct {
+	Container       *string            `json:"container,omitempty"`
+	DurationSeconds *float32           `json:"durationSeconds,omitempty"`
+	FilePath        string             `json:"filePath"`
+	Genres          *[]string          `json:"genres,omitempty"`
+	Id              openapi_types.UUID `json:"id"`
+	Kind            string             `json:"kind"`
+	Overview        *string            `json:"overview,omitempty"`
+	PosterUrl       *string            `json:"posterUrl,omitempty"`
+	ReviewRequired  bool               `json:"reviewRequired"`
+	Title           string             `json:"title"`
+	Year            *int               `json:"year,omitempty"`
+}
+
+// MediaItemPage defines model for MediaItemPage.
+type MediaItemPage struct {
+	Items  []MediaItemSummary `json:"items"`
+	Limit  int                `json:"limit"`
+	Offset int                `json:"offset"`
+	Total  int                `json:"total"`
+}
+
+// MediaItemSummary defines model for MediaItemSummary.
+type MediaItemSummary struct {
+	Id        openapi_types.UUID `json:"id"`
+	Kind      string             `json:"kind"`
+	PosterUrl *string            `json:"posterUrl,omitempty"`
+	Title     string             `json:"title"`
+	Year      *int               `json:"year,omitempty"`
+}
+
 // PingResponse defines model for PingResponse.
 type PingResponse struct {
 	Service string `json:"service"`
@@ -104,6 +191,40 @@ type PingResponse struct {
 
 // Role defines model for Role.
 type Role string
+
+// SeasonSummary defines model for SeasonSummary.
+type SeasonSummary struct {
+	Episodes     []EpisodeSummary   `json:"episodes"`
+	Id           openapi_types.UUID `json:"id"`
+	SeasonNumber int                `json:"seasonNumber"`
+	Title        *string            `json:"title,omitempty"`
+}
+
+// SeriesDetail defines model for SeriesDetail.
+type SeriesDetail struct {
+	Id        openapi_types.UUID `json:"id"`
+	Overview  *string            `json:"overview,omitempty"`
+	PosterUrl *string            `json:"posterUrl,omitempty"`
+	Seasons   []SeasonSummary    `json:"seasons"`
+	Title     string             `json:"title"`
+	Year      *int               `json:"year,omitempty"`
+}
+
+// SeriesPage defines model for SeriesPage.
+type SeriesPage struct {
+	Items  []SeriesSummary `json:"items"`
+	Limit  int             `json:"limit"`
+	Offset int             `json:"offset"`
+	Total  int             `json:"total"`
+}
+
+// SeriesSummary defines model for SeriesSummary.
+type SeriesSummary struct {
+	Id        openapi_types.UUID `json:"id"`
+	PosterUrl *string            `json:"posterUrl,omitempty"`
+	Title     string             `json:"title"`
+	Year      *int               `json:"year,omitempty"`
+}
 
 // Session defines model for Session.
 type Session struct {
@@ -132,6 +253,26 @@ type Unauthorized = Error
 // bearerAuthContextKey is the context key for bearerAuth security scheme
 type bearerAuthContextKey string
 
+// ListMoviesParams defines parameters for ListMovies.
+type ListMoviesParams struct {
+	Limit  *int                  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int                  `form:"offset,omitempty" json:"offset,omitempty"`
+	Sort   *ListMoviesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
+// ListMoviesParamsSort defines parameters for ListMovies.
+type ListMoviesParamsSort string
+
+// ListSeriesParams defines parameters for ListSeries.
+type ListSeriesParams struct {
+	Limit  *int                  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int                  `form:"offset,omitempty" json:"offset,omitempty"`
+	Sort   *ListSeriesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
+// ListSeriesParamsSort defines parameters for ListSeries.
+type ListSeriesParamsSort string
+
 // RegisterDeviceJSONRequestBody defines body for RegisterDevice for application/json ContentType.
 type RegisterDeviceJSONRequestBody = DeviceRegistrationRequest
 
@@ -155,9 +296,24 @@ type ServerInterface interface {
 	// Resolve the current (account, profile, device) from the token
 	// (GET /api/v1/auth/me)
 	GetCurrentSession(w http.ResponseWriter, r *http.Request)
+	// Media item detail with effective metadata
+	// (GET /api/v1/items/{itemId})
+	GetMediaItem(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID)
+	// List the account's libraries
+	// (GET /api/v1/libraries)
+	ListLibraries(w http.ResponseWriter, r *http.Request)
+	// Browse movies in a library
+	// (GET /api/v1/libraries/{libraryId}/movies)
+	ListMovies(w http.ResponseWriter, r *http.Request, libraryId openapi_types.UUID, params ListMoviesParams)
+	// Browse series in a library
+	// (GET /api/v1/libraries/{libraryId}/series)
+	ListSeries(w http.ResponseWriter, r *http.Request, libraryId openapi_types.UUID, params ListSeriesParams)
 	// Service identity and version
 	// (GET /api/v1/ping)
 	Ping(w http.ResponseWriter, r *http.Request)
+	// Series detail with seasons and episodes
+	// (GET /api/v1/series/{seriesId})
+	GetSeries(w http.ResponseWriter, r *http.Request, seriesId openapi_types.UUID)
 	// Liveness/readiness probe
 	// (GET /healthz)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -272,11 +428,243 @@ func (siw *ServerInterfaceWrapper) GetCurrentSession(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetMediaItem operation middleware
+func (siw *ServerInterfaceWrapper) GetMediaItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "itemId" -------------
+	var itemId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "itemId", r.PathValue("itemId"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "itemId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMediaItem(w, r, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLibraries operation middleware
+func (siw *ServerInterfaceWrapper) ListLibraries(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLibraries(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListMovies operation middleware
+func (siw *ServerInterfaceWrapper) ListMovies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "libraryId" -------------
+	var libraryId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "libraryId", r.PathValue("libraryId"), &libraryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "libraryId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListMoviesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMovies(w, r, libraryId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSeries operation middleware
+func (siw *ServerInterfaceWrapper) ListSeries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "libraryId" -------------
+	var libraryId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "libraryId", r.PathValue("libraryId"), &libraryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "libraryId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSeriesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSeries(w, r, libraryId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // Ping operation middleware
 func (siw *ServerInterfaceWrapper) Ping(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Ping(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSeries operation middleware
+func (siw *ServerInterfaceWrapper) GetSeries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "seriesId" -------------
+	var seriesId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "seriesId", r.PathValue("seriesId"), &seriesId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "seriesId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSeries(w, r, seriesId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -425,7 +813,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/auth/devices/{deviceId}", wrapper.RevokeDevice)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/login", wrapper.Login)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/auth/me", wrapper.GetCurrentSession)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/items/{itemId}", wrapper.GetMediaItem)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/libraries", wrapper.ListLibraries)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/libraries/{libraryId}/movies", wrapper.ListMovies)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/libraries/{libraryId}/series", wrapper.ListSeries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/ping", wrapper.Ping)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/series/{seriesId}", wrapper.GetSeries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.GetHealth)
 
 	return m
@@ -436,32 +829,42 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"1DzxpFzdrP4LAAD//w==",
+	"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",
+	"66EAvpdpuTr74m5B29vtfwMAAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

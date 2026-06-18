@@ -111,6 +111,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libraries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the account's libraries */
+        get: operations["listLibraries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libraries/{libraryId}/movies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse movies in a library */
+        get: operations["listMovies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libraries/{libraryId}/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse series in a library */
+        get: operations["listSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/series/{seriesId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Series detail with seasons and episodes */
+        get: operations["getSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/items/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Media item detail with effective metadata */
+        get: operations["getMediaItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -184,6 +269,77 @@ export interface components {
             /** Format: uuid */
             deviceId: string;
             role: components["schemas"]["Role"];
+        };
+        Library: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            kind: string;
+        };
+        MediaItemSummary: {
+            /** Format: uuid */
+            id: string;
+            kind: string;
+            title: string;
+            year?: number | null;
+            posterUrl?: string | null;
+        };
+        MediaItemDetail: {
+            /** Format: uuid */
+            id: string;
+            kind: string;
+            title: string;
+            year?: number | null;
+            overview?: string | null;
+            genres?: string[];
+            posterUrl?: string | null;
+            durationSeconds?: number | null;
+            container?: string | null;
+            filePath: string;
+            reviewRequired: boolean;
+        };
+        MediaItemPage: {
+            items: components["schemas"]["MediaItemSummary"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        SeriesSummary: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            year?: number | null;
+            posterUrl?: string | null;
+        };
+        SeriesPage: {
+            items: components["schemas"]["SeriesSummary"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        EpisodeSummary: {
+            /** Format: uuid */
+            id: string;
+            episodeNumber: number;
+            title?: string | null;
+            /** Format: uuid */
+            mediaItemId?: string | null;
+        };
+        SeasonSummary: {
+            /** Format: uuid */
+            id: string;
+            seasonNumber: number;
+            title?: string | null;
+            episodes: components["schemas"]["EpisodeSummary"][];
+        };
+        SeriesDetail: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            year?: number | null;
+            overview?: string | null;
+            posterUrl?: string | null;
+            seasons: components["schemas"]["SeasonSummary"][];
         };
     };
     responses: {
@@ -382,6 +538,129 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    listLibraries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listMovies: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                sort?: "title" | "added" | "year";
+            };
+            header?: never;
+            path: {
+                libraryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaItemPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listSeries: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                sort?: "title" | "year";
+            };
+            header?: never;
+            path: {
+                libraryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seriesId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getMediaItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaItemDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

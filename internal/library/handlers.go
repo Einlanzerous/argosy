@@ -1,0 +1,123 @@
+package library
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"strconv"
+
+	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type handlers struct {
+	store  *Store
+	logger *slog.Logger
+}
+
+// RegisterRoutes wires the auth-scoped browse endpoints and the public artwork
+// file server onto mux. artworkDir == "" disables artwork serving.
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger) {
+	h := &handlers{store: NewStore(pool, artworkBase), logger: logger}
+	mw := auth.Middleware(authStore)
+
+	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))
+	mux.Handle("GET /api/v1/libraries/{libraryId}/movies", mw(http.HandlerFunc(h.listMovies)))
+	mux.Handle("GET /api/v1/libraries/{libraryId}/series", mw(http.HandlerFunc(h.listSeries)))
+	mux.Handle("GET /api/v1/series/{seriesId}", mw(http.HandlerFunc(h.getSeries)))
+	mux.Handle("GET /api/v1/items/{itemId}", mw(http.HandlerFunc(h.getItem)))
+
+	if artworkDir != "" {
+		mux.Handle("GET /artwork/", http.StripPrefix("/artwork/", http.FileServer(http.Dir(artworkDir))))
+	}
+}
+
+func (h *handlers) listLibraries(w http.ResponseWriter, r *http.Request) {
+	libs, err := h.store.ListLibraries(r.Context(), accountOf(r))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, libs)
+}
+
+func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
+	limit, offset := pagination(r)
+	page, err := h.store.ListMovies(r.Context(), accountOf(r), r.PathValue("libraryId"), limit, offset, r.URL.Query().Get("sort"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (h *handlers) listSeries(w http.ResponseWriter, r *http.Request) {
+	limit, offset := pagination(r)
+	page, err := h.store.ListSeries(r.Context(), accountOf(r), r.PathValue("libraryId"), limit, offset, r.URL.Query().Get("sort"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {
+	d, err := h.store.GetSeries(r.Context(), accountOf(r), r.PathValue("seriesId"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if d == nil {
+		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *handlers) getItem(w http.ResponseWriter, r *http.Request) {
+	d, err := h.store.GetItem(r.Context(), accountOf(r), r.PathValue("itemId"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if d == nil {
+		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+func accountOf(r *http.Request) string {
+	sess, _ := auth.SessionFromContext(r.Context())
+	return sess.AccountId.String()
+}
+
+func pagination(r *http.Request) (limit, offset int) {
+	limit, offset = 50, 0
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil {
+		limit = v
+	}
+	switch {
+	case limit < 1:
+		limit = 1
+	case limit > 200:
+		limit = 200
+	}
+	if v, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && v >= 0 {
+		offset = v
+	}
+	return limit, offset
+}
+
+func (h *handlers) fail(w http.ResponseWriter, err error) {
+	h.logger.Error("browse query failed", "err", err)
+	writeJSON(w, http.StatusInternalServerError, errorBody("internal error"))
+}
+
+func errorBody(msg string) map[string]string { return map[string]string{"error": msg} }
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
