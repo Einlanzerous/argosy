@@ -145,6 +145,101 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/libraries:
+    get:
+      tags: [library]
+      operationId: listLibraries
+      summary: List the account's libraries
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Library"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/libraries/{libraryId}/movies:
+    get:
+      tags: [library]
+      operationId: listMovies
+      summary: Browse movies in a library
+      parameters:
+        - { name: libraryId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0 } }
+        - { name: sort, in: query, schema: { type: string, enum: [title, added, year], default: title } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaItemPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/libraries/{libraryId}/series:
+    get:
+      tags: [library]
+      operationId: listSeries
+      summary: Browse series in a library
+      parameters:
+        - { name: libraryId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0 } }
+        - { name: sort, in: query, schema: { type: string, enum: [title, year], default: title } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeriesPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/series/{seriesId}:
+    get:
+      tags: [library]
+      operationId: getSeries
+      summary: Series detail with seasons and episodes
+      parameters:
+        - { name: seriesId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeriesDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/items/{itemId}:
+    get:
+      tags: [library]
+      operationId: getMediaItem
+      summary: Media item detail with effective metadata
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaItemDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -305,6 +400,96 @@ components:
           format: uuid
         role:
           $ref: "#/components/schemas/Role"
+
+    Library:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string }
+
+    MediaItemSummary:
+      type: object
+      required: [id, kind, title]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        title: { type: string }
+        year: { type: integer, nullable: true }
+        posterUrl: { type: string, nullable: true }
+
+    MediaItemDetail:
+      type: object
+      required: [id, kind, title, filePath, reviewRequired]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        title: { type: string }
+        year: { type: integer, nullable: true }
+        overview: { type: string, nullable: true }
+        genres: { type: array, items: { type: string } }
+        posterUrl: { type: string, nullable: true }
+        durationSeconds: { type: number, nullable: true }
+        container: { type: string, nullable: true }
+        filePath: { type: string }
+        reviewRequired: { type: boolean }
+
+    MediaItemPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MediaItemSummary" } }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    SeriesSummary:
+      type: object
+      required: [id, title]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        year: { type: integer, nullable: true }
+        posterUrl: { type: string, nullable: true }
+
+    SeriesPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SeriesSummary" } }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    EpisodeSummary:
+      type: object
+      required: [id, episodeNumber]
+      properties:
+        id: { type: string, format: uuid }
+        episodeNumber: { type: integer }
+        title: { type: string, nullable: true }
+        mediaItemId: { type: string, format: uuid, nullable: true }
+
+    SeasonSummary:
+      type: object
+      required: [id, seasonNumber, episodes]
+      properties:
+        id: { type: string, format: uuid }
+        seasonNumber: { type: integer }
+        title: { type: string, nullable: true }
+        episodes: { type: array, items: { $ref: "#/components/schemas/EpisodeSummary" } }
+
+    SeriesDetail:
+      type: object
+      required: [id, title, seasons]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        year: { type: integer, nullable: true }
+        overview: { type: string, nullable: true }
+        posterUrl: { type: string, nullable: true }
+        seasons: { type: array, items: { $ref: "#/components/schemas/SeasonSummary" } }
 
 security:
   - bearerAuth: []
