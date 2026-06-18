@@ -98,6 +98,11 @@ func (s *Scanner) Scan(ctx context.Context, libraryID string, src mediasource.So
 	}
 	close(jobs)
 	wg.Wait()
+
+	// Group episodes into series/seasons and parse movie years (single-threaded).
+	if err := s.Classify(ctx, libraryID); err != nil {
+		return res, err
+	}
 	return res, nil
 }
 
