@@ -1,4 +1,10 @@
-# ⚓ Argosy
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/argosy_logo_dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/argosy_logo_light.png" />
+    <img alt="Argosy" src="assets/argosy_logo_light.png" width="420" />
+  </picture>
+</p>
 
 Self-hosted, owned-media streaming server — a Plex alternative you actually build. The differentiator is **seamless cross-device resume** (start at the gym, finish on the TV).
 

@@ -24,7 +24,7 @@ onMounted(async () => {
 
 <template>
   <main class="home">
-    <h1>⚓ Argosy</h1>
+    <img class="logo" src="/argosy_logo_light.png" alt="Argosy" width="360" height="100" />
     <p class="tagline">Your fleet, your manifest, your media.</p>
     <p class="ping">API: <code>{{ ping }}</code></p>
     <p class="hint">Scaffold ready — this home view is a placeholder for the Phase 2 web player.</p>
@@ -37,6 +37,11 @@ onMounted(async () => {
   max-width: 40rem;
   margin: 4rem auto;
   padding: 0 1rem;
+}
+.logo {
+  display: block;
+  width: min(360px, 80%);
+  height: auto;
 }
 .tagline {
   color: #6b7280;
