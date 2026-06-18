@@ -21,6 +21,11 @@ type Config struct {
 	// first startup if one with that username does not already exist.
 	AdminUsername string
 	AdminPassword string
+	// TMDB credentials for metadata matching (either is sufficient).
+	TMDBReadToken string
+	TMDBAPIKey    string
+	// ArtworkDir is where downloaded poster/artwork files are cached.
+	ArtworkDir string
 }
 
 // Load reads configuration from the environment, applying sensible defaults.
@@ -31,6 +36,9 @@ func Load() Config {
 		MediaDir:      getenv("ARGOSY_MEDIA_DIR", "/media"),
 		AdminUsername: os.Getenv("ARGOSY_ADMIN_USERNAME"),
 		AdminPassword: os.Getenv("ARGOSY_ADMIN_PASSWORD"),
+		TMDBReadToken: os.Getenv("TMDB_API_READ_ACCESS_KEY"),
+		TMDBAPIKey:    os.Getenv("TMDB_API_KEY"),
+		ArtworkDir:    getenv("ARGOSY_ARTWORK_DIR", "artwork"),
 	}
 }
 

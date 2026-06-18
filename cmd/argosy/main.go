@@ -26,10 +26,16 @@ func main() {
 
 	cfg := config.Load()
 
-	// Subcommands (e.g. `argosy scan ...`) run and exit instead of serving.
-	if len(os.Args) > 1 && os.Args[1] == "scan" {
-		runScan(cfg, logger, os.Args[2:])
-		return
+	// Subcommands run and exit instead of serving.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "scan":
+			runScan(cfg, logger, os.Args[2:])
+			return
+		case "match":
+			runMatch(cfg, logger, os.Args[2:])
+			return
+		}
 	}
 
 	logger.Info("starting argosy", "version", version.Version, "addr", cfg.Addr)
