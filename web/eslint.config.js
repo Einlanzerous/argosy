@@ -9,7 +9,7 @@ export default defineConfigWithVueTs(
   },
   {
     name: 'app/files-to-ignore',
-    ignores: ['dist/**', '../internal/webui/dist/**'],
+    ignores: ['dist/**', '../internal/webui/dist/**', 'src/api/schema.ts'],
   },
   pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,

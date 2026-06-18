@@ -1,0 +1,310 @@
+openapi: 3.0.3
+info:
+  title: Argosy API
+  version: 0.1.0
+  description: |
+    Self-hosted media streaming server. This spec is the single source of truth
+    for the HTTP contract; the Go server interface and the TypeScript client are
+    generated from it (`make generate`), and CI fails on drift.
+
+servers:
+  - url: /
+
+tags:
+  - name: system
+  - name: auth
+
+paths:
+  /healthz:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Liveness/readiness probe
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+        "503":
+          description: A dependency (e.g. the database) is unavailable
+
+  /api/v1/ping:
+    get:
+      tags: [system]
+      operationId: ping
+      summary: Service identity and version
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PingResponse"
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Authenticate an account and list its profiles
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated; returns the account and its profiles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/devices:
+    post:
+      tags: [auth]
+      operationId: registerDevice
+      summary: Register a device for a profile and issue a device token
+      description: |
+        Re-authenticates with account credentials and binds a new device to the
+        chosen profile, returning a bearer token used for all subsequent calls.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceRegistrationRequest"
+      responses:
+        "201":
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRegistrationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    get:
+      tags: [auth]
+      operationId: listDevices
+      summary: List devices in the current account (the Fleet)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Device"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/devices/{deviceId}:
+    delete:
+      tags: [auth]
+      operationId: revokeDevice
+      summary: Revoke a device token ("retire from the Fleet")
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Device revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentSession
+      summary: Resolve the current (account, profile, device) from the token
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Per-device token issued by registerDevice.
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Authenticated but not allowed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    PingResponse:
+      type: object
+      required: [service, status, version]
+      properties:
+        service:
+          type: string
+          example: argosy
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: dev
+
+    Role:
+      type: string
+      enum: [admin, viewer]
+
+    Account:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    UserProfile:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      required: [account, profiles]
+      properties:
+        account:
+          $ref: "#/components/schemas/Account"
+        profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserProfile"
+
+    DeviceRegistrationRequest:
+      type: object
+      required: [username, password, userId, deviceName]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        userId:
+          type: string
+          format: uuid
+          description: The profile this device is bound to.
+        deviceName:
+          type: string
+
+    Device:
+      type: object
+      required: [id, name, userId, revoked, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        lastSeenAt:
+          type: string
+          format: date-time
+          nullable: true
+        revoked:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    DeviceRegistrationResponse:
+      type: object
+      required: [device, token]
+      properties:
+        device:
+          $ref: "#/components/schemas/Device"
+        token:
+          type: string
+          description: Bearer token for this device.
+
+    Session:
+      type: object
+      required: [accountId, userId, deviceId, role]
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/Role"
+
+security:
+  - bearerAuth: []
