@@ -1,13 +1,118 @@
+/* Argosy design system — brass-on-charcoal, mercantile. Tokens mirror the
+   Claude Design composition (Argosy.dc.html). Fonts are bundled via
+   @fontsource-variable (imported in main.ts) so the app works offline. */
 :root {
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color: #1f2937;
-  background: #ffffff;
+  --arg-bg: #171717;
+  --arg-bg-2: #141413;
+  --arg-panel: #1c1c1a;
+  --arg-panel-2: #1d1d1b;
+  --arg-panel-hi: #201f1c;
+  --arg-ink: #0c0c0b;
+  --arg-ink-2: #121211;
+
+  --arg-cream: #eaeae5;
+  --arg-soft: #b8b8b0;
+  --arg-soft-2: #cfcfc7;
+  --arg-dim: #9a9a92;
+  --arg-faint: #6f6f68;
+  --arg-faint-2: #5f5f58;
+  --arg-mute: #7a7a72;
+
+  --arg-accent: #c99a4e;
+  --arg-accent-hi: #ddb066;
+  --arg-accent-soft: #d9b87f;
+  --arg-green: #5aa86a;
+  --arg-danger: #e08a6e;
+
+  --arg-line: rgba(234, 234, 229, 0.08);
+  --arg-line-2: rgba(234, 234, 229, 0.14);
+  --arg-line-3: rgba(234, 234, 229, 0.18);
+  --arg-accent-line: rgba(201, 154, 78, 0.22);
+  --arg-accent-bg: rgba(201, 154, 78, 0.1);
+  --arg-accent-bg-2: rgba(201, 154, 78, 0.16);
+
+  --arg-display: 'Archivo Variable', system-ui, sans-serif;
+  --arg-body: 'Hanken Grotesk Variable', system-ui, sans-serif;
+
+  --arg-r-sm: 8px;
+  --arg-r: 10px;
+  --arg-r-lg: 12px;
+  --arg-r-xl: 16px;
+
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--arg-bg);
+  color: var(--arg-cream);
+  font-family: var(--arg-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(234, 234, 229, 0.14);
+  border-radius: 10px;
+  border: 2px solid var(--arg-bg);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* The diagonal-hatch texture the design lays over poster/backdrop placeholders. */
+.arg-hatch {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(234, 234, 229, 0.03) 0 2px,
+    transparent 2px 9px
+  );
+}
+
+@keyframes argPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 154, 78, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px 4px rgba(201, 154, 78, 0.28);
+  }
+}
+@keyframes argFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

@@ -13,6 +13,8 @@
     "gen:api": "openapi-typescript ../proto/openapi/argosy.yaml -o src/api/schema.ts"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "^5.1.0",
+    "@fontsource-variable/hanken-grotesk": "^5.1.0",
     "openapi-fetch": "^0.17.0",
     "pinia": "^2.3.0",
     "vue": "^3.5.13",
