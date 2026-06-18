@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "5dd351de97adcbbf52edfbaa21ef30cef37fe4ed",
+  "include-component-in-tag": false,
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "argosy",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}
