@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/version"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +23,11 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (*http.Serv
 
 	mux.HandleFunc("GET /healthz", healthHandler(pool))
 	mux.HandleFunc("GET /api/v1/ping", handlePing)
+
+	// The auth surface needs a database; without one the server is read-only.
+	if pool != nil {
+		auth.RegisterRoutes(mux, auth.NewStore(pool))
+	}
 
 	spa, err := newSPAHandler()
 	if err != nil {

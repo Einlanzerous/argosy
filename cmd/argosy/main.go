@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/mediatool"
@@ -43,6 +44,22 @@ func main() {
 		pool = p
 		defer pool.Close()
 		logger.Info("database connected and migrated")
+
+		if cfg.AdminUsername != "" && cfg.AdminPassword != "" {
+			store := auth.NewStore(pool)
+			switch exists, err := store.AccountExists(context.Background(), cfg.AdminUsername); {
+			case err != nil:
+				logger.Error("admin bootstrap check failed", "err", err)
+			case exists:
+				// already provisioned
+			default:
+				if _, err := store.CreateAccount(context.Background(), cfg.AdminUsername, cfg.AdminPassword, cfg.AdminUsername); err != nil {
+					logger.Error("admin bootstrap failed", "err", err)
+				} else {
+					logger.Info("bootstrapped admin account", "username", cfg.AdminUsername)
+				}
+			}
+		}
 	} else {
 		logger.Warn("no database configured; set ARGOSY_DATABASE_URL or ARGOSY_DB_HOST")
 	}
