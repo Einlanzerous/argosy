@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-argosy}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-argosy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}   # dev placeholder; override in deploy/.env
       POSTGRES_DB: ${POSTGRES_DB:-argosy}
     # construct-server already binds host 5432 (loopback) — publish on 5433.
     ports:
@@ -36,8 +36,9 @@ services:
         condition: service_healthy
     environment:
       ARGOSY_ADDR: ":8096"
-      ARGOSY_DATABASE_URL: "postgres://${POSTGRES_USER:-argosy}:${POSTGRES_PASSWORD:-argosy}@db:5432/${POSTGRES_DB:-argosy}?sslmode=disable"
       ARGOSY_MEDIA_DIR: "/media"
+      # ARGOSY_DATABASE_URL is wired in ARGY-11 (DB driver + migrations), e.g.:
+      #   postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
     ports:
       - "${ARGOSY_HOST_PORT:-8096}:8096"
     working_dir: /app
