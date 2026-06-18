@@ -12,14 +12,16 @@ import (
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/library"
+	"github.com/Einlanzerous/argosy/internal/stevedore"
 	"github.com/Einlanzerous/argosy/internal/version"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // New builds the HTTP server. Routes here are deliberately minimal — the real
 // API surface is generated from the OpenAPI spec in a later Phase 0 ticket.
-// pool may be nil when no database is configured.
-func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (*http.Server, error) {
+// pool may be nil when no database is configured; scheduler may be nil to
+// disable the scan trigger/status endpoints.
+func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *stevedore.Scheduler) (*http.Server, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthHandler(pool))
@@ -30,6 +32,13 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (*http.Serv
 		authStore := auth.NewStore(pool)
 		auth.RegisterRoutes(mux, authStore)
 		library.RegisterRoutes(mux, pool, authStore, cfg.ArtworkDir, "/artwork", logger)
+
+		if scheduler != nil {
+			mw := auth.Middleware(authStore)
+			sh := &scanHandlers{sched: scheduler}
+			mux.Handle("POST /api/v1/scan", mw(http.HandlerFunc(sh.trigger)))
+			mux.Handle("GET /api/v1/scan/status", mw(http.HandlerFunc(sh.status)))
+		}
 	}
 
 	spa, err := newSPAHandler()

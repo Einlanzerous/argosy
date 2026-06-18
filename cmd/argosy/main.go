@@ -16,7 +16,9 @@ import (
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/mediatool"
+	"github.com/Einlanzerous/argosy/internal/metadata"
 	"github.com/Einlanzerous/argosy/internal/server"
+	"github.com/Einlanzerous/argosy/internal/stevedore"
 	"github.com/Einlanzerous/argosy/internal/version"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -77,7 +79,18 @@ func main() {
 		logger.Warn("no database configured; set ARGOSY_DATABASE_URL or ARGOSY_DB_HOST")
 	}
 
-	srv, err := server.New(cfg, logger, pool)
+	// Stevedore's scan scheduler keeps the Manifest current; it also backs the
+	// scan trigger/status API. Only available with a database.
+	var scheduler *stevedore.Scheduler
+	if pool != nil {
+		var provider metadata.Provider
+		if tmdb := metadata.NewTMDB(cfg.TMDBReadToken, cfg.TMDBAPIKey); tmdb.Configured() {
+			provider = tmdb
+		}
+		scheduler = stevedore.NewScheduler(pool, logger, cfg.ArtworkDir, provider, cfg.ScanInterval)
+	}
+
+	srv, err := server.New(cfg, logger, pool, scheduler)
 	if err != nil {
 		logger.Error("failed to build server", "err", err)
 		os.Exit(1)
@@ -85,6 +98,10 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if scheduler != nil {
+		go scheduler.Run(ctx)
+	}
 
 	go func() {
 		logger.Info("listening", "addr", cfg.Addr)

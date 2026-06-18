@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger an immediate library re-scan ("rebuild the Manifest") */
+        post: operations["triggerScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scan/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current/last scan sweep status */
+        get: operations["getScanStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -270,6 +304,22 @@ export interface components {
             deviceId: string;
             role: components["schemas"]["Role"];
         };
+        ScanLibraryResult: {
+            /** Format: uuid */
+            libraryId: string;
+            name: string;
+            scanned: number;
+            errors: number;
+            error?: string;
+        };
+        ScanStatus: {
+            running: boolean;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            libraries: components["schemas"]["ScanLibraryResult"][];
+        };
         Library: {
             /** Format: uuid */
             id: string;
@@ -427,6 +477,53 @@ export interface operations {
                     "application/json": components["schemas"]["PingResponse"];
                 };
             };
+        };
+    };
+    triggerScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A scan sweep was queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description A scan sweep is already running or queued */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getScanStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     login: {
