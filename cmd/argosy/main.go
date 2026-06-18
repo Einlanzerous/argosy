@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/config"
+	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/mediatool"
 	"github.com/Einlanzerous/argosy/internal/server"
 	"github.com/Einlanzerous/argosy/internal/version"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -27,7 +29,25 @@ func main() {
 	// Best-effort: log the media toolchain so its absence is obvious at startup.
 	mediatool.LogVersions(context.Background(), logger)
 
-	srv, err := server.New(cfg, logger)
+	var pool *pgxpool.Pool
+	if cfg.DatabaseURL != "" {
+		if err := db.Migrate(context.Background(), cfg.DatabaseURL); err != nil {
+			logger.Error("database migration failed", "err", err)
+			os.Exit(1)
+		}
+		p, err := db.Open(context.Background(), cfg.DatabaseURL)
+		if err != nil {
+			logger.Error("database connection failed", "err", err)
+			os.Exit(1)
+		}
+		pool = p
+		defer pool.Close()
+		logger.Info("database connected and migrated")
+	} else {
+		logger.Warn("no database configured; set ARGOSY_DATABASE_URL or ARGOSY_DB_HOST")
+	}
+
+	srv, err := server.New(cfg, logger, pool)
 	if err != nil {
 		logger.Error("failed to build server", "err", err)
 		os.Exit(1)

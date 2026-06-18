@@ -10,7 +10,7 @@ COMPOSE := docker compose -f deploy/docker-compose.yml
 GO_PKGS := ./cmd/... ./internal/...   # scope go tooling; keep it out of web/node_modules
 
 .PHONY: all build web-build go-build ensure-embed server-dev web-dev lint fmt test tidy generate clean help \
-	compose-up compose-web compose-down compose-logs compose-reset docker-build
+	compose-up compose-web compose-down compose-logs compose-reset seed docker-build
 
 all: build
 
@@ -47,6 +47,9 @@ compose-down: ## Stop the dev stack
 
 compose-reset: ## Stop the dev stack and delete volumes (drops the DB!)
 	$(COMPOSE) down -v
+
+seed: ## Seed the dev database with a demo account + two profiles
+	$(COMPOSE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < internal/db/seed.sql
 
 docker-build: ## Build the production single-artifact image (argosy:dev)
 	docker build -f deploy/Dockerfile -t argosy:dev --build-arg VERSION=$(VERSION) .

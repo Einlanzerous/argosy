@@ -29,11 +29,12 @@ func TestHandlePing(t *testing.T) {
 	}
 }
 
-func TestHandleHealth(t *testing.T) {
+func TestHealthHandlerNoDB(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 
-	handleHealth(rec, req)
+	// nil pool => no database configured => always healthy.
+	healthHandler(nil)(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
