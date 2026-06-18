@@ -25,6 +25,13 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	cfg := config.Load()
+
+	// Subcommands (e.g. `argosy scan ...`) run and exit instead of serving.
+	if len(os.Args) > 1 && os.Args[1] == "scan" {
+		runScan(cfg, logger, os.Args[2:])
+		return
+	}
+
 	logger.Info("starting argosy", "version", version.Version, "addr", cfg.Addr)
 
 	// Best-effort: log the media toolchain so its absence is obvious at startup.
