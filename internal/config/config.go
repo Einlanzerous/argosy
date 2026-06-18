@@ -17,14 +17,20 @@ type Config struct {
 	// MediaDir is the root the ingestion layer reads from. The storage
 	// abstraction (local FS vs. Pydio Cells) lands in Phase 1.
 	MediaDir string
+	// AdminUsername/AdminPassword, when both set, bootstrap an admin account on
+	// first startup if one with that username does not already exist.
+	AdminUsername string
+	AdminPassword string
 }
 
 // Load reads configuration from the environment, applying sensible defaults.
 func Load() Config {
 	return Config{
-		Addr:        getenv("ARGOSY_ADDR", ":8096"),
-		DatabaseURL: resolveDatabaseURL(),
-		MediaDir:    getenv("ARGOSY_MEDIA_DIR", "/media"),
+		Addr:          getenv("ARGOSY_ADDR", ":8096"),
+		DatabaseURL:   resolveDatabaseURL(),
+		MediaDir:      getenv("ARGOSY_MEDIA_DIR", "/media"),
+		AdminUsername: os.Getenv("ARGOSY_ADMIN_USERNAME"),
+		AdminPassword: os.Getenv("ARGOSY_ADMIN_PASSWORD"),
 	}
 }
 

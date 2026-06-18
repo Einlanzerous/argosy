@@ -40,6 +40,23 @@ func Migrate(ctx context.Context, dsn string) error {
 		return fmt.Errorf("ping: %w", err)
 	}
 
+	// Serialize concurrent migrators (parallel test binaries, multiple server
+	// instances starting at once) with a session-scoped advisory lock so goose
+	// never races to create its bookkeeping table.
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire conn: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	const migrationLockKey int64 = 0x4152474F5359 // "ARGOSY"
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey); err != nil {
+		return fmt.Errorf("acquire migration lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1)", migrationLockKey)
+	}()
+
 	goose.SetBaseFS(migrationFS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		return fmt.Errorf("set dialect: %w", err)

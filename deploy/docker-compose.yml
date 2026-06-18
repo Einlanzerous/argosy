@@ -44,6 +44,9 @@ services:
       ARGOSY_DB_PASSWORD: "${POSTGRES_PASSWORD:-changeme}"
       ARGOSY_DB_NAME: "${POSTGRES_DB:-argosy}"
       ARGOSY_DB_SSLMODE: "disable"
+      # First-run admin bootstrap (created only if absent).
+      ARGOSY_ADMIN_USERNAME: "${ARGOSY_ADMIN_USERNAME:-admin}"
+      ARGOSY_ADMIN_PASSWORD: "${ARGOSY_ADMIN_PASSWORD:-changeme}"
     ports:
       - "${ARGOSY_HOST_PORT:-8096}:8096"
     working_dir: /app
