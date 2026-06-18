@@ -71,6 +71,27 @@ Health checks: `GET /healthz`, `GET /api/v1/ping`.
 
 Run `make help` for all targets.
 
+## Docker dev stack
+
+A one-command local stack (PostgreSQL + the Go server with hot-reload via `air`, `ffmpeg` in the image) lives in `deploy/`:
+
+```bash
+cp deploy/.env.example deploy/.env   # optional: override ports / media path
+make compose-up                      # Postgres + server (hot-reload) on :8096
+make compose-web                     # ...also the Vite dev server on :5173 (HMR)
+make compose-logs                    # tail logs
+make compose-down                    # stop
+make compose-reset                   # stop and delete volumes (drops the DB)
+```
+
+Defaults avoid the `construct-server` stack: server on `:8096`, Postgres published on host `:5433` (the server reaches it in-network on `5432`). Point `ARGOSY_MEDIA_DIR_HOST` at your library — it's mounted read-only at `/media`.
+
+The production single-artifact image (SPA embedded into the Go binary + ffmpeg) is built from `deploy/Dockerfile`:
+
+```bash
+make docker-build    # -> argosy:dev
+```
+
 ## Configuration
 
 | Env var                | Default   | Purpose                                   |

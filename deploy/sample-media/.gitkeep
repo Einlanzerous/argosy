@@ -1,0 +1,2 @@
+# Default media mount target for the dev stack (bind-mounted read-only at /media).
+# Drop a few sample files here, or point ARGOSY_MEDIA_DIR_HOST at your real library.

@@ -1,0 +1,72 @@
+name: argosy
+
+# Local dev stack for Argosy: PostgreSQL + the Go server (hot-reload via air),
+# with ffmpeg/ffprobe inside the server image. The Vue dev server is optional
+# (profile: webdev) — most of the time you run `make web-dev` on the host.
+#
+# Ports are chosen to avoid the construct-server stack. Copy .env.example to
+# .env to override. Run from the repo root with `make compose-up`.
+
+services:
+  db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-argosy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}   # dev placeholder; override in deploy/.env
+      POSTGRES_DB: ${POSTGRES_DB:-argosy}
+    # construct-server already binds host 5432 (loopback) — publish on 5433.
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-argosy} -d ${POSTGRES_DB:-argosy}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ARGOSY_ADDR: ":8096"
+      ARGOSY_MEDIA_DIR: "/media"
+      # ARGOSY_DATABASE_URL is wired in ARGY-11 (DB driver + migrations), e.g.:
+      #   postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+    ports:
+      - "${ARGOSY_HOST_PORT:-8096}:8096"
+    working_dir: /app
+    volumes:
+      - ..:/app                                              # source for hot reload
+      - gocache:/root/.cache/go-build                        # persist Go build cache
+      - gomod:/go/pkg/mod                                    # persist module cache
+      - ${ARGOSY_MEDIA_DIR_HOST:-./sample-media}:/media:ro   # your media library
+
+  # Optional Vite dev server with HMR. Enable with: make compose-web
+  web:
+    profiles: ["webdev"]
+    image: node:24-bookworm-slim
+    restart: unless-stopped
+    depends_on:
+      - server
+    working_dir: /app/web
+    command: sh -c "npm install && npm run dev -- --host"
+    environment:
+      VITE_DEV_PROXY: "http://server:8096"   # proxy API/stream to the server container
+    ports:
+      - "${WEB_HOST_PORT:-5173}:5173"
+    volumes:
+      - ..:/app
+      - webnode:/app/web/node_modules
+
+volumes:
+  pgdata:
+  gocache:
+  gomod:
+  webnode:
