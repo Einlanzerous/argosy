@@ -5,7 +5,7 @@ import Hls from 'hls.js'
 import { api } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
 import { formatClock } from '@/lib/format'
-import { getProgress, reportProgress, setWatched, streamUrl } from '@/lib/playback'
+import { getPlaybackInfo, getProgress, reportProgress, setWatched, streamUrl } from '@/lib/playback'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -33,14 +33,22 @@ const remaining = computed(() => Math.max(0, duration.value - position.value))
 const backdrop = computed(() => posterStyle(item.value?.posterUrl, item.value?.title ?? ''))
 
 onMounted(async () => {
-  const [{ data }, progress] = await Promise.all([
+  const [{ data }, progress, playback] = await Promise.all([
     api.GET('/api/v1/items/{itemId}', { params: { path: { itemId } } }),
     getProgress(itemId).catch(() => null),
+    getPlaybackInfo(itemId).catch(() => null),
   ])
   item.value = data ?? null
 
   const el = video.value
   if (!el) return
+
+  // Capability gate: don't even attempt a source the browser can't decode.
+  if (playback && !playback.directPlay) {
+    error.value = `Can't direct-play — ${playback.reason ?? 'unsupported format'}. On-the-fly transcoding lands in Phase 3.`
+    return
+  }
+
   attachSource(el, streamUrl(itemId))
   bindVideo(el)
 

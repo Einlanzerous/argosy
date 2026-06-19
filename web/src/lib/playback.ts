@@ -3,6 +3,14 @@ import type { components } from '@/api/schema'
 
 export type PlayState = components['schemas']['PlayState']
 export type ContinueItem = components['schemas']['ContinueItem']
+export type PlaybackInfo = components['schemas']['PlaybackInfo']
+
+export async function getPlaybackInfo(itemId: string): Promise<PlaybackInfo | null> {
+  const { data } = await api.GET('/api/v1/items/{itemId}/playback', {
+    params: { path: { itemId } },
+  })
+  return data ?? null
+}
 
 // The stream endpoint authorizes via ?token= because an HTML5 <video> can't set
 // the Authorization header.
