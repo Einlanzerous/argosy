@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/ballast"
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/mediatool"
@@ -108,7 +109,17 @@ func main() {
 		logger.Info("transcode ready", "available", caps.Available, "selected", caps.Selected, "encoding", encoder, "workDir", cfg.TranscodeDir)
 	}
 
-	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder)
+	// Ballast: keep the transcode cache within budget and reclaim orphans.
+	var sweeper *ballast.Sweeper
+	if tcManager != nil {
+		budget := cfg.TranscodeCacheBudget
+		if budget == 0 {
+			budget = 10 << 30 // 10 GiB default high-water mark
+		}
+		sweeper = ballast.NewSweeper(cfg.TranscodeDir, budget, cfg.TranscodeIdleTimeout, tcManager, logger)
+	}
+
+	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper)
 	if err != nil {
 		logger.Error("failed to build server", "err", err)
 		os.Exit(1)
@@ -122,6 +133,9 @@ func main() {
 	}
 	if tcManager != nil {
 		go tcManager.Run(ctx)
+	}
+	if sweeper != nil {
+		go sweeper.Run(ctx)
 	}
 
 	go func() {

@@ -302,6 +302,18 @@ func (m *Manager) Stop(id string) bool {
 	return true
 }
 
+// LiveIDs returns the set of session IDs currently tracked — i.e. the output
+// directories Ballast must not purge. Satisfies ballast.Live.
+func (m *Manager) LiveIDs() map[string]bool {
+	m.mu.Lock()
+	out := make(map[string]bool, len(m.sessions))
+	for id := range m.sessions {
+		out[id] = true
+	}
+	m.mu.Unlock()
+	return out
+}
+
 // List returns snapshots of all live sessions for the The Helm dashboard.
 func (m *Manager) List() []Session {
 	m.mu.Lock()

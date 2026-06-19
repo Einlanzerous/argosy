@@ -48,6 +48,9 @@ type Config struct {
 	// ForceSoftware pins encoding to libx264/libx265 regardless of hardware
 	// (debugging aid; see ARGY-30).
 	ForceSoftware bool
+	// TranscodeCacheBudget is the high-water mark (bytes) for the transcode
+	// cache dir; Ballast evicts idle sessions oldest-first when exceeded.
+	TranscodeCacheBudget int64
 }
 
 // Load reads configuration from the environment, applying sensible defaults.
@@ -68,7 +71,33 @@ func Load() Config {
 		MaxTranscodeSessions: parseInt(os.Getenv("ARGOSY_MAX_TRANSCODE_SESSIONS")),
 		EncoderPreference:    parseList(os.Getenv("ARGOSY_ENCODER_PREFERENCE")),
 		ForceSoftware:        os.Getenv("ARGOSY_FORCE_SOFTWARE") == "1" || os.Getenv("ARGOSY_FORCE_SOFTWARE") == "true",
+		TranscodeCacheBudget: parseSize(os.Getenv("ARGOSY_TRANSCODE_CACHE_BUDGET")),
 	}
+}
+
+// parseSize parses a byte size with an optional K/M/G suffix (powers of 1024),
+// e.g. "10G", "500M", "1048576". Returns 0 for empty/invalid (callers default).
+func parseSize(s string) int64 {
+	s = strings.TrimSpace(strings.ToUpper(s))
+	if s == "" {
+		return 0
+	}
+	mult := int64(1)
+	switch s[len(s)-1] {
+	case 'K':
+		mult, s = 1<<10, s[:len(s)-1]
+	case 'M':
+		mult, s = 1<<20, s[:len(s)-1]
+	case 'G':
+		mult, s = 1<<30, s[:len(s)-1]
+	case 'B':
+		s = s[:len(s)-1]
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n * mult
 }
 
 // parseInt returns the int value of s, or 0 when empty/invalid (callers apply

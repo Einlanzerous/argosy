@@ -378,6 +378,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/transcode/cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Transcode cache usage (Ballast) */
+        get: operations["getTranscodeCache"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/transcode/{sessionId}": {
         parameters: {
             query?: never;
@@ -467,6 +484,14 @@ export interface components {
             playlistUrl: string;
             error?: string;
             progress: components["schemas"]["TranscodeProgress"];
+        };
+        TranscodeCacheStats: {
+            /** Format: int64 */
+            totalBytes: number;
+            /** Format: int64 */
+            budgetBytes: number;
+            sessionDirs: number;
+            liveDirs: number;
         };
         TranscodeCapabilities: {
             /** @description Encoder backends usable on this host (always includes "software"). */
@@ -1278,6 +1303,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscodeCapabilities"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getTranscodeCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscodeCacheStats"];
                 };
             };
             401: components["responses"]["Unauthorized"];
