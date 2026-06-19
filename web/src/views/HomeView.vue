@@ -5,7 +5,7 @@ import { api } from '@/api/client'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import { posterStyle } from '@/lib/poster'
-import { formatRuntime } from '@/lib/format'
+import { formatRuntime, formatTitle } from '@/lib/format'
 import { getLibraries, getMovies, getSeries, type MovieSummary, type SeriesSummary } from '@/lib/manifest'
 import { getContinue, type ContinueItem } from '@/lib/playback'
 import { setPage } from '@/lib/page'
@@ -31,7 +31,7 @@ const hero = computed(() => {
       id: r.id,
       eyebrow: 'Continue watching',
       title: r.seriesTitle || r.title,
-      sub: r.seriesTitle ? r.title : r.year ? String(r.year) : '',
+      sub: r.seriesTitle ? formatTitle(r.title) : r.year ? String(r.year) : '',
       posterUrl: r.posterUrl,
       percent: r.percent,
       detailTo: (r.seriesId
@@ -119,8 +119,8 @@ onMounted(async () => {
             <div class="arg-hatch cw-hatch" />
             <div class="cw-grad" />
             <div class="cw-meta">
-              <div class="cw-title">{{ c.seriesTitle || c.title }}</div>
-              <div class="cw-sub">{{ c.seriesTitle ? c.title : c.year }}</div>
+              <div class="cw-title">{{ c.seriesTitle || formatTitle(c.title) }}</div>
+              <div class="cw-sub">{{ c.seriesTitle ? formatTitle(c.title) : c.year }}</div>
             </div>
             <div class="cw-bar"><div class="cw-fill" :style="{ width: `${c.percent}%` }" /></div>
           </div>

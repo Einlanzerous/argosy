@@ -23,6 +23,24 @@ export function formatRelative(iso: string | null | undefined): string {
   return `${days}d ago`
 }
 
+// Humanize an episode-code title: replaces a "S01E02" / "s1e2" token with
+// "Season 1 Ep 2" so cryptic codes don't leak into the UI. Leaves the rest of
+// the title (show name, real episode title) intact, and titles without a code
+// untouched. Examples:
+//   "The Good Place s01e01"        → "The Good Place · Season 1 Ep 1"
+//   "Sword Art Online S01E02 Sword"→ "Sword Art Online · Season 1 Ep 2 Sword"
+const episodeCode = /\s*[·\-—]?\s*S(\d{1,2})E(\d{1,2})\b/i
+
+export function formatTitle(title: string | null | undefined): string {
+  if (!title) return ''
+  const m = title.match(episodeCode)
+  if (!m) return title
+  const human = `Season ${Number(m[1])} Ep ${Number(m[2])}`
+  const replaced = title.replace(episodeCode, ` · ${human}`)
+  // Collapse a leading separator if the code was at the very start.
+  return replaced.replace(/^\s*·\s*/, '').trim()
+}
+
 // Clock like "0:42:15" from a position in seconds.
 export function formatClock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds))
