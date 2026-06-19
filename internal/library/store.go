@@ -178,8 +178,9 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 	return &d, nil
 }
 
-// GetSeries returns a series with its seasons/episodes, or nil if not found.
-func (s *Store) GetSeries(ctx context.Context, accountID, seriesID string) (*api.SeriesDetail, error) {
+// GetSeries returns a series with its seasons/episodes (including each episode's
+// runtime and the given user's resume progress), or nil if not found.
+func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID string) (*api.SeriesDetail, error) {
 	var id, title string
 	var year *int
 	var tags []string
@@ -208,11 +209,14 @@ func (s *Store) GetSeries(ctx context.Context, accountID, seriesID string) (*api
 
 	rows, err := s.pool.Query(ctx,
 		`SELECT se.id::text, se.season_number, se.title,
-		        e.id::text, e.episode_number, e.title, e.media_item_id::text
+		        e.id::text, e.episode_number, e.title, e.media_item_id::text,
+		        mi.duration_seconds, ps.position_seconds, ps.watched
 		 FROM seasons se
 		 LEFT JOIN episodes e ON e.season_id = se.id
+		 LEFT JOIN media_items mi ON mi.id = e.media_item_id
+		 LEFT JOIN play_state ps ON ps.media_item_id = e.media_item_id AND ps.user_id = $2
 		 WHERE se.series_id = $1
-		 ORDER BY se.season_number, e.episode_number`, seriesID)
+		 ORDER BY se.season_number, e.episode_number`, seriesID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +229,10 @@ func (s *Store) GetSeries(ctx context.Context, accountID, seriesID string) (*api
 		var seasonTitle *string
 		var epID, epTitle, epMediaItem *string
 		var epNum *int
-		if err := rows.Scan(&seasonID, &seasonNum, &seasonTitle, &epID, &epNum, &epTitle, &epMediaItem); err != nil {
+		var epDuration, epPosition *float64
+		var epWatched *bool
+		if err := rows.Scan(&seasonID, &seasonNum, &seasonTitle, &epID, &epNum, &epTitle, &epMediaItem,
+			&epDuration, &epPosition, &epWatched); err != nil {
 			return nil, err
 		}
 		i, ok := idx[seasonID]
@@ -242,6 +249,15 @@ func (s *Store) GetSeries(ctx context.Context, accountID, seriesID string) (*api
 				u := parseUUID(*epMediaItem)
 				ep.MediaItemId = &u
 			}
+			if epDuration != nil {
+				f := float32(*epDuration)
+				ep.DurationSeconds = &f
+			}
+			if epPosition != nil {
+				f := float32(*epPosition)
+				ep.PositionSeconds = &f
+			}
+			ep.Watched = epWatched
 			detail.Seasons[i].Episodes = append(detail.Seasons[i].Episodes, ep)
 		}
 	}

@@ -3,11 +3,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
-import { formatTitle } from '@/lib/format'
+import { formatRuntime, formatTitle } from '@/lib/format'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
 type SeriesDetail = components['schemas']['SeriesDetail']
+type Episode = SeriesDetail['seasons'][number]['episodes'][number]
 
 const route = useRoute()
 const router = useRouter()
@@ -24,6 +25,47 @@ const firstPlayable = computed(() => {
   }
   return null
 })
+
+function epPercent(ep: Episode): number {
+  if (!ep.durationSeconds || !ep.positionSeconds) return 0
+  return Math.min(100, (ep.positionSeconds / ep.durationSeconds) * 100)
+}
+
+function epInProgress(ep: Episode): boolean {
+  if (!ep.mediaItemId || ep.watched || (ep.positionSeconds ?? 0) <= 5) return false
+  return !ep.durationSeconds || (ep.positionSeconds ?? 0) < ep.durationSeconds * 0.95
+}
+
+// Playable episodes flattened in season/episode order, with their season number.
+const playableEpisodes = computed(() =>
+  (series.value?.seasons ?? []).flatMap((s) =>
+    s.episodes.filter((e) => e.mediaItemId).map((ep) => ({ ep, seasonNumber: s.seasonNumber })),
+  ),
+)
+
+// Resume target: the episode you're mid-way through, otherwise the next one
+// after the last episode you touched (watched or partially watched).
+const resumeTarget = computed(() => {
+  const eps = playableEpisodes.value
+  let lastTouched = -1
+  eps.forEach((x, i) => {
+    if (x.ep.watched || (x.ep.positionSeconds ?? 0) > 5) lastTouched = i
+  })
+  if (lastTouched < 0) return null
+  const touched = eps[lastTouched]
+  if (epInProgress(touched.ep)) return touched
+  return eps[lastTouched + 1] ?? null
+})
+
+const resumeLabel = computed(() => {
+  const t = resumeTarget.value
+  return t ? `Resume Season ${t.seasonNumber} Ep ${t.ep.episodeNumber}` : ''
+})
+
+function resumeSeries(): void {
+  const id = resumeTarget.value?.ep.mediaItemId
+  if (id) void router.push({ name: 'player', params: { id } })
+}
 
 async function load(id: string): Promise<void> {
   notFound.value = false
@@ -72,7 +114,15 @@ watch(
         </div>
         <p v-if="series.overview" class="synopsis">{{ series.overview }}</p>
         <div class="actions">
-          <button class="play" type="button" :disabled="!firstPlayable" @click="playFirst">
+          <template v-if="resumeTarget">
+            <button class="play" type="button" @click="resumeSeries">
+              <span>▶</span> {{ resumeLabel }}
+            </button>
+            <button class="ghost" type="button" :disabled="!firstPlayable" @click="playFirst">
+              Start Over
+            </button>
+          </template>
+          <button v-else class="play" type="button" :disabled="!firstPlayable" @click="playFirst">
             <span>▶</span> Play
           </button>
         </div>
@@ -110,7 +160,19 @@ watch(
             <span class="ep-tag">E{{ ep.episodeNumber }}</span>
             <span class="ep-title">{{ ep.title ? formatTitle(ep.title) : `Episode ${ep.episodeNumber}` }}</span>
           </div>
-          <div class="ep-status">{{ ep.mediaItemId ? 'Ready to play' : 'No file linked' }}</div>
+          <div class="ep-meta">
+            <span v-if="!ep.mediaItemId" class="ep-status">No file linked</span>
+            <template v-else>
+              <span class="ep-len">{{ formatRuntime(ep.durationSeconds) }}</span>
+              <span v-if="ep.watched" class="ep-watched">✓ Watched</span>
+              <span v-else-if="epInProgress(ep)" class="ep-left">
+                {{ Math.round(epPercent(ep)) }}% · {{ formatRuntime((ep.durationSeconds || 0) - (ep.positionSeconds || 0)) }} left
+              </span>
+            </template>
+          </div>
+          <div v-if="epInProgress(ep)" class="ep-bar">
+            <div class="ep-fill" :style="{ width: `${epPercent(ep)}%` }" />
+          </div>
         </div>
       </button>
     </div>
@@ -171,6 +233,10 @@ h1 {
 }
 .actions {
   margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .play {
   display: flex;
@@ -191,8 +257,24 @@ h1 {
   opacity: 0.5;
   cursor: default;
 }
+.ghost {
+  padding: 13px 22px;
+  border: 1px solid var(--arg-line-2);
+  border-radius: var(--arg-r);
+  background: rgba(20, 20, 19, 0.4);
+  color: var(--arg-cream);
+  font: 600 14px var(--arg-body);
+  cursor: pointer;
+}
+.ghost:hover {
+  border-color: var(--arg-accent);
+}
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .tabs {
-  margin-top: 30px;
+  margin-top: 22px;
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -275,10 +357,38 @@ h1 {
 .ep-title {
   font: 700 15px var(--arg-display);
 }
-.ep-status {
+.ep-meta {
   margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font: 600 11.5px var(--arg-body);
+}
+.ep-status {
   color: var(--arg-faint);
+}
+.ep-len {
+  color: var(--arg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.ep-watched {
+  color: var(--arg-accent);
+}
+.ep-left {
+  color: var(--arg-soft-2);
+  font-variant-numeric: tabular-nums;
+}
+.ep-bar {
+  margin-top: 9px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(234, 234, 229, 0.16);
+  overflow: hidden;
+}
+.ep-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--arg-accent);
 }
 .missing {
   padding: 80px 0;

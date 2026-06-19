@@ -679,6 +679,10 @@ export interface components {
             title?: string | null;
             /** Format: uuid */
             mediaItemId?: string | null;
+            durationSeconds?: number | null;
+            /** @description Current profile's resume position. */
+            positionSeconds?: number | null;
+            watched?: boolean | null;
         };
         SeasonSummary: {
             /** Format: uuid */

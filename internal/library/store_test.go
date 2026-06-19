@@ -107,7 +107,7 @@ func TestBrowseStore(t *testing.T) {
 		t.Fatalf("series page = %+v (err %v), want 1 'Provider Show'", series, err)
 	}
 
-	detail, err := s.GetSeries(ctx, accID, seriesID)
+	detail, err := s.GetSeries(ctx, accID, "00000000-0000-0000-0000-000000000000", seriesID)
 	if err != nil || detail == nil {
 		t.Fatalf("series detail err %v", err)
 	}
