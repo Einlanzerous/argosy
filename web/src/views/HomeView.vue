@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import type { RouteLocationRaw } from 'vue-router'
 import { api } from '@/api/client'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
 import { getLibraries, getMovies, getSeries, type MovieSummary, type SeriesSummary } from '@/lib/manifest'
+import { getContinue, type ContinueItem } from '@/lib/playback'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
@@ -13,64 +15,119 @@ type MovieDetail = components['schemas']['MediaItemDetail']
 
 const movies = ref<MovieSummary[]>([])
 const series = ref<SeriesSummary[]>([])
-const featuredDetail = ref<MovieDetail | null>(null)
+const continueItems = ref<ContinueItem[]>([])
+const heroDetail = ref<MovieDetail | null>(null)
 const loading = ref(true)
 
-const featured = computed(() => movies.value[0] ?? null)
 const recent = computed(() => movies.value.slice(0, 12))
 const shows = computed(() => series.value.slice(0, 12))
-const heroStyle = computed(() => posterStyle(featured.value?.posterUrl, featured.value?.title ?? ''))
+
+// The hero is the top continue-watching item when there is one (a real resume),
+// otherwise the most recent film as a featured spotlight.
+const hero = computed(() => {
+  const r = continueItems.value[0]
+  if (r) {
+    return {
+      id: r.id,
+      eyebrow: 'Continue watching',
+      title: r.seriesTitle || r.title,
+      sub: r.seriesTitle ? r.title : r.year ? String(r.year) : '',
+      posterUrl: r.posterUrl,
+      percent: r.percent,
+      detailTo: (r.seriesId
+        ? { name: 'series', params: { id: r.seriesId } }
+        : { name: 'movie', params: { id: r.id } }) as RouteLocationRaw,
+    }
+  }
+  const f = movies.value[0]
+  if (f) {
+    return {
+      id: f.id,
+      eyebrow: 'Featured in the hold',
+      title: f.title,
+      sub: f.year ? String(f.year) : '',
+      posterUrl: f.posterUrl,
+      percent: null as number | null,
+      detailTo: { name: 'movie', params: { id: f.id } } as RouteLocationRaw,
+    }
+  }
+  return null
+})
+
+const heroStyle = computed(() => posterStyle(hero.value?.posterUrl, hero.value?.title ?? ''))
 
 onMounted(async () => {
   setPage('Home')
   const libs = await getLibraries()
-  ;[movies.value, series.value] = await Promise.all([
+  ;[movies.value, series.value, continueItems.value] = await Promise.all([
     getMovies({ sort: 'added' }, libs),
     getSeries({ sort: 'title' }, libs),
+    getContinue().catch(() => []),
   ])
   loading.value = false
-  if (featured.value) {
+  if (hero.value) {
     const { data } = await api.GET('/api/v1/items/{itemId}', {
-      params: { path: { itemId: featured.value.id } },
+      params: { path: { itemId: hero.value.id } },
     })
-    featuredDetail.value = data ?? null
+    heroDetail.value = data ?? null
   }
 })
 </script>
 
 <template>
   <div>
-    <!-- full-bleed cinematic hero -->
-    <section v-if="featured" class="hero">
+    <section v-if="hero" class="hero">
       <div class="hero-art" :style="heroStyle" />
       <div class="shade-l" />
       <div class="shade-b" />
       <div class="hero-body">
-        <div class="eyebrow"><span>⇄</span> Featured in the hold</div>
-        <h1>{{ featured.title }}</h1>
+        <div class="eyebrow"><span>⇄</span> {{ hero.eyebrow }}</div>
+        <h1>{{ hero.title }}</h1>
         <div class="meta">
-          {{ [featured.year, featuredDetail ? formatRuntime(featuredDetail.durationSeconds) : null]
+          {{ [hero.sub, heroDetail ? formatRuntime(heroDetail.durationSeconds) : null]
             .filter(Boolean)
             .join(' · ') }}
         </div>
-        <p v-if="featuredDetail?.overview" class="synopsis">{{ featuredDetail.overview }}</p>
-        <div class="cue">
-          <span class="dot" /> Syncs across your Fleet — resume on any device
+        <p v-if="heroDetail?.overview" class="synopsis">{{ heroDetail.overview }}</p>
+        <div v-if="hero.percent != null" class="progress">
+          <div class="track"><div class="fill" :style="{ width: `${hero.percent}%` }" /></div>
+          <span>{{ Math.round(hero.percent) }}% watched</span>
         </div>
+        <div class="cue"><span class="dot" /> Syncs across your Fleet — resume on any device</div>
         <div class="actions">
-          <RouterLink class="play" :to="{ name: 'player', params: { id: featured.id } }">
-            <span>▶</span> Play
+          <RouterLink class="play" :to="{ name: 'player', params: { id: hero.id } }">
+            <span>▶</span> {{ hero.percent != null ? 'Resume' : 'Play' }}
           </RouterLink>
-          <RouterLink class="ghost" :to="{ name: 'movie', params: { id: featured.id } }">
-            Details
-          </RouterLink>
+          <RouterLink class="ghost" :to="hero.detailTo">Details</RouterLink>
         </div>
       </div>
     </section>
 
-    <div class="rails" :class="{ 'no-hero': !featured }">
-      <!-- Continue Watching takes this slot once play-state lands (Phase 3);
-           until then we surface Newly Arrived rather than an empty rail. -->
+    <div class="rails" :class="{ 'no-hero': !hero }">
+      <PosterRail
+        v-if="continueItems.length"
+        label="Continue Watching"
+        hint="pick up on any deck in your Fleet"
+      >
+        <RouterLink
+          v-for="c in continueItems"
+          :key="c.id"
+          class="cw"
+          :to="{ name: 'player', params: { id: c.id } }"
+        >
+          <div class="cw-art" :style="posterStyle(c.posterUrl, c.title)">
+            <div class="arg-hatch cw-hatch" />
+            <div class="cw-grad" />
+            <div class="cw-meta">
+              <div class="cw-title">{{ c.seriesTitle || c.title }}</div>
+              <div class="cw-sub">{{ c.seriesTitle ? c.title : c.year }}</div>
+            </div>
+            <div class="cw-bar"><div class="cw-fill" :style="{ width: `${c.percent}%` }" /></div>
+          </div>
+          <div class="cw-foot">{{ Math.round(c.percent) }}% · resume</div>
+        </RouterLink>
+      </PosterRail>
+
       <PosterRail v-if="recent.length" label="Newly Arrived" :view-all-to="{ name: 'library' }">
         <PosterCard
           v-for="m in recent"
@@ -129,12 +186,7 @@ onMounted(async () => {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    rgba(20, 20, 19, 0.95) 0%,
-    rgba(20, 20, 19, 0.6) 44%,
-    rgba(20, 20, 19, 0) 78%
-  );
+  background: linear-gradient(90deg, rgba(20, 20, 19, 0.95) 0%, rgba(20, 20, 19, 0.6) 44%, rgba(20, 20, 19, 0) 78%);
 }
 .shade-b {
   position: absolute;
@@ -172,6 +224,29 @@ h1 {
   max-width: 520px;
   font: 400 15px/1.6 var(--arg-body);
   color: #a8a89f;
+}
+.progress {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 460px;
+}
+.progress .track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(234, 234, 229, 0.2);
+}
+.progress .fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--arg-accent);
+}
+.progress span {
+  font: 600 12.5px var(--arg-body);
+  color: #bdbdb4;
+  font-variant-numeric: tabular-nums;
 }
 .cue {
   margin-top: 16px;
@@ -230,6 +305,63 @@ h1 {
 }
 .rails.no-hero {
   padding-top: 96px;
+}
+.cw {
+  display: block;
+  flex: none;
+  width: 300px;
+  cursor: pointer;
+  transition: transform 0.18s ease;
+}
+.cw:hover {
+  transform: translateY(-3px);
+}
+.cw-art {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 11px;
+  overflow: hidden;
+  border: 1px solid var(--arg-line);
+}
+.cw-hatch {
+  position: absolute;
+  inset: 0;
+}
+.cw-grad {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 45%, rgba(12, 12, 11, 0.85));
+}
+.cw-meta {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 16px;
+}
+.cw-title {
+  font: 700 16px var(--arg-display);
+}
+.cw-sub {
+  margin-top: 2px;
+  font: 500 11.5px var(--arg-body);
+  color: #bdbdb4;
+}
+.cw-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(234, 234, 229, 0.18);
+}
+.cw-fill {
+  height: 100%;
+  background: var(--arg-accent);
+}
+.cw-foot {
+  margin-top: 9px;
+  font: 500 11.5px var(--arg-body);
+  color: var(--arg-mute);
 }
 .hold-empty {
   margin-top: 40px;
