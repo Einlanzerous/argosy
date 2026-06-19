@@ -69,14 +69,9 @@ onMounted(async () => {
     </section>
 
     <div class="rails" :class="{ 'no-hero': !featured }">
-      <PosterRail label="Continue Watching" hint="pick up on any deck in your Fleet">
-        <div class="empty-rail">
-          Nothing in progress yet — start something and Argosy will hold your place on every device
-          in the Fleet.
-        </div>
-      </PosterRail>
-
-      <PosterRail v-if="recent.length" label="New in your library" :view-all-to="{ name: 'library' }">
+      <!-- Continue Watching takes this slot once play-state lands (Phase 3);
+           until then we surface Newly Arrived rather than an empty rail. -->
+      <PosterRail v-if="recent.length" label="Newly Arrived" :view-all-to="{ name: 'library' }">
         <PosterCard
           v-for="m in recent"
           :key="m.id"
@@ -235,15 +230,6 @@ h1 {
 }
 .rails.no-hero {
   padding-top: 96px;
-}
-.empty-rail {
-  flex: none;
-  max-width: 520px;
-  padding: 22px;
-  border-radius: var(--arg-r-lg);
-  border: 1px dashed var(--arg-line-2);
-  font: 400 13.5px/1.6 var(--arg-body);
-  color: var(--arg-dim);
 }
 .hold-empty {
   margin-top: 40px;
