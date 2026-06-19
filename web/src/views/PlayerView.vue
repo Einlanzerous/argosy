@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import Hls from 'hls.js'
 import { api } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
 import { formatClock } from '@/lib/format'
+import { getProgress, reportProgress, setWatched, streamUrl } from '@/lib/playback'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -12,59 +14,173 @@ type MovieDetail = components['schemas']['MediaItemDetail']
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
+const itemId = String(route.params.id)
 
+const video = ref<HTMLVideoElement | null>(null)
 const item = ref<MovieDetail | null>(null)
 const playing = ref(false)
 const position = ref(0)
+const duration = ref(0)
+const error = ref('')
 const resumeOpen = ref(false)
-const resumeFrom = ref<number | null>(null)
-const resumeFromDevice = ref('another device')
+const resumeFrom = ref(0)
 
-const duration = computed(() => item.value?.durationSeconds ?? 0)
+let hls: Hls | null = null
+let heartbeat: ReturnType<typeof setInterval> | null = null
+
 const pct = computed(() => (duration.value ? (position.value / duration.value) * 100 : 0))
 const remaining = computed(() => Math.max(0, duration.value - position.value))
-
 const backdrop = computed(() => posterStyle(item.value?.posterUrl, item.value?.title ?? ''))
 
 onMounted(async () => {
-  const { data } = await api.GET('/api/v1/items/{itemId}', {
-    params: { path: { itemId: String(route.params.id) } },
-  })
+  const [{ data }, progress] = await Promise.all([
+    api.GET('/api/v1/items/{itemId}', { params: { path: { itemId } } }),
+    getProgress(itemId).catch(() => null),
+  ])
   item.value = data ?? null
 
-  // Cross-device resume: in production this resolves from the shared play_state
-  // (lands with Phase 3). A ?resume=<seconds> query lets the prompt be previewed
-  // and is honoured here so a future "Resume" deep-link works unchanged.
-  const q = route.query.resume
-  if (typeof q === 'string' && Number.isFinite(Number(q))) {
-    resumeFrom.value = Number(q)
-    if (typeof route.query.from === 'string') resumeFromDevice.value = route.query.from
+  const el = video.value
+  if (!el) return
+  attachSource(el, streamUrl(itemId))
+  bindVideo(el)
+
+  // Resume prompt when there's a meaningful saved position.
+  if (progress && !progress.watched && progress.positionSeconds > 5) {
+    resumeFrom.value = progress.positionSeconds
     resumeOpen.value = true
+  } else {
+    void el.play().catch(() => {})
   }
 })
 
+onBeforeUnmount(() => {
+  flush()
+  if (heartbeat) clearInterval(heartbeat)
+  if (hls) hls.destroy()
+  const el = video.value
+  if (el) {
+    el.pause()
+    el.removeAttribute('src')
+    el.load()
+  }
+})
+
+// hls.js for HLS sources (Phase 3 transcode), native element for direct play.
+function attachSource(el: HTMLVideoElement, url: string): void {
+  if (url.includes('.m3u8') && Hls.isSupported()) {
+    hls = new Hls()
+    hls.loadSource(url)
+    hls.attachMedia(el)
+    hls.on(Hls.Events.ERROR, (_e, data) => {
+      if (data.fatal) error.value = 'This stream could not be played.'
+    })
+  } else {
+    el.src = url
+  }
+}
+
+function bindVideo(el: HTMLVideoElement): void {
+  el.addEventListener('loadedmetadata', () => {
+    duration.value = el.duration || item.value?.durationSeconds || 0
+  })
+  el.addEventListener('timeupdate', () => {
+    position.value = el.currentTime
+  })
+  el.addEventListener('play', () => {
+    playing.value = true
+  })
+  el.addEventListener('pause', () => {
+    playing.value = false
+    flush()
+  })
+  el.addEventListener('seeked', flush)
+  el.addEventListener('ended', () => {
+    void setWatched(itemId, true).catch(() => {})
+  })
+  el.addEventListener('error', () => {
+    error.value =
+      "This file can't be direct-played in your browser yet — on-the-fly transcoding lands in Phase 3."
+  })
+  // Throttled heartbeat while open.
+  heartbeat = setInterval(() => {
+    if (!el.paused && el.currentTime > 0) flush()
+  }, 10000)
+}
+
+function flush(): void {
+  const el = video.value
+  if (el && el.currentTime > 0) {
+    void reportProgress(itemId, el.currentTime, el.duration || undefined).catch(() => {})
+  }
+}
+
+function togglePlay(): void {
+  const el = video.value
+  if (!el) return
+  if (el.paused) void el.play().catch(() => {})
+  else el.pause()
+}
+
+function seek(e: MouseEvent): void {
+  const el = video.value
+  if (!el || !duration.value) return
+  const bar = e.currentTarget as HTMLElement
+  const rect = bar.getBoundingClientRect()
+  el.currentTime = ((e.clientX - rect.left) / rect.width) * duration.value
+}
+
+function skip(delta: number): void {
+  const el = video.value
+  if (el) el.currentTime = Math.min(duration.value, Math.max(0, el.currentTime + delta))
+}
+
+function fullscreen(): void {
+  const el = video.value?.closest('.player') as HTMLElement | null
+  if (el?.requestFullscreen) void el.requestFullscreen().catch(() => {})
+}
+
 function resume(): void {
-  if (resumeFrom.value != null) position.value = resumeFrom.value
+  const el = video.value
+  if (el) {
+    el.currentTime = resumeFrom.value
+    void el.play().catch(() => {})
+  }
   resumeOpen.value = false
-  playing.value = true
 }
 
 function startOver(): void {
-  position.value = 0
+  const el = video.value
+  if (el) {
+    el.currentTime = 0
+    void el.play().catch(() => {})
+  }
   resumeOpen.value = false
-  playing.value = true
 }
 
 function goBack(): void {
   if (window.history.length > 1) router.back()
   else void router.push({ name: 'home' })
 }
+
+function onKey(e: KeyboardEvent): void {
+  if (resumeOpen.value) return
+  if (e.key === ' ') {
+    e.preventDefault()
+    togglePlay()
+  } else if (e.key === 'ArrowLeft') skip(-10)
+  else if (e.key === 'ArrowRight') skip(10)
+  else if (e.key === 'f') fullscreen()
+  else if (e.key === 'Escape') goBack()
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
   <div class="player">
     <div class="backdrop" :style="backdrop" />
     <div class="arg-hatch backdrop-hatch" />
+    <video ref="video" class="video" playsinline @click="togglePlay" />
     <div class="vignette" />
 
     <!-- top chrome -->
@@ -81,53 +197,57 @@ function goBack(): void {
       </div>
     </div>
 
-    <!-- center -->
-    <div class="center">
-      <button class="big-play" type="button" @click="playing = !playing">
-        {{ playing ? '❚❚' : '▶' }}
-      </button>
+    <!-- center play -->
+    <div v-if="!playing && !error" class="center">
+      <button class="big-play" type="button" @click="togglePlay">▶</button>
+    </div>
+
+    <!-- error overlay -->
+    <div v-if="error" class="error">
+      <div class="error-card">
+        <div class="error-eyebrow">Can't direct-play</div>
+        <p>{{ error }}</p>
+        <button type="button" @click="goBack">Back to details</button>
+      </div>
     </div>
 
     <!-- bottom controls -->
     <div class="bottom">
       <div class="scrub">
         <span class="t">{{ formatClock(position) }}</span>
-        <div class="bar">
+        <div class="bar" @click="seek">
           <div class="fill" :style="{ width: `${pct}%` }" />
           <div class="knob" :style="{ left: `${pct}%` }" />
         </div>
         <span class="t">{{ formatClock(duration) }}</span>
       </div>
       <div class="buttons">
-        <button type="button">⟲ 10</button>
-        <button type="button">10 ⟳</button>
-        <button type="button">CC</button>
-        <button type="button">⤢ Fullscreen</button>
+        <button type="button" @click="skip(-10)">⟲ 10</button>
+        <button type="button" @click="togglePlay">{{ playing ? '❚❚ Pause' : '▶ Play' }}</button>
+        <button type="button" @click="skip(10)">10 ⟳</button>
+        <button type="button" @click="fullscreen">⤢ Fullscreen</button>
       </div>
-      <p class="note">Streaming is wired up in a later phase — this is the playback surface.</p>
     </div>
 
-    <!-- ★ signature: cross-device resume prompt -->
+    <!-- ★ cross-device resume prompt -->
     <div v-if="resumeOpen" class="resume-scrim">
       <div class="resume-card">
         <div class="resume-eyebrow"><span>⇄</span> Cross-device resume</div>
         <div class="resume-title">Pick up where you left off?</div>
         <div class="resume-body">
-          You were watching <strong>{{ item?.title }}</strong> on your
-          <strong>{{ resumeFromDevice }}</strong
-          >.
+          You were watching <strong>{{ item?.title }}</strong> on another device in your Fleet.
         </div>
         <div class="resume-stat">
           <div>
             <div class="stat-label">Left off at</div>
-            <div class="stat-time">{{ formatClock(resumeFrom ?? 0) }}</div>
+            <div class="stat-time">{{ formatClock(resumeFrom) }}</div>
           </div>
           <div class="stat-right">
-            moments ago<br /><span>{{ formatClock(remaining) }} remaining</span>
+            <span>{{ formatClock(remaining || duration - resumeFrom) }} remaining</span>
           </div>
         </div>
         <button class="resume-primary" type="button" @click="resume">
-          Resume from {{ formatClock(resumeFrom ?? 0) }}
+          Resume from {{ formatClock(resumeFrom) }}
         </button>
         <button class="resume-ghost" type="button" @click="startOver">Start from the beginning</button>
         <div class="resume-foot">Synced across your Fleet</div>
@@ -146,22 +266,26 @@ function goBack(): void {
 .backdrop {
   position: absolute;
   inset: 0;
-  opacity: 0.5;
+  opacity: 0.25;
 }
 .backdrop-hatch {
   position: absolute;
   inset: 0;
-  opacity: 0.5;
+  opacity: 0.4;
+}
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: transparent;
 }
 .vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(
-    80% 60% at 50% 42%,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(8, 8, 7, 0.55) 70%,
-    var(--arg-ink) 100%
-  );
+  pointer-events: none;
+  background: radial-gradient(80% 60% at 50% 42%, rgba(0, 0, 0, 0) 0%, rgba(8, 8, 7, 0.35) 75%, var(--arg-ink) 100%);
 }
 .top {
   position: absolute;
@@ -223,8 +347,10 @@ function goBack(): void {
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 .big-play {
+  pointer-events: auto;
   width: 84px;
   height: 84px;
   border-radius: 50%;
@@ -237,6 +363,45 @@ function goBack(): void {
 }
 .big-play:hover {
   background: rgba(201, 154, 78, 0.22);
+  border-color: var(--arg-accent);
+}
+.error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+}
+.error-card {
+  max-width: 420px;
+  text-align: center;
+  padding: 32px;
+  border-radius: var(--arg-r-xl);
+  background: linear-gradient(160deg, #201d18, #161513);
+  border: 1px solid var(--arg-line-2);
+}
+.error-eyebrow {
+  font: 700 11px var(--arg-display);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--arg-accent);
+}
+.error-card p {
+  margin: 14px 0 22px;
+  font: 400 14px/1.6 var(--arg-body);
+  color: var(--arg-soft);
+}
+.error-card button {
+  padding: 12px 22px;
+  border: 1px solid var(--arg-line-2);
+  border-radius: var(--arg-r);
+  background: transparent;
+  color: var(--arg-cream);
+  font: 600 14px var(--arg-body);
+  cursor: pointer;
+}
+.error-card button:hover {
   border-color: var(--arg-accent);
 }
 .bottom {
@@ -263,6 +428,7 @@ function goBack(): void {
   height: 5px;
   border-radius: 3px;
   background: rgba(234, 234, 229, 0.16);
+  cursor: pointer;
 }
 .fill {
   position: absolute;
@@ -298,12 +464,6 @@ function goBack(): void {
 }
 .buttons button:hover {
   color: var(--arg-cream);
-}
-.note {
-  margin: 16px 0 0;
-  text-align: center;
-  font: 500 11px var(--arg-body);
-  color: var(--arg-faint-2);
 }
 .resume-scrim {
   position: absolute;
