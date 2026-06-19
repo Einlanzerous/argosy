@@ -8,6 +8,14 @@ import (
 	"github.com/Einlanzerous/argosy/internal/webui"
 )
 
+// apiNotFound returns a JSON 404 for unmatched /api/ paths so API clients never
+// receive the SPA shell (which would break openapi-fetch error handling).
+func apiNotFound(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write([]byte(`{"error":"not found"}`))
+}
+
 // newSPAHandler serves the embedded Vue app with single-page-app fallback: real
 // asset paths are served directly, unknown paths fall back to index.html
 // (client-side routing), and before the first `vite build` a placeholder page
@@ -20,6 +28,13 @@ func newSPAHandler() (http.Handler, error) {
 	fileServer := http.FileServer(http.FS(sub))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Unmatched API routes fall through to this catch-all; never serve them
+		// the SPA shell — return a JSON 404 so API clients see a real error.
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			apiNotFound(w)
+			return
+		}
+
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name == "" {
 			name = "index.html"

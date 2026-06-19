@@ -23,9 +23,9 @@ export const router = createRouter({
       component: () => import('@/layouts/AppShell.vue'),
       children: [
         { path: '', name: 'home', component: () => import('@/views/HomeView.vue') },
+        // Library is the single browse surface; Movies/Shows are a ?kind= filter,
+        // not separate pages. (/movie/:id and /series/:id are item detail pages.)
         { path: 'library', name: 'library', component: () => import('@/views/LibraryView.vue') },
-        { path: 'movies', name: 'movies', component: () => import('@/views/LibraryView.vue') },
-        { path: 'shows', name: 'shows', component: () => import('@/views/LibraryView.vue') },
         { path: 'movie/:id', name: 'movie', component: () => import('@/views/MovieDetailView.vue') },
         { path: 'series/:id', name: 'series', component: () => import('@/views/SeriesDetailView.vue') },
         { path: 'fleet', name: 'fleet', component: () => import('@/views/FleetView.vue') },
