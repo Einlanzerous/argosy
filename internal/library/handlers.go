@@ -90,7 +90,7 @@ func (h *handlers) listSeries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {
-	d, err := h.store.GetSeries(r.Context(), accountOf(r), r.PathValue("seriesId"))
+	d, err := h.store.GetSeries(r.Context(), accountOf(r), userOf(r), r.PathValue("seriesId"))
 	if err != nil {
 		h.fail(w, err)
 		return

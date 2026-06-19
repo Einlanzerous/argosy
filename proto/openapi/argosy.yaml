@@ -908,6 +908,9 @@ components:
         episodeNumber: { type: integer }
         title: { type: string, nullable: true }
         mediaItemId: { type: string, format: uuid, nullable: true }
+        durationSeconds: { type: number, nullable: true }
+        positionSeconds: { type: number, nullable: true, description: "Current profile's resume position." }
+        watched: { type: boolean, nullable: true }
 
     SeasonSummary:
       type: object
