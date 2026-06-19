@@ -12,7 +12,7 @@ const menuOpen = ref(false)
 
 // Home and Library are full-bleed (their own backdrops sit under the floating
 // bar); other screens get padded so content clears the fixed bar.
-const fullBleed = computed(() => ['home', 'library', 'movies', 'shows'].includes(String(route.name)))
+const fullBleed = computed(() => ['home', 'library'].includes(String(route.name)))
 // The bar's pill search is hidden on Library, which has its own inline search.
 const showBarSearch = computed(() => String(route.name) !== 'library')
 const initial = computed(() => (session.profileName || 'Argosy').charAt(0).toUpperCase())

@@ -9,8 +9,8 @@ const input = ref<HTMLInputElement | null>(null)
 const query = ref('')
 
 const browse: { label: string; icon: string; to: RouteLocationRaw }[] = [
-  { label: 'Movies', icon: '▦', to: { name: 'movies' } },
-  { label: 'Shows', icon: '▥', to: { name: 'shows' } },
+  { label: 'Movies', icon: '▦', to: { name: 'library', query: { kind: 'movies' } } },
+  { label: 'Shows', icon: '▥', to: { name: 'library', query: { kind: 'series' } } },
   { label: 'Anime', icon: '◆', to: { name: 'library', query: { tag: 'Anime' } } },
   { label: 'Documentary', icon: '❖', to: { name: 'library', query: { tag: 'Documentary' } } },
   { label: '4K', icon: '◇', to: { name: 'library', query: { tag: '4K' } } },

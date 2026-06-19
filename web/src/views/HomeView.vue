@@ -142,7 +142,7 @@ onMounted(async () => {
         />
       </PosterRail>
 
-      <PosterRail v-if="shows.length" label="Shows" :view-all-to="{ name: 'shows' }">
+      <PosterRail v-if="shows.length" label="Shows" :view-all-to="{ name: 'library', query: { kind: 'series' } }">
         <PosterCard
           v-for="s in shows"
           :key="s.id"

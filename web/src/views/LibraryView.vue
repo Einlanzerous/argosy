@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 import PosterCard from '@/components/PosterCard.vue'
 import { posterStyle } from '@/lib/poster'
@@ -24,17 +24,35 @@ const SORTS: { key: MovieSort; label: string }[] = [
   { key: 'year', label: 'Year' },
 ]
 
+type Scope = 'all' | 'movies' | 'series'
+const KINDS: { key: Scope; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'movies', label: 'Movies' },
+  { key: 'series', label: 'Shows' },
+]
+
 const route = useRoute()
+const router = useRouter()
 const tag = ref('All')
 const sort = ref<MovieSort>('added')
 const cards = ref<Card[]>([])
 const loading = ref(true)
 
-const scope = computed<'all' | 'movies' | 'series'>(() => {
-  if (route.name === 'movies') return 'movies'
-  if (route.name === 'shows') return 'series'
+// Movies vs. Shows is a filter on the single Library page, driven by ?kind=
+// rather than a dedicated route.
+const scope = computed<Scope>(() => {
+  const k = route.query.kind
+  if (k === 'movies') return 'movies'
+  if (k === 'series' || k === 'shows') return 'series'
   return 'all'
 })
+
+function setKind(k: Scope): void {
+  const query = { ...route.query }
+  if (k === 'all') delete query.kind
+  else query.kind = k
+  void router.replace({ name: 'library', query })
+}
 const libTitle = computed(() =>
   scope.value === 'movies' ? 'Movies' : scope.value === 'series' ? 'Shows' : 'All Titles',
 )
@@ -120,17 +138,31 @@ watch(
       </header>
 
       <div class="controls">
-        <div class="chips">
-          <button
-            v-for="t in TAG_FILTERS"
-            :key="t"
-            class="chip"
-            :class="{ on: tag === t }"
-            type="button"
-            @click="tag = t"
-          >
-            {{ t }}
-          </button>
+        <div class="filters">
+          <div class="kinds">
+            <button
+              v-for="k in KINDS"
+              :key="k.key"
+              class="kind"
+              :class="{ on: scope === k.key }"
+              type="button"
+              @click="setKind(k.key)"
+            >
+              {{ k.label }}
+            </button>
+          </div>
+          <div class="chips">
+            <button
+              v-for="t in TAG_FILTERS"
+              :key="t"
+              class="chip"
+              :class="{ on: tag === t }"
+              type="button"
+              @click="tag = t"
+            >
+              {{ t }}
+            </button>
+          </div>
         </div>
         <div class="sorts">
           <span class="sort-label">Sort</span>
@@ -259,6 +291,36 @@ h1 {
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
+}
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.kinds {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.5);
+}
+.kind {
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--arg-soft);
+  font: 700 12.5px var(--arg-display);
+  cursor: pointer;
+}
+.kind:hover {
+  color: var(--arg-cream);
+}
+.kind.on {
+  background: var(--arg-accent);
+  color: var(--arg-bg);
 }
 .chips {
   display: flex;
