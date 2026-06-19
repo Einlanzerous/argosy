@@ -5,6 +5,9 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -31,6 +34,20 @@ type Config struct {
 	// Manifest current (fsnotify is unreliable over the SMB mount, ARGY-53).
 	// Zero disables the periodic sweep; on-demand scans still work.
 	ScanInterval time.Duration
+	// TranscodeDir is where The Helm writes per-session HLS artifacts (Ballast
+	// manages their lifecycle). Defaults to <os.TempDir>/argosy-transcode.
+	TranscodeDir string
+	// TranscodeIdleTimeout is how long a session may go without a playlist or
+	// segment request before it's killed and purged.
+	TranscodeIdleTimeout time.Duration
+	// MaxTranscodeSessions caps concurrent transcode sessions (back-pressure).
+	MaxTranscodeSessions int
+	// EncoderPreference is the encoder fallback order (e.g. nvenc,qsv,vaapi,
+	// software). Empty uses the built-in default order.
+	EncoderPreference []string
+	// ForceSoftware pins encoding to libx264/libx265 regardless of hardware
+	// (debugging aid; see ARGY-30).
+	ForceSoftware bool
 }
 
 // Load reads configuration from the environment, applying sensible defaults.
@@ -45,7 +62,38 @@ func Load() Config {
 		TMDBAPIKey:    os.Getenv("TMDB_API_KEY"),
 		ArtworkDir:    getenv("ARGOSY_ARTWORK_DIR", "artwork"),
 		ScanInterval:  parseDuration(os.Getenv("ARGOSY_SCAN_INTERVAL")),
+
+		TranscodeDir:         getenv("ARGOSY_TRANSCODE_DIR", filepath.Join(os.TempDir(), "argosy-transcode")),
+		TranscodeIdleTimeout: parseDuration(os.Getenv("ARGOSY_TRANSCODE_IDLE_TIMEOUT")),
+		MaxTranscodeSessions: parseInt(os.Getenv("ARGOSY_MAX_TRANSCODE_SESSIONS")),
+		EncoderPreference:    parseList(os.Getenv("ARGOSY_ENCODER_PREFERENCE")),
+		ForceSoftware:        os.Getenv("ARGOSY_FORCE_SOFTWARE") == "1" || os.Getenv("ARGOSY_FORCE_SOFTWARE") == "true",
 	}
+}
+
+// parseInt returns the int value of s, or 0 when empty/invalid (callers apply
+// their own default).
+func parseInt(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// parseList splits a comma-separated list, trimming spaces and dropping empties.
+func parseList(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if v := strings.TrimSpace(p); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // parseDuration parses a Go duration string (e.g. "15m", "1h"). It returns 0

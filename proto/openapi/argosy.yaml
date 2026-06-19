@@ -399,6 +399,128 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/items/{itemId}/transcode:
+    post:
+      tags: [transcode]
+      operationId: startTranscode
+      summary: Start (or join) an HLS transcode session for an item
+      description: |
+        Starts a server-side transcode and returns the session plus its HLS
+        playlist URL. Repeat requests for the same item + offset join the
+        existing session instead of spawning a second ffmpeg. Returns 503 when
+        the server is at its transcode-session limit (back-pressure).
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranscodeStartRequest"
+      responses:
+        "202":
+          description: Session started or joined
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodeSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: At transcode-session capacity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/transcode/sessions:
+    get:
+      tags: [transcode]
+      operationId: listTranscodeSessions
+      summary: Live transcode sessions for the current account (The Helm)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranscodeSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/transcode/capabilities:
+    get:
+      tags: [transcode]
+      operationId: getTranscodeCapabilities
+      summary: Encoders available on this host and the selected one
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodeCapabilities"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/transcode/{sessionId}:
+    delete:
+      tags: [transcode]
+      operationId: stopTranscode
+      summary: Stop a transcode session and purge its output
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204":
+          description: Stopped
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/transcode/{sessionId}/index.m3u8:
+    get:
+      tags: [transcode]
+      operationId: getTranscodePlaylist
+      summary: HLS media playlist for a transcode session
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: HLS media playlist
+          content:
+            application/vnd.apple.mpegurl:
+              schema: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Session still starting (no playlist yet)
+
+  /api/v1/transcode/{sessionId}/{segment}:
+    get:
+      tags: [transcode]
+      operationId: getTranscodeSegment
+      summary: HLS media segment for a transcode session
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+        - { name: segment, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: HLS media segment
+          content:
+            video/mp2t:
+              schema: { type: string, format: binary }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -433,6 +555,71 @@ components:
       properties:
         error:
           type: string
+
+    TranscodeStartRequest:
+      type: object
+      properties:
+        startAt:
+          type: number
+          format: double
+          description: Seek offset in seconds (default 0).
+
+    TranscodeProgress:
+      type: object
+      required: [outTimeMs, speed, fps]
+      properties:
+        outTimeMs:
+          type: integer
+          format: int64
+          description: Encoded timeline position in milliseconds.
+        speed:
+          type: number
+          format: double
+          description: Encode speed as a multiple of realtime (2.5 == 2.5x).
+        fps:
+          type: number
+          format: double
+
+    TranscodeSession:
+      type: object
+      required: [id, itemId, encoder, state, startAt, startedAt, playlistUrl, progress]
+      properties:
+        id:
+          type: string
+        itemId:
+          type: string
+          format: uuid
+        encoder:
+          type: string
+        state:
+          type: string
+          enum: [starting, running, complete, failed, stopped]
+        startAt:
+          type: number
+          format: double
+        startedAt:
+          type: string
+          format: date-time
+        playlistUrl:
+          type: string
+          description: Relative URL of the HLS media playlist for this session.
+        error:
+          type: string
+        progress:
+          $ref: "#/components/schemas/TranscodeProgress"
+
+    TranscodeCapabilities:
+      type: object
+      required: [available, selected]
+      properties:
+        available:
+          type: array
+          items:
+            type: string
+          description: Encoder backends usable on this host (always includes "software").
+        selected:
+          type: string
+          description: The encoder chosen by the configured preference order.
 
     PingResponse:
       type: object

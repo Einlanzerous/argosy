@@ -45,6 +45,33 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for TranscodeSessionState.
+const (
+	Complete TranscodeSessionState = "complete"
+	Failed   TranscodeSessionState = "failed"
+	Running  TranscodeSessionState = "running"
+	Starting TranscodeSessionState = "starting"
+	Stopped  TranscodeSessionState = "stopped"
+)
+
+// Valid indicates whether the value is a known member of the TranscodeSessionState enum.
+func (e TranscodeSessionState) Valid() bool {
+	switch e {
+	case Complete:
+		return true
+	case Failed:
+		return true
+	case Running:
+		return true
+	case Starting:
+		return true
+	case Stopped:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListMoviesParamsSort.
 const (
 	ListMoviesParamsSortAdded ListMoviesParamsSort = "added"
@@ -292,6 +319,50 @@ type Session struct {
 	UserId    openapi_types.UUID `json:"userId"`
 }
 
+// TranscodeCapabilities defines model for TranscodeCapabilities.
+type TranscodeCapabilities struct {
+	// Available Encoder backends usable on this host (always includes "software").
+	Available []string `json:"available"`
+
+	// Selected The encoder chosen by the configured preference order.
+	Selected string `json:"selected"`
+}
+
+// TranscodeProgress defines model for TranscodeProgress.
+type TranscodeProgress struct {
+	Fps float64 `json:"fps"`
+
+	// OutTimeMs Encoded timeline position in milliseconds.
+	OutTimeMs int64 `json:"outTimeMs"`
+
+	// Speed Encode speed as a multiple of realtime (2.5 == 2.5x).
+	Speed float64 `json:"speed"`
+}
+
+// TranscodeSession defines model for TranscodeSession.
+type TranscodeSession struct {
+	Encoder string             `json:"encoder"`
+	Error   *string            `json:"error,omitempty"`
+	Id      string             `json:"id"`
+	ItemId  openapi_types.UUID `json:"itemId"`
+
+	// PlaylistUrl Relative URL of the HLS media playlist for this session.
+	PlaylistUrl string                `json:"playlistUrl"`
+	Progress    TranscodeProgress     `json:"progress"`
+	StartAt     float64               `json:"startAt"`
+	StartedAt   time.Time             `json:"startedAt"`
+	State       TranscodeSessionState `json:"state"`
+}
+
+// TranscodeSessionState defines model for TranscodeSession.State.
+type TranscodeSessionState string
+
+// TranscodeStartRequest defines model for TranscodeStartRequest.
+type TranscodeStartRequest struct {
+	// StartAt Seek offset in seconds (default 0).
+	StartAt *float64 `json:"startAt,omitempty"`
+}
+
 // UserProfile defines model for UserProfile.
 type UserProfile struct {
 	Id   openapi_types.UUID `json:"id"`
@@ -357,6 +428,9 @@ type LoginJSONRequestBody = LoginRequest
 // ReportProgressJSONRequestBody defines body for ReportProgress for application/json ContentType.
 type ReportProgressJSONRequestBody = ProgressUpdate
 
+// StartTranscodeJSONRequestBody defines body for StartTranscode for application/json ContentType.
+type StartTranscodeJSONRequestBody = TranscodeStartRequest
+
 // SetWatchedJSONRequestBody defines body for SetWatched for application/json ContentType.
 type SetWatchedJSONRequestBody = WatchedUpdate
 
@@ -395,6 +469,9 @@ type ServerInterface interface {
 	// Direct-play media stream with HTTP range support
 	// (GET /api/v1/items/{itemId}/stream)
 	StreamItem(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID, params StreamItemParams)
+	// Start (or join) an HLS transcode session for an item
+	// (POST /api/v1/items/{itemId}/transcode)
+	StartTranscode(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID)
 	// Mark an item watched / unwatched for the current profile
 	// (POST /api/v1/items/{itemId}/watched)
 	SetWatched(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID)
@@ -419,6 +496,21 @@ type ServerInterface interface {
 	// Series detail with seasons and episodes
 	// (GET /api/v1/series/{seriesId})
 	GetSeries(w http.ResponseWriter, r *http.Request, seriesId openapi_types.UUID)
+	// Encoders available on this host and the selected one
+	// (GET /api/v1/transcode/capabilities)
+	GetTranscodeCapabilities(w http.ResponseWriter, r *http.Request)
+	// Live transcode sessions for the current account (The Helm)
+	// (GET /api/v1/transcode/sessions)
+	ListTranscodeSessions(w http.ResponseWriter, r *http.Request)
+	// Stop a transcode session and purge its output
+	// (DELETE /api/v1/transcode/{sessionId})
+	StopTranscode(w http.ResponseWriter, r *http.Request, sessionId string)
+	// HLS media playlist for a transcode session
+	// (GET /api/v1/transcode/{sessionId}/index.m3u8)
+	GetTranscodePlaylist(w http.ResponseWriter, r *http.Request, sessionId string)
+	// HLS media segment for a transcode session
+	// (GET /api/v1/transcode/{sessionId}/{segment})
+	GetTranscodeSegment(w http.ResponseWriter, r *http.Request, sessionId string, segment string)
 	// Liveness/readiness probe
 	// (GET /healthz)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -714,6 +806,38 @@ func (siw *ServerInterfaceWrapper) StreamItem(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StreamItem(w, r, itemId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartTranscode operation middleware
+func (siw *ServerInterfaceWrapper) StartTranscode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "itemId" -------------
+	var itemId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "itemId", r.PathValue("itemId"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "itemId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartTranscode(w, r, itemId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1035,6 +1159,151 @@ func (siw *ServerInterfaceWrapper) GetSeries(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// GetTranscodeCapabilities operation middleware
+func (siw *ServerInterfaceWrapper) GetTranscodeCapabilities(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTranscodeCapabilities(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTranscodeSessions operation middleware
+func (siw *ServerInterfaceWrapper) ListTranscodeSessions(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTranscodeSessions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StopTranscode operation middleware
+func (siw *ServerInterfaceWrapper) StopTranscode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", r.PathValue("sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StopTranscode(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTranscodePlaylist operation middleware
+func (siw *ServerInterfaceWrapper) GetTranscodePlaylist(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", r.PathValue("sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTranscodePlaylist(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTranscodeSegment operation middleware
+func (siw *ServerInterfaceWrapper) GetTranscodeSegment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", r.PathValue("sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "segment" -------------
+	var segment string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "segment", r.PathValue("segment"), &segment, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "segment", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTranscodeSegment(w, r, sessionId, segment)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealth operation middleware
 func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
 
@@ -1180,6 +1449,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/items/{itemId}/progress", wrapper.GetProgress)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/items/{itemId}/progress", wrapper.ReportProgress)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/items/{itemId}/stream", wrapper.StreamItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/items/{itemId}/transcode", wrapper.StartTranscode)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/items/{itemId}/watched", wrapper.SetWatched)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/libraries", wrapper.ListLibraries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/libraries/{libraryId}/movies", wrapper.ListMovies)
@@ -1188,6 +1458,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/scan", wrapper.TriggerScan)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/scan/status", wrapper.GetScanStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/series/{seriesId}", wrapper.GetSeries)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/transcode/capabilities", wrapper.GetTranscodeCapabilities)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/transcode/sessions", wrapper.ListTranscodeSessions)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/transcode/{sessionId}", wrapper.StopTranscode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/transcode/{sessionId}/index.m3u8", wrapper.GetTranscodePlaylist)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/transcode/{sessionId}/{segment}", wrapper.GetTranscodeSegment)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.GetHealth)
 
 	return m
@@ -1198,57 +1473,71 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"Iv27g3VXyrqFqTXB/WIGXVcfV/8KAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

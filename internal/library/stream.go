@@ -31,6 +31,11 @@ var videoTypes = map[string]string{
 	".mpeg": "video/mpeg",
 }
 
+// ErrPathTraversal is returned when an item's resolved path escapes its library
+// root — it should never happen with DB-stored relative paths, so treat it as a
+// hard 403.
+var ErrPathTraversal = errors.New("path escapes library root")
+
 // itemPath resolves the library root + relative file path for an item the
 // account owns. ok is false when the item isn't found in the account.
 func (s *Store) itemPath(ctx context.Context, accountID, itemID string) (root, rel string, ok bool, err error) {
@@ -48,6 +53,25 @@ func (s *Store) itemPath(ctx context.Context, accountID, itemID string) (root, r
 	return root, rel, true, nil
 }
 
+// ItemFilePath resolves the absolute, traversal-safe path to an item's media
+// file for an account. ok is false when the item isn't found; ErrPathTraversal
+// is returned if the resolved path escapes the library root.
+func (s *Store) ItemFilePath(ctx context.Context, accountID, itemID string) (string, bool, error) {
+	root, rel, ok, err := s.itemPath(ctx, accountID, itemID)
+	if err != nil || !ok {
+		return "", ok, err
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", false, err
+	}
+	fileAbs := filepath.Join(rootAbs, filepath.FromSlash(rel))
+	if fileAbs != rootAbs && !strings.HasPrefix(fileAbs, rootAbs+string(os.PathSeparator)) {
+		return "", false, ErrPathTraversal
+	}
+	return fileAbs, true, nil
+}
+
 // streamHandler serves a media file with byte-range support for direct play.
 // An HTML5 <video> element can't send an Authorization header, so the per-device
 // token may arrive either as a bearer header or a ?token= query param.
@@ -63,7 +87,11 @@ func streamHandler(store *Store, authStore *auth.Store, logger *slog.Logger) htt
 			writeJSON(w, http.StatusUnauthorized, errorBody("invalid or revoked token"))
 			return
 		}
-		root, rel, ok, err := store.itemPath(r.Context(), sess.AccountId.String(), r.PathValue("itemId"))
+		fileAbs, ok, err := store.ItemFilePath(r.Context(), sess.AccountId.String(), r.PathValue("itemId"))
+		if errors.Is(err, ErrPathTraversal) {
+			writeJSON(w, http.StatusForbidden, errorBody("forbidden"))
+			return
+		}
 		if err != nil {
 			logger.Error("stream: resolve path failed", "err", err)
 			writeJSON(w, http.StatusInternalServerError, errorBody("internal error"))
@@ -71,18 +99,6 @@ func streamHandler(store *Store, authStore *auth.Store, logger *slog.Logger) htt
 		}
 		if !ok {
 			writeJSON(w, http.StatusNotFound, errorBody("not found"))
-			return
-		}
-
-		// Resolve within the library root; reject any path traversal.
-		rootAbs, err := filepath.Abs(root)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, errorBody("internal error"))
-			return
-		}
-		fileAbs := filepath.Join(rootAbs, filepath.FromSlash(rel))
-		if fileAbs != rootAbs && !strings.HasPrefix(fileAbs, rootAbs+string(os.PathSeparator)) {
-			writeJSON(w, http.StatusForbidden, errorBody("forbidden"))
 			return
 		}
 
