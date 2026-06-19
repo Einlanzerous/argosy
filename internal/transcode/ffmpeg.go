@@ -3,20 +3,18 @@ package transcode
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
-// PlaylistName is the per-session HLS media playlist ffmpeg writes and clients
-// fetch. Segments sit alongside it as seg00000.ts, seg00001.ts, …
+// PlaylistName is the HLS master playlist ffmpeg writes and clients fetch first;
+// it references the per-variant playlists (stream_N.m3u8).
 const PlaylistName = "index.m3u8"
-
-const segmentPattern = "seg%05d.ts"
 
 // LocalFFmpeg runs transcodes with the local ffmpeg binary. It is the default
 // Backend; a remote-worker backend (ARGY-57) can implement the same interface.
@@ -35,11 +33,13 @@ func (b LocalFFmpeg) bin() string {
 	return "ffmpeg"
 }
 
-// Run builds the HLS ffmpeg invocation for spec, runs it, and streams progress.
-// The process is killed (SIGTERM then forced after WaitDelay) when ctx is
-// cancelled, so no ffmpeg is orphaned on stop/seek/shutdown.
+// Run builds the HLS ffmpeg invocation for spec, runs it from spec.OutputDir
+// (so every artifact lands there), and streams progress. The process is killed
+// (SIGTERM then forced after WaitDelay) when ctx is cancelled, so no ffmpeg is
+// orphaned on stop/seek/shutdown.
 func (b LocalFFmpeg) Run(ctx context.Context, spec Spec, onProgress func(Progress)) error {
 	cmd := exec.CommandContext(ctx, b.bin(), buildArgs(spec)...)
+	cmd.Dir = spec.OutputDir
 	// Graceful stop: SIGTERM lets ffmpeg flush, then CommandContext force-kills
 	// after WaitDelay if it ignores the signal.
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
@@ -60,31 +60,105 @@ func (b LocalFFmpeg) Run(ctx context.Context, spec Spec, onProgress func(Progres
 	return cmd.Wait()
 }
 
-// buildArgs builds the ffmpeg arguments for a single-variant HLS encode. The
-// proper CMAF bitrate ladder + master playlist lands in ARGY-28; the encoder
-// switch (qsv/vaapi/nvenc) lands in ARGY-30 — today everything encodes with the
-// software libx264/aac path.
+// rung is one rendition of the adaptive bitrate ladder.
+type rung struct {
+	height       int
+	videoBitrate string
+	maxRate      string
+	bufSize      string
+}
+
+// ladder is the full bitrate ladder, widest first. rungsFor trims it to the
+// source so we never upscale.
+var ladder = []rung{
+	{1080, "6M", "6400k", "12M"},
+	{720, "3M", "3200k", "6M"},
+	{480, "1500k", "1600k", "3M"},
+}
+
+const audioBitrate = "128k"
+
+// rungsFor returns the ladder rungs appropriate for a source of the given
+// height: every rung at or below the source height (never upscale). A source
+// smaller than the smallest rung encodes at its own height; an unknown height
+// collapses to a single conservative 720p rung.
+func rungsFor(sourceHeight int) []rung {
+	if sourceHeight <= 0 {
+		return []rung{{720, "3M", "3200k", "6M"}}
+	}
+	var out []rung
+	for _, r := range ladder {
+		if r.height <= sourceHeight {
+			out = append(out, r)
+		}
+	}
+	if len(out) == 0 {
+		out = []rung{{sourceHeight, "1500k", "1600k", "3M"}}
+	}
+	return out
+}
+
+// buildArgs builds the ffmpeg arguments for a CMAF (fMP4) HLS encode with a
+// source-derived bitrate ladder: a master playlist (index.m3u8) plus one
+// variant playlist + init segment + media segments per rung. Paths are
+// relative — ffmpeg runs with cwd == spec.OutputDir. The encoder switch
+// (qsv/vaapi/nvenc) lands in ARGY-30; today everything is software libx264/aac.
 func buildArgs(spec Spec) []string {
+	rungs := rungsFor(spec.SourceHeight)
+	n := len(rungs)
+
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error"}
-	// Input seek before -i is fast (keyframe granularity) — fine for a start
-	// offset; accurate seek can come later if needed.
 	if spec.StartAt > 0 {
 		args = append(args, "-ss", strconv.FormatFloat(spec.StartAt, 'f', 3, 64))
 	}
+	args = append(args, "-i", spec.Source)
+
+	// Split the video once and scale each branch to its rung height (-2 keeps
+	// the width even and preserves aspect ratio).
+	var fc strings.Builder
+	fmt.Fprintf(&fc, "[0:v]split=%d", n)
+	for i := range rungs {
+		fmt.Fprintf(&fc, "[v%d]", i)
+	}
+	for i, r := range rungs {
+		fmt.Fprintf(&fc, ";[v%d]scale=-2:%d[v%do]", i, r.height, i)
+	}
+	args = append(args, "-filter_complex", fc.String())
+
+	for i := range rungs {
+		args = append(args, "-map", fmt.Sprintf("[v%do]", i))
+	}
+	for range rungs {
+		args = append(args, "-map", "0:a:0")
+	}
+
+	args = append(args, "-c:v", "libx264", "-preset", "veryfast",
+		"-g", "48", "-keyint_min", "48", "-sc_threshold", "0")
+	for i, r := range rungs {
+		args = append(args,
+			fmt.Sprintf("-b:v:%d", i), r.videoBitrate,
+			fmt.Sprintf("-maxrate:v:%d", i), r.maxRate,
+			fmt.Sprintf("-bufsize:v:%d", i), r.bufSize)
+	}
+	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
+
+	var vsm strings.Builder
+	for i := range rungs {
+		if i > 0 {
+			vsm.WriteByte(' ')
+		}
+		fmt.Fprintf(&vsm, "v:%d,a:%d", i, i)
+	}
+
 	args = append(args,
-		"-i", spec.Source,
-		"-map", "0:v:0", "-map", "0:a:0?",
-		// Software H.264; 2s keyframe cadence aligns with the 4s segments.
-		"-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-		"-maxrate", "6M", "-bufsize", "12M",
-		"-g", "48", "-keyint_min", "48", "-sc_threshold", "0",
-		"-c:a", "aac", "-b:a", "160k", "-ac", "2",
 		"-f", "hls", "-hls_time", "4", "-hls_playlist_type", "event",
-		"-hls_segment_type", "mpegts",
-		"-hls_flags", "independent_segments",
-		"-hls_segment_filename", filepath.Join(spec.OutputDir, segmentPattern),
+		"-hls_segment_type", "fmp4", "-hls_flags", "independent_segments",
+		"-hls_fmp4_init_filename", "init_%v.mp4",
+		"-master_pl_name", PlaylistName,
+		"-var_stream_map", vsm.String(),
+		"-hls_segment_filename", "stream_%v_%05d.m4s",
 		"-progress", "pipe:1",
-		filepath.Join(spec.OutputDir, PlaylistName),
+		"stream_%v.m3u8",
 	)
 	return args
 }

@@ -52,20 +52,22 @@ type Progress struct {
 
 // Spec describes a single transcode job handed to a Backend.
 type Spec struct {
-	SessionID string
-	Source    string // absolute path to the source media file
-	OutputDir string // directory the backend writes HLS artifacts into
-	StartAt   float64
-	Encoder   string // selected encoder backend (e.g. "software", "qsv")
+	SessionID    string
+	Source       string // absolute path to the source media file
+	OutputDir    string // directory the backend writes HLS artifacts into
+	StartAt      float64
+	Encoder      string // selected encoder backend (e.g. "software", "qsv")
+	SourceHeight int    // source video height; drives the bitrate ladder (0 = unknown)
 }
 
 // StartRequest is the caller-facing request to begin (or join) a session.
 type StartRequest struct {
-	ItemID    string
-	AccountID string
-	Source    string
-	StartAt   float64 // seek offset in seconds
-	Encoder   string
+	ItemID       string
+	AccountID    string
+	Source       string
+	StartAt      float64 // seek offset in seconds
+	Encoder      string
+	SourceHeight int
 }
 
 // Session is an immutable snapshot of a transcode session's public state,
@@ -228,7 +230,7 @@ func (m *Manager) Start(req StartRequest) (Session, error) {
 
 	go m.run(ctx, s, Spec{
 		SessionID: id, Source: req.Source, OutputDir: outputDir,
-		StartAt: req.StartAt, Encoder: req.Encoder,
+		StartAt: req.StartAt, Encoder: req.Encoder, SourceHeight: req.SourceHeight,
 	})
 	return s.snapshot(), nil
 }

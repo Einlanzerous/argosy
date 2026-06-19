@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,11 +12,67 @@ import (
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
-// segmentName guards the HLS segment path param against traversal: only the
-// ffmpeg-produced segNNNNN.ts names are servable.
-var segmentName = regexp.MustCompile(`^seg\d{1,8}\.ts$`)
+// transcodeFile is the allowlist of servable per-session artifacts (master +
+// variant playlists, fMP4 init segments, and media segments). It doubles as the
+// traversal guard for the {file} path param.
+var transcodeFile = regexp.MustCompile(`^(index\.m3u8|stream_\d+\.m3u8|init_\d+\.mp4|stream_\d+_\d+\.m4s)$`)
+
+func transcodeContentType(name string) string {
+	switch filepath.Ext(name) {
+	case ".m3u8":
+		return "application/vnd.apple.mpegurl"
+	case ".m4s", ".mp4":
+		return "video/mp4"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// videoHeightFromTechnical pulls the first video stream's height out of the
+// stored ffprobe JSON; 0 when unknown.
+func videoHeightFromTechnical(technical []byte) int {
+	var t struct {
+		Streams []struct {
+			CodecType string `json:"codec_type"`
+			Height    int    `json:"height"`
+		} `json:"streams"`
+	}
+	if len(technical) > 0 {
+		_ = json.Unmarshal(technical, &t)
+	}
+	for _, s := range t.Streams {
+		if s.CodecType == "video" && s.Height > 0 {
+			return s.Height
+		}
+	}
+	return 0
+}
+
+// ItemSource resolves the absolute, traversal-safe media path and source video
+// height for an item the account owns. ok is false when the item isn't found.
+func (s *Store) ItemSource(ctx context.Context, accountID, itemID string) (path string, height int, ok bool, err error) {
+	var root, rel string
+	var technical []byte
+	e := s.pool.QueryRow(ctx,
+		`SELECT l.root_path, mi.file_path, mi.technical
+		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id
+		 WHERE l.account_id = $1 AND mi.id = $2`,
+		accountID, itemID).Scan(&root, &rel, &technical)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return "", 0, false, nil
+	}
+	if e != nil {
+		return "", 0, false, e
+	}
+	abs, e := resolveWithinRoot(root, rel)
+	if e != nil {
+		return "", 0, false, e
+	}
+	return abs, videoHeightFromTechnical(technical), true, nil
+}
 
 // startTranscode begins (or joins) an HLS transcode session for an item and
 // returns the session + its playlist URL.
@@ -23,7 +80,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	account := accountOf(r)
 	itemID := r.PathValue("itemId")
 
-	src, ok, err := h.store.ItemFilePath(r.Context(), account, itemID)
+	src, height, ok, err := h.store.ItemSource(r.Context(), account, itemID)
 	if errors.Is(err, ErrPathTraversal) {
 		writeJSON(w, http.StatusForbidden, errorBody("forbidden"))
 		return
@@ -48,11 +105,12 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess, err := h.tc.Start(transcode.StartRequest{
-		ItemID:    itemID,
-		AccountID: account,
-		Source:    src,
-		StartAt:   startAt,
-		Encoder:   h.encoder,
+		ItemID:       itemID,
+		AccountID:    account,
+		Source:       src,
+		StartAt:      startAt,
+		Encoder:      h.encoder,
+		SourceHeight: height,
 	})
 	if errors.Is(err, transcode.ErrAtCapacity) {
 		writeJSON(w, http.StatusServiceUnavailable, errorBody("server at transcode capacity, try again shortly"))
@@ -65,27 +123,11 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, toAPISession(sess))
 }
 
-// transcodePlaylist serves a session's HLS media playlist.
-func (h *handlers) transcodePlaylist(w http.ResponseWriter, r *http.Request) {
-	sess, ok := h.authedSession(w, r)
-	if !ok {
-		return
-	}
-	h.tc.Touch(sess.ID)
-	path := filepath.Join(sess.OutputDir, transcode.PlaylistName)
-	if _, err := os.Stat(path); err != nil {
-		// ffmpeg hasn't written the first playlist yet — client should retry.
-		writeJSON(w, http.StatusServiceUnavailable, errorBody("transcode starting"))
-		return
-	}
-	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-	http.ServeFile(w, r, path)
-}
-
-// transcodeSegment serves one HLS media segment for a session.
-func (h *handlers) transcodeSegment(w http.ResponseWriter, r *http.Request) {
-	seg := r.PathValue("segment")
-	if !segmentName.MatchString(seg) {
+// fileTranscode serves a session's HLS artifacts: the master playlist
+// (index.m3u8), variant playlists, fMP4 init segments, and media segments.
+func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("file")
+	if !transcodeFile.MatchString(name) {
 		writeJSON(w, http.StatusNotFound, errorBody("not found"))
 		return
 	}
@@ -94,12 +136,17 @@ func (h *handlers) transcodeSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.tc.Touch(sess.ID)
-	path := filepath.Join(sess.OutputDir, seg)
+	path := filepath.Join(sess.OutputDir, name)
 	if _, err := os.Stat(path); err != nil {
+		// The master playlist may not be written yet — tell the client to retry.
+		if name == transcode.PlaylistName {
+			writeJSON(w, http.StatusServiceUnavailable, errorBody("transcode starting"))
+			return
+		}
 		writeJSON(w, http.StatusNotFound, errorBody("not found"))
 		return
 	}
-	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Content-Type", transcodeContentType(name))
 	http.ServeFile(w, r, path)
 }
 

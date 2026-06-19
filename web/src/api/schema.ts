@@ -395,32 +395,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/transcode/{sessionId}/index.m3u8": {
+    "/api/v1/transcode/{sessionId}/{file}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** HLS media playlist for a transcode session */
-        get: operations["getTranscodePlaylist"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/transcode/{sessionId}/{segment}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** HLS media segment for a transcode session */
-        get: operations["getTranscodeSegment"];
+        /**
+         * HLS artifact for a session (master/variant playlist, init, or segment)
+         * @description Serves a session's HLS artifacts: the master playlist (`index.m3u8`),
+         *     per-variant playlists (`stream_N.m3u8`), fMP4 init segments
+         *     (`init_N.mp4`), and media segments (`stream_N_NNNNN.m4s`). The filename
+         *     is allow-listed server-side. `index.m3u8` returns 503 while the session
+         *     is still starting (no playlist written yet).
+         */
+        get: operations["getTranscodeFile"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1305,24 +1295,26 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    getTranscodePlaylist: {
+    getTranscodeFile: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 sessionId: string;
+                file: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description HLS media playlist */
+            /** @description HLS playlist or segment */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/vnd.apple.mpegurl": string;
+                    "video/mp4": string;
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -1334,31 +1326,6 @@ export interface operations {
                 };
                 content?: never;
             };
-        };
-    };
-    getTranscodeSegment: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-                segment: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description HLS media segment */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "video/mp2t": string;
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
         };
     };
 }
