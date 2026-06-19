@@ -2,10 +2,18 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Hls from 'hls.js'
-import { api } from '@/api/client'
+import { api, getToken } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
 import { formatClock } from '@/lib/format'
-import { getPlaybackInfo, getProgress, reportProgress, setWatched, streamUrl } from '@/lib/playback'
+import {
+  getPlaybackInfo,
+  getProgress,
+  reportProgress,
+  setWatched,
+  startTranscode,
+  stopTranscode,
+  streamUrl,
+} from '@/lib/playback'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -27,6 +35,8 @@ const resumeFrom = ref(0)
 
 let hls: Hls | null = null
 let heartbeat: ReturnType<typeof setInterval> | null = null
+let transcodeSessionId = ''
+const starting = ref(false)
 
 const pct = computed(() => (duration.value ? (position.value / duration.value) * 100 : 0))
 const remaining = computed(() => Math.max(0, duration.value - position.value))
@@ -43,13 +53,14 @@ onMounted(async () => {
   const el = video.value
   if (!el) return
 
-  // Capability gate: don't even attempt a source the browser can't decode.
+  // Direct play when the browser can decode the file; otherwise fall back to a
+  // server-side HLS transcode (The Helm).
   if (playback && !playback.directPlay) {
-    error.value = `Can't direct-play — ${playback.reason ?? 'unsupported format'}. On-the-fly transcoding lands in Phase 3.`
-    return
+    const ok = await attachTranscode(el)
+    if (!ok) return
+  } else {
+    attachSource(el, streamUrl(itemId))
   }
-
-  attachSource(el, streamUrl(itemId))
   bindVideo(el)
 
   // Resume prompt when there's a meaningful saved position.
@@ -61,10 +72,68 @@ onMounted(async () => {
   }
 })
 
+// attachTranscode starts a server-side transcode, waits for the master playlist
+// to warm up, then feeds it to hls.js (with the per-device token on every
+// request). Returns false and sets an error on failure.
+async function attachTranscode(el: HTMLVideoElement): Promise<boolean> {
+  starting.value = true
+  try {
+    const sess = await startTranscode(itemId).catch(() => null)
+    if (!sess) {
+      error.value = "Couldn't start transcoding this title. The server may be at capacity."
+      return false
+    }
+    transcodeSessionId = sess.id
+    if (!(await waitForPlaylist(sess.playlistUrl))) {
+      error.value = 'The transcoder is taking too long to start. Please try again.'
+      return false
+    }
+    if (Hls.isSupported()) {
+      hls = new Hls({
+        xhrSetup: (xhr) => {
+          const t = getToken()
+          if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
+        },
+      })
+      hls.loadSource(sess.playlistUrl)
+      hls.attachMedia(el)
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (data.fatal) error.value = 'This stream could not be played.'
+      })
+    } else {
+      // Native-HLS browsers (iOS Safari) can't set an Authorization header on a
+      // bare <video> src; token-in-URL support is a follow-up.
+      el.src = sess.playlistUrl
+    }
+    return true
+  } finally {
+    starting.value = false
+  }
+}
+
+// waitForPlaylist polls the master playlist until ffmpeg has written it (the
+// endpoint returns 503 until then), giving the encoder time to warm up.
+async function waitForPlaylist(url: string): Promise<boolean> {
+  const token = getToken()
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+  for (let i = 0; i < 40; i++) {
+    try {
+      const r = await fetch(url, { headers })
+      if (r.ok) return true
+      if (r.status !== 503) return false
+    } catch {
+      return false
+    }
+    await new Promise((res) => setTimeout(res, 500))
+  }
+  return false
+}
+
 onBeforeUnmount(() => {
   flush()
   if (heartbeat) clearInterval(heartbeat)
   if (hls) hls.destroy()
+  if (transcodeSessionId) void stopTranscode(transcodeSessionId).catch(() => {})
   const el = video.value
   if (el) {
     el.pause()
@@ -106,8 +175,8 @@ function bindVideo(el: HTMLVideoElement): void {
     void setWatched(itemId, true).catch(() => {})
   })
   el.addEventListener('error', () => {
-    error.value =
-      "This file can't be direct-played in your browser yet — on-the-fly transcoding lands in Phase 3."
+    // hls.js surfaces its own errors; only flag native-element failures.
+    if (!hls) error.value = 'This stream could not be played.'
   })
   // Throttled heartbeat while open.
   heartbeat = setInterval(() => {
@@ -205,8 +274,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </div>
     </div>
 
+    <!-- preparing transcode -->
+    <div v-if="starting" class="center prep">
+      <div class="prep-card">
+        <div class="prep-spinner" />
+        <div class="prep-text">Preparing your stream…</div>
+        <div class="prep-sub">Transcoding for your device</div>
+      </div>
+    </div>
+
     <!-- center play -->
-    <div v-if="!playing && !error" class="center">
+    <div v-if="!playing && !error && !starting" class="center">
       <button class="big-play" type="button" @click="togglePlay">▶</button>
     </div>
 
@@ -372,6 +450,34 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .big-play:hover {
   background: rgba(201, 154, 78, 0.22);
   border-color: var(--arg-accent);
+}
+.prep {
+  pointer-events: none;
+}
+.prep-card {
+  text-align: center;
+}
+.prep-spinner {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  border: 3px solid rgba(201, 154, 78, 0.25);
+  border-top-color: var(--arg-accent);
+  animation: argSpin 0.9s linear infinite;
+}
+.prep-text {
+  font: 700 16px var(--arg-display);
+}
+.prep-sub {
+  margin-top: 5px;
+  font: 500 12.5px var(--arg-body);
+  color: var(--arg-dim);
+}
+@keyframes argSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .error {
   position: absolute;

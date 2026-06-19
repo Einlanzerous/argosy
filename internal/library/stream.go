@@ -61,15 +61,22 @@ func (s *Store) ItemFilePath(ctx context.Context, accountID, itemID string) (str
 	if err != nil || !ok {
 		return "", ok, err
 	}
+	abs, err := resolveWithinRoot(root, rel)
+	return abs, err == nil, err
+}
+
+// resolveWithinRoot joins a library root and a stored relative path, rejecting
+// any result that escapes the root with ErrPathTraversal.
+func resolveWithinRoot(root, rel string) (string, error) {
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	fileAbs := filepath.Join(rootAbs, filepath.FromSlash(rel))
 	if fileAbs != rootAbs && !strings.HasPrefix(fileAbs, rootAbs+string(os.PathSeparator)) {
-		return "", false, ErrPathTraversal
+		return "", ErrPathTraversal
 	}
-	return fileAbs, true, nil
+	return fileAbs, nil
 }
 
 // streamHandler serves a media file with byte-range support for direct play.

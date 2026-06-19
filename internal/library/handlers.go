@@ -46,8 +46,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 		mux.Handle("GET /api/v1/transcode/sessions", mw(http.HandlerFunc(h.listTranscodeSessions)))
 		mux.Handle("DELETE /api/v1/transcode/{sessionId}", mw(http.HandlerFunc(h.stopTranscode)))
 		mux.Handle("GET /api/v1/transcode/capabilities", mw(http.HandlerFunc(h.transcodeCapabilities)))
-		mux.Handle("GET /api/v1/transcode/{sessionId}/index.m3u8", mw(http.HandlerFunc(h.transcodePlaylist)))
-		mux.Handle("GET /api/v1/transcode/{sessionId}/{segment}", mw(http.HandlerFunc(h.transcodeSegment)))
+		mux.Handle("GET /api/v1/transcode/{sessionId}/{file}", mw(http.HandlerFunc(h.fileTranscode)))
 	}
 
 	if artworkDir != "" {

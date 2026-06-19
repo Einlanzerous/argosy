@@ -482,44 +482,34 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/transcode/{sessionId}/index.m3u8:
+  /api/v1/transcode/{sessionId}/{file}:
     get:
       tags: [transcode]
-      operationId: getTranscodePlaylist
-      summary: HLS media playlist for a transcode session
+      operationId: getTranscodeFile
+      summary: HLS artifact for a session (master/variant playlist, init, or segment)
+      description: |
+        Serves a session's HLS artifacts: the master playlist (`index.m3u8`),
+        per-variant playlists (`stream_N.m3u8`), fMP4 init segments
+        (`init_N.mp4`), and media segments (`stream_N_NNNNN.m4s`). The filename
+        is allow-listed server-side. `index.m3u8` returns 503 while the session
+        is still starting (no playlist written yet).
       parameters:
         - { name: sessionId, in: path, required: true, schema: { type: string } }
+        - { name: file, in: path, required: true, schema: { type: string } }
       responses:
         "200":
-          description: HLS media playlist
+          description: HLS playlist or segment
           content:
             application/vnd.apple.mpegurl:
               schema: { type: string }
+            video/mp4:
+              schema: { type: string, format: binary }
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "503":
           description: Session still starting (no playlist yet)
-
-  /api/v1/transcode/{sessionId}/{segment}:
-    get:
-      tags: [transcode]
-      operationId: getTranscodeSegment
-      summary: HLS media segment for a transcode session
-      parameters:
-        - { name: sessionId, in: path, required: true, schema: { type: string } }
-        - { name: segment, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: HLS media segment
-          content:
-            video/mp2t:
-              schema: { type: string, format: binary }
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
 
 components:
   securitySchemes:

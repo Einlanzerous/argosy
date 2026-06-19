@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -189,13 +188,38 @@ func TestSessionIDDeterministicAndScoped(t *testing.T) {
 	}
 }
 
-func TestBuildArgsHLS(t *testing.T) {
-	args := buildArgs(Spec{Source: "/m/a.mkv", OutputDir: "/tmp/out", StartAt: 30, Encoder: EncoderSoftware})
+func TestBuildArgsHLSLadder(t *testing.T) {
+	// 1080p source → full 3-rung ladder.
+	args := buildArgs(Spec{Source: "/m/a.mkv", OutputDir: "/tmp/out", StartAt: 30, Encoder: EncoderSoftware, SourceHeight: 1080})
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"-i /m/a.mkv", "libx264", "-f hls", "-ss 30.000", filepath.Join("/tmp/out", PlaylistName)} {
+	for _, want := range []string{
+		"-i /m/a.mkv", "libx264", "-ss 30.000",
+		"-filter_complex", "split=3", "scale=-2:1080", "scale=-2:480",
+		"-var_stream_map v:0,a:0 v:1,a:1 v:2,a:2",
+		"-master_pl_name " + PlaylistName,
+		"-hls_segment_type fmp4", "stream_%v.m3u8",
+	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("args missing %q\nargs: %s", want, joined)
 		}
+	}
+}
+
+func TestRungsFor(t *testing.T) {
+	cases := []struct {
+		height int
+		want   int
+	}{
+		{1080, 3}, {1440, 3}, {720, 2}, {600, 1}, {480, 1}, {360, 1}, {0, 1},
+	}
+	for _, c := range cases {
+		if got := len(rungsFor(c.height)); got != c.want {
+			t.Errorf("rungsFor(%d) = %d rungs, want %d", c.height, got, c.want)
+		}
+	}
+	// Never upscale: a 480p source's top rung is ≤ 480.
+	if r := rungsFor(480); r[0].height > 480 {
+		t.Errorf("rungsFor(480) top rung %d upscales", r[0].height)
 	}
 }
 

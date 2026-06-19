@@ -4,6 +4,26 @@ import type { components } from '@/api/schema'
 export type PlayState = components['schemas']['PlayState']
 export type ContinueItem = components['schemas']['ContinueItem']
 export type PlaybackInfo = components['schemas']['PlaybackInfo']
+export type TranscodeSession = components['schemas']['TranscodeSession']
+
+// startTranscode begins (or joins) a server-side HLS transcode for an item that
+// can't be direct-played, returning the session + its playlist URL.
+export async function startTranscode(
+  itemId: string,
+  startAt = 0,
+): Promise<TranscodeSession | null> {
+  const { data } = await api.POST('/api/v1/items/{itemId}/transcode', {
+    params: { path: { itemId } },
+    body: { startAt },
+  })
+  return data ?? null
+}
+
+// stopTranscode tears a session down so the server frees it immediately rather
+// than waiting for the idle reaper.
+export async function stopTranscode(sessionId: string): Promise<void> {
+  await api.DELETE('/api/v1/transcode/{sessionId}', { params: { path: { sessionId } } })
+}
 
 export async function getPlaybackInfo(itemId: string): Promise<PlaybackInfo | null> {
   const { data } = await api.GET('/api/v1/items/{itemId}/playback', {
