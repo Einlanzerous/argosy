@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
+import { formatTitle } from '@/lib/format'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
@@ -107,7 +108,7 @@ watch(
         <div class="ep-info">
           <div class="ep-head">
             <span class="ep-tag">E{{ ep.episodeNumber }}</span>
-            <span class="ep-title">{{ ep.title || `Episode ${ep.episodeNumber}` }}</span>
+            <span class="ep-title">{{ ep.title ? formatTitle(ep.title) : `Episode ${ep.episodeNumber}` }}</span>
           </div>
           <div class="ep-status">{{ ep.mediaItemId ? 'Ready to play' : 'No file linked' }}</div>
         </div>

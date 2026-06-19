@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import Hls from 'hls.js'
 import { api, getToken } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
-import { formatClock } from '@/lib/format'
+import { formatClock, formatTitle } from '@/lib/format'
 import {
   getPlaybackInfo,
   getProgress,
@@ -29,14 +29,21 @@ const item = ref<MovieDetail | null>(null)
 const playing = ref(false)
 const position = ref(0)
 const duration = ref(0)
+const quality = ref('')
 const error = ref('')
+const starting = ref(false)
 const resumeOpen = ref(false)
 const resumeFrom = ref(0)
 
+// Playback mode + the media offset at which the current source begins. Direct
+// play seeks natively (offset stays 0); a transcode seek restarts ffmpeg at the
+// new offset, so the HLS timeline's 0 maps to baseOffset in the media.
+let mode: 'direct' | 'transcode' = 'direct'
+const baseOffset = ref(0)
+let directAttached = false
 let hls: Hls | null = null
 let heartbeat: ReturnType<typeof setInterval> | null = null
 let transcodeSessionId = ''
-const starting = ref(false)
 
 const pct = computed(() => (duration.value ? (position.value / duration.value) * 100 : 0))
 const remaining = computed(() => Math.max(0, duration.value - position.value))
@@ -53,40 +60,67 @@ onMounted(async () => {
   const el = video.value
   if (!el) return
 
-  // Direct play when the browser can decode the file; otherwise fall back to a
-  // server-side HLS transcode (The Helm).
-  if (playback && !playback.directPlay) {
-    const ok = await attachTranscode(el)
-    if (!ok) return
-  } else {
-    attachSource(el, streamUrl(itemId))
-  }
+  // The true total runtime comes from the catalog; an HLS event playlist only
+  // knows the encoded-so-far length, so never trust el.duration for transcodes.
+  duration.value = item.value?.durationSeconds ?? 0
+  mode = playback && !playback.directPlay ? 'transcode' : 'direct'
   bindVideo(el)
 
-  // Resume prompt when there's a meaningful saved position.
   if (progress && !progress.watched && progress.positionSeconds > 5) {
     resumeFrom.value = progress.positionSeconds
     resumeOpen.value = true
+    // Ready the direct-play source so resume is instant; defer a transcode until
+    // the user picks an offset so we encode from there (server-side seek).
+    if (mode === 'direct') attachDirect(el)
   } else {
-    void el.play().catch(() => {})
+    await playFrom(0)
   }
 })
 
-// attachTranscode starts a server-side transcode, waits for the master playlist
-// to warm up, then feeds it to hls.js (with the per-device token on every
-// request). Returns false and sets an error on failure.
-async function attachTranscode(el: HTMLVideoElement): Promise<boolean> {
+// playFrom begins playback at an absolute media offset (seconds).
+async function playFrom(offset: number): Promise<void> {
+  const el = video.value
+  if (!el) return
+  if (mode === 'direct') {
+    attachDirect(el)
+    baseOffset.value = 0
+    el.currentTime = offset
+    void el.play().catch(() => {})
+  } else {
+    await startTranscodeAt(el, offset)
+  }
+}
+
+function attachDirect(el: HTMLVideoElement): void {
+  if (directAttached) return
+  el.src = streamUrl(itemId)
+  directAttached = true
+}
+
+// startTranscodeAt (re)starts a server-side transcode encoding from offset, then
+// feeds the playlist to hls.js (per-device token on every request) and plays.
+// The HLS timeline's 0 corresponds to baseOffset in the media.
+async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<void> {
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+  if (transcodeSessionId) {
+    void stopTranscode(transcodeSessionId).catch(() => {})
+    transcodeSessionId = ''
+  }
+  baseOffset.value = offset
   starting.value = true
   try {
-    const sess = await startTranscode(itemId).catch(() => null)
+    const sess = await startTranscode(itemId, offset).catch(() => null)
     if (!sess) {
       error.value = "Couldn't start transcoding this title. The server may be at capacity."
-      return false
+      return
     }
     transcodeSessionId = sess.id
     if (!(await waitForPlaylist(sess.playlistUrl))) {
       error.value = 'The transcoder is taking too long to start. Please try again.'
-      return false
+      return
     }
     if (Hls.isSupported()) {
       hls = new Hls({
@@ -95,17 +129,18 @@ async function attachTranscode(el: HTMLVideoElement): Promise<boolean> {
           if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
         },
       })
-      hls.loadSource(sess.playlistUrl)
-      hls.attachMedia(el)
+      hls.on(Hls.Events.MANIFEST_PARSED, () => void el.play().catch(() => {}))
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) error.value = 'This stream could not be played.'
       })
+      hls.loadSource(sess.playlistUrl)
+      hls.attachMedia(el)
     } else {
       // Native-HLS browsers (iOS Safari) can't set an Authorization header on a
       // bare <video> src; token-in-URL support is a follow-up.
       el.src = sess.playlistUrl
+      void el.play().catch(() => {})
     }
-    return true
   } finally {
     starting.value = false
   }
@@ -142,26 +177,15 @@ onBeforeUnmount(() => {
   }
 })
 
-// hls.js for HLS sources (Phase 3 transcode), native element for direct play.
-function attachSource(el: HTMLVideoElement, url: string): void {
-  if (url.includes('.m3u8') && Hls.isSupported()) {
-    hls = new Hls()
-    hls.loadSource(url)
-    hls.attachMedia(el)
-    hls.on(Hls.Events.ERROR, (_e, data) => {
-      if (data.fatal) error.value = 'This stream could not be played.'
-    })
-  } else {
-    el.src = url
-  }
-}
-
 function bindVideo(el: HTMLVideoElement): void {
   el.addEventListener('loadedmetadata', () => {
-    duration.value = el.duration || item.value?.durationSeconds || 0
+    if (!duration.value) duration.value = el.duration || 0
+    updateQuality(el)
   })
+  // Fires when the decoded resolution changes (e.g. hls.js switches level).
+  el.addEventListener('resize', () => updateQuality(el))
   el.addEventListener('timeupdate', () => {
-    position.value = el.currentTime
+    position.value = baseOffset.value + el.currentTime
   })
   el.addEventListener('play', () => {
     playing.value = true
@@ -180,14 +204,22 @@ function bindVideo(el: HTMLVideoElement): void {
   })
   // Throttled heartbeat while open.
   heartbeat = setInterval(() => {
-    if (!el.paused && el.currentTime > 0) flush()
+    if (!el.paused) flush()
   }, 10000)
 }
 
+// updateQuality derives a friendly label from the currently decoded resolution
+// (reflects the live hls.js variant, or the file for direct play).
+function updateQuality(el: HTMLVideoElement): void {
+  const h = el.videoHeight
+  if (!h) return
+  quality.value = h >= 2160 ? '4K' : `${h}p`
+}
+
 function flush(): void {
-  const el = video.value
-  if (el && el.currentTime > 0) {
-    void reportProgress(itemId, el.currentTime, el.duration || undefined).catch(() => {})
+  const pos = baseOffset.value + (video.value?.currentTime ?? 0)
+  if (pos > 0) {
+    void reportProgress(itemId, pos, duration.value || undefined).catch(() => {})
   }
 }
 
@@ -199,16 +231,34 @@ function togglePlay(): void {
 }
 
 function seek(e: MouseEvent): void {
-  const el = video.value
-  if (!el || !duration.value) return
+  if (!duration.value) return
   const bar = e.currentTarget as HTMLElement
   const rect = bar.getBoundingClientRect()
-  el.currentTime = ((e.clientX - rect.left) / rect.width) * duration.value
+  void seekTo(((e.clientX - rect.left) / rect.width) * duration.value)
 }
 
 function skip(delta: number): void {
+  void seekTo(position.value + delta)
+}
+
+// seekTo seeks to an absolute media time. Direct play seeks natively; a
+// transcode seek stays native when the target is already encoded/buffered,
+// otherwise restarts ffmpeg from the new offset.
+async function seekTo(t: number): Promise<void> {
   const el = video.value
-  if (el) el.currentTime = Math.min(duration.value, Math.max(0, el.currentTime + delta))
+  if (!el) return
+  t = Math.max(0, duration.value ? Math.min(duration.value, t) : t)
+  if (mode === 'direct') {
+    el.currentTime = t
+    return
+  }
+  const rel = t - baseOffset.value
+  const buffered = el.seekable.length ? el.seekable.end(el.seekable.length - 1) : 0
+  if (rel >= 0 && rel <= buffered) {
+    el.currentTime = rel
+  } else {
+    await startTranscodeAt(el, t)
+  }
 }
 
 function fullscreen(): void {
@@ -217,21 +267,13 @@ function fullscreen(): void {
 }
 
 function resume(): void {
-  const el = video.value
-  if (el) {
-    el.currentTime = resumeFrom.value
-    void el.play().catch(() => {})
-  }
   resumeOpen.value = false
+  void playFrom(resumeFrom.value)
 }
 
 function startOver(): void {
-  const el = video.value
-  if (el) {
-    el.currentTime = 0
-    void el.play().catch(() => {})
-  }
   resumeOpen.value = false
+  void playFrom(0)
 }
 
 function goBack(): void {
@@ -265,12 +307,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <div class="top-left">
         <button class="back" type="button" @click="goBack">‹</button>
         <div>
-          <div class="title">{{ item?.title ?? 'Loading…' }}</div>
+          <div class="title">{{ item ? formatTitle(item.title) : 'Loading…' }}</div>
           <div class="sub">{{ item?.year ?? '' }}</div>
         </div>
       </div>
-      <div class="device-pill">
-        <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
+      <div class="top-right">
+        <span v-if="quality" class="quality">{{ quality }}</span>
+        <div class="device-pill">
+          <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
+        </div>
       </div>
     </div>
 
@@ -284,7 +329,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </div>
 
     <!-- center play -->
-    <div v-if="!playing && !error && !starting" class="center">
+    <div v-if="!playing && !error && !starting && !resumeOpen" class="center">
       <button class="big-play" type="button" @click="togglePlay">▶</button>
     </div>
 
@@ -308,10 +353,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <span class="t">{{ formatClock(duration) }}</span>
       </div>
       <div class="buttons">
-        <button type="button" @click="skip(-10)">⟲ 10</button>
-        <button type="button" @click="togglePlay">{{ playing ? '❚❚ Pause' : '▶ Play' }}</button>
-        <button type="button" @click="skip(10)">10 ⟳</button>
-        <button type="button" @click="fullscreen">⤢ Fullscreen</button>
+        <button class="ctrl" type="button" title="Back 10s" @click="skip(-10)">
+          <span class="ic">↺</span><span class="lbl">10s</span>
+        </button>
+        <button class="ctrl primary" type="button" :title="playing ? 'Pause' : 'Play'" @click="togglePlay">
+          <span class="ic">{{ playing ? '❚❚' : '▶' }}</span>
+          <span class="lbl">{{ playing ? 'Pause' : 'Play' }}</span>
+        </button>
+        <button class="ctrl" type="button" title="Forward 10s" @click="skip(10)">
+          <span class="ic">↻</span><span class="lbl">10s</span>
+        </button>
+        <button class="ctrl" type="button" title="Fullscreen" @click="fullscreen">
+          <span class="ic">⛶</span><span class="lbl">Fullscreen</span>
+        </button>
       </div>
     </div>
 
@@ -408,6 +462,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .sub {
   font: 500 12px var(--arg-body);
   color: var(--arg-dim);
+}
+.top-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.quality {
+  padding: 6px 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(201, 154, 78, 0.5);
+  background: var(--arg-accent-bg-2);
+  color: var(--arg-accent);
+  font: 800 12px var(--arg-display);
+  letter-spacing: 0.04em;
 }
 .device-pill {
   display: flex;
@@ -563,21 +631,49 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   box-shadow: 0 0 0 4px rgba(201, 154, 78, 0.3);
 }
 .buttons {
-  margin-top: 18px;
+  margin-top: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 26px;
+  gap: 18px;
 }
-.buttons button {
-  background: none;
-  border: none;
-  color: var(--arg-soft-2);
-  cursor: pointer;
-  font: 500 13px var(--arg-body);
-}
-.buttons button:hover {
+.ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.55);
   color: var(--arg-cream);
+  cursor: pointer;
+  font: 600 14px var(--arg-body);
+}
+.ctrl:hover {
+  border-color: var(--arg-accent);
+  color: #fff;
+}
+.ctrl .ic {
+  font-size: 19px;
+  line-height: 1;
+  color: var(--arg-accent);
+}
+.ctrl .lbl {
+  font: 600 14px var(--arg-body);
+}
+.ctrl.primary {
+  padding: 13px 30px;
+  background: var(--arg-accent);
+  border-color: var(--arg-accent);
+  color: var(--arg-bg);
+}
+.ctrl.primary .ic {
+  color: var(--arg-bg);
+  font-size: 17px;
+}
+.ctrl.primary:hover {
+  background: var(--arg-accent-hi);
+  color: var(--arg-bg);
 }
 .resume-scrim {
   position: absolute;
