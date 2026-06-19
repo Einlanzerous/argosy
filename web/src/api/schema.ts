@@ -252,6 +252,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/items/{itemId}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current play-state (resume position) for the item */
+        get: operations["getProgress"];
+        /** Heartbeat — upsert the resume position for the current profile */
+        put: operations["reportProgress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/items/{itemId}/watched": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark an item watched / unwatched for the current profile */
+        post: operations["setWatched"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Continue-watching / on-deck items for the current profile */
+        get: operations["listContinue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -341,6 +393,34 @@ export interface components {
             /** Format: date-time */
             finishedAt?: string;
             libraries: components["schemas"]["ScanLibraryResult"][];
+        };
+        PlayState: {
+            positionSeconds: number;
+            durationSeconds?: number | null;
+            watched: boolean;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        ProgressUpdate: {
+            positionSeconds: number;
+            durationSeconds?: number | null;
+        };
+        WatchedUpdate: {
+            watched: boolean;
+        };
+        ContinueItem: {
+            /** Format: uuid */
+            id: string;
+            kind: string;
+            title: string;
+            year?: number | null;
+            posterUrl?: string | null;
+            positionSeconds: number;
+            durationSeconds?: number | null;
+            percent: number;
+            /** Format: uuid */
+            seriesId?: string | null;
+            seriesTitle?: string | null;
         };
         Library: {
             /** Format: uuid */
@@ -822,6 +902,107 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    reportProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProgressUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated play-state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setWatched: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchedUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated play-state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listContinue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinueItem"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
 }

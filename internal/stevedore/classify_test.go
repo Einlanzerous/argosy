@@ -21,6 +21,8 @@ func TestParseEpisode(t *testing.T) {
 		ok         bool
 	}{
 		{"Show Name/Season 1/Show Name S01E02 Title.mkv", "Show Name", 1, 2, true},
+		{"shows/Sword Art Online/Season 1/Sword Art Online S01E01.mkv", "Sword Art Online", 1, 1, true}, // category dir skipped
+		{"anime/Cowboy Bebop/Season 1/Cowboy Bebop S01E02.mkv", "Cowboy Bebop", 1, 2, true},
 		{"Show.Name.S03E10.1080p.mkv", "Show Name", 3, 10, true},
 		{"Show Name/Show Name 1x05.mkv", "Show Name", 1, 5, true},
 		{"Specials/Show Name S00E01.mkv", "Show Name", 0, 1, true},

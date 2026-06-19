@@ -16,6 +16,13 @@ var (
 	reYear      = regexp.MustCompile(`\b(?:19|20)\d{2}\b`)
 )
 
+// categoryDirs are top-level library buckets that should never be mistaken for a
+// show name (anime is also surfaced as a tag, see tags.go).
+var categoryDirs = map[string]bool{
+	"movies": true, "movie": true, "films": true, "film": true,
+	"shows": true, "show": true, "tv": true, "series": true, "anime": true,
+}
+
 type episodeInfo struct {
 	show    string
 	season  int
@@ -42,14 +49,17 @@ func parseEpisode(filePath string) (episodeInfo, bool) {
 		return episodeInfo{}, false
 	}
 
-	// Show name: first ancestor dir that isn't a season/specials folder, else
-	// the filename portion before the season/episode marker.
+	// Show name: the ancestor dir closest to the file that isn't a
+	// season/specials folder or a top-level category dir (movies/, shows/,
+	// anime/, …); else the filename portion before the season/episode marker.
+	// "Last wins" so e.g. shows/Cowboy Bebop/Season 1/… yields "Cowboy Bebop",
+	// not the "shows" category folder.
 	show := ""
 	for _, d := range dirs {
-		if !reSeasonDir.MatchString(d) && !strings.EqualFold(d, "specials") {
-			show = d
-			break
+		if reSeasonDir.MatchString(d) || strings.EqualFold(d, "specials") || categoryDirs[strings.ToLower(d)] {
+			continue
 		}
+		show = d
 	}
 	if show == "" && markerIdx != nil {
 		show = name[:markerIdx[0]]
