@@ -90,6 +90,20 @@ type Account struct {
 	Name string             `json:"name"`
 }
 
+// ContinueItem defines model for ContinueItem.
+type ContinueItem struct {
+	DurationSeconds *float32            `json:"durationSeconds,omitempty"`
+	Id              openapi_types.UUID  `json:"id"`
+	Kind            string              `json:"kind"`
+	Percent         float32             `json:"percent"`
+	PositionSeconds float32             `json:"positionSeconds"`
+	PosterUrl       *string             `json:"posterUrl,omitempty"`
+	SeriesId        *openapi_types.UUID `json:"seriesId,omitempty"`
+	SeriesTitle     *string             `json:"seriesTitle,omitempty"`
+	Title           string              `json:"title"`
+	Year            *int                `json:"year,omitempty"`
+}
+
 // Device defines model for Device.
 type Device struct {
 	CreatedAt  time.Time           `json:"createdAt"`
@@ -191,6 +205,20 @@ type PingResponse struct {
 	Version string `json:"version"`
 }
 
+// PlayState defines model for PlayState.
+type PlayState struct {
+	DurationSeconds *float32   `json:"durationSeconds,omitempty"`
+	PositionSeconds float32    `json:"positionSeconds"`
+	UpdatedAt       *time.Time `json:"updatedAt,omitempty"`
+	Watched         bool       `json:"watched"`
+}
+
+// ProgressUpdate defines model for ProgressUpdate.
+type ProgressUpdate struct {
+	DurationSeconds *float32 `json:"durationSeconds,omitempty"`
+	PositionSeconds float32  `json:"positionSeconds"`
+}
+
 // Role defines model for Role.
 type Role string
 
@@ -262,6 +290,11 @@ type UserProfile struct {
 	Role Role               `json:"role"`
 }
 
+// WatchedUpdate defines model for WatchedUpdate.
+type WatchedUpdate struct {
+	Watched bool `json:"watched"`
+}
+
 // Forbidden defines model for Forbidden.
 type Forbidden = Error
 
@@ -312,6 +345,12 @@ type RegisterDeviceJSONRequestBody = DeviceRegistrationRequest
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
+// ReportProgressJSONRequestBody defines body for ReportProgress for application/json ContentType.
+type ReportProgressJSONRequestBody = ProgressUpdate
+
+// SetWatchedJSONRequestBody defines body for SetWatched for application/json ContentType.
+type SetWatchedJSONRequestBody = WatchedUpdate
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// List devices in the current account (the Fleet)
@@ -329,12 +368,24 @@ type ServerInterface interface {
 	// Resolve the current (account, profile, device) from the token
 	// (GET /api/v1/auth/me)
 	GetCurrentSession(w http.ResponseWriter, r *http.Request)
+	// Continue-watching / on-deck items for the current profile
+	// (GET /api/v1/continue)
+	ListContinue(w http.ResponseWriter, r *http.Request)
 	// Media item detail with effective metadata
 	// (GET /api/v1/items/{itemId})
 	GetMediaItem(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID)
+	// Current play-state (resume position) for the item
+	// (GET /api/v1/items/{itemId}/progress)
+	GetProgress(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID)
+	// Heartbeat — upsert the resume position for the current profile
+	// (PUT /api/v1/items/{itemId}/progress)
+	ReportProgress(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID)
 	// Direct-play media stream with HTTP range support
 	// (GET /api/v1/items/{itemId}/stream)
 	StreamItem(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID, params StreamItemParams)
+	// Mark an item watched / unwatched for the current profile
+	// (POST /api/v1/items/{itemId}/watched)
+	SetWatched(w http.ResponseWriter, r *http.Request, itemId openapi_types.UUID)
 	// List the account's libraries
 	// (GET /api/v1/libraries)
 	ListLibraries(w http.ResponseWriter, r *http.Request)
@@ -470,6 +521,26 @@ func (siw *ServerInterfaceWrapper) GetCurrentSession(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListContinue operation middleware
+func (siw *ServerInterfaceWrapper) ListContinue(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListContinue(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMediaItem operation middleware
 func (siw *ServerInterfaceWrapper) GetMediaItem(w http.ResponseWriter, r *http.Request) {
 
@@ -493,6 +564,70 @@ func (siw *ServerInterfaceWrapper) GetMediaItem(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMediaItem(w, r, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProgress operation middleware
+func (siw *ServerInterfaceWrapper) GetProgress(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "itemId" -------------
+	var itemId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "itemId", r.PathValue("itemId"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "itemId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProgress(w, r, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReportProgress operation middleware
+func (siw *ServerInterfaceWrapper) ReportProgress(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "itemId" -------------
+	var itemId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "itemId", r.PathValue("itemId"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "itemId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReportProgress(w, r, itemId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -535,6 +670,38 @@ func (siw *ServerInterfaceWrapper) StreamItem(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StreamItem(w, r, itemId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetWatched operation middleware
+func (siw *ServerInterfaceWrapper) SetWatched(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "itemId" -------------
+	var itemId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "itemId", r.PathValue("itemId"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "itemId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetWatched(w, r, itemId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -963,8 +1130,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/auth/devices/{deviceId}", wrapper.RevokeDevice)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/login", wrapper.Login)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/auth/me", wrapper.GetCurrentSession)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/continue", wrapper.ListContinue)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/items/{itemId}", wrapper.GetMediaItem)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/items/{itemId}/progress", wrapper.GetProgress)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/items/{itemId}/progress", wrapper.ReportProgress)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/items/{itemId}/stream", wrapper.StreamItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/items/{itemId}/watched", wrapper.SetWatched)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/libraries", wrapper.ListLibraries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/libraries/{libraryId}/movies", wrapper.ListMovies)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/libraries/{libraryId}/series", wrapper.ListSeries)
@@ -982,50 +1153,56 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"6/8GAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

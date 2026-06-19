@@ -296,6 +296,90 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/items/{itemId}/progress:
+    get:
+      tags: [library]
+      operationId: getProgress
+      summary: Current play-state (resume position) for the item
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [library]
+      operationId: reportProgress
+      summary: Heartbeat — upsert the resume position for the current profile
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressUpdate"
+      responses:
+        "200":
+          description: Updated play-state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/items/{itemId}/watched:
+    post:
+      tags: [library]
+      operationId: setWatched
+      summary: Mark an item watched / unwatched for the current profile
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchedUpdate"
+      responses:
+        "200":
+          description: Updated play-state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/continue:
+    get:
+      tags: [library]
+      operationId: listContinue
+      summary: Continue-watching / on-deck items for the current profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContinueItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -476,6 +560,43 @@ components:
         startedAt: { type: string, format: date-time }
         finishedAt: { type: string, format: date-time }
         libraries: { type: array, items: { $ref: "#/components/schemas/ScanLibraryResult" } }
+
+    PlayState:
+      type: object
+      required: [positionSeconds, watched]
+      properties:
+        positionSeconds: { type: number }
+        durationSeconds: { type: number, nullable: true }
+        watched: { type: boolean }
+        updatedAt: { type: string, format: date-time, nullable: true }
+
+    ProgressUpdate:
+      type: object
+      required: [positionSeconds]
+      properties:
+        positionSeconds: { type: number }
+        durationSeconds: { type: number, nullable: true }
+
+    WatchedUpdate:
+      type: object
+      required: [watched]
+      properties:
+        watched: { type: boolean }
+
+    ContinueItem:
+      type: object
+      required: [id, kind, title, positionSeconds, percent]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        title: { type: string }
+        year: { type: integer, nullable: true }
+        posterUrl: { type: string, nullable: true }
+        positionSeconds: { type: number }
+        durationSeconds: { type: number, nullable: true }
+        percent: { type: number }
+        seriesId: { type: string, format: uuid, nullable: true }
+        seriesTitle: { type: string, nullable: true }
 
     Library:
       type: object
