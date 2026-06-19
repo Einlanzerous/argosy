@@ -64,7 +64,14 @@ const resumeLabel = computed(() => {
 
 function resumeSeries(): void {
   const id = resumeTarget.value?.ep.mediaItemId
-  if (id) void router.push({ name: 'player', params: { id } })
+  if (id) void router.push({ name: 'player', params: { id }, query: { resume: '1' } })
+}
+
+// Start Over: play the first episode from the beginning (skip the resume prompt).
+function startOverSeries(): void {
+  if (firstPlayable.value) {
+    void router.push({ name: 'player', params: { id: firstPlayable.value }, query: { start: '1' } })
+  }
 }
 
 async function load(id: string): Promise<void> {
@@ -118,7 +125,7 @@ watch(
             <button class="play" type="button" @click="resumeSeries">
               <span>▶</span> {{ resumeLabel }}
             </button>
-            <button class="ghost" type="button" :disabled="!firstPlayable" @click="playFirst">
+            <button class="ghost" type="button" :disabled="!firstPlayable" @click="startOverSeries">
               Start Over
             </button>
           </template>
