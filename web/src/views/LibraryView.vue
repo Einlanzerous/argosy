@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 import PosterCard from '@/components/PosterCard.vue'
+import { posterStyle } from '@/lib/poster'
+import { openSearch } from '@/lib/ui'
 import { getLibraries, getMovies, getSeries, TAG_FILTERS, type MovieSort } from '@/lib/manifest'
 import { setPage } from '@/lib/page'
 
@@ -33,12 +35,10 @@ const scope = computed<'all' | 'movies' | 'series'>(() => {
   if (route.name === 'shows') return 'series'
   return 'all'
 })
-
-function headerFor(s: 'all' | 'movies' | 'series'): [string, string] {
-  if (s === 'movies') return ['Movies', 'The Manifest · standalone films.']
-  if (s === 'series') return ['Shows', 'The Manifest · series in the hold.']
-  return ['Library', 'The Manifest · everything in the hold.']
-}
+const libTitle = computed(() =>
+  scope.value === 'movies' ? 'Movies' : scope.value === 'series' ? 'Shows' : 'All Titles',
+)
+const backdropStyle = computed(() => posterStyle(cards.value[0]?.posterUrl, libTitle.value))
 
 async function load(): Promise<void> {
   loading.value = true
@@ -78,13 +78,24 @@ async function load(): Promise<void> {
   loading.value = false
 }
 
-onMounted(load)
+onMounted(() => {
+  if (typeof route.query.tag === 'string' && TAG_FILTERS.includes(route.query.tag)) {
+    tag.value = route.query.tag
+  }
+  void load()
+})
 
+// React to scope (route), tag, sort, and a tag arriving via the search overlay.
+watch(
+  () => route.query.tag,
+  (q) => {
+    if (typeof q === 'string' && TAG_FILTERS.includes(q)) tag.value = q
+  },
+)
 watch(
   () => [scope.value, tag.value, sort.value],
   () => {
-    const [t, s] = headerFor(scope.value)
-    setPage(t, s)
+    setPage(libTitle.value)
     void load()
   },
   { immediate: true },
@@ -92,68 +103,162 @@ watch(
 </script>
 
 <template>
-  <div>
-    <div class="controls">
-      <div class="chips">
-        <button
-          v-for="t in TAG_FILTERS"
-          :key="t"
-          class="chip"
-          :class="{ on: tag === t }"
-          type="button"
-          @click="tag = t"
-        >
-          {{ t }}
-        </button>
-      </div>
-      <div class="sorts">
-        <span class="sort-label">Sort</span>
-        <button
-          v-for="s in SORTS"
-          :key="s.key"
-          class="sort"
-          :class="{ on: sort === s.key }"
-          type="button"
-          @click="sort = s.key"
-        >
-          {{ s.label }}
-        </button>
-      </div>
-    </div>
+  <div class="library">
+    <div class="backdrop" :style="backdropStyle" />
+    <div class="backdrop-fade" />
 
-    <div v-if="cards.length" class="grid">
-      <PosterCard
-        v-for="c in cards"
-        :key="c.id"
-        :title="c.title"
-        :subtitle="c.year ? String(c.year) : undefined"
-        :kind="c.kind"
-        :anime="c.anime"
-        :poster-url="c.posterUrl"
-        :to="c.to"
-      />
-    </div>
+    <div class="content">
+      <header class="head">
+        <div class="title-block">
+          <div class="eyebrow">The Manifest</div>
+          <h1>{{ libTitle }}</h1>
+          <div class="count">{{ cards.length }} titles in the hold</div>
+        </div>
+        <button class="search" type="button" @click="openSearch">
+          <span>⌕</span> Search the Manifest…
+        </button>
+      </header>
 
-    <div v-else-if="!loading" class="empty">
-      <img src="/argosy_logo_dark.png" alt="" />
-      <h2>The hold is empty</h2>
-      <p>
-        Stevedore hasn't loaded any cargo for this filter. Point Argosy at your media folders and
-        we'll rebuild the Manifest.
-      </p>
-      <RouterLink class="scan" :to="{ name: 'settings' }">Scan library</RouterLink>
+      <div class="controls">
+        <div class="chips">
+          <button
+            v-for="t in TAG_FILTERS"
+            :key="t"
+            class="chip"
+            :class="{ on: tag === t }"
+            type="button"
+            @click="tag = t"
+          >
+            {{ t }}
+          </button>
+        </div>
+        <div class="sorts">
+          <span class="sort-label">Sort</span>
+          <button
+            v-for="s in SORTS"
+            :key="s.key"
+            class="sort"
+            :class="{ on: sort === s.key }"
+            type="button"
+            @click="sort = s.key"
+          >
+            {{ s.label }}
+          </button>
+        </div>
+      </div>
+
+      <div class="showing">Showing {{ cards.length }} titles</div>
+
+      <div v-if="cards.length" class="grid">
+        <PosterCard
+          v-for="c in cards"
+          :key="c.id"
+          :title="c.title"
+          :subtitle="c.year ? String(c.year) : undefined"
+          :kind="c.kind"
+          :anime="c.anime"
+          :poster-url="c.posterUrl"
+          :to="c.to"
+        />
+      </div>
+
+      <div v-else-if="!loading" class="empty">
+        <img src="/argosy_logo_dark.png" alt="" />
+        <h2>The hold is empty</h2>
+        <p>
+          Stevedore hasn't loaded any cargo for this filter. Point Argosy at your media folders and
+          we'll rebuild the Manifest.
+        </p>
+        <RouterLink class="scan" :to="{ name: 'settings' }">Scan library</RouterLink>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.library {
+  position: relative;
+  min-height: 100vh;
+}
+.backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 460px;
+  opacity: 0.45;
+  filter: blur(1px);
+}
+.backdrop-fade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 460px;
+  background: linear-gradient(
+    180deg,
+    rgba(23, 23, 23, 0.4) 0%,
+    rgba(23, 23, 23, 0.78) 55%,
+    #171717 100%
+  );
+}
+.content {
+  position: relative;
+  padding: 104px 40px 90px;
+}
+.head {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.title-block {
+  flex: none;
+  width: 200px;
+}
+.eyebrow {
+  font: 700 11px var(--arg-display);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--arg-accent);
+}
+h1 {
+  margin: 10px 0 0;
+  font: 800 clamp(30px, 3.4vw, 40px) var(--arg-display);
+  letter-spacing: -0.02em;
+}
+.count {
+  margin-top: 4px;
+  font: 500 13px var(--arg-body);
+  color: var(--arg-dim);
+}
+.search {
+  flex: 1;
+  min-width: 280px;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border-radius: var(--arg-r-lg);
+  border: 1px solid var(--arg-line-3);
+  background: rgba(20, 20, 19, 0.7);
+  backdrop-filter: blur(8px);
+  color: #8a8a82;
+  font: 500 14.5px var(--arg-body);
+  cursor: text;
+  text-align: left;
+}
+.search:hover {
+  border-color: var(--arg-accent);
+}
 .controls {
+  margin-top: 22px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 14px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
 }
 .chips {
   display: flex;
@@ -200,13 +305,18 @@ watch(
   border-color: rgba(201, 154, 78, 0.5);
   color: var(--arg-accent);
 }
+.showing {
+  margin: 22px 0;
+  font: 600 12.5px var(--arg-body);
+  color: var(--arg-mute);
+}
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
   gap: 24px 18px;
 }
 .empty {
-  margin-top: 50px;
+  margin-top: 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
