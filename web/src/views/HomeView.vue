@@ -95,7 +95,10 @@ onMounted(async () => {
         </div>
         <div class="cue"><span class="dot" /> Syncs across your Fleet — resume on any device</div>
         <div class="actions">
-          <RouterLink class="play" :to="{ name: 'player', params: { id: hero.id } }">
+          <RouterLink
+            class="play"
+            :to="{ name: 'player', params: { id: hero.id }, query: hero.percent != null ? { resume: '1' } : undefined }"
+          >
             <span>▶</span> {{ hero.percent != null ? 'Resume' : 'Play' }}
           </RouterLink>
           <RouterLink class="ghost" :to="hero.detailTo">Details</RouterLink>
@@ -113,7 +116,7 @@ onMounted(async () => {
           v-for="c in continueItems"
           :key="c.id"
           class="cw"
-          :to="{ name: 'player', params: { id: c.id } }"
+          :to="{ name: 'player', params: { id: c.id }, query: { resume: '1' } }"
         >
           <div class="cw-art" :style="posterStyle(c.posterUrl, c.title)">
             <div class="arg-hatch cw-hatch" />

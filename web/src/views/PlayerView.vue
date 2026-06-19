@@ -66,8 +66,18 @@ onMounted(async () => {
   mode = playback && !playback.directPlay ? 'transcode' : 'direct'
   bindVideo(el)
 
-  if (progress && !progress.watched && progress.positionSeconds > 5) {
-    resumeFrom.value = progress.positionSeconds
+  // Intent from the entry point: ?resume jumps straight to the saved position,
+  // ?start forces the beginning, and a bare /player asks (only when there's
+  // history). So "Resume"/Continue-Watching links resume silently, while a plain
+  // "Play" still offers the choice.
+  const wantResume = route.query.resume != null
+  const wantStart = route.query.start != null
+  const hasHistory = !!(progress && !progress.watched && progress.positionSeconds > 5)
+
+  if (hasHistory && wantResume) {
+    await playFrom(progress!.positionSeconds)
+  } else if (hasHistory && !wantStart) {
+    resumeFrom.value = progress!.positionSeconds
     resumeOpen.value = true
     // Ready the direct-play source so resume is instant; defer a transcode until
     // the user picks an offset so we encode from there (server-side seek).
