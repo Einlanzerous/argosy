@@ -19,6 +19,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/metadata"
 	"github.com/Einlanzerous/argosy/internal/server"
 	"github.com/Einlanzerous/argosy/internal/stevedore"
+	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/Einlanzerous/argosy/internal/version"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -90,7 +91,24 @@ func main() {
 		scheduler = stevedore.NewScheduler(pool, logger, cfg.ArtworkDir, provider, cfg.ScanInterval)
 	}
 
-	srv, err := server.New(cfg, logger, pool, scheduler)
+	// The Helm: transcode session orchestration. Only with a database (it serves
+	// authenticated, account-scoped items).
+	var tcManager *transcode.Manager
+	var caps transcode.Capabilities
+	// ARGY-27 encodes software-only; the LocalFFmpeg backend wires the hardware
+	// encoders in ARGY-30. The probe still reports what hardware is available so
+	// /capabilities is truthful ahead of that work.
+	encoder := transcode.EncoderSoftware
+	if pool != nil {
+		caps = transcode.Probe(context.Background(), "", cfg.EncoderPreference)
+		if cfg.ForceSoftware {
+			caps.Selected = transcode.EncoderSoftware
+		}
+		tcManager = transcode.NewManager(transcode.LocalFFmpeg{}, cfg.TranscodeDir, cfg.TranscodeIdleTimeout, cfg.MaxTranscodeSessions, logger)
+		logger.Info("transcode ready", "available", caps.Available, "selected", caps.Selected, "encoding", encoder, "workDir", cfg.TranscodeDir)
+	}
+
+	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder)
 	if err != nil {
 		logger.Error("failed to build server", "err", err)
 		os.Exit(1)
@@ -101,6 +119,9 @@ func main() {
 
 	if scheduler != nil {
 		go scheduler.Run(ctx)
+	}
+	if tcManager != nil {
+		go tcManager.Run(ctx)
 	}
 
 	go func() {

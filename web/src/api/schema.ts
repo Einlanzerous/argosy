@@ -321,12 +321,163 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/items/{itemId}/transcode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start (or join) an HLS transcode session for an item
+         * @description Starts a server-side transcode and returns the session plus its HLS
+         *     playlist URL. Repeat requests for the same item + offset join the
+         *     existing session instead of spawning a second ffmpeg. Returns 503 when
+         *     the server is at its transcode-session limit (back-pressure).
+         */
+        post: operations["startTranscode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transcode/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live transcode sessions for the current account (The Helm) */
+        get: operations["listTranscodeSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transcode/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Encoders available on this host and the selected one */
+        get: operations["getTranscodeCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transcode/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Stop a transcode session and purge its output */
+        delete: operations["stopTranscode"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transcode/{sessionId}/index.m3u8": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** HLS media playlist for a transcode session */
+        get: operations["getTranscodePlaylist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transcode/{sessionId}/{segment}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** HLS media segment for a transcode session */
+        get: operations["getTranscodeSegment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Error: {
             error: string;
+        };
+        TranscodeStartRequest: {
+            /**
+             * Format: double
+             * @description Seek offset in seconds (default 0).
+             */
+            startAt?: number;
+        };
+        TranscodeProgress: {
+            /**
+             * Format: int64
+             * @description Encoded timeline position in milliseconds.
+             */
+            outTimeMs: number;
+            /**
+             * Format: double
+             * @description Encode speed as a multiple of realtime (2.5 == 2.5x).
+             */
+            speed: number;
+            /** Format: double */
+            fps: number;
+        };
+        TranscodeSession: {
+            id: string;
+            /** Format: uuid */
+            itemId: string;
+            encoder: string;
+            /** @enum {string} */
+            state: "starting" | "running" | "complete" | "failed" | "stopped";
+            /** Format: double */
+            startAt: number;
+            /** Format: date-time */
+            startedAt: string;
+            /** @description Relative URL of the HLS media playlist for this session. */
+            playlistUrl: string;
+            error?: string;
+            progress: components["schemas"]["TranscodeProgress"];
+        };
+        TranscodeCapabilities: {
+            /** @description Encoder backends usable on this host (always includes "software"). */
+            available: string[];
+            /** @description The encoder chosen by the configured preference order. */
+            selected: string;
         };
         PingResponse: {
             /** @example argosy */
@@ -1051,6 +1202,163 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    startTranscode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TranscodeStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Session started or joined */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscodeSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description At transcode-session capacity */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listTranscodeSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscodeSession"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getTranscodeCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscodeCapabilities"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    stopTranscode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stopped */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTranscodePlaylist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description HLS media playlist */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apple.mpegurl": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Session still starting (no playlist yet) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getTranscodeSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                segment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description HLS media segment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp2t": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

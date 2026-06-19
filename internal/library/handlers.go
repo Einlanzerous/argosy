@@ -7,18 +7,23 @@ import (
 	"strconv"
 
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type handlers struct {
-	store  *Store
-	logger *slog.Logger
+	store   *Store
+	logger  *slog.Logger
+	tc      *transcode.Manager
+	caps    transcode.Capabilities
+	encoder string
 }
 
 // RegisterRoutes wires the auth-scoped browse endpoints and the public artwork
-// file server onto mux. artworkDir == "" disables artwork serving.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger) {
-	h := &handlers{store: NewStore(pool, artworkBase), logger: logger}
+// file server onto mux. artworkDir == "" disables artwork serving. tc may be nil
+// to disable the transcode (The Helm) endpoints.
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string) {
+	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder}
 	mw := auth.Middleware(authStore)
 
 	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))
@@ -34,6 +39,16 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	// Streaming authenticates inline (token may be a ?token= query param) since
 	// an HTML5 <video> element can't set the Authorization header.
 	mux.Handle("GET /api/v1/items/{itemId}/stream", streamHandler(h.store, authStore, logger))
+
+	// The Helm: transcode session orchestration + HLS delivery (ARGY-27).
+	if tc != nil {
+		mux.Handle("POST /api/v1/items/{itemId}/transcode", mw(http.HandlerFunc(h.startTranscode)))
+		mux.Handle("GET /api/v1/transcode/sessions", mw(http.HandlerFunc(h.listTranscodeSessions)))
+		mux.Handle("DELETE /api/v1/transcode/{sessionId}", mw(http.HandlerFunc(h.stopTranscode)))
+		mux.Handle("GET /api/v1/transcode/capabilities", mw(http.HandlerFunc(h.transcodeCapabilities)))
+		mux.Handle("GET /api/v1/transcode/{sessionId}/index.m3u8", mw(http.HandlerFunc(h.transcodePlaylist)))
+		mux.Handle("GET /api/v1/transcode/{sessionId}/{segment}", mw(http.HandlerFunc(h.transcodeSegment)))
+	}
 
 	if artworkDir != "" {
 		mux.Handle("GET /artwork/", http.StripPrefix("/artwork/", http.FileServer(http.Dir(artworkDir))))
