@@ -31,6 +31,13 @@ var ErrAtCapacity = errors.New("transcode: at session capacity")
 // State is the lifecycle state of a transcode session.
 type State string
 
+// Transcode methods: remux copies codecs into a browser-friendly container;
+// transcode re-encodes. The decision engine (library) picks which.
+const (
+	MethodRemux     = "remux"
+	MethodTranscode = "transcode"
+)
+
 // Session lifecycle states.
 const (
 	StateStarting State = "starting"
@@ -58,6 +65,7 @@ type Spec struct {
 	StartAt      float64
 	Encoder      string // selected encoder backend (e.g. "software", "qsv")
 	SourceHeight int    // source video height; drives the bitrate ladder (0 = unknown)
+	Method       string // MethodRemux (copy codecs) or MethodTranscode (re-encode)
 }
 
 // StartRequest is the caller-facing request to begin (or join) a session.
@@ -68,6 +76,7 @@ type StartRequest struct {
 	StartAt      float64 // seek offset in seconds
 	Encoder      string
 	SourceHeight int
+	Method       string // MethodRemux or MethodTranscode (default transcode)
 }
 
 // Session is an immutable snapshot of a transcode session's public state,
@@ -77,6 +86,7 @@ type Session struct {
 	ItemID     string    `json:"itemId"`
 	AccountID  string    `json:"-"`
 	Encoder    string    `json:"encoder"`
+	Method     string    `json:"method"`
 	State      State     `json:"state"`
 	StartAt    float64   `json:"startAt"`
 	OutputDir  string    `json:"-"`
@@ -96,9 +106,9 @@ type Backend interface {
 
 // session is the Manager's internal, mutable view of a running transcode.
 type session struct {
-	id, itemID, accountID, encoder, outputDir string
-	startAt                                   float64
-	startedAt                                 time.Time
+	id, itemID, accountID, encoder, method, outputDir string
+	startAt                                           float64
+	startedAt                                         time.Time
 
 	mu         sync.Mutex
 	state      State
@@ -118,6 +128,7 @@ func (s *session) snapshot() Session {
 		ItemID:     s.itemID,
 		AccountID:  s.accountID,
 		Encoder:    s.encoder,
+		Method:     s.method,
 		State:      s.state,
 		StartAt:    s.startAt,
 		OutputDir:  s.outputDir,
@@ -218,10 +229,14 @@ func (m *Manager) Start(req StartRequest) (Session, error) {
 		m.mu.Unlock()
 		return Session{}, fmt.Errorf("transcode: create output dir: %w", err)
 	}
+	method := req.Method
+	if method != MethodRemux {
+		method = MethodTranscode
+	}
 	now := m.clock()
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &session{
-		id: id, itemID: req.ItemID, accountID: req.AccountID, encoder: req.Encoder,
+		id: id, itemID: req.ItemID, accountID: req.AccountID, encoder: req.Encoder, method: method,
 		outputDir: outputDir, startAt: req.StartAt, startedAt: now,
 		state: StateStarting, lastAccess: now, cancel: cancel, done: make(chan struct{}),
 	}
@@ -230,7 +245,7 @@ func (m *Manager) Start(req StartRequest) (Session, error) {
 
 	go m.run(ctx, s, Spec{
 		SessionID: id, Source: req.Source, OutputDir: outputDir,
-		StartAt: req.StartAt, Encoder: req.Encoder, SourceHeight: req.SourceHeight,
+		StartAt: req.StartAt, Encoder: req.Encoder, SourceHeight: req.SourceHeight, Method: method,
 	})
 	return s.snapshot(), nil
 }

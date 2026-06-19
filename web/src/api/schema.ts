@@ -452,6 +452,11 @@ export interface components {
             /** Format: uuid */
             itemId: string;
             encoder: string;
+            /**
+             * @description Whether this session copies codecs (remux) or re-encodes (transcode).
+             * @enum {string}
+             */
+            method: "remux" | "transcode";
             /** @enum {string} */
             state: "starting" | "running" | "complete" | "failed" | "stopped";
             /** Format: double */
@@ -554,6 +559,11 @@ export interface components {
         };
         PlaybackInfo: {
             directPlay: boolean;
+            /**
+             * @description Cheapest playable path — serve as-is, repackage (copy codecs), or re-encode.
+             * @enum {string}
+             */
+            method: "direct" | "remux" | "transcode";
             container: string;
             videoCodec?: string | null;
             audioCodec?: string | null;
