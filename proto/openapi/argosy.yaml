@@ -270,6 +270,32 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/items/{itemId}/stream:
+    get:
+      tags: [library]
+      operationId: streamItem
+      summary: Direct-play media stream with HTTP range support
+      description: |
+        Streams the item's media file with byte-range support (seeking). Auth is
+        the per-device token via the bearer header OR a `token` query param,
+        since an HTML5 `<video>` element cannot set Authorization.
+      security: []
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: token, in: query, description: "Per-device token (alternative to the bearer header).", schema: { type: string } }
+      responses:
+        "200":
+          description: Full media content
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "206":
+          description: Partial content (range request)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:

@@ -26,6 +26,9 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/libraries/{libraryId}/series", mw(http.HandlerFunc(h.listSeries)))
 	mux.Handle("GET /api/v1/series/{seriesId}", mw(http.HandlerFunc(h.getSeries)))
 	mux.Handle("GET /api/v1/items/{itemId}", mw(http.HandlerFunc(h.getItem)))
+	// Streaming authenticates inline (token may be a ?token= query param) since
+	// an HTML5 <video> element can't set the Authorization header.
+	mux.Handle("GET /api/v1/items/{itemId}/stream", streamHandler(h.store, authStore, logger))
 
 	if artworkDir != "" {
 		mux.Handle("GET /artwork/", http.StripPrefix("/artwork/", http.FileServer(http.Dir(artworkDir))))
