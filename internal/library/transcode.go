@@ -195,6 +195,17 @@ func (h *handlers) listTranscodeSessions(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, out)
 }
 
+// transcodeCache reports transcode cache usage (Ballast) for The Helm/Drydock.
+func (h *handlers) transcodeCache(w http.ResponseWriter, _ *http.Request) {
+	st := h.cache.Stats()
+	writeJSON(w, http.StatusOK, api.TranscodeCacheStats{
+		TotalBytes:  st.TotalBytes,
+		BudgetBytes: st.BudgetBytes,
+		SessionDirs: st.SessionDirs,
+		LiveDirs:    st.LiveDirs,
+	})
+}
+
 // transcodeCapabilities reports the encoders available on this host.
 func (h *handlers) transcodeCapabilities(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, api.TranscodeCapabilities{

@@ -467,6 +467,21 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/transcode/cache:
+    get:
+      tags: [transcode]
+      operationId: getTranscodeCache
+      summary: Transcode cache usage (Ballast)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodeCacheStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v1/transcode/{sessionId}:
     delete:
       tags: [transcode]
@@ -601,6 +616,15 @@ components:
           type: string
         progress:
           $ref: "#/components/schemas/TranscodeProgress"
+
+    TranscodeCacheStats:
+      type: object
+      required: [totalBytes, budgetBytes, sessionDirs, liveDirs]
+      properties:
+        totalBytes: { type: integer, format: int64 }
+        budgetBytes: { type: integer, format: int64 }
+        sessionDirs: { type: integer }
+        liveDirs: { type: integer }
 
     TranscodeCapabilities:
       type: object
