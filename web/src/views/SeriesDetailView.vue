@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
-import { formatRuntime, formatTitle } from '@/lib/format'
+import { formatRuntime } from '@/lib/format'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
@@ -25,6 +25,20 @@ const firstPlayable = computed(() => {
   }
   return null
 })
+
+const episodeCodeRe = /S\d{1,2}E\d{1,2}/i
+
+// episodeName returns a real episode name only. The filename fallback is
+// "<Show> S01E01" (carries the code) — until TMDB episode names land (ARGY-58)
+// we show just E# + runtime rather than a cryptic code.
+function episodeName(ep: Episode): string | null {
+  if (!ep.title || episodeCodeRe.test(ep.title)) return null
+  return ep.title
+}
+
+function epTimeLeft(ep: Episode): number {
+  return Math.max(0, (ep.durationSeconds || 0) - (ep.positionSeconds || 0))
+}
 
 function epPercent(ep: Episode): number {
   if (!ep.durationSeconds || !ep.positionSeconds) return 0
@@ -163,22 +177,16 @@ watch(
           <span class="glyph">▶</span>
         </div>
         <div class="ep-info">
-          <div class="ep-head">
+          <div class="ep-line1">
             <span class="ep-tag">E{{ ep.episodeNumber }}</span>
-            <span class="ep-title">{{ ep.title ? formatTitle(ep.title) : `Episode ${ep.episodeNumber}` }}</span>
+            <span v-if="episodeName(ep)" class="ep-name">{{ episodeName(ep) }}</span>
+            <span class="ep-dot">·</span>
+            <span class="ep-len">{{ ep.mediaItemId ? formatRuntime(ep.durationSeconds) : 'No file linked' }}</span>
+            <span v-if="ep.watched" class="ep-flag">✓ Watched</span>
           </div>
-          <div class="ep-meta">
-            <span v-if="!ep.mediaItemId" class="ep-status">No file linked</span>
-            <template v-else>
-              <span class="ep-len">{{ formatRuntime(ep.durationSeconds) }}</span>
-              <span v-if="ep.watched" class="ep-watched">✓ Watched</span>
-              <span v-else-if="epInProgress(ep)" class="ep-left">
-                {{ Math.round(epPercent(ep)) }}% · {{ formatRuntime((ep.durationSeconds || 0) - (ep.positionSeconds || 0)) }} left
-              </span>
-            </template>
-          </div>
-          <div v-if="epInProgress(ep)" class="ep-bar">
-            <div class="ep-fill" :style="{ width: `${epPercent(ep)}%` }" />
+          <div v-if="epInProgress(ep)" class="ep-line2">
+            <div class="ep-bar"><div class="ep-fill" :style="{ width: `${epPercent(ep)}%` }" /></div>
+            <span class="ep-prog">{{ Math.round(epPercent(ep)) }}% · {{ formatRuntime(epTimeLeft(ep)) }} left</span>
           </div>
         </div>
       </button>
@@ -351,51 +359,56 @@ h1 {
   flex: 1;
   min-width: 0;
 }
-.ep-head {
+.ep-line1 {
   display: flex;
   align-items: baseline;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .ep-tag {
-  font: 700 11px var(--arg-display);
+  font: 800 13px var(--arg-display);
   color: var(--arg-accent);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
 }
-.ep-title {
-  font: 700 15px var(--arg-display);
+.ep-name {
+  font: 700 17px var(--arg-display);
+  color: var(--arg-cream);
 }
-.ep-meta {
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font: 600 11.5px var(--arg-body);
-}
-.ep-status {
+.ep-dot {
   color: var(--arg-faint);
 }
 .ep-len {
+  font: 600 13.5px var(--arg-body);
   color: var(--arg-dim);
   font-variant-numeric: tabular-nums;
 }
-.ep-watched {
+.ep-flag {
+  font: 700 12px var(--arg-display);
   color: var(--arg-accent);
 }
-.ep-left {
-  color: var(--arg-soft-2);
-  font-variant-numeric: tabular-nums;
+.ep-line2 {
+  margin-top: 11px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 .ep-bar {
-  margin-top: 9px;
-  height: 4px;
-  border-radius: 2px;
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
   background: rgba(234, 234, 229, 0.16);
   overflow: hidden;
 }
 .ep-fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: 3px;
   background: var(--arg-accent);
+}
+.ep-prog {
+  flex: none;
+  font: 600 12.5px var(--arg-body);
+  color: var(--arg-soft-2);
+  font-variant-numeric: tabular-nums;
 }
 .missing {
   padding: 80px 0;
