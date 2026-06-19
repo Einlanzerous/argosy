@@ -296,6 +296,25 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/items/{itemId}/playback:
+    get:
+      tags: [library]
+      operationId: getPlaybackInfo
+      summary: Direct-play capability decision for the item
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/items/{itemId}/progress:
     get:
       tags: [library]
@@ -560,6 +579,16 @@ components:
         startedAt: { type: string, format: date-time }
         finishedAt: { type: string, format: date-time }
         libraries: { type: array, items: { $ref: "#/components/schemas/ScanLibraryResult" } }
+
+    PlaybackInfo:
+      type: object
+      required: [directPlay, container]
+      properties:
+        directPlay: { type: boolean }
+        container: { type: string }
+        videoCodec: { type: string, nullable: true }
+        audioCodec: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
 
     PlayState:
       type: object
