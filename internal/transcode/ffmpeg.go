@@ -98,20 +98,54 @@ func rungsFor(sourceHeight int) []rung {
 	return out
 }
 
-// buildArgs builds the ffmpeg arguments for a CMAF (fMP4) HLS encode with a
-// source-derived bitrate ladder: a master playlist (index.m3u8) plus one
-// variant playlist + init segment + media segments per rung. Paths are
-// relative — ffmpeg runs with cwd == spec.OutputDir. The encoder switch
-// (qsv/vaapi/nvenc) lands in ARGY-30; today everything is software libx264/aac.
+// buildArgs builds the ffmpeg arguments for an HLS encode, dispatching on the
+// decision engine's choice: a remux copies the existing codecs into fMP4 (no
+// re-encode), while a transcode re-encodes through the bitrate ladder. Paths
+// are relative — ffmpeg runs with cwd == spec.OutputDir.
 func buildArgs(spec Spec) []string {
-	rungs := rungsFor(spec.SourceHeight)
-	n := len(rungs)
-
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error"}
-	if spec.StartAt > 0 {
-		args = append(args, "-ss", strconv.FormatFloat(spec.StartAt, 'f', 3, 64))
+	if spec.Method == MethodRemux {
+		return buildRemuxArgs(spec)
 	}
-	args = append(args, "-i", spec.Source)
+	return buildTranscodeArgs(spec)
+}
+
+// buildRemuxArgs copies the source video+audio into a single-variant CMAF HLS
+// (only the container changes — the cheap path when the codecs are already
+// browser-friendly but the container isn't, e.g. H.264/AAC in Matroska).
+func buildRemuxArgs(spec Spec) []string {
+	args := inputArgs(spec)
+	args = append(args, "-map", "0:v:0", "-map", "0:a:0", "-c", "copy")
+	return append(args, singleOutputTail()...)
+}
+
+// buildTranscodeArgs re-encodes the source. A single rung emits one media
+// playlist (index.m3u8) directly; multiple rungs emit a master playlist + one
+// variant playlist/init/segments per rung for adaptive streaming. The encoder
+// switch (qsv/vaapi/nvenc) lands in ARGY-30; today it's software libx264/aac.
+func buildTranscodeArgs(spec Spec) []string {
+	rungs := rungsFor(spec.SourceHeight)
+	if len(rungs) == 1 {
+		return buildSingleTranscodeArgs(spec, rungs[0])
+	}
+	return buildLadderArgs(spec, rungs)
+}
+
+func buildSingleTranscodeArgs(spec Spec, r rung) []string {
+	args := inputArgs(spec)
+	args = append(args,
+		"-map", "0:v:0", "-map", "0:a:0",
+		"-vf", fmt.Sprintf("scale=-2:%d", r.height),
+		"-c:v", "libx264", "-preset", "veryfast",
+		"-g", "48", "-keyint_min", "48", "-sc_threshold", "0",
+		"-b:v", r.videoBitrate, "-maxrate", r.maxRate, "-bufsize", r.bufSize,
+		"-c:a", "aac", "-b:a", audioBitrate, "-ac", "2",
+	)
+	return append(args, singleOutputTail()...)
+}
+
+func buildLadderArgs(spec Spec, rungs []rung) []string {
+	n := len(rungs)
+	args := inputArgs(spec)
 
 	// Split the video once and scale each branch to its rung height (-2 keeps
 	// the width even and preserves aspect ratio).
@@ -161,6 +195,28 @@ func buildArgs(spec Spec) []string {
 		"stream_%v.m3u8",
 	)
 	return args
+}
+
+func inputArgs(spec Spec) []string {
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error"}
+	if spec.StartAt > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(spec.StartAt, 'f', 3, 64))
+	}
+	return append(args, "-i", spec.Source)
+}
+
+// singleOutputTail writes one media playlist directly at index.m3u8 (no master,
+// no %v variant substitution — which ffmpeg does not expand in the init
+// filename for a lone variant).
+func singleOutputTail() []string {
+	return []string{
+		"-f", "hls", "-hls_time", "4", "-hls_playlist_type", "event",
+		"-hls_segment_type", "fmp4", "-hls_flags", "independent_segments",
+		"-hls_fmp4_init_filename", "init.mp4",
+		"-hls_segment_filename", "stream_%05d.m4s",
+		"-progress", "pipe:1",
+		PlaylistName,
+	}
 }
 
 // parseProgress reads ffmpeg's -progress key=value stream and reports a Progress

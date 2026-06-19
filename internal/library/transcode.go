@@ -15,10 +15,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// transcodeFile is the allowlist of servable per-session artifacts (master +
-// variant playlists, fMP4 init segments, and media segments). It doubles as the
-// traversal guard for the {file} path param.
-var transcodeFile = regexp.MustCompile(`^(index\.m3u8|stream_\d+\.m3u8|init_\d+\.mp4|stream_\d+_\d+\.m4s)$`)
+// transcodeFile is the allowlist of servable per-session artifacts, covering
+// both the single-output layout (index.m3u8 + init.mp4 + stream_NNNNN.m4s) and
+// the multi-variant ladder (master + stream_N.m3u8 + init_N.mp4 +
+// stream_N_NNNNN.m4s). It doubles as the traversal guard for the {file} param.
+var transcodeFile = regexp.MustCompile(`^(index\.m3u8|stream_\d+\.m3u8|init\.mp4|init_\d+\.mp4|stream_\d+\.m4s|stream_\d+_\d+\.m4s)$`)
 
 func transcodeContentType(name string) string {
 	switch filepath.Ext(name) {
@@ -51,9 +52,17 @@ func videoHeightFromTechnical(technical []byte) int {
 	return 0
 }
 
-// ItemSource resolves the absolute, traversal-safe media path and source video
-// height for an item the account owns. ok is false when the item isn't found.
-func (s *Store) ItemSource(ctx context.Context, accountID, itemID string) (path string, height int, ok bool, err error) {
+// transcodeSource is the resolved input for a transcode/remux decision.
+type transcodeSource struct {
+	path         string
+	height       int
+	video, audio string
+}
+
+// itemSource resolves the absolute, traversal-safe media path plus the source
+// video height and codecs for an item the account owns. ok is false when the
+// item isn't found.
+func (s *Store) itemSource(ctx context.Context, accountID, itemID string) (src transcodeSource, ok bool, err error) {
 	var root, rel string
 	var technical []byte
 	e := s.pool.QueryRow(ctx,
@@ -62,16 +71,17 @@ func (s *Store) ItemSource(ctx context.Context, accountID, itemID string) (path 
 		 WHERE l.account_id = $1 AND mi.id = $2`,
 		accountID, itemID).Scan(&root, &rel, &technical)
 	if errors.Is(e, pgx.ErrNoRows) {
-		return "", 0, false, nil
+		return transcodeSource{}, false, nil
 	}
 	if e != nil {
-		return "", 0, false, e
+		return transcodeSource{}, false, e
 	}
 	abs, e := resolveWithinRoot(root, rel)
 	if e != nil {
-		return "", 0, false, e
+		return transcodeSource{}, false, e
 	}
-	return abs, videoHeightFromTechnical(technical), true, nil
+	video, audio := codecsFromTechnical(technical)
+	return transcodeSource{path: abs, height: videoHeightFromTechnical(technical), video: video, audio: audio}, true, nil
 }
 
 // startTranscode begins (or joins) an HLS transcode session for an item and
@@ -80,7 +90,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	account := accountOf(r)
 	itemID := r.PathValue("itemId")
 
-	src, height, ok, err := h.store.ItemSource(r.Context(), account, itemID)
+	src, ok, err := h.store.itemSource(r.Context(), account, itemID)
 	if errors.Is(err, ErrPathTraversal) {
 		writeJSON(w, http.StatusForbidden, errorBody("forbidden"))
 		return
@@ -93,6 +103,17 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errorBody("not found"))
 		return
 	}
+
+	// Decide the cheapest re-packaging: remux (copy codecs) when only the
+	// container is incompatible, full transcode when a codec needs re-encoding.
+	// A direct-playable item that still hit this endpoint just gets a cheap remux.
+	method, reason := decide(filepath.Ext(src.path), src.video, src.audio)
+	mode := transcode.MethodTranscode
+	if method != methodTranscode {
+		mode = transcode.MethodRemux
+	}
+	h.logger.Info("transcode decision", "item", itemID, "method", mode, "reason", reason,
+		"container", filepath.Ext(src.path), "video", src.video, "audio", src.audio)
 
 	// Body is optional; it only carries the seek offset.
 	var body api.TranscodeStartRequest
@@ -107,10 +128,11 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	sess, err := h.tc.Start(transcode.StartRequest{
 		ItemID:       itemID,
 		AccountID:    account,
-		Source:       src,
+		Source:       src.path,
 		StartAt:      startAt,
 		Encoder:      h.encoder,
-		SourceHeight: height,
+		SourceHeight: src.height,
+		Method:       mode,
 	})
 	if errors.Is(err, transcode.ErrAtCapacity) {
 		writeJSON(w, http.StatusServiceUnavailable, errorBody("server at transcode capacity, try again shortly"))
@@ -199,6 +221,7 @@ func toAPISession(s transcode.Session) api.TranscodeSession {
 		Id:          s.ID,
 		ItemId:      itemUUID,
 		Encoder:     s.Encoder,
+		Method:      api.TranscodeSessionMethod(s.Method),
 		State:       api.TranscodeSessionState(s.State),
 		StartAt:     s.StartAt,
 		StartedAt:   s.StartedAt,

@@ -572,7 +572,7 @@ components:
 
     TranscodeSession:
       type: object
-      required: [id, itemId, encoder, state, startAt, startedAt, playlistUrl, progress]
+      required: [id, itemId, encoder, method, state, startAt, startedAt, playlistUrl, progress]
       properties:
         id:
           type: string
@@ -581,6 +581,10 @@ components:
           format: uuid
         encoder:
           type: string
+        method:
+          type: string
+          enum: [remux, transcode]
+          description: Whether this session copies codecs (remux) or re-encodes (transcode).
         state:
           type: string
           enum: [starting, running, complete, failed, stopped]
@@ -759,9 +763,13 @@ components:
 
     PlaybackInfo:
       type: object
-      required: [directPlay, container]
+      required: [directPlay, method, container]
       properties:
         directPlay: { type: boolean }
+        method:
+          type: string
+          enum: [direct, remux, transcode]
+          description: Cheapest playable path — serve as-is, repackage (copy codecs), or re-encode.
         container: { type: string }
         videoCodec: { type: string, nullable: true }
         audioCodec: { type: string, nullable: true }

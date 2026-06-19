@@ -2,24 +2,27 @@ package library
 
 import "testing"
 
-func TestDecideDirectPlay(t *testing.T) {
+func TestDecide(t *testing.T) {
 	cases := []struct {
 		ext, video, audio string
-		want              bool
+		want              string
 	}{
-		{".mp4", "h264", "aac", true},
-		{".webm", "vp9", "opus", true},
-		{".m4v", "h264", "mp3", true},
-		{".mkv", "h264", "aac", false}, // container browsers won't play
-		{".avi", "mpeg4", "mp3", false},
-		{".mp4", "hevc", "aac", false}, // codec needs transcoding
-		{".mp4", "h264", "ac3", false}, // audio needs transcoding
-		{".mp4", "", "", true},         // unknown codecs in a friendly container: optimistic
+		{".mp4", "h264", "aac", methodDirect},
+		{".webm", "vp9", "opus", methodDirect},
+		{".m4v", "h264", "mp3", methodDirect},
+		{".mp4", "", "", methodDirect},       // unknown codecs in a friendly container: optimistic
+		{".mkv", "h264", "aac", methodRemux}, // only the container is incompatible → copy
+		{".mov", "h264", "aac", methodDirect},
+		{".avi", "h264", "mp3", methodRemux},
+		{".mkv", "hevc", "aac", methodTranscode}, // video codec needs re-encode
+		{".mp4", "hevc", "aac", methodTranscode},
+		{".mp4", "h264", "ac3", methodTranscode}, // audio codec needs re-encode
+		{".mkv", "h264", "dts", methodTranscode},
 	}
 	for _, c := range cases {
-		got, reason := decideDirectPlay(c.ext, c.video, c.audio)
+		got, reason := decide(c.ext, c.video, c.audio)
 		if got != c.want {
-			t.Errorf("decideDirectPlay(%q,%q,%q) = %v (%q), want %v", c.ext, c.video, c.audio, got, reason, c.want)
+			t.Errorf("decide(%q,%q,%q) = %v (%q), want %v", c.ext, c.video, c.audio, got, reason, c.want)
 		}
 	}
 }

@@ -21,20 +21,34 @@ var (
 	directAudio      = map[string]bool{"aac": true, "mp3": true, "opus": true, "vorbis": true, "flac": true}
 )
 
-// decideDirectPlay reports whether a (container ext, video, audio) tuple can play
-// natively in a typical browser, with a human reason when it can't.
-func decideDirectPlay(ext, videoCodec, audioCodec string) (bool, string) {
+// Playback decision methods, mirroring the PlaybackInfo.method enum.
+const (
+	methodDirect    = "direct"
+	methodRemux     = "remux"
+	methodTranscode = "transcode"
+)
+
+// decide picks the cheapest playable path for a (container ext, video, audio)
+// tuple in a typical browser, with a human reason:
+//   - direct: the file plays as-is.
+//   - remux: codecs are fine, only the container is incompatible (copy, no
+//     re-encode — e.g. H.264/AAC in Matroska).
+//   - transcode: a codec needs re-encoding.
+func decide(ext, videoCodec, audioCodec string) (method, reason string) {
 	ext = strings.ToLower(ext)
-	if !directContainers[ext] {
-		return false, "the " + strings.TrimPrefix(ext, ".") + " container needs transcoding"
+	videoOK := videoCodec == "" || directVideo[strings.ToLower(videoCodec)]
+	audioOK := audioCodec == "" || directAudio[strings.ToLower(audioCodec)]
+
+	switch {
+	case !videoOK:
+		return methodTranscode, "the " + videoCodec + " video codec needs transcoding"
+	case !audioOK:
+		return methodTranscode, "the " + audioCodec + " audio codec needs transcoding"
+	case directContainers[ext]:
+		return methodDirect, "direct play"
+	default:
+		return methodRemux, "the " + strings.TrimPrefix(ext, ".") + " container will be remuxed"
 	}
-	if videoCodec != "" && !directVideo[strings.ToLower(videoCodec)] {
-		return false, "the " + videoCodec + " video codec needs transcoding"
-	}
-	if audioCodec != "" && !directAudio[strings.ToLower(audioCodec)] {
-		return false, "the " + audioCodec + " audio codec needs transcoding"
-	}
-	return true, "direct play"
 }
 
 // codecsFromTechnical pulls the first video/audio codec names out of the stored
@@ -78,10 +92,11 @@ func (s *Store) Playback(ctx context.Context, accountID, itemID string) (*api.Pl
 	}
 	ext := strings.ToLower(filepath.Ext(filePath))
 	video, audio := codecsFromTechnical(technical)
-	directPlay, reason := decideDirectPlay(ext, video, audio)
+	method, reason := decide(ext, video, audio)
 
 	info := &api.PlaybackInfo{
-		DirectPlay: directPlay,
+		DirectPlay: method == methodDirect,
+		Method:     api.PlaybackInfoMethod(method),
 		Container:  strings.TrimPrefix(ext, "."),
 		Reason:     &reason,
 	}

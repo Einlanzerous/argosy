@@ -205,6 +205,37 @@ func TestBuildArgsHLSLadder(t *testing.T) {
 	}
 }
 
+func TestBuildArgsRemux(t *testing.T) {
+	args := buildArgs(Spec{Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodRemux})
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-i /m/a.mkv", "-c copy", "-hls_segment_type fmp4", "init.mp4", "stream_%05d.m4s", PlaylistName} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("remux args missing %q\nargs: %s", want, joined)
+		}
+	}
+	// Remux must not re-encode, scale, or use the %v multi-variant layout (which
+	// ffmpeg won't expand in the init filename for a single variant).
+	for _, bad := range []string{"libx264", "filter_complex", "var_stream_map", "%v"} {
+		if strings.Contains(joined, bad) {
+			t.Errorf("remux must not contain %q\nargs: %s", bad, joined)
+		}
+	}
+}
+
+func TestBuildArgsSingleRung(t *testing.T) {
+	// A 480p source → single rung → one media playlist, no master/%v.
+	args := buildArgs(Spec{Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodTranscode, SourceHeight: 480})
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"libx264", "scale=-2:480", "init.mp4", "stream_%05d.m4s"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("single-rung args missing %q\nargs: %s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "%v") || strings.Contains(joined, "var_stream_map") {
+		t.Errorf("single-rung must not use the multi-variant layout\nargs: %s", joined)
+	}
+}
+
 func TestRungsFor(t *testing.T) {
 	cases := []struct {
 		height int
