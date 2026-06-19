@@ -28,5 +28,15 @@ node_modules/
 /deploy/sample-media/*
 !/deploy/sample-media/.gitkeep
 
+# Local test media / images dropped at the repo root (never commit binaries)
+/*.mkv
+/*.mp4
+/*.mov
+/*.avi
+/*.webm
+/*.png
+/*.jpg
+/*.jpeg
+
 # Local agent workspace
 .claude/

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 GO ?= go
-NPM ?= npm
+BUN ?= bun
 WEB := web
 EMBED_DIR := internal/webui/dist
 BIN := bin/argosy
@@ -9,15 +9,15 @@ LDFLAGS := -X github.com/Einlanzerous/argosy/internal/version.Version=$(VERSION)
 COMPOSE := docker compose -f deploy/docker-compose.yml
 GO_PKGS := ./cmd/... ./internal/...   # scope go tooling; keep it out of web/node_modules
 
-.PHONY: all build web-build go-build ensure-embed server-dev web-dev lint fmt test tidy generate clean help \
-	compose-up compose-web compose-down compose-logs compose-reset seed docker-build
+.PHONY: all build web-build go-build ensure-embed server-dev web-dev dev lint fmt test tidy generate clean help \
+	compose-up compose-web compose-down compose-logs compose-reset seed seed-sample docker-build
 
 all: build
 
 build: web-build go-build ## Build the single artifact: web UI embedded into the server binary
 
 web-build: ## Build the Vue SPA into the Go embed dir (internal/webui/dist)
-	cd $(WEB) && $(NPM) install && $(NPM) run build
+	cd $(WEB) && $(BUN) install --frozen-lockfile && $(BUN) run build
 	@touch $(EMBED_DIR)/.gitkeep   # Vite's emptyOutDir wipes it; keep it tracked
 
 ensure-embed: ## Guarantee the embed dir is non-empty so go:embed compiles
@@ -31,7 +31,11 @@ server-dev: ensure-embed ## Run the Go server (serves a placeholder until the we
 	$(GO) run ./cmd/argosy
 
 web-dev: ## Run the Vite dev server with HMR (proxies API/stream routes to :8096)
-	cd $(WEB) && $(NPM) install && $(NPM) run dev
+	cd $(WEB) && $(BUN) install && $(BUN) run dev
+
+dev: ## Start the backend stack, then the Vite dev server (one command)
+	$(COMPOSE) up -d --build
+	$(MAKE) web-dev
 
 compose-up: ## Start the dev stack: Postgres + server (air hot-reload) on :8096
 	$(COMPOSE) up -d --build
@@ -51,17 +55,20 @@ compose-reset: ## Stop the dev stack and delete volumes (drops the DB!)
 seed: ## Seed the dev database with a demo account + two profiles
 	$(COMPOSE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < internal/db/seed.sql
 
+seed-sample: ## Seed a sample media library (placeholder files + TMDB match) into the dev stack
+	bash scripts/seed-sample.sh
+
 docker-build: ## Build the production single-artifact image (argosy:dev)
 	docker build -f deploy/Dockerfile -t argosy:dev --build-arg VERSION=$(VERSION) .
 
 lint: ## Lint Go and web
 	$(GO) vet $(GO_PKGS)
 	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run $(GO_PKGS) || echo "golangci-lint not installed; skipping"
-	cd $(WEB) && $(NPM) run lint
+	cd $(WEB) && $(BUN) run lint
 
 fmt: ## Format Go and web
 	$(GO) fmt $(GO_PKGS)
-	cd $(WEB) && $(NPM) run format
+	cd $(WEB) && $(BUN) run format
 
 test: ensure-embed ## Run Go tests
 	$(GO) test $(GO_PKGS)
@@ -71,7 +78,7 @@ tidy: ## Tidy go.mod
 
 generate: ## Regenerate the Go server interface + TS client from the OpenAPI spec
 	$(GO) tool oapi-codegen -config proto/openapi/oapi-codegen.yaml proto/openapi/argosy.yaml
-	cd $(WEB) && $(NPM) install && $(NPM) run gen:api
+	cd $(WEB) && $(BUN) install --frozen-lockfile && $(BUN) run gen:api
 
 clean: ## Remove build artifacts (restores the embed placeholder)
 	rm -rf bin $(EMBED_DIR)

@@ -6,12 +6,12 @@
 #   docker build -f deploy/Dockerfile -t argosy:latest .
 
 # 1) Build the Vue SPA -> internal/webui/dist
-FROM node:24-bookworm-slim AS web
+FROM oven/bun:1-debian AS web
 WORKDIR /app/web
-COPY web/package.json web/package-lock.json ./
-RUN npm ci
+COPY web/package.json web/bun.lock ./
+RUN bun install --frozen-lockfile
 COPY web/ ./
-RUN npm run build
+RUN bun run build
 
 # 2) Build the Go binary with the SPA embedded
 FROM golang:1.26-bookworm AS build
