@@ -116,3 +116,11 @@ select {
     transform: none;
   }
 }
+@keyframes argRise {
+  from {
+    transform: translateY(16px);
+  }
+  to {
+    transform: none;
+  }
+}
