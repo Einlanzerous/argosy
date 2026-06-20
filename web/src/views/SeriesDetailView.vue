@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
+import BackButton from '@/components/BackButton.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
 import { setPage } from '@/lib/page'
@@ -126,6 +127,7 @@ watch(
     <section class="hero" :style="heroStyle">
       <div class="arg-hatch hatch" />
       <div class="shade" />
+      <BackButton class="hero-back" fallback="library" />
       <div class="body">
         <h1>{{ series.title }}</h1>
         <div class="meta">
@@ -214,6 +216,12 @@ watch(
   position: absolute;
   inset: 0;
   background: linear-gradient(0deg, #171717 4%, rgba(23, 23, 23, 0.5) 55%, rgba(23, 23, 23, 0.15) 100%);
+}
+.hero-back {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  z-index: 3;
 }
 .body {
   position: relative;

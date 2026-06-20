@@ -2,11 +2,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api/client'
+import BackButton from '@/components/BackButton.vue'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import { posterStyle } from '@/lib/poster'
-import { formatRuntime } from '@/lib/format'
+import { formatRuntime, formatClock } from '@/lib/format'
 import { getMovies, type MovieSummary } from '@/lib/manifest'
+import { getProgress, type PlayState } from '@/lib/playback'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
@@ -15,6 +17,7 @@ type MovieDetail = components['schemas']['MediaItemDetail']
 const route = useRoute()
 const movie = ref<MovieDetail | null>(null)
 const related = ref<MovieSummary[]>([])
+const progress = ref<PlayState | null>(null)
 const notFound = ref(false)
 
 // The full-screen hero prefers the landscape backdrop; the small poster tile
@@ -24,9 +27,22 @@ const heroStyle = computed(() =>
 )
 const posterTile = computed(() => posterStyle(movie.value?.posterUrl, movie.value?.title ?? ''))
 
+// In-progress when there's a saved, unfinished position — drives Resume + Start
+// over (and the progress bar) instead of a bare Play.
+const resumable = computed(() => {
+  const p = progress.value
+  return !!(p && !p.watched && p.positionSeconds > 5)
+})
+const percent = computed(() => {
+  const p = progress.value
+  if (!p?.durationSeconds) return 0
+  return Math.min(100, (p.positionSeconds / p.durationSeconds) * 100)
+})
+
 async function load(id: string): Promise<void> {
   notFound.value = false
   movie.value = null
+  progress.value = null
   const { data } = await api.GET('/api/v1/items/{itemId}', { params: { path: { itemId: id } } })
   if (!data) {
     notFound.value = true
@@ -35,6 +51,7 @@ async function load(id: string): Promise<void> {
   }
   movie.value = data
   setPage(data.title, `Film · ${data.year ?? '—'}`)
+  progress.value = await getProgress(id).catch(() => null)
   const all = await getMovies({ sort: 'title' })
   related.value = all.filter((m) => m.id !== id).slice(0, 8)
 }
@@ -51,6 +68,7 @@ watch(
     <section class="hero" :style="heroStyle">
       <div class="arg-hatch hatch" />
       <div class="shade" />
+      <BackButton class="hero-back" fallback="library" />
       <div class="body">
         <div class="poster" :style="posterTile">
           <div class="poster-title">{{ movie.title }}</div>
@@ -72,10 +90,28 @@ watch(
             <span v-for="t in movie.tags ?? []" :key="`t-${t}`" class="tag accent">{{ t }}</span>
           </div>
           <div class="actions">
-            <RouterLink class="play" :to="{ name: 'player', params: { id: movie.id } }">
+            <template v-if="resumable">
+              <RouterLink
+                class="play"
+                :to="{ name: 'player', params: { id: movie.id }, query: { resume: '1' } }"
+              >
+                <span>▶</span> Resume
+              </RouterLink>
+              <RouterLink
+                class="ghost"
+                :to="{ name: 'player', params: { id: movie.id }, query: { start: '1' } }"
+              >
+                Start over
+              </RouterLink>
+            </template>
+            <RouterLink v-else class="play" :to="{ name: 'player', params: { id: movie.id } }">
               <span>▶</span> Play
             </RouterLink>
             <button class="vault" type="button" title="Add to a Vault">+</button>
+          </div>
+          <div v-if="resumable && progress" class="resume-bar">
+            <div class="track"><div class="fill" :style="{ width: `${percent}%` }" /></div>
+            <span>{{ Math.round(percent) }}% · resume at {{ formatClock(progress.positionSeconds) }}</span>
           </div>
           <p v-if="movie.reviewRequired" class="review">⚑ Flagged for review — metadata may be incomplete.</p>
         </div>
@@ -116,6 +152,12 @@ watch(
   position: absolute;
   inset: 0;
   background: linear-gradient(0deg, #171717 4%, rgba(23, 23, 23, 0.5) 50%, rgba(23, 23, 23, 0.15) 100%);
+}
+.hero-back {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  z-index: 3;
 }
 .body {
   position: relative;
@@ -214,6 +256,20 @@ h1 {
 .play:hover {
   background: var(--arg-accent-hi);
 }
+.ghost {
+  display: flex;
+  align-items: center;
+  padding: 14px 22px;
+  border: 1px solid var(--arg-line-2);
+  border-radius: var(--arg-r);
+  background: rgba(20, 20, 19, 0.4);
+  color: var(--arg-cream);
+  font: 600 14px var(--arg-body);
+  cursor: pointer;
+}
+.ghost:hover {
+  border-color: var(--arg-cream);
+}
 .vault {
   width: 48px;
   height: 48px;
@@ -226,6 +282,31 @@ h1 {
 }
 .vault:hover {
   border-color: var(--arg-accent);
+}
+.resume-bar {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 460px;
+}
+.resume-bar .track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(234, 234, 229, 0.2);
+  overflow: hidden;
+}
+.resume-bar .fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--arg-accent);
+}
+.resume-bar span {
+  font: 600 12px var(--arg-body);
+  color: var(--arg-soft-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .review {
   margin-top: 16px;
