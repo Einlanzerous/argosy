@@ -17,7 +17,12 @@ const movie = ref<MovieDetail | null>(null)
 const related = ref<MovieSummary[]>([])
 const notFound = ref(false)
 
-const heroStyle = computed(() => posterStyle(movie.value?.posterUrl, movie.value?.title ?? ''))
+// The full-screen hero prefers the landscape backdrop; the small poster tile
+// stays the portrait poster.
+const heroStyle = computed(() =>
+  posterStyle(movie.value?.backdropUrl ?? movie.value?.posterUrl, movie.value?.title ?? ''),
+)
+const posterTile = computed(() => posterStyle(movie.value?.posterUrl, movie.value?.title ?? ''))
 
 async function load(id: string): Promise<void> {
   notFound.value = false
@@ -47,7 +52,7 @@ watch(
       <div class="arg-hatch hatch" />
       <div class="shade" />
       <div class="body">
-        <div class="poster" :style="heroStyle">
+        <div class="poster" :style="posterTile">
           <div class="poster-title">{{ movie.title }}</div>
         </div>
         <div class="info">

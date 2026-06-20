@@ -16,7 +16,9 @@ const series = ref<SeriesDetail | null>(null)
 const notFound = ref(false)
 const activeSeason = ref(0)
 
-const heroStyle = computed(() => posterStyle(series.value?.posterUrl, series.value?.title ?? ''))
+const heroStyle = computed(() =>
+  posterStyle(series.value?.backdropUrl ?? series.value?.posterUrl, series.value?.title ?? ''),
+)
 const season = computed(() => series.value?.seasons[activeSeason.value] ?? null)
 
 const firstPlayable = computed(() => {

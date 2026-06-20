@@ -130,7 +130,7 @@ func (s *Store) ListSeries(ctx context.Context, accountID, libraryID string, lim
 			return page, err
 		}
 		p, o := decodeMap(prov), decodeMap(over)
-		item := api.SeriesSummary{Id: parseUUID(id), Title: effectiveTitle(o, p, title), Year: effectiveYear(o, p, year), PosterUrl: posterURL(s.artworkBase, o, p), Tags: nonNil(tags)}
+		item := api.SeriesSummary{Id: parseUUID(id), Title: effectiveTitle(o, p, title), Year: effectiveYear(o, p, year), PosterUrl: posterURL(s.artworkBase, o, p), BackdropUrl: backdropURL(s.artworkBase, o, p), Tags: nonNil(tags)}
 		page.Items = append(page.Items, item)
 	}
 	return page, rows.Err()
@@ -214,6 +214,7 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 		Overview:       effectiveOverview(o, p),
 		Genres:         effectiveGenres(o, p),
 		PosterUrl:      posterURL(s.artworkBase, o, p),
+		BackdropUrl:    backdropURL(s.artworkBase, o, p),
 		Container:      container,
 		FilePath:       filePath,
 		ReviewRequired: reviewRequired,
@@ -246,13 +247,14 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 	}
 	p, o := decodeMap(prov), decodeMap(over)
 	detail := api.SeriesDetail{
-		Id:        parseUUID(id),
-		Title:     effectiveTitle(o, p, title),
-		Year:      effectiveYear(o, p, year),
-		Overview:  effectiveOverview(o, p),
-		PosterUrl: posterURL(s.artworkBase, o, p),
-		Seasons:   []api.SeasonSummary{},
-		Tags:      nonNil(tags),
+		Id:          parseUUID(id),
+		Title:       effectiveTitle(o, p, title),
+		Year:        effectiveYear(o, p, year),
+		Overview:    effectiveOverview(o, p),
+		PosterUrl:   posterURL(s.artworkBase, o, p),
+		BackdropUrl: backdropURL(s.artworkBase, o, p),
+		Seasons:     []api.SeasonSummary{},
+		Tags:        nonNil(tags),
 	}
 
 	rows, err := s.pool.Query(ctx,
@@ -315,11 +317,12 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 func (s *Store) summary(id, kind, title string, year *int, tags []string, prov, over []byte) api.MediaItemSummary {
 	p, o := decodeMap(prov), decodeMap(over)
 	return api.MediaItemSummary{
-		Id:        parseUUID(id),
-		Kind:      kind,
-		Title:     effectiveTitle(o, p, title),
-		Year:      effectiveYear(o, p, year),
-		PosterUrl: posterURL(s.artworkBase, o, p),
-		Tags:      nonNil(tags),
+		Id:          parseUUID(id),
+		Kind:        kind,
+		Title:       effectiveTitle(o, p, title),
+		Year:        effectiveYear(o, p, year),
+		PosterUrl:   posterURL(s.artworkBase, o, p),
+		BackdropUrl: backdropURL(s.artworkBase, o, p),
+		Tags:        nonNil(tags),
 	}
 }

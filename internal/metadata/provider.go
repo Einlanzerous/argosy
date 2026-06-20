@@ -7,12 +7,13 @@ import "context"
 
 // Match is a normalized provider result.
 type Match struct {
-	TMDBID    int64
-	Title     string
-	Year      int
-	Overview  string
-	PosterURL string // full image URL, or "" when none
-	GenreIDs  []int
+	TMDBID      int64
+	Title       string
+	Year        int
+	Overview    string
+	PosterURL   string // full poster (portrait) image URL, or "" when none
+	BackdropURL string // full backdrop (landscape) image URL, or "" when none
+	GenreIDs    []int
 }
 
 // Provider looks up metadata for films and series.

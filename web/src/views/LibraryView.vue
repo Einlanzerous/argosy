@@ -15,6 +15,7 @@ type Card = {
   kind: string
   anime: boolean
   posterUrl?: string | null
+  backdropUrl?: string | null
   to: RouteLocationRaw
 }
 
@@ -56,7 +57,9 @@ function setKind(k: Scope): void {
 const libTitle = computed(() =>
   scope.value === 'movies' ? 'Movies' : scope.value === 'series' ? 'Shows' : 'All Titles',
 )
-const backdropStyle = computed(() => posterStyle(cards.value[0]?.posterUrl, libTitle.value))
+const backdropStyle = computed(() =>
+  posterStyle(cards.value[0]?.backdropUrl ?? cards.value[0]?.posterUrl, libTitle.value),
+)
 
 async function load(): Promise<void> {
   loading.value = true
@@ -73,6 +76,7 @@ async function load(): Promise<void> {
         kind: m.kind,
         anime: !!m.tags?.includes('anime'),
         posterUrl: m.posterUrl,
+        backdropUrl: m.backdropUrl,
         to: { name: 'movie', params: { id: m.id } } as RouteLocationRaw,
       })),
     )
@@ -88,6 +92,7 @@ async function load(): Promise<void> {
         kind: 'Series',
         anime: !!s.tags?.includes('anime'),
         posterUrl: s.posterUrl,
+        backdropUrl: s.backdropUrl,
         to: { name: 'series', params: { id: s.id } } as RouteLocationRaw,
       })),
     )

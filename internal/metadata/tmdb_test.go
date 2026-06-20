@@ -18,13 +18,13 @@ func TestTMDBSearchMovie(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"results":[{"id":12345,"title":"Big Buck Bunny","overview":"A bunny.","poster_path":"/poster.jpg","release_date":"2008-05-30","genre_ids":[16,35]}]}`))
+		_, _ = w.Write([]byte(`{"results":[{"id":12345,"title":"Big Buck Bunny","overview":"A bunny.","poster_path":"/poster.jpg","backdrop_path":"/backdrop.jpg","release_date":"2008-05-30","genre_ids":[16,35]}]}`))
 	}))
 	defer srv.Close()
 
 	tm := NewTMDB("test-token", "")
 	tm.baseURL = srv.URL
-	tm.imageURL = "https://img"
+	tm.imageBase = "https://img"
 
 	m, err := tm.SearchMovie(context.Background(), "Big Buck Bunny", 2008)
 	if err != nil {
@@ -36,8 +36,11 @@ func TestTMDBSearchMovie(t *testing.T) {
 	if m.TMDBID != 12345 || m.Title != "Big Buck Bunny" || m.Year != 2008 {
 		t.Errorf("match = %+v", m)
 	}
-	if m.PosterURL != "https://img/poster.jpg" {
+	if m.PosterURL != "https://img/w780/poster.jpg" {
 		t.Errorf("poster = %q", m.PosterURL)
+	}
+	if m.BackdropURL != "https://img/w1280/backdrop.jpg" {
+		t.Errorf("backdrop = %q", m.BackdropURL)
 	}
 }
 
