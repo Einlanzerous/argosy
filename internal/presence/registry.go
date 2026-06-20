@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-// Session states.
+// StatePlaying marks a session that is actively playing.
 const StatePlaying = "playing"
 
 // Session is a live playback session.
