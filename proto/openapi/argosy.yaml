@@ -512,6 +512,28 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/sessions:
+    get:
+      tags: [library]
+      operationId: listPlaybackSessions
+      summary: Live playback sessions (who's watching what, where, now)
+      description: >
+        Active playback sessions, most-recently-active first. Admins see the
+        whole account; a viewer sees only their own. A session that owns a
+        transcode session is annotated with its encoder + method (reconciled
+        with The Helm).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlaybackSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v1/items/{itemId}/transcode:
     post:
       tags: [transcode]
@@ -980,6 +1002,21 @@ components:
       required: [watched]
       properties:
         watched: { type: boolean }
+
+    PlaybackSession:
+      type: object
+      required: [userId, deviceId, itemId, positionSeconds, state, startedAt, lastSeen]
+      properties:
+        userId: { type: string, format: uuid }
+        deviceId: { type: string, format: uuid }
+        itemId: { type: string, format: uuid }
+        positionSeconds: { type: number, format: double }
+        durationSeconds: { type: number, format: double, nullable: true }
+        state: { type: string, description: "e.g. \"playing\"" }
+        startedAt: { type: string, format: date-time }
+        lastSeen: { type: string, format: date-time }
+        encoder: { type: string, nullable: true, description: "Encoder of the owned transcode session, if any." }
+        method: { type: string, nullable: true, description: "remux | transcode, if this session owns a transcode session." }
 
     ContinueItem:
       type: object

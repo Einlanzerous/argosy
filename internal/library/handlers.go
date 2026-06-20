@@ -8,27 +8,29 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/ballast"
+	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type handlers struct {
-	store   *Store
-	logger  *slog.Logger
-	tc      *transcode.Manager
-	caps    transcode.Capabilities
-	encoder string
-	cache   *ballast.Sweeper
-	subs    *subtitle.Service
+	store    *Store
+	logger   *slog.Logger
+	tc       *transcode.Manager
+	caps     transcode.Capabilities
+	encoder  string
+	cache    *ballast.Sweeper
+	subs     *subtitle.Service
+	presence *presence.Registry
 }
 
 // RegisterRoutes wires the auth-scoped browse endpoints and the public artwork
 // file server onto mux. artworkDir == "" disables artwork serving. tc may be nil
 // to disable the transcode (The Helm) endpoints; sweeper may be nil to disable
 // the cache-stats endpoint.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service) {
-	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs}
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry) {
+	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs, presence: pres}
 	mw := auth.Middleware(authStore)
 
 	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))
@@ -38,6 +40,9 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/items/{itemId}", mw(http.HandlerFunc(h.getItem)))
 	mux.Handle("GET /api/v1/continue", mw(http.HandlerFunc(h.listContinue)))
 	mux.Handle("GET /api/v1/recent", mw(http.HandlerFunc(h.listRecent)))
+	if pres != nil {
+		mux.Handle("GET /api/v1/sessions", mw(http.HandlerFunc(h.listSessions)))
+	}
 	mux.Handle("GET /api/v1/items/{itemId}/playback", mw(http.HandlerFunc(h.getPlayback)))
 	mux.Handle("GET /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.getProgress)))
 	mux.Handle("PUT /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.reportProgress)))

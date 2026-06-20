@@ -18,6 +18,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/mediatool"
 	"github.com/Einlanzerous/argosy/internal/metadata"
+	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/Einlanzerous/argosy/internal/server"
 	"github.com/Einlanzerous/argosy/internal/stevedore"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
@@ -138,7 +139,14 @@ func main() {
 		subs = subtitle.NewService(osClient, cfg.SubtitleDir, cfg.SubtitleLanguages, logger)
 	}
 
-	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper, subs)
+	// Presence: live playback sessions (who's watching what, where, now) — driven
+	// by the progress heartbeat, reaped on idle (ARGY-34). Feeds resume + Beacon.
+	var pres *presence.Registry
+	if pool != nil {
+		pres = presence.NewRegistry(0) // default TTL (~45s, a few missed beats)
+	}
+
+	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper, subs, pres)
 	if err != nil {
 		logger.Error("failed to build server", "err", err)
 		os.Exit(1)
@@ -155,6 +163,9 @@ func main() {
 	}
 	if sweeper != nil {
 		go sweeper.Run(ctx)
+	}
+	if pres != nil {
+		go pres.Run(ctx)
 	}
 
 	go func() {

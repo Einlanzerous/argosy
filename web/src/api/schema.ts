@@ -389,6 +389,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live playback sessions (who's watching what, where, now)
+         * @description Active playback sessions, most-recently-active first. Admins see the whole account; a viewer sees only their own. A session that owns a transcode session is annotated with its encoder + method (reconciled with The Helm).
+         */
+        get: operations["listPlaybackSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{itemId}/transcode": {
         parameters: {
             query?: never;
@@ -698,6 +718,28 @@ export interface components {
         };
         WatchedUpdate: {
             watched: boolean;
+        };
+        PlaybackSession: {
+            /** Format: uuid */
+            userId: string;
+            /** Format: uuid */
+            deviceId: string;
+            /** Format: uuid */
+            itemId: string;
+            /** Format: double */
+            positionSeconds: number;
+            /** Format: double */
+            durationSeconds?: number | null;
+            /** @description e.g. "playing" */
+            state: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            lastSeen: string;
+            /** @description Encoder of the owned transcode session, if any. */
+            encoder?: string | null;
+            /** @description remux | transcode, if this session owns a transcode session. */
+            method?: string | null;
         };
         ContinueItem: {
             /** Format: uuid */
@@ -1431,6 +1473,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MediaItemSummary"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listPlaybackSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackSession"][];
                 };
             };
             401: components["responses"]["Unauthorized"];

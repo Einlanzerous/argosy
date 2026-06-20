@@ -9,6 +9,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -193,7 +194,8 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 		d := float64(*body.DurationSeconds)
 		dur = &d
 	}
-	ps, err := h.store.SetProgress(r.Context(), accountOf(r), userOf(r), r.PathValue("itemId"), float64(body.PositionSeconds), dur)
+	itemID := r.PathValue("itemId")
+	ps, err := h.store.SetProgress(r.Context(), accountOf(r), userOf(r), itemID, float64(body.PositionSeconds), dur)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -201,6 +203,24 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 	if ps == nil {
 		writeJSON(w, http.StatusNotFound, errorBody("not found"))
 		return
+	}
+	// The heartbeat doubles as a presence beat: refresh this device's live
+	// playback session (ARGY-34). Keyed (user, device, item), so reconnects
+	// refresh rather than duplicate; idle sessions are reaped by the registry.
+	if h.presence != nil {
+		sess, _ := auth.SessionFromContext(r.Context())
+		var durf float64
+		if dur != nil {
+			durf = *dur
+		}
+		h.presence.Heartbeat(presence.Session{
+			AccountID:       sess.AccountId.String(),
+			UserID:          sess.UserId.String(),
+			DeviceID:        sess.DeviceId.String(),
+			ItemID:          itemID,
+			PositionSeconds: float64(body.PositionSeconds),
+			DurationSeconds: durf,
+		})
 	}
 	writeJSON(w, http.StatusOK, ps)
 }
