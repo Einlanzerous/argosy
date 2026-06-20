@@ -409,6 +409,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/beacon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SSE stream of the current user's live play-state events (Beacon)
+         * @description Server-Sent Events stream of play_state changes for the authenticated user, powering cross-device resume/handoff. Authenticates via ?token= (an EventSource cannot set the Authorization header). Each message is `event: position` with a JSON data payload (see PlaybackSession-like fields). The client (EventSource) auto-reconnects; on reconnect it reconciles missed updates via a /continue or /progress fetch.
+         */
+        get: operations["beaconStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{itemId}/transcode": {
         parameters: {
             query?: never;
@@ -1494,6 +1514,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlaybackSession"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    beaconStream: {
+        parameters: {
+            query?: {
+                /** @description Per-device bearer token (EventSource can't set headers). */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An SSE event stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
                 };
             };
             401: components["responses"]["Unauthorized"];

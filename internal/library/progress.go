@@ -9,6 +9,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/beacon"
 	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/jackc/pgx/v5"
 )
@@ -204,15 +205,15 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errorBody("not found"))
 		return
 	}
-	// The heartbeat doubles as a presence beat: refresh this device's live
-	// playback session (ARGY-34). Keyed (user, device, item), so reconnects
-	// refresh rather than duplicate; idle sessions are reaped by the registry.
+	// The heartbeat doubles as a presence beat (ARGY-34) + a Beacon publish
+	// (ARGY-36): refresh this device's live session, and broadcast the new
+	// position to the user's other devices for cross-device resume.
+	sess, _ := auth.SessionFromContext(r.Context())
+	var durf float64
+	if dur != nil {
+		durf = *dur
+	}
 	if h.presence != nil {
-		sess, _ := auth.SessionFromContext(r.Context())
-		var durf float64
-		if dur != nil {
-			durf = *dur
-		}
 		h.presence.Heartbeat(presence.Session{
 			AccountID:       sess.AccountId.String(),
 			UserID:          sess.UserId.String(),
@@ -222,7 +223,27 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 			DurationSeconds: durf,
 		})
 	}
+	h.publishBeacon(r, sess, itemID, float64(body.PositionSeconds), durf, ps.Watched)
 	writeJSON(w, http.StatusOK, ps)
+}
+
+// publishBeacon broadcasts a play-state change to the user's other devices.
+// OriginDeviceID lets the writing device ignore the echo of its own update.
+func (h *handlers) publishBeacon(r *http.Request, sess api.Session, itemID string, pos, dur float64, watched bool) {
+	if h.beacon == nil {
+		return
+	}
+	if err := h.beacon.Publish(r.Context(), beacon.Event{
+		UserID:          sess.UserId.String(),
+		ItemID:          itemID,
+		PositionSeconds: pos,
+		DurationSeconds: dur,
+		Watched:         watched,
+		OriginDeviceID:  sess.DeviceId.String(),
+		UpdatedAt:       time.Now(),
+	}); err != nil {
+		h.logger.Warn("beacon: publish failed", "err", err)
+	}
 }
 
 func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
@@ -230,7 +251,8 @@ func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	ps, err := h.store.SetWatched(r.Context(), accountOf(r), userOf(r), r.PathValue("itemId"), body.Watched)
+	itemID := r.PathValue("itemId")
+	ps, err := h.store.SetWatched(r.Context(), accountOf(r), userOf(r), itemID, body.Watched)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -239,6 +261,13 @@ func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errorBody("not found"))
 		return
 	}
+	// Broadcast the watched-state change so other devices update live.
+	sess, _ := auth.SessionFromContext(r.Context())
+	var durf float64
+	if ps.DurationSeconds != nil {
+		durf = float64(*ps.DurationSeconds)
+	}
+	h.publishBeacon(r, sess, itemID, float64(ps.PositionSeconds), durf, ps.Watched)
 	writeJSON(w, http.StatusOK, ps)
 }
 
