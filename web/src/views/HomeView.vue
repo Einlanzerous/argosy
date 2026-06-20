@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 import { api } from '@/api/client'
 import PosterCard from '@/components/PosterCard.vue'
@@ -8,6 +8,7 @@ import { posterStyle } from '@/lib/poster'
 import { formatRuntime, formatTitle } from '@/lib/format'
 import { getRecent, type RecentItem } from '@/lib/manifest'
 import { getContinue, type ContinueItem } from '@/lib/playback'
+import { subscribeBeacon } from '@/lib/beacon'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
@@ -57,6 +58,21 @@ const hero = computed(() => {
 
 const heroStyle = computed(() => posterStyle(hero.value?.posterUrl, hero.value?.title ?? ''))
 
+// Beacon keeps "Continue Watching" live: when another of the user's devices
+// moves or finishes an item, refresh the rail (debounced, so a burst of
+// heartbeats collapses to one fetch). The fetch also reconciles anything missed
+// while disconnected — Beacon's onOpen fires on every (re)connect. A plain page
+// load is the polling fallback when SSE is unavailable.
+let closeBeacon: (() => void) | null = null
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+function refreshContinueSoon(): void {
+  if (refreshTimer) return
+  refreshTimer = setTimeout(async () => {
+    refreshTimer = null
+    continueItems.value = await getContinue().catch(() => continueItems.value)
+  }, 1500)
+}
+
 onMounted(async () => {
   setPage('Home')
   ;[recentItems.value, continueItems.value] = await Promise.all([
@@ -70,6 +86,15 @@ onMounted(async () => {
     })
     heroDetail.value = data ?? null
   }
+  closeBeacon = subscribeBeacon({
+    onPosition: refreshContinueSoon,
+    onOpen: refreshContinueSoon,
+  })
+})
+
+onUnmounted(() => {
+  closeBeacon?.()
+  if (refreshTimer) clearTimeout(refreshTimer)
 })
 </script>
 
