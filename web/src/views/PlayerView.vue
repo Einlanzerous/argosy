@@ -487,6 +487,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </div>
       <div class="top-right">
+        <span v-if="quality" class="quality">{{ quality }}</span>
         <button
           class="icon-btn"
           type="button"
@@ -495,10 +496,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         >
           {{ isFullscreen ? '▢' : '⛶' }}
         </button>
-        <span v-if="quality" class="quality">{{ quality }}</span>
-        <div class="device-pill">
-          <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
-        </div>
       </div>
     </div>
 
@@ -527,6 +524,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
     <!-- bottom controls -->
     <div class="bottom" :class="{ hidden: !controlsVisible }">
+      <div class="device-pill">
+        <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
+      </div>
       <div class="scrub">
         <span class="t">{{ formatClock(position) }}</span>
         <div class="bar" @click="seek">
@@ -696,8 +696,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   gap: 10px;
 }
 .quality {
-  padding: 6px 11px;
-  border-radius: 7px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 8px;
   border: 1px solid rgba(201, 154, 78, 0.5);
   background: var(--arg-accent-bg-2);
   color: var(--arg-accent);
@@ -719,10 +722,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color: var(--arg-accent);
   color: #fff;
 }
+/* Bottom-left of the player, above the scrubber (inside .bottom, so it hides
+   with the controls). inline-flex keeps it a compact pill, not full-width. */
 .device-pill {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 14px;
   padding: 8px 13px;
   border-radius: 999px;
   border: 1px solid var(--arg-line-2);
