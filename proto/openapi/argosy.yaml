@@ -157,6 +157,39 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [auth]
+      operationId: renameDevice
+      summary: Rename a device in the Fleet
+      description: >
+        Give a device a friendly label. Admins may rename any device in the
+        account; a viewer may rename only their own.
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceRenameRequest"
+      responses:
+        "200":
+          description: Renamed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/auth/me:
     get:
@@ -824,6 +857,9 @@ components:
           description: The profile this device is bound to.
         deviceName:
           type: string
+        platform:
+          type: string
+          description: Client platform/type label (e.g. "web", "tv", "phone"); shown in the Fleet.
 
     Device:
       type: object
@@ -834,10 +870,18 @@ components:
           format: uuid
         name:
           type: string
+        platform:
+          type: string
+          nullable: true
+          description: Client platform/type label captured at registration.
         userId:
           type: string
           format: uuid
           nullable: true
+        userName:
+          type: string
+          nullable: true
+          description: Display name of the profile this device is bound to (the Fleet shows whose device it is).
         lastSeenAt:
           type: string
           format: date-time
@@ -847,6 +891,13 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    DeviceRenameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
 
     DeviceRegistrationResponse:
       type: object

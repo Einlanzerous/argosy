@@ -27,15 +27,27 @@ async function revoke(d: Device): Promise<void> {
   await load()
 }
 
+async function rename(d: Device): Promise<void> {
+  const next = window.prompt('Rename this device', d.name)?.trim()
+  if (!next || next === d.name) return
+  await api.PATCH('/api/v1/auth/devices/{deviceId}', {
+    params: { path: { deviceId: d.id } },
+    body: { name: next },
+  })
+  await load()
+}
+
 function isCurrent(d: Device): boolean {
   return d.id === session.session?.deviceId
 }
 
-function glyph(name: string): string {
-  const n = name.toLowerCase()
-  if (n.includes('iphone') || n.includes('phone') || n.includes('android')) return '▭'
-  if (n.includes('ipad') || n.includes('tablet')) return '▢'
-  if (n.includes('tv')) return '⛶'
+// Prefer the platform captured at registration; fall back to guessing from the name.
+function glyph(d: Device): string {
+  const k = (d.platform || d.name).toLowerCase()
+  if (k.includes('iphone') || k.includes('phone') || k.includes('android')) return '▭'
+  if (k.includes('ipad') || k.includes('tablet')) return '▢'
+  if (k.includes('tv')) return '⛶'
+  if (k.includes('web') || k.includes('browser')) return '◰'
   return '◳'
 }
 
@@ -56,14 +68,18 @@ onMounted(() => {
 
     <div class="list">
       <div v-for="d in devices" :key="d.id" class="device">
-        <div class="glyph">{{ glyph(d.name) }}</div>
+        <div class="glyph">{{ glyph(d) }}</div>
         <div class="info">
           <div class="head">
             <span class="name">{{ d.name }}</span>
+            <span v-if="d.platform" class="tag">{{ d.platform }}</span>
             <span v-if="isCurrent(d)" class="current">THIS DEVICE</span>
           </div>
-          <div class="seen">last seen {{ formatRelative(d.lastSeenAt) }}</div>
+          <div class="seen">
+            <span v-if="d.userName">{{ d.userName }} · </span>last seen {{ formatRelative(d.lastSeenAt) }}
+          </div>
         </div>
+        <button class="rename" type="button" @click="rename(d)">Rename</button>
         <button v-if="!isCurrent(d)" class="revoke" type="button" @click="revoke(d)">Retire</button>
         <span v-else class="here">Active</span>
       </div>
@@ -141,11 +157,21 @@ onMounted(() => {
   background: var(--arg-accent-bg-2);
   color: var(--arg-accent-soft);
 }
+.tag {
+  font: 600 9.5px var(--arg-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: rgba(234, 234, 229, 0.07);
+  color: var(--arg-mute);
+}
 .seen {
   margin-top: 4px;
   font: 500 12.5px var(--arg-body);
   color: var(--arg-mute);
 }
+.rename,
 .revoke {
   padding: 9px 16px;
   border-radius: var(--arg-r-sm);
@@ -154,6 +180,10 @@ onMounted(() => {
   color: var(--arg-dim);
   font: 600 12.5px var(--arg-body);
   cursor: pointer;
+}
+.rename:hover {
+  border-color: var(--arg-line);
+  color: var(--arg-cream);
 }
 .revoke:hover {
   border-color: #c96a4e;
