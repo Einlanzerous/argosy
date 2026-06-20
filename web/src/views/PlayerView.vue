@@ -8,12 +8,16 @@ import { formatClock, formatTitle } from '@/lib/format'
 import {
   getPlaybackInfo,
   getProgress,
+  listSubtitles,
   reportProgress,
   setWatched,
   startTranscode,
   stopTranscode,
   streamUrl,
+  subtitleUrl,
+  type SubtitleTrack,
 } from '@/lib/playback'
+import { shiftVtt } from '@/lib/vtt'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -34,6 +38,13 @@ const error = ref('')
 const starting = ref(false)
 const resumeOpen = ref(false)
 const resumeFrom = ref(0)
+const subtitleTracks = ref<SubtitleTrack[]>([])
+const activeSubtitle = ref<string | null>(null)
+const subMenuOpen = ref(false)
+// The active subtitle is rendered via a <track> fed from an in-memory blob, so
+// we hold the element + object URL for cleanup.
+let subEl: HTMLTrackElement | null = null
+let subBlobUrl = ''
 
 // Playback mode + the media offset at which the current source begins. Direct
 // play seeks natively (offset stays 0); a transcode seek restarts ffmpeg at the
@@ -56,6 +67,14 @@ onMounted(async () => {
     getPlaybackInfo(itemId).catch(() => null),
   ])
   item.value = data ?? null
+
+  // Subtitle tracks load in the background; an OpenSubtitles search can take a
+  // moment and shouldn't hold up playback.
+  void listSubtitles(itemId)
+    .then((t) => {
+      subtitleTracks.value = t
+    })
+    .catch(() => {})
 
   const el = video.value
   if (!el) return
@@ -145,11 +164,13 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
       })
       hls.loadSource(sess.playlistUrl)
       hls.attachMedia(el)
+      reapplySubtitle()
     } else {
       // Native-HLS browsers (iOS Safari) can't set an Authorization header on a
       // bare <video> src; token-in-URL support is a follow-up.
       el.src = sess.playlistUrl
       void el.play().catch(() => {})
+      reapplySubtitle()
     }
   } finally {
     starting.value = false
@@ -177,6 +198,7 @@ async function waitForPlaylist(url: string): Promise<boolean> {
 onBeforeUnmount(() => {
   flush()
   if (heartbeat) clearInterval(heartbeat)
+  removeSubtitleEl()
   if (hls) hls.destroy()
   if (transcodeSessionId) void stopTranscode(transcodeSessionId).catch(() => {})
   const el = video.value
@@ -271,6 +293,66 @@ async function seekTo(t: number): Promise<void> {
   }
 }
 
+// selectSubtitle switches the active track (null = off). Selection persists
+// across transcode restarts via reapplySubtitle.
+async function selectSubtitle(trackId: string | null): Promise<void> {
+  subMenuOpen.value = false
+  activeSubtitle.value = trackId
+  removeSubtitleEl()
+  if (trackId) await applySubtitle(trackId)
+}
+
+// applySubtitle fetches the WebVTT (authenticated), rewrites its cue timings for
+// the current transcode offset, and feeds it to a <track> as a blob. Rebuilding
+// per offset keeps cues aligned whether we direct-play or seek a transcode.
+async function applySubtitle(trackId: string): Promise<void> {
+  const el = video.value
+  const track = subtitleTracks.value.find((t) => t.id === trackId)
+  if (!el || !track) return
+  try {
+    const token = getToken()
+    const r = await fetch(subtitleUrl(itemId, trackId), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!r.ok) return
+    let text = await r.text()
+    if (baseOffset.value > 0) text = shiftVtt(text, -baseOffset.value)
+    // A stale selection may have changed while we awaited the fetch.
+    if (activeSubtitle.value !== trackId) return
+    removeSubtitleEl()
+    subBlobUrl = URL.createObjectURL(new Blob([text], { type: 'text/vtt' }))
+    const tEl = document.createElement('track')
+    tEl.kind = 'subtitles'
+    tEl.label = track.label
+    tEl.srclang = track.language
+    tEl.src = subBlobUrl
+    tEl.default = true
+    el.appendChild(tEl)
+    tEl.addEventListener('load', () => {
+      if (tEl.track) tEl.track.mode = 'showing'
+    })
+    subEl = tEl
+  } catch {
+    /* leave subtitles off on failure */
+  }
+}
+
+// reapplySubtitle rebuilds the active track against a new transcode offset.
+function reapplySubtitle(): void {
+  if (activeSubtitle.value) void applySubtitle(activeSubtitle.value)
+}
+
+function removeSubtitleEl(): void {
+  if (subEl) {
+    subEl.remove()
+    subEl = null
+  }
+  if (subBlobUrl) {
+    URL.revokeObjectURL(subBlobUrl)
+    subBlobUrl = ''
+  }
+}
+
 function fullscreen(): void {
   const el = video.value?.closest('.player') as HTMLElement | null
   if (el?.requestFullscreen) void el.requestFullscreen().catch(() => {})
@@ -293,12 +375,17 @@ function goBack(): void {
 
 function onKey(e: KeyboardEvent): void {
   if (resumeOpen.value) return
+  if (e.key === 'Escape' && subMenuOpen.value) {
+    subMenuOpen.value = false
+    return
+  }
   if (e.key === ' ') {
     e.preventDefault()
     togglePlay()
   } else if (e.key === 'ArrowLeft') skip(-10)
   else if (e.key === 'ArrowRight') skip(10)
   else if (e.key === 'f') fullscreen()
+  else if (e.key === 'c' && subtitleTracks.value.length) subMenuOpen.value = !subMenuOpen.value
   else if (e.key === 'Escape') goBack()
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -376,6 +463,38 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <button class="ctrl" type="button" title="Fullscreen" @click="fullscreen">
           <span class="ic">⛶</span><span class="lbl">Fullscreen</span>
         </button>
+        <div v-if="subtitleTracks.length" class="cc-wrap">
+          <button
+            class="ctrl"
+            :class="{ on: activeSubtitle }"
+            type="button"
+            title="Subtitles"
+            @click="subMenuOpen = !subMenuOpen"
+          >
+            <span class="ic cc">CC</span><span class="lbl">Subtitles</span>
+          </button>
+          <div v-if="subMenuOpen" class="cc-menu">
+            <div class="cc-head">Subtitles</div>
+            <button class="cc-item" :class="{ sel: !activeSubtitle }" type="button" @click="selectSubtitle(null)">
+              <span class="cc-label">Off</span>
+              <span v-if="!activeSubtitle" class="cc-check">✓</span>
+            </button>
+            <button
+              v-for="t in subtitleTracks"
+              :key="t.id"
+              class="cc-item"
+              :class="{ sel: activeSubtitle === t.id }"
+              type="button"
+              @click="selectSubtitle(t.id)"
+            >
+              <span class="cc-label">
+                {{ t.label }}
+                <span class="cc-src">{{ t.source === 'opensubtitles' ? 'OpenSubtitles' : 'Embedded' }}</span>
+              </span>
+              <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -684,6 +803,77 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .ctrl.primary:hover {
   background: var(--arg-accent-hi);
   color: var(--arg-bg);
+}
+.ctrl.on {
+  border-color: var(--arg-accent);
+}
+.ctrl.on .ic.cc {
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+}
+.ic.cc {
+  font: 800 11px var(--arg-display);
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1.5px solid var(--arg-accent);
+  color: var(--arg-accent);
+}
+.cc-wrap {
+  position: relative;
+}
+.cc-menu {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  min-width: 248px;
+  padding: 7px;
+  border-radius: var(--arg-r-lg);
+  background: linear-gradient(160deg, #221f19, #161513);
+  border: 1px solid var(--arg-line-2);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  animation: argFade 0.16s ease;
+}
+.cc-head {
+  padding: 6px 10px 8px;
+  font: 700 10px var(--arg-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--arg-dim);
+}
+.cc-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 11px;
+  border: none;
+  border-radius: var(--arg-r);
+  background: transparent;
+  color: var(--arg-cream);
+  font: 600 13.5px var(--arg-body);
+  text-align: left;
+  cursor: pointer;
+}
+.cc-item:hover {
+  background: rgba(201, 154, 78, 0.12);
+}
+.cc-item.sel {
+  background: var(--arg-accent-bg);
+}
+.cc-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cc-src {
+  font: 500 10.5px var(--arg-body);
+  color: var(--arg-dim);
+}
+.cc-check {
+  color: var(--arg-accent);
+  font-size: 13px;
 }
 .resume-scrim {
   position: absolute;
