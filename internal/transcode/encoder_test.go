@@ -5,13 +5,45 @@ import (
 	"testing"
 )
 
-func TestEncoderForFallsBackToSoftware(t *testing.T) {
-	// Software resolves to itself; un-implemented hardware backends (and unknown
-	// names) degrade to software rather than failing.
-	for _, name := range []string{EncoderSoftware, EncoderQSV, EncoderVAAPI, EncoderNVENC, "nonsense", ""} {
-		if got := ResolvedEncoder(name); got != EncoderSoftware {
-			t.Errorf("ResolvedEncoder(%q) = %q, want %q (until the backend is wired)", name, got, EncoderSoftware)
+func TestEncoderForResolution(t *testing.T) {
+	// Implemented backends resolve to themselves; un-implemented ones (VAAPI/
+	// NVENC, ARGY-61) and unknown names degrade to software rather than failing.
+	cases := map[string]string{
+		EncoderSoftware: EncoderSoftware,
+		EncoderQSV:      EncoderQSV, // wired in ARGY-30
+		EncoderVAAPI:    EncoderSoftware,
+		EncoderNVENC:    EncoderSoftware,
+		"nonsense":      EncoderSoftware,
+		"":              EncoderSoftware,
+	}
+	for name, want := range cases {
+		if got := ResolvedEncoder(name); got != want {
+			t.Errorf("ResolvedEncoder(%q) = %q, want %q", name, got, want)
 		}
+	}
+}
+
+func TestQSVEncoderPieces(t *testing.T) {
+	enc := qsvEncoder{}
+	// Encode-only: no hwaccel init, CPU/software scale shared with software, and
+	// only the codec differs (h264_qsv).
+	if enc.globalArgs() != nil {
+		t.Errorf("qsv globalArgs = %v, want nil (encode-only, CPU decode)", enc.globalArgs())
+	}
+	if got := enc.scale(720); got != "scale=-2:720" {
+		t.Errorf("qsv scale(720) = %q, want software scale", got)
+	}
+	if got := strings.Join(enc.videoCodec(), " "); !strings.Contains(got, "h264_qsv") {
+		t.Errorf("qsv videoCodec = %q, want h264_qsv", got)
+	}
+}
+
+func TestIsHardwareEncoder(t *testing.T) {
+	if isHardwareEncoder(EncoderSoftware) || isHardwareEncoder("") {
+		t.Error("software/empty should not be hardware")
+	}
+	if !isHardwareEncoder(EncoderQSV) || !isHardwareEncoder(EncoderNVENC) {
+		t.Error("qsv/nvenc should be hardware")
 	}
 }
 
