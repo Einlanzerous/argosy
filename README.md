@@ -17,7 +17,7 @@ Tracked in Switchyard under project **ARGY**.
 - **Web:** Vue 3 + TypeScript + Pinia; `hls.js` for playback.
 - **Android:** native Kotlin + ExoPlayer.
 - **API:** OpenAPI spec → codegen for the TS client and Go server stubs.
-- **Streaming:** HLS with fMP4/CMAF; direct-play decision engine (direct play → remux → transcode); hardware accel + software fallback.
+- **Streaming:** HLS with fMP4/CMAF; direct-play decision engine (direct play → remux → transcode); hardware-accelerated encode (Intel **QSV**, **VAAPI**, NVIDIA **NVENC**) with automatic software fallback; **HEVC pass-through for true 4K** (incl. 10-bit/HDR) to capable clients via per-client codec negotiation; subtitles (embedded text + OpenSubtitles) served as WebVTT.
 
 ## Single-service model
 
@@ -38,9 +38,13 @@ argosy/
 │   ├── server/          # HTTP server: API + health + embedded SPA
 │   ├── webui/           # go:embed of the built Vue app (dist/)
 │   ├── mediatool/       # ffmpeg/ffprobe shell-out seam
-│   ├── stevedore/       # P1 ingestion worker (stub)
-│   ├── beacon/          # P4 live play-state push (stub)
-│   └── ballast/         # P3 segment cache/cleanup (stub)
+│   ├── stevedore/       # P1 ingestion worker + scan scheduler
+│   ├── metadata/        # P1 TMDB provider (titles/art/overviews)
+│   ├── library/         # browse + playback API (The Manifest)
+│   ├── transcode/       # P3 ffmpeg session orchestration (The Helm)
+│   ├── subtitle/        # P3 embedded + OpenSubtitles → WebVTT
+│   ├── ballast/         # P3 HLS segment cache + cleanup (Ballast)
+│   └── beacon/          # P4 live play-state push (stub)
 ├── web/                 # Vue 3 + TS + Pinia SPA (Vite)
 ├── proto/openapi/       # API contract (P0, ARGY-13)
 ├── deploy/              # docker-compose / deploy assets (P0, ARGY-10)
@@ -50,8 +54,8 @@ argosy/
 ## Prerequisites
 
 - Go 1.26+
-- Node 24+ (`.nvmrc`) and npm
-- `ffmpeg`/`ffprobe` on PATH for media work (optional for the scaffold; logged at startup)
+- Bun 1+ (web toolchain — install/build/codegen)
+- `ffmpeg`/`ffprobe` on PATH for media work (optional for the scaffold; logged at startup). For hardware encode, the host also needs the GPU runtime (Intel iHD/`libmfx` for QSV/VAAPI, NVIDIA drivers for NVENC) and `/dev/dri` passthrough — the Docker images install the Intel stack; see `deploy/`.
 
 ## Quickstart
 
@@ -107,6 +111,19 @@ make docker-build    # -> argosy:dev
 | `ARGOSY_DB_SSLMODE`   | `disable` | DB sslmode                                       |
 | `ARGOSY_ADMIN_USERNAME` | _(unset)_ | First-run admin bootstrap username             |
 | `ARGOSY_ADMIN_PASSWORD` | _(unset)_ | First-run admin bootstrap password             |
+| `ARGOSY_SCAN_INTERVAL`  | _(unset)_ | Periodic library re-scan interval (e.g. `15m`)  |
+| `ARGOSY_ARTWORK_DIR`    | _(unset)_ | Cache dir for fetched poster/backdrop artwork   |
+| `TMDB_API_READ_ACCESS_KEY` / `TMDB_API_KEY` | _(unset)_ | TMDB credentials for metadata + artwork |
+| `ARGOSY_ENCODER_PREFERENCE` | `nvenc,qsv,vaapi,software` | Hardware-encode preference order |
+| `ARGOSY_FORCE_SOFTWARE` | `false`   | Force software (libx264/libx265) encode          |
+| `ARGOSY_VAAPI_DEVICE`   | `/dev/dri/renderD128` | VAAPI render node (e.g. a discrete GPU) |
+| `ARGOSY_TRANSCODE_DIR`  | _(temp)_  | Working dir for HLS segments                     |
+| `ARGOSY_TRANSCODE_CACHE_BUDGET` | `10 GiB` | Ballast cache high-water mark (bytes)    |
+| `ARGOSY_TRANSCODE_IDLE_TIMEOUT` | `60s`  | Idle-session reap / cache TTL                   |
+| `ARGOSY_MAX_TRANSCODE_SESSIONS` | `4`    | Concurrent transcode-session cap                |
+| `ARGOSY_SUBTITLE_DIR`   | _(unset)_ | Cache dir for fetched/converted WebVTT subs      |
+| `ARGOSY_SUBTITLE_LANGUAGES` | _(unset)_ | Preferred subtitle languages (e.g. `en,ja`)  |
+| `OPEN_SUBTITLES_API_KEY` / `OPEN_SUBTITLES_USERNAME` / `OPEN_SUBTITLES_PASSWORD` | _(unset)_ | OpenSubtitles (all three required to enable download) |
 
 > When `ARGOSY_ADMIN_USERNAME` + `ARGOSY_ADMIN_PASSWORD` are set, an admin account is created on first startup if absent. Auth: `POST /api/v1/auth/login` → account + profiles; `POST /api/v1/auth/devices` issues a per-device bearer token; `GET /api/v1/auth/me`, `GET/DELETE /api/v1/auth/devices` (bearer).
 
