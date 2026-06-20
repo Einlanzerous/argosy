@@ -14,6 +14,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/ballast"
+	"github.com/Einlanzerous/argosy/internal/beacon"
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/mediatool"
@@ -146,7 +147,14 @@ func main() {
 		pres = presence.NewRegistry(0) // default TTL (~45s, a few missed beats)
 	}
 
-	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper, subs, pres)
+	// Beacon: live play-state push (Postgres LISTEN/NOTIFY → SSE) for cross-device
+	// resume (ARGY-36).
+	var hub *beacon.Hub
+	if pool != nil {
+		hub = beacon.NewHub(pool, logger)
+	}
+
+	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper, subs, pres, hub)
 	if err != nil {
 		logger.Error("failed to build server", "err", err)
 		os.Exit(1)
@@ -166,6 +174,9 @@ func main() {
 	}
 	if pres != nil {
 		go pres.Run(ctx)
+	}
+	if hub != nil {
+		go hub.Run(ctx)
 	}
 
 	go func() {

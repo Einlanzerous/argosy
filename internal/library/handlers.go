@@ -8,6 +8,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/ballast"
+	"github.com/Einlanzerous/argosy/internal/beacon"
 	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
@@ -23,14 +24,15 @@ type handlers struct {
 	cache    *ballast.Sweeper
 	subs     *subtitle.Service
 	presence *presence.Registry
+	beacon   *beacon.Hub
 }
 
 // RegisterRoutes wires the auth-scoped browse endpoints and the public artwork
 // file server onto mux. artworkDir == "" disables artwork serving. tc may be nil
 // to disable the transcode (The Helm) endpoints; sweeper may be nil to disable
 // the cache-stats endpoint.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry) {
-	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs, presence: pres}
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub) {
+	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs, presence: pres, beacon: hub}
 	mw := auth.Middleware(authStore)
 
 	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))
@@ -42,6 +44,11 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/recent", mw(http.HandlerFunc(h.listRecent)))
 	if pres != nil {
 		mux.Handle("GET /api/v1/sessions", mw(http.HandlerFunc(h.listSessions)))
+	}
+	// Beacon SSE authenticates inline (?token=), like streaming, since an
+	// EventSource can't set the Authorization header.
+	if hub != nil {
+		mux.Handle("GET /api/v1/beacon", beaconHandler(authStore, hub))
 	}
 	mux.Handle("GET /api/v1/items/{itemId}/playback", mw(http.HandlerFunc(h.getPlayback)))
 	mux.Handle("GET /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.getProgress)))

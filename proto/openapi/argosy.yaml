@@ -534,6 +534,33 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/beacon:
+    get:
+      tags: [library]
+      operationId: beaconStream
+      summary: SSE stream of the current user's live play-state events (Beacon)
+      description: >
+        Server-Sent Events stream of play_state changes for the authenticated
+        user, powering cross-device resume/handoff. Authenticates via ?token=
+        (an EventSource cannot set the Authorization header). Each message is
+        `event: position` with a JSON data payload (see PlaybackSession-like
+        fields). The client (EventSource) auto-reconnects; on reconnect it
+        reconciles missed updates via a /continue or /progress fetch.
+      parameters:
+        - name: token
+          in: query
+          required: false
+          schema: { type: string }
+          description: Per-device bearer token (EventSource can't set headers).
+      responses:
+        "200":
+          description: An SSE event stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v1/items/{itemId}/transcode:
     post:
       tags: [transcode]
