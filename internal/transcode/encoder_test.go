@@ -30,8 +30,8 @@ func TestQSVEncoderPieces(t *testing.T) {
 	if enc.globalArgs() != nil {
 		t.Errorf("qsv globalArgs = %v, want nil (encode-only, CPU decode)", enc.globalArgs())
 	}
-	if got := enc.scale(720); got != "scale=-2:720" {
-		t.Errorf("qsv scale(720) = %q, want software scale", got)
+	if got := enc.scale(720); got != "scale=-2:720,format=nv12" {
+		t.Errorf("qsv scale(720) = %q, want nv12 conversion for 8-bit h264_qsv input", got)
 	}
 	if got := strings.Join(enc.videoCodec(), " "); !strings.Contains(got, "h264_qsv") {
 		t.Errorf("qsv videoCodec = %q, want h264_qsv", got)

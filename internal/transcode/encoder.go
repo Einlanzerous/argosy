@@ -98,6 +98,13 @@ type qsvEncoder struct{ softwareEncoder }
 
 func (qsvEncoder) name() string { return EncoderQSV }
 
+func (qsvEncoder) scale(height int) string {
+	// h264_qsv only accepts 8-bit nv12, so convert after scaling. Without this a
+	// 10-bit source (e.g. HEVC Main 10 from a 4K rip) fails with "Current pixel
+	// format is unsupported"; for 8-bit sources the conversion is a cheap repack.
+	return fmt.Sprintf("scale=-2:%d,format=nv12", height)
+}
+
 func (qsvEncoder) videoCodec() []string {
 	return []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-g", "48"}
 }
