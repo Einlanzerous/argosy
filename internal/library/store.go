@@ -136,6 +136,54 @@ func (s *Store) ListSeries(ctx context.Context, accountID, libraryID string, lim
 	return page, rows.Err()
 }
 
+// ListRecent returns a unified "newly arrived" feed across the account: films
+// and series, newest first. A film's arrival is its own added_at; a series'
+// arrival is the most recent of its episodes' added_at (so a series surfaces
+// once, when any episode lands, rather than once per episode). Series rows carry
+// kind "series"; films keep "movie".
+func (s *Store) ListRecent(ctx context.Context, accountID string, limit int) ([]api.MediaItemSummary, error) {
+	if limit < 1 {
+		limit = 24
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, kind, title, year, tags, prov, over FROM (
+			SELECT mi.id::text AS id, mi.kind AS kind, mi.title AS title, mi.year AS year,
+			       mi.tags AS tags, mi.provider_metadata AS prov, mi.metadata AS over,
+			       mi.added_at AS added_at
+			FROM media_items mi JOIN libraries l ON l.id = mi.library_id
+			WHERE l.account_id = $1 AND mi.kind = 'movie'
+			UNION ALL
+			SELECT r.id::text, 'series', r.title, r.year, r.tags, r.provider_metadata, r.metadata,
+			       max(mi.added_at) AS added_at
+			FROM series r
+			JOIN libraries l ON l.id = r.library_id
+			JOIN seasons se ON se.series_id = r.id
+			JOIN episodes e ON e.season_id = se.id
+			JOIN media_items mi ON mi.id = e.media_item_id
+			WHERE l.account_id = $1
+			GROUP BY r.id
+		) feed
+		ORDER BY added_at DESC NULLS LAST
+		LIMIT $2`,
+		accountID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []api.MediaItemSummary{}
+	for rows.Next() {
+		var id, kind, title string
+		var year *int
+		var tags []string
+		var prov, over []byte
+		if err := rows.Scan(&id, &kind, &title, &year, &tags, &prov, &over); err != nil {
+			return nil, err
+		}
+		out = append(out, s.summary(id, kind, title, year, tags, prov, over))
+	}
+	return out, rows.Err()
+}
+
 // GetItem returns a single media item's detail, or nil if not found/not owned.
 func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.MediaItemDetail, error) {
 	var id, kind, title, filePath string

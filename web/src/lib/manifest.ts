@@ -52,6 +52,16 @@ export async function getSeries(
   return pages.flatMap((p) => p.data?.items ?? [])
 }
 
+// A "newly arrived" feed item — a film or a series (kind is "movie" | "series").
+export type RecentItem = MovieSummary
+
+// getRecent returns the unified, account-wide newly-arrived feed (films + series
+// merged, newest first) — already cross-library, so no per-library fan-out.
+export async function getRecent(limit = 24): Promise<RecentItem[]> {
+  const { data } = await api.GET('/api/v1/recent', { params: { query: { limit } } })
+  return data ?? []
+}
+
 // Tags surfaced as filter chips. "All" is the no-filter sentinel; the rest match
 // the path-derived/override tags Stevedore writes (anime, etc.).
 export const TAG_FILTERS = ['All', 'Anime', 'Sci-Fi', 'Drama', 'Action', 'Documentary', '4K']
