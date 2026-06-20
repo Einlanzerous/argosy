@@ -794,6 +794,8 @@ export interface components {
             title: string;
             year?: number | null;
             posterUrl?: string | null;
+            /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
+            backdropUrl?: string | null;
             positionSeconds: number;
             durationSeconds?: number | null;
             percent: number;
@@ -814,6 +816,8 @@ export interface components {
             title: string;
             year?: number | null;
             posterUrl?: string | null;
+            /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
+            backdropUrl?: string | null;
             tags: string[];
         };
         MediaItemDetail: {
@@ -825,6 +829,8 @@ export interface components {
             overview?: string | null;
             genres?: string[];
             posterUrl?: string | null;
+            /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
+            backdropUrl?: string | null;
             durationSeconds?: number | null;
             container?: string | null;
             filePath: string;
@@ -843,6 +849,8 @@ export interface components {
             title: string;
             year?: number | null;
             posterUrl?: string | null;
+            /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
+            backdropUrl?: string | null;
             tags: string[];
         };
         SeriesPage: {
@@ -877,6 +885,8 @@ export interface components {
             year?: number | null;
             overview?: string | null;
             posterUrl?: string | null;
+            /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
+            backdropUrl?: string | null;
             seasons: components["schemas"]["SeasonSummary"][];
             tags: string[];
         };

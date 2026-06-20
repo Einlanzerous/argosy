@@ -99,6 +99,17 @@ func posterURL(base string, over, prov map[string]any) *string {
 	return &u
 }
 
+// backdropURL resolves the cached landscape backdrop (for full-screen heroes),
+// or nil when none was fetched — callers fall back to the poster.
+func backdropURL(base string, over, prov map[string]any) *string {
+	rel := firstNonEmpty(mstr(over, "backdrop"), mstr(prov, "backdrop"))
+	if rel == "" {
+		return nil
+	}
+	u := base + "/" + rel
+	return &u
+}
+
 func parseUUID(s string) openapi_types.UUID {
 	u, _ := uuid.Parse(s)
 	return u

@@ -137,6 +137,16 @@ func (m *Matcher) store(ctx context.Context, table, artworkSub, id string, match
 		}
 	}
 
+	backdropRel := ""
+	if match.BackdropURL != "" {
+		backdropRel = path.Join(artworkSub, fmt.Sprintf("%d-backdrop.jpg", match.TMDBID))
+		dest := filepath.Join(m.artworkDir, filepath.FromSlash(backdropRel))
+		if err := m.download(ctx, match.BackdropURL, dest); err != nil {
+			m.logger.Warn("backdrop download failed", "url", match.BackdropURL, "err", err)
+			backdropRel = ""
+		}
+	}
+
 	pm := map[string]any{
 		"source":    "tmdb",
 		"tmdb_id":   match.TMDBID,
@@ -147,6 +157,9 @@ func (m *Matcher) store(ctx context.Context, table, artworkSub, id string, match
 	}
 	if posterRel != "" {
 		pm["poster"] = posterRel
+	}
+	if backdropRel != "" {
+		pm["backdrop"] = backdropRel
 	}
 	raw, err := json.Marshal(pm)
 	if err != nil {

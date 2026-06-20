@@ -156,10 +156,18 @@ func (s *Store) ContinueWatching(ctx context.Context, accountID, userID string, 
 			PositionSeconds: float32(pos),
 		}
 		poster := posterURL(s.artworkBase, o, p)
-		if poster == nil && seriesID != nil { // episode without its own art → series poster
-			poster = posterURL(s.artworkBase, decodeMap(sover), decodeMap(sprov))
+		backdrop := backdropURL(s.artworkBase, o, p)
+		if seriesID != nil { // episode without its own art → fall back to series art
+			so, sp := decodeMap(sover), decodeMap(sprov)
+			if poster == nil {
+				poster = posterURL(s.artworkBase, so, sp)
+			}
+			if backdrop == nil {
+				backdrop = backdropURL(s.artworkBase, so, sp)
+			}
 		}
 		ci.PosterUrl = poster
+		ci.BackdropUrl = backdrop
 		if dur != nil {
 			d := float32(*dur)
 			ci.DurationSeconds = &d

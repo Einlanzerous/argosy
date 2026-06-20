@@ -70,7 +70,9 @@ let transcodeSessionId = ''
 
 const pct = computed(() => (duration.value ? (position.value / duration.value) * 100 : 0))
 const remaining = computed(() => Math.max(0, duration.value - position.value))
-const backdrop = computed(() => posterStyle(item.value?.posterUrl, item.value?.title ?? ''))
+const backdrop = computed(() =>
+  posterStyle(item.value?.backdropUrl ?? item.value?.posterUrl, item.value?.title ?? ''),
+)
 
 onMounted(async () => {
   const [{ data }, progress, playback, devicePrefs] = await Promise.all([

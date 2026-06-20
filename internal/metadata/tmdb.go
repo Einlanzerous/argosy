@@ -15,8 +15,14 @@ import (
 )
 
 const (
-	defaultTMDBBaseURL  = "https://api.themoviedb.org/3"
-	defaultTMDBImageURL = "https://image.tmdb.org/t/p/w500"
+	defaultTMDBBaseURL = "https://api.themoviedb.org/3"
+	// imageBase has no size segment; sizes are appended per image type below.
+	defaultTMDBImageBase = "https://image.tmdb.org/t/p"
+	// posterSize is for portrait poster cards; backdropSize is the wider, higher-
+	// res landscape art used for full-screen hero backgrounds (w1280 stays crisp
+	// stretched across a desktop without pulling the multi-MB "original").
+	posterSize   = "w780"
+	backdropSize = "w1280"
 )
 
 // TMDB is a Provider backed by themoviedb.org. Auth uses the v4 read access
@@ -25,7 +31,7 @@ type TMDB struct {
 	readToken string
 	apiKey    string
 	baseURL   string
-	imageURL  string
+	imageBase string
 	http      *http.Client
 }
 
@@ -36,7 +42,7 @@ func NewTMDB(readToken, apiKey string) *TMDB {
 		readToken: readToken,
 		apiKey:    apiKey,
 		baseURL:   defaultTMDBBaseURL,
-		imageURL:  defaultTMDBImageURL,
+		imageBase: defaultTMDBImageBase,
 		http:      &http.Client{Timeout: 15 * time.Second},
 	}
 }
@@ -50,6 +56,7 @@ type tmdbResult struct {
 	Name         string `json:"name"`  // tv
 	Overview     string `json:"overview"`
 	PosterPath   string `json:"poster_path"`
+	BackdropPath string `json:"backdrop_path"`
 	ReleaseDate  string `json:"release_date"`   // movies
 	FirstAirDate string `json:"first_air_date"` // tv
 	GenreIDs     []int  `json:"genre_ids"`
@@ -66,7 +73,7 @@ func (t *TMDB) SearchMovie(ctx context.Context, title string, year int) (*Match,
 		return nil, err
 	}
 	r := results[0]
-	return t.toMatch(r.ID, r.Title, r.Overview, r.ReleaseDate, r.PosterPath, r.GenreIDs), nil
+	return t.toMatch(r.ID, r.Title, r.Overview, r.ReleaseDate, r.PosterPath, r.BackdropPath, r.GenreIDs), nil
 }
 
 // SearchSeries returns the best TV-series match for title.
@@ -76,13 +83,16 @@ func (t *TMDB) SearchSeries(ctx context.Context, title string) (*Match, error) {
 		return nil, err
 	}
 	r := results[0]
-	return t.toMatch(r.ID, r.Name, r.Overview, r.FirstAirDate, r.PosterPath, r.GenreIDs), nil
+	return t.toMatch(r.ID, r.Name, r.Overview, r.FirstAirDate, r.PosterPath, r.BackdropPath, r.GenreIDs), nil
 }
 
-func (t *TMDB) toMatch(id int64, title, overview, date, poster string, genres []int) *Match {
+func (t *TMDB) toMatch(id int64, title, overview, date, poster, backdrop string, genres []int) *Match {
 	m := &Match{TMDBID: id, Title: title, Overview: overview, GenreIDs: genres, Year: yearOf(date)}
 	if poster != "" {
-		m.PosterURL = t.imageURL + poster
+		m.PosterURL = t.imageBase + "/" + posterSize + poster
+	}
+	if backdrop != "" {
+		m.BackdropURL = t.imageBase + "/" + backdropSize + backdrop
 	}
 	return m
 }

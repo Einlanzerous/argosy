@@ -35,6 +35,7 @@ const hero = computed(() => {
       title: r.seriesTitle || r.title,
       sub: r.seriesTitle ? formatTitle(r.title) : r.year ? String(r.year) : '',
       posterUrl: r.posterUrl,
+      backdropUrl: r.backdropUrl,
       percent: r.percent,
       detailTo: (r.seriesId
         ? { name: 'series', params: { id: r.seriesId } }
@@ -49,6 +50,7 @@ const hero = computed(() => {
       title: f.title,
       sub: f.year ? String(f.year) : '',
       posterUrl: f.posterUrl,
+      backdropUrl: f.backdropUrl,
       percent: null as number | null,
       detailTo: { name: 'movie', params: { id: f.id } } as RouteLocationRaw,
     }
@@ -56,7 +58,11 @@ const hero = computed(() => {
   return null
 })
 
-const heroStyle = computed(() => posterStyle(hero.value?.posterUrl, hero.value?.title ?? ''))
+// Heroes are full-screen + landscape, so prefer the backdrop; fall back to the
+// poster when an item has no backdrop yet.
+const heroStyle = computed(() =>
+  posterStyle(hero.value?.backdropUrl ?? hero.value?.posterUrl, hero.value?.title ?? ''),
+)
 
 // Beacon keeps "Continue Watching" live: when another of the user's devices
 // moves or finishes an item, refresh the rail (debounced, so a burst of
