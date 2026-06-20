@@ -6,6 +6,19 @@ export type ContinueItem = components['schemas']['ContinueItem']
 export type PlaybackInfo = components['schemas']['PlaybackInfo']
 export type TranscodeSession = components['schemas']['TranscodeSession']
 export type SubtitleTrack = components['schemas']['SubtitleTrack']
+export type DevicePreferences = components['schemas']['DevicePreferences']
+
+// getPreferences returns this device's saved playback preferences (subtitle
+// language/on-off, audio language). Defaults (subtitles off) when none saved.
+export async function getPreferences(): Promise<DevicePreferences | null> {
+  const { data } = await api.GET('/api/v1/preferences')
+  return data ?? null
+}
+
+// putPreferences persists this device's playback preferences.
+export async function putPreferences(prefs: DevicePreferences): Promise<void> {
+  await api.PUT('/api/v1/preferences', { body: prefs })
+}
 
 // supportsHevc reports whether this client can play 4K HEVC (including 10-bit
 // Main 10 / HDR) in fMP4 via MSE. We probe the hardest case — Main 10 at level

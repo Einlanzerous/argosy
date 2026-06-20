@@ -132,6 +132,24 @@ export interface paths {
         patch: operations["renameDevice"];
         trace?: never;
     };
+    "/api/v1/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the calling device's playback preferences */
+        get: operations["getDevicePreferences"];
+        /** Update the calling device's playback preferences */
+        put: operations["setDevicePreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -683,6 +701,14 @@ export interface components {
         DeviceRenameRequest: {
             name: string;
         };
+        DevicePreferences: {
+            /** @description Preferred subtitle language (ISO code); the player auto-selects a matching track. */
+            subtitleLanguage?: string | null;
+            /** @description Whether subtitles are on by default. */
+            subtitleEnabled: boolean;
+            /** @description Preferred audio language (ISO code). Persisted; applied once audio-track selection ships. */
+            audioLanguage?: string | null;
+        };
         DeviceRegistrationResponse: {
             device: components["schemas"]["Device"];
             /** @description Bearer token for this device. */
@@ -1106,6 +1132,52 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getDevicePreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePreferences"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    setDevicePreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePreferences"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePreferences"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     getCurrentSession: {
