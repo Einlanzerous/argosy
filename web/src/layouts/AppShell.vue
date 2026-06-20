@@ -35,10 +35,12 @@ function logout(): void {
   <div class="app">
     <!-- floating top bar -->
     <header class="bar">
-      <img class="logo" src="/argosy_logo_dark.png" alt="Argosy" @click="goHome" />
-      <button v-if="showBarSearch" class="bar-search" type="button" @click="openSearch">
-        <span>⌕</span> Search the Manifest…
-      </button>
+      <div class="brand" :class="{ 'logo-only': !showBarSearch }">
+        <img class="logo" src="/argosy_logo_dark.png" alt="Argosy" @click="goHome" />
+        <button v-if="showBarSearch" class="bar-search" type="button" @click="openSearch">
+          <span class="mag">⌕</span> Search the Manifest…
+        </button>
+      </div>
       <div class="bar-right">
         <button class="pill" type="button" @click="openSearch"><span class="i">▤</span> Browse</button>
         <button class="pill" type="button" @click="nav('library')"><span class="i">◈</span> Yours</button>
@@ -93,29 +95,52 @@ function logout(): void {
   padding: 18px 40px;
   background: linear-gradient(#171717e0 10%, rgba(23, 23, 23, 0));
 }
+/* Logo + search share one translucent pill so the brand reads as a single
+   light surface instead of two clunky boxes. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.42);
+  backdrop-filter: blur(10px);
+}
+.brand.logo-only {
+  padding: 7px 18px;
+}
 .logo {
-  width: 132px;
+  width: 104px;
   height: auto;
   flex: none;
   cursor: pointer;
+  /* The PNG has a baked-in dark background; screen blending drops it so only
+     the cream ship + wordmark float on the pill (no transparent asset needed). */
+  mix-blend-mode: screen;
 }
 .bar-search {
   display: flex;
   align-items: center;
   gap: 9px;
-  width: 300px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--arg-line-3);
-  background: rgba(20, 20, 19, 0.6);
-  backdrop-filter: blur(8px);
+  width: 256px;
+  margin-left: 4px;
+  padding: 9px 16px 9px 14px;
+  border: none;
+  border-left: 1px solid var(--arg-line-2);
+  border-radius: 0;
+  background: transparent;
   color: #8a8a82;
   font: 500 13.5px var(--arg-body);
   cursor: text;
   text-align: left;
 }
 .bar-search:hover {
-  border-color: var(--arg-accent);
+  color: var(--arg-cream);
+}
+.mag {
+  color: var(--arg-accent);
+  font-size: 15px;
 }
 .bar-right {
   margin-left: auto;

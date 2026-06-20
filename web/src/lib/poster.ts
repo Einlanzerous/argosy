@@ -35,7 +35,10 @@ export function posterStyle(
       backgroundImage: `url("${posterUrl}")`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
+      // Clip to the padding box so the image doesn't paint under a 1px border
+      // and bleed past the overlay at the rounded corners.
+      backgroundClip: 'padding-box',
     }
   }
-  return { backgroundImage: gradientFor(seed) }
+  return { backgroundImage: gradientFor(seed), backgroundClip: 'padding-box' }
 }
