@@ -60,7 +60,10 @@ func encoderFor(name string) videoEncoder {
 	switch name {
 	case EncoderQSV:
 		return qsvEncoder{}
-	// case EncoderVAAPI, EncoderNVENC: ...    // ARGY-61
+	case EncoderVAAPI:
+		return vaapiEncoder{}
+	case EncoderNVENC:
+		return nvencEncoder{}
 	default:
 		return softwareEncoder{}
 	}
@@ -140,6 +143,60 @@ func (qsvEncoder) scale(height int) string {
 func (qsvEncoder) videoCodec(codec string) []string {
 	codec = resolveCodec(codec)
 	args := []string{"-c:v", ffmpegEncoder[EncoderQSV][codec], "-preset", "veryfast", "-g", "48"}
+	if codec == CodecHEVC {
+		args = append(args, "-tag:v", "hvc1")
+	}
+	return args
+}
+
+// VAAPIDevice is the DRM render node VAAPI initializes. renderD128 is the Intel
+// iGPU (also exposes VAAPI); renderD129 is the discrete AMD card. Overridable so
+// a host can target a specific GPU; a config/env knob can set it in main.
+var VAAPIDevice = "/dev/dri/renderD128"
+
+// vaapiEncoder is the VAAPI path (Intel/AMD). Unlike QSV — which uploads frames
+// to the GPU internally — VAAPI needs the frames explicitly uploaded to a GPU
+// surface (format=nv12,hwupload) after a CPU scale, with the device initialized
+// before the input via -vaapi_device. Verified on this box (renderD128):
+// h264_vaapi + hevc_vaapi, single-rung and multi-rung ladder.
+type vaapiEncoder struct{ softwareEncoder }
+
+func (vaapiEncoder) name() string { return EncoderVAAPI }
+
+func (vaapiEncoder) globalArgs() []string { return []string{"-vaapi_device", VAAPIDevice} }
+
+func (vaapiEncoder) scale(height int) string {
+	// CPU scale to nv12, then upload to a VAAPI surface for the GPU encoder.
+	return fmt.Sprintf("scale=-2:%d,format=nv12,hwupload", height)
+}
+
+func (vaapiEncoder) videoCodec(codec string) []string {
+	codec = resolveCodec(codec)
+	args := []string{"-c:v", ffmpegEncoder[EncoderVAAPI][codec], "-g", "48"}
+	if codec == CodecHEVC {
+		args = append(args, "-tag:v", "hvc1")
+	}
+	return args
+}
+
+// nvencEncoder is the NVIDIA NVENC path. Like QSV it's encode-only (NVENC
+// accepts system-memory frames and uploads them internally), so it differs from
+// software only in the codec + scale-format. NOTE: not verified on this box (no
+// NVIDIA GPU); it stays inert unless Probe detects an NVIDIA device, so shipping
+// it is safe. Recipe follows the standard h264_nvenc/hevc_nvenc encode-only form.
+type nvencEncoder struct{ softwareEncoder }
+
+func (nvencEncoder) name() string { return EncoderNVENC }
+
+func (nvencEncoder) scale(height int) string {
+	// nv12 so 10-bit sources downconvert for the 8-bit NVENC encoders.
+	return fmt.Sprintf("scale=-2:%d,format=nv12", height)
+}
+
+func (nvencEncoder) videoCodec(codec string) []string {
+	codec = resolveCodec(codec)
+	// NVENC presets are p1..p7 (p4 ~= medium quality/speed).
+	args := []string{"-c:v", ffmpegEncoder[EncoderNVENC][codec], "-preset", "p4", "-g", "48"}
 	if codec == CodecHEVC {
 		args = append(args, "-tag:v", "hvc1")
 	}
