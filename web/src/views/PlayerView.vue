@@ -7,14 +7,17 @@ import { posterStyle } from '@/lib/poster'
 import { formatClock, formatTitle } from '@/lib/format'
 import {
   getPlaybackInfo,
+  getPreferences,
   getProgress,
   listSubtitles,
+  putPreferences,
   reportProgress,
   setWatched,
   startTranscode,
   stopTranscode,
   streamUrl,
   subtitleUrl,
+  type DevicePreferences,
   type SubtitleTrack,
 } from '@/lib/playback'
 import { parseVttCues, shiftVtt } from '@/lib/vtt'
@@ -41,6 +44,9 @@ const resumeFrom = ref(0)
 const subtitleTracks = ref<SubtitleTrack[]>([])
 const activeSubtitle = ref<string | null>(null)
 const subMenuOpen = ref(false)
+// This device's saved playback preferences (subtitle language/on-off), applied
+// when tracks load and updated when the viewer changes the subtitle (ARGY-37).
+const prefs = ref<DevicePreferences | null>(null)
 // The active subtitle is rendered by feeding cues straight into a single
 // TextTrack (reused across switches); we track the cues we added so we can
 // clear them when changing or turning off subtitles.
@@ -67,18 +73,22 @@ const remaining = computed(() => Math.max(0, duration.value - position.value))
 const backdrop = computed(() => posterStyle(item.value?.posterUrl, item.value?.title ?? ''))
 
 onMounted(async () => {
-  const [{ data }, progress, playback] = await Promise.all([
+  const [{ data }, progress, playback, devicePrefs] = await Promise.all([
     api.GET('/api/v1/items/{itemId}', { params: { path: { itemId } } }),
     getProgress(itemId).catch(() => null),
     getPlaybackInfo(itemId).catch(() => null),
+    getPreferences().catch(() => null),
   ])
   item.value = data ?? null
+  prefs.value = devicePrefs
 
   // Subtitle tracks load in the background; an OpenSubtitles search can take a
-  // moment and shouldn't hold up playback.
+  // moment and shouldn't hold up playback. Once they arrive, auto-enable the
+  // viewer's preferred subtitle language for this device (ARGY-37).
   void listSubtitles(itemId)
     .then((t) => {
       subtitleTracks.value = t
+      applyPreferredSubtitle()
     })
     .catch(() => {})
 
@@ -316,12 +326,37 @@ async function seekTo(t: number): Promise<void> {
 }
 
 // selectSubtitle switches the active track (null = off). Selection persists
-// across transcode restarts via reapplySubtitle.
-async function selectSubtitle(trackId: string | null): Promise<void> {
+// across transcode restarts via reapplySubtitle, and (when persist) is saved as
+// this device's preference so it auto-applies on the next title.
+async function selectSubtitle(trackId: string | null, persist = true): Promise<void> {
   subMenuOpen.value = false
   activeSubtitle.value = trackId
   removeSubtitleEl()
   if (trackId) await applySubtitle(trackId)
+  if (persist) void savePreferredSubtitle(trackId)
+}
+
+// savePreferredSubtitle persists the subtitle choice for this device. Turning
+// subtitles off keeps the last language, so re-enabling remembers it.
+function savePreferredSubtitle(trackId: string | null): Promise<void> {
+  const track = trackId ? subtitleTracks.value.find((t) => t.id === trackId) : null
+  const next: DevicePreferences = {
+    subtitleEnabled: trackId != null,
+    subtitleLanguage: track?.language ?? prefs.value?.subtitleLanguage ?? null,
+    audioLanguage: prefs.value?.audioLanguage ?? null,
+  }
+  prefs.value = next
+  return putPreferences(next).catch(() => {})
+}
+
+// applyPreferredSubtitle auto-enables the saved subtitle language once tracks
+// load — only if the viewer hasn't already picked one this session.
+function applyPreferredSubtitle(): void {
+  if (activeSubtitle.value) return
+  const p = prefs.value
+  if (!p?.subtitleEnabled || !p.subtitleLanguage) return
+  const match = subtitleTracks.value.find((t) => t.language === p.subtitleLanguage)
+  if (match) void selectSubtitle(match.id, false)
 }
 
 // applySubtitle fetches the WebVTT (authenticated), rewrites its cue timings for

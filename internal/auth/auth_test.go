@@ -112,6 +112,24 @@ func TestAuthFlow(t *testing.T) {
 		t.Errorf("renamed device name = %q, want Living Room TV", renamed.Name)
 	}
 
+	// Device preferences: default to subtitles off, then round-trip a save.
+	defPrefs, err := store.GetDevicePreferences(ctx, reg.Device.Id.String())
+	if err != nil {
+		t.Fatalf("get prefs: %v", err)
+	}
+	if defPrefs.SubtitleEnabled {
+		t.Error("default preferences should have subtitles off")
+	}
+	lang := "en"
+	saved, err := store.SetDevicePreferences(ctx, reg.Device.Id.String(),
+		api.DevicePreferences{SubtitleEnabled: true, SubtitleLanguage: &lang})
+	if err != nil {
+		t.Fatalf("set prefs: %v", err)
+	}
+	if !saved.SubtitleEnabled || saved.SubtitleLanguage == nil || *saved.SubtitleLanguage != "en" {
+		t.Errorf("saved prefs = %+v, want subtitles on / en", saved)
+	}
+
 	if err := store.RevokeDevice(ctx, sess, reg.Device.Id); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}

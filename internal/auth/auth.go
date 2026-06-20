@@ -228,6 +228,40 @@ func (s *Store) RenameDevice(ctx context.Context, sess api.Session, deviceID ope
 	return scanDevice(row)
 }
 
+// GetDevicePreferences returns a device's playback preferences, or sensible
+// defaults (subtitles off) when none have been saved yet.
+func (s *Store) GetDevicePreferences(ctx context.Context, deviceID string) (api.DevicePreferences, error) {
+	var subLang, audLang *string
+	var subEnabled bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT subtitle_language, subtitle_enabled, audio_language
+		 FROM device_preferences WHERE device_id = $1`, deviceID).
+		Scan(&subLang, &subEnabled, &audLang)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.DevicePreferences{SubtitleEnabled: false}, nil
+	}
+	if err != nil {
+		return api.DevicePreferences{}, err
+	}
+	return api.DevicePreferences{SubtitleLanguage: subLang, SubtitleEnabled: subEnabled, AudioLanguage: audLang}, nil
+}
+
+// SetDevicePreferences upserts a device's playback preferences.
+func (s *Store) SetDevicePreferences(ctx context.Context, deviceID string, p api.DevicePreferences) (api.DevicePreferences, error) {
+	if _, err := s.pool.Exec(ctx,
+		`INSERT INTO device_preferences (device_id, subtitle_language, subtitle_enabled, audio_language, updated_at)
+		 VALUES ($1, $2, $3, $4, now())
+		 ON CONFLICT (device_id) DO UPDATE SET
+		   subtitle_language = EXCLUDED.subtitle_language,
+		   subtitle_enabled = EXCLUDED.subtitle_enabled,
+		   audio_language = EXCLUDED.audio_language,
+		   updated_at = now()`,
+		deviceID, p.SubtitleLanguage, p.SubtitleEnabled, p.AudioLanguage); err != nil {
+		return api.DevicePreferences{}, err
+	}
+	return s.GetDevicePreferences(ctx, deviceID)
+}
+
 func (s *Store) verify(ctx context.Context, username, password string) (id, name string, err error) {
 	var hash string
 	err = s.pool.QueryRow(ctx,

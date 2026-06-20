@@ -23,6 +23,36 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("DELETE /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRevokeDevice(store)))
 	mux.Handle("PATCH /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRenameDevice(store)))
 	mux.Handle("GET /api/v1/auth/me", requireAuth(store, handleMe()))
+	mux.Handle("GET /api/v1/preferences", requireAuth(store, handleGetPreferences(store)))
+	mux.Handle("PUT /api/v1/preferences", requireAuth(store, handleSetPreferences(store)))
+}
+
+func handleGetPreferences(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		p, err := store.GetDevicePreferences(r.Context(), sess.DeviceId.String())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}
+}
+
+func handleSetPreferences(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		var p api.DevicePreferences
+		if !decode(w, r, &p) {
+			return
+		}
+		out, err := store.SetDevicePreferences(r.Context(), sess.DeviceId.String(), p)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
 }
 
 func handleLogin(store *Store) http.HandlerFunc {
