@@ -493,6 +493,8 @@ export interface components {
              * @description Seek offset in seconds (default 0).
              */
             startAt?: number;
+            /** @description Whether the client can play HEVC (H.265) in fMP4/MSE — detected via MediaSource.isTypeSupported. When true, an HEVC source is remuxed (copied) at native resolution including 4K instead of being re-encoded to H.264 1080p, and re-encodes of >1080p sources target HEVC. Defaults to false (H.264 only). */
+            hevc?: boolean;
         };
         TranscodeProgress: {
             /**

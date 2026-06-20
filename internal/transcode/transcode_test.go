@@ -208,16 +208,37 @@ func TestBuildArgsHLSLadder(t *testing.T) {
 func TestBuildArgsRemux(t *testing.T) {
 	args := buildArgs(Spec{Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodRemux})
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"-i /m/a.mkv", "-c copy", "-hls_segment_type fmp4", "init.mp4", "stream_%05d.m4s", PlaylistName} {
+	for _, want := range []string{"-i /m/a.mkv", "-c:v copy", "-c:a copy", "-hls_segment_type fmp4", "init.mp4", "stream_%05d.m4s", PlaylistName} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("remux args missing %q\nargs: %s", want, joined)
 		}
 	}
 	// Remux must not re-encode, scale, or use the %v multi-variant layout (which
 	// ffmpeg won't expand in the init filename for a single variant).
-	for _, bad := range []string{"libx264", "filter_complex", "var_stream_map", "%v"} {
+	for _, bad := range []string{"libx264", "filter_complex", "var_stream_map", "%v", "-tag:v hvc1"} {
 		if strings.Contains(joined, bad) {
 			t.Errorf("remux must not contain %q\nargs: %s", bad, joined)
+		}
+	}
+}
+
+func TestBuildArgsRemuxHEVCWithAudioTranscode(t *testing.T) {
+	// The 4K case: copy the HEVC video (with the hvc1 tag) untouched, but
+	// re-encode the audio (e.g. TrueHD) to stereo AAC.
+	args := buildArgs(Spec{
+		Source: "/m/4k.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+		VideoCodec: CodecHEVC, TranscodeAudio: true,
+	})
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-c:v copy", "-tag:v hvc1", "-c:a aac", "-ac 2"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("hevc remux args missing %q\nargs: %s", want, joined)
+		}
+	}
+	// The video is copied, never re-encoded.
+	for _, bad := range []string{"hevc_qsv", "libx265", "-c:a copy"} {
+		if strings.Contains(joined, bad) {
+			t.Errorf("hevc remux must not contain %q\nargs: %s", bad, joined)
 		}
 	}
 }
@@ -244,13 +265,27 @@ func TestRungsFor(t *testing.T) {
 		{1080, 3}, {1440, 3}, {720, 2}, {600, 1}, {480, 1}, {360, 1}, {0, 1},
 	}
 	for _, c := range cases {
-		if got := len(rungsFor(c.height)); got != c.want {
-			t.Errorf("rungsFor(%d) = %d rungs, want %d", c.height, got, c.want)
+		if got := len(rungsForCodec(c.height, CodecH264)); got != c.want {
+			t.Errorf("rungsForCodec(%d, h264) = %d rungs, want %d", c.height, got, c.want)
 		}
 	}
 	// Never upscale: a 480p source's top rung is ≤ 480.
-	if r := rungsFor(480); r[0].height > 480 {
-		t.Errorf("rungsFor(480) top rung %d upscales", r[0].height)
+	if r := rungsForCodec(480, CodecH264); r[0].height > 480 {
+		t.Errorf("rungsForCodec(480, h264) top rung %d upscales", r[0].height)
+	}
+}
+
+func TestRungsForCodecHEVC(t *testing.T) {
+	// HEVC carries a 2160 rung that H.264 lacks: a 4K source gets the full
+	// 2160/1080/720 ladder, where H.264 would top out at 1080.
+	if got := len(rungsForCodec(2160, CodecHEVC)); got != 3 {
+		t.Errorf("rungsForCodec(2160, hevc) = %d rungs, want 3", got)
+	}
+	if r := rungsForCodec(2160, CodecHEVC); r[0].height != 2160 {
+		t.Errorf("rungsForCodec(2160, hevc) top rung = %d, want 2160", r[0].height)
+	}
+	if r := rungsForCodec(2160, CodecH264); r[0].height != 1080 {
+		t.Errorf("rungsForCodec(2160, h264) top rung = %d, want 1080 (no 4K H.264)", r[0].height)
 	}
 }
 

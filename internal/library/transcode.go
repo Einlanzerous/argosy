@@ -104,35 +104,42 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decide the cheapest re-packaging: remux (copy codecs) when only the
-	// container is incompatible, full transcode when a codec needs re-encoding.
-	// A direct-playable item that still hit this endpoint just gets a cheap remux.
-	method, reason := decide(filepath.Ext(src.path), src.video, src.audio)
-	mode := transcode.MethodTranscode
-	if method != methodTranscode {
-		mode = transcode.MethodRemux
-	}
-	h.logger.Info("transcode decision", "item", itemID, "method", mode, "reason", reason,
-		"container", filepath.Ext(src.path), "video", src.video, "audio", src.audio)
-
-	// Body is optional; it only carries the seek offset.
+	// Body is optional; it carries the seek offset and whether the client can
+	// play HEVC (so a 4K HEVC source can be copied at native resolution rather
+	// than re-encoded down to H.264 1080p).
 	var body api.TranscodeStartRequest
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 	}
+	clientHEVC := body.Hevc != nil && *body.Hevc
+
+	// Decide the cheapest playable recipe: copy the video whenever the client can
+	// play it (true 4K for HEVC clients), transcoding only the audio if needed;
+	// otherwise re-encode (to HEVC for >1080p capable clients, else H.264).
+	plan := planPlayback(src.video, src.audio, clientHEVC, src.height)
+	mode := transcode.MethodTranscode
+	if plan.method != methodTranscode {
+		mode = transcode.MethodRemux
+	}
+	h.logger.Info("transcode decision", "item", itemID, "method", mode, "codec", plan.videoCodec,
+		"transcodeAudio", plan.transcodeAudio, "reason", plan.reason, "container", filepath.Ext(src.path),
+		"video", src.video, "audio", src.audio, "height", src.height, "clientHevc", clientHEVC)
+
 	var startAt float64
 	if body.StartAt != nil && *body.StartAt > 0 {
 		startAt = *body.StartAt
 	}
 
 	sess, err := h.tc.Start(transcode.StartRequest{
-		ItemID:       itemID,
-		AccountID:    account,
-		Source:       src.path,
-		StartAt:      startAt,
-		Encoder:      h.encoder,
-		SourceHeight: src.height,
-		Method:       mode,
+		ItemID:         itemID,
+		AccountID:      account,
+		Source:         src.path,
+		StartAt:        startAt,
+		Encoder:        h.encoder,
+		SourceHeight:   src.height,
+		Method:         mode,
+		VideoCodec:     plan.videoCodec,
+		TranscodeAudio: plan.transcodeAudio,
 	})
 	if errors.Is(err, transcode.ErrAtCapacity) {
 		writeJSON(w, http.StatusServiceUnavailable, errorBody("server at transcode capacity, try again shortly"))

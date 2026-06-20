@@ -68,26 +68,46 @@ type rung struct {
 	bufSize      string
 }
 
-// ladder is the full bitrate ladder, widest first. rungsFor trims it to the
-// source so we never upscale.
+// ladder is the H.264 bitrate ladder, widest first. It tops out at 1080p:
+// H.264 at 2160p needs impractical bitrates, so true-4K output uses hevcLadder.
 var ladder = []rung{
 	{1080, "6M", "6400k", "12M"},
 	{720, "3M", "3200k", "6M"},
 	{480, "1500k", "1600k", "3M"},
 }
 
+// hevcLadder is the HEVC bitrate ladder. HEVC reaches similar quality at ~40%
+// less bitrate than H.264, so it carries a viable 2160p rung for true 4K. Only
+// used when the client negotiated HEVC and we must re-encode a >1080p source
+// (the common 4K case is remux-copy, which never touches this).
+var hevcLadder = []rung{
+	{2160, "16M", "18M", "32M"},
+	{1080, "4M", "4400k", "8M"},
+	{720, "2M", "2200k", "4M"},
+}
+
 const audioBitrate = "128k"
 
-// rungsFor returns the ladder rungs appropriate for a source of the given
-// height: every rung at or below the source height (never upscale). A source
-// smaller than the smallest rung encodes at its own height; an unknown height
-// collapses to a single conservative 720p rung.
-func rungsFor(sourceHeight int) []rung {
+// rungsForCodec returns the bitrate-ladder rungs for a source of the given
+// height in the given output codec: every rung at or below the source height
+// (never upscale). A source smaller than the smallest rung encodes at its own
+// height; an unknown height collapses to a single conservative 720p rung.
+func rungsForCodec(sourceHeight int, codec string) []rung {
+	l := ladder
+	if resolveCodec(codec) == CodecHEVC {
+		l = hevcLadder
+	}
 	if sourceHeight <= 0 {
-		return []rung{{720, "3M", "3200k", "6M"}}
+		// Unknown source: one conservative 720p rung (the 720 entry in either ladder).
+		for _, r := range l {
+			if r.height == 720 {
+				return []rung{r}
+			}
+		}
+		return []rung{l[len(l)-1]}
 	}
 	var out []rung
-	for _, r := range ladder {
+	for _, r := range l {
 		if r.height <= sourceHeight {
 			out = append(out, r)
 		}
@@ -109,14 +129,28 @@ func buildArgs(spec Spec) []string {
 	return buildTranscodeArgs(spec)
 }
 
-// buildRemuxArgs copies the source video+audio into a single-variant CMAF HLS
-// (only the container changes — the cheap path when the codecs are already
-// browser-friendly but the container isn't, e.g. H.264/AAC in Matroska).
+// buildRemuxArgs copies the source video into a single-variant CMAF HLS without
+// re-encoding — the cheap path when the video codec is browser-playable but the
+// container isn't (e.g. H.264/AAC in Matroska), or when a client can play the
+// source codec natively (e.g. HEVC/4K). The video stream is always copied
+// (preserving resolution, bit depth, and HDR — this is what makes true 4K
+// possible). Audio is copied too, unless spec.TranscodeAudio is set, in which
+// case only the audio is re-encoded to stereo AAC (e.g. TrueHD/DTS → AAC while
+// the 4K HEVC video passes through untouched).
 func buildRemuxArgs(spec Spec) []string {
-	// Remux copies codecs (no re-encode), so the encoder backend is irrelevant;
-	// software contributes no hwaccel flags.
+	// Remux copies the video (no re-encode), so the encoder backend is
+	// irrelevant; software contributes no hwaccel flags.
 	args := inputArgs(spec, softwareEncoder{})
-	args = append(args, "-map", "0:v:0", "-map", "0:a:0", "-c", "copy")
+	args = append(args, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy")
+	if resolveCodec(spec.VideoCodec) == CodecHEVC {
+		// Copied HEVC needs the hvc1 sample-entry tag for fMP4/MSE playback.
+		args = append(args, "-tag:v", "hvc1")
+	}
+	if spec.TranscodeAudio {
+		args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
+	} else {
+		args = append(args, "-c:a", "copy")
+	}
 	return append(args, singleOutputTail()...)
 }
 
@@ -127,23 +161,24 @@ func buildRemuxArgs(spec Spec) []string {
 // today; qsv/vaapi/nvenc in ARGY-30/61).
 func buildTranscodeArgs(spec Spec) []string {
 	enc := encoderFor(spec.Encoder)
-	rungs := rungsFor(spec.SourceHeight)
+	codec := resolveCodec(spec.VideoCodec)
+	rungs := rungsForCodec(spec.SourceHeight, codec)
 	if len(rungs) == 1 {
-		return buildSingleTranscodeArgs(spec, enc, rungs[0])
+		return buildSingleTranscodeArgs(spec, enc, codec, rungs[0])
 	}
-	return buildLadderArgs(spec, enc, rungs)
+	return buildLadderArgs(spec, enc, codec, rungs)
 }
 
-func buildSingleTranscodeArgs(spec Spec, enc videoEncoder, r rung) []string {
+func buildSingleTranscodeArgs(spec Spec, enc videoEncoder, codec string, r rung) []string {
 	args := inputArgs(spec, enc)
 	args = append(args, "-map", "0:v:0", "-map", "0:a:0", "-vf", enc.scale(r.height))
-	args = append(args, enc.videoCodec()...)
+	args = append(args, enc.videoCodec(codec)...)
 	args = append(args, enc.rateControl(-1, r)...)
 	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
 	return append(args, singleOutputTail()...)
 }
 
-func buildLadderArgs(spec Spec, enc videoEncoder, rungs []rung) []string {
+func buildLadderArgs(spec Spec, enc videoEncoder, codec string, rungs []rung) []string {
 	n := len(rungs)
 	args := inputArgs(spec, enc)
 
@@ -166,7 +201,7 @@ func buildLadderArgs(spec Spec, enc videoEncoder, rungs []rung) []string {
 		args = append(args, "-map", "0:a:0")
 	}
 
-	args = append(args, enc.videoCodec()...)
+	args = append(args, enc.videoCodec(codec)...)
 	for i, r := range rungs {
 		args = append(args, enc.rateControl(i, r)...)
 	}

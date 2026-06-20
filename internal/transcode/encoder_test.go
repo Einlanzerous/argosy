@@ -33,8 +33,12 @@ func TestQSVEncoderPieces(t *testing.T) {
 	if got := enc.scale(720); got != "scale=-2:720,format=nv12" {
 		t.Errorf("qsv scale(720) = %q, want nv12 conversion for 8-bit h264_qsv input", got)
 	}
-	if got := strings.Join(enc.videoCodec(), " "); !strings.Contains(got, "h264_qsv") {
-		t.Errorf("qsv videoCodec = %q, want h264_qsv", got)
+	if got := strings.Join(enc.videoCodec(CodecH264), " "); !strings.Contains(got, "h264_qsv") {
+		t.Errorf("qsv videoCodec(h264) = %q, want h264_qsv", got)
+	}
+	hevc := strings.Join(enc.videoCodec(CodecHEVC), " ")
+	if !strings.Contains(hevc, "hevc_qsv") || !strings.Contains(hevc, "-tag:v hvc1") {
+		t.Errorf("qsv videoCodec(hevc) = %q, want hevc_qsv + hvc1 tag", hevc)
 	}
 }
 
@@ -55,8 +59,11 @@ func TestSoftwareEncoderPieces(t *testing.T) {
 	if got := enc.scale(720); got != "scale=-2:720" {
 		t.Errorf("scale(720) = %q", got)
 	}
-	if got := strings.Join(enc.videoCodec(), " "); !strings.Contains(got, "libx264") {
-		t.Errorf("videoCodec = %q, want libx264", got)
+	if got := strings.Join(enc.videoCodec(CodecH264), " "); !strings.Contains(got, "libx264") {
+		t.Errorf("videoCodec(h264) = %q, want libx264", got)
+	}
+	if got := strings.Join(enc.videoCodec(CodecHEVC), " "); !strings.Contains(got, "libx265") {
+		t.Errorf("videoCodec(hevc) = %q, want libx265", got)
 	}
 
 	r := rung{videoBitrate: "2800k", maxRate: "3000k", bufSize: "5600k"}

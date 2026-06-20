@@ -66,17 +66,26 @@ type Spec struct {
 	Encoder      string // selected encoder backend (e.g. "software", "qsv")
 	SourceHeight int    // source video height; drives the bitrate ladder (0 = unknown)
 	Method       string // MethodRemux (copy codecs) or MethodTranscode (re-encode)
+	// VideoCodec is the output video codec (CodecH264/CodecHEVC). For a transcode
+	// it selects the encoder + ladder; for a remux it names the codec being
+	// copied (so HEVC gets the hvc1 fMP4 tag). Empty defaults to H.264.
+	VideoCodec string
+	// TranscodeAudio, on the remux path, re-encodes audio to stereo AAC instead
+	// of copying it (e.g. TrueHD/DTS alongside a copied 4K HEVC video stream).
+	TranscodeAudio bool
 }
 
 // StartRequest is the caller-facing request to begin (or join) a session.
 type StartRequest struct {
-	ItemID       string
-	AccountID    string
-	Source       string
-	StartAt      float64 // seek offset in seconds
-	Encoder      string
-	SourceHeight int
-	Method       string // MethodRemux or MethodTranscode (default transcode)
+	ItemID         string
+	AccountID      string
+	Source         string
+	StartAt        float64 // seek offset in seconds
+	Encoder        string
+	SourceHeight   int
+	Method         string // MethodRemux or MethodTranscode (default transcode)
+	VideoCodec     string // output/copied video codec (CodecH264/CodecHEVC)
+	TranscodeAudio bool   // remux: re-encode audio to AAC instead of copying
 }
 
 // Session is an immutable snapshot of a transcode session's public state,
@@ -211,7 +220,11 @@ func NewManager(backend Backend, workDir string, idleTTL time.Duration, maxSess 
 // sessionID derives a deterministic id so repeat requests for the same content
 // (same account, item, start offset bucket, and encoder) join one session.
 func sessionID(req StartRequest) string {
-	key := fmt.Sprintf("%s|%s|%d|%s", req.AccountID, req.ItemID, int64(req.StartAt), req.Encoder)
+	// Codec + method are part of the key so clients that negotiated different
+	// outputs (e.g. an HEVC-capable client remuxing 4K vs one transcoding to
+	// H.264 1080p) get distinct sessions rather than colliding on one.
+	key := fmt.Sprintf("%s|%s|%d|%s|%s|%s", req.AccountID, req.ItemID, int64(req.StartAt),
+		req.Encoder, resolveCodec(req.VideoCodec), req.Method)
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])[:16]
 }
@@ -254,6 +267,7 @@ func (m *Manager) Start(req StartRequest) (Session, error) {
 	go m.run(ctx, s, Spec{
 		SessionID: id, Source: req.Source, OutputDir: outputDir,
 		StartAt: req.StartAt, Encoder: req.Encoder, SourceHeight: req.SourceHeight, Method: method,
+		VideoCodec: req.VideoCodec, TranscodeAudio: req.TranscodeAudio,
 	})
 	return s.snapshot(), nil
 }
@@ -273,6 +287,11 @@ func (m *Manager) run(ctx context.Context, s *session, spec Spec) {
 		_ = cleanDir(spec.OutputDir)
 		spec.Encoder = EncoderSoftware
 		s.setEncoder(EncoderSoftware)
+		if spec.Method == MethodTranscode {
+			// Software HEVC (libx265) at 4K is impractically slow; drop to the
+			// universal H.264 ladder so the session still plays at a sane speed.
+			spec.VideoCodec = CodecH264
+		}
 		err = m.backend.Run(ctx, spec, s.updateProgress)
 	}
 

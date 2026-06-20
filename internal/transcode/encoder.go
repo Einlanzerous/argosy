@@ -20,11 +20,37 @@ type videoEncoder interface {
 	// scale returns a filtergraph scale expression to height, e.g.
 	// "scale=-2:720" (software) or "scale_qsv=w=-2:h=720" (QSV).
 	scale(height int) string
-	// videoCodec returns "-c:v <enc>" plus the shared encode flags (preset, GOP).
-	videoCodec() []string
+	// videoCodec returns "-c:v <enc>" plus the shared encode flags (preset, GOP)
+	// for the requested output codec (CodecH264 or CodecHEVC).
+	videoCodec(codec string) []string
 	// rateControl returns the per-output rate-control flags. idx < 0 is the
 	// single-output case (no stream specifier); idx >= 0 targets ladder output i.
 	rateControl(idx int, r rung) []string
+}
+
+// Output video codecs. H.264 is the universal baseline; HEVC is used for
+// >1080p (true 4K) output to capable clients, where H.264's bitrate is
+// impractical. See ffmpegEncoder for the per-backend ffmpeg encoder names.
+const (
+	CodecH264 = "h264"
+	CodecHEVC = "hevc"
+)
+
+// ffmpegEncoder maps (backend, output codec) to the concrete ffmpeg encoder.
+// Adding a backend or codec is a table entry, not a new code path.
+var ffmpegEncoder = map[string]map[string]string{
+	EncoderSoftware: {CodecH264: "libx264", CodecHEVC: "libx265"},
+	EncoderQSV:      {CodecH264: "h264_qsv", CodecHEVC: "hevc_qsv"},
+	EncoderVAAPI:    {CodecH264: "h264_vaapi", CodecHEVC: "hevc_vaapi"},
+	EncoderNVENC:    {CodecH264: "h264_nvenc", CodecHEVC: "hevc_nvenc"},
+}
+
+// resolveCodec normalizes an output codec, defaulting to H.264.
+func resolveCodec(c string) string {
+	if c == CodecHEVC {
+		return CodecHEVC
+	}
+	return CodecH264
 }
 
 // encoderFor resolves a backend name to its implementation. Anything not yet
@@ -61,11 +87,17 @@ func (softwareEncoder) globalArgs() []string { return nil }
 
 func (softwareEncoder) scale(height int) string { return fmt.Sprintf("scale=-2:%d", height) }
 
-func (softwareEncoder) videoCodec() []string {
-	return []string{
-		"-c:v", "libx264", "-preset", "veryfast",
+func (softwareEncoder) videoCodec(codec string) []string {
+	codec = resolveCodec(codec)
+	args := []string{
+		"-c:v", ffmpegEncoder[EncoderSoftware][codec], "-preset", "veryfast",
 		"-g", "48", "-keyint_min", "48", "-sc_threshold", "0",
 	}
+	if codec == CodecHEVC {
+		// hvc1 tag so the fMP4 sample entry is one MSE/Safari recognize.
+		args = append(args, "-tag:v", "hvc1")
+	}
+	return args
 }
 
 func (softwareEncoder) rateControl(idx int, r rung) []string { return vbrRateControl(idx, r) }
@@ -105,6 +137,11 @@ func (qsvEncoder) scale(height int) string {
 	return fmt.Sprintf("scale=-2:%d,format=nv12", height)
 }
 
-func (qsvEncoder) videoCodec() []string {
-	return []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-g", "48"}
+func (qsvEncoder) videoCodec(codec string) []string {
+	codec = resolveCodec(codec)
+	args := []string{"-c:v", ffmpegEncoder[EncoderQSV][codec], "-preset", "veryfast", "-g", "48"}
+	if codec == CodecHEVC {
+		args = append(args, "-tag:v", "hvc1")
+	}
+	return args
 }

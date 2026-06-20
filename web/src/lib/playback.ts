@@ -7,15 +7,27 @@ export type PlaybackInfo = components['schemas']['PlaybackInfo']
 export type TranscodeSession = components['schemas']['TranscodeSession']
 export type SubtitleTrack = components['schemas']['SubtitleTrack']
 
+// supportsHevc reports whether this client can play 4K HEVC (including 10-bit
+// Main 10 / HDR) in fMP4 via MSE. We probe the hardest case — Main 10 at level
+// 5.1 (4K) — so a positive answer means it's safe for the server to copy *any*
+// HEVC source untouched (native resolution, bit depth, HDR) instead of
+// re-encoding it down to H.264 1080p. hvc1 matches the sample-entry tag we mux.
+export function supportsHevc(): boolean {
+  if (typeof MediaSource === 'undefined' || !MediaSource.isTypeSupported) return false
+  return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"')
+}
+
 // startTranscode begins (or joins) a server-side HLS transcode for an item that
-// can't be direct-played, returning the session + its playlist URL.
+// can't be direct-played, returning the session + its playlist URL. It advertises
+// the client's HEVC capability so 4K HEVC can be passed through (copied) rather
+// than re-encoded.
 export async function startTranscode(
   itemId: string,
   startAt = 0,
 ): Promise<TranscodeSession | null> {
   const { data } = await api.POST('/api/v1/items/{itemId}/transcode', {
     params: { path: { itemId } },
-    body: { startAt },
+    body: { startAt, hevc: supportsHevc() },
   })
   return data ?? null
 }
