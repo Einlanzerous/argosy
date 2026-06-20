@@ -41,7 +41,9 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 		if scheduler != nil {
 			mw := auth.Middleware(authStore)
 			sh := &scanHandlers{sched: scheduler}
-			mux.Handle("POST /api/v1/scan", mw(http.HandlerFunc(sh.trigger)))
+			// Triggering a library re-scan mutates the shared Manifest — admin only;
+			// anyone authenticated may read scan status.
+			mux.Handle("POST /api/v1/scan", mw(auth.RequireAdmin(http.HandlerFunc(sh.trigger))))
 			mux.Handle("GET /api/v1/scan/status", mw(http.HandlerFunc(sh.status)))
 		}
 	}

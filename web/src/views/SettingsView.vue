@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '@/api/client'
 import { formatRelative } from '@/lib/format'
 import { setPage } from '@/lib/page'
+import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
 type ScanStatus = components['schemas']['ScanStatus']
 
+const sessionStore = useSessionStore()
+// Triggering a re-scan is admin-only (the server enforces it too); viewers see
+// status but not the control.
+const isAdmin = computed(() => sessionStore.session?.role === 'admin')
 const status = ref<ScanStatus | null>(null)
 const message = ref('')
 const triggering = ref(false)
@@ -52,9 +57,16 @@ onUnmounted(() => {
           <h2>Library scan</h2>
           <p>Stevedore re-sweeps your media so the Manifest stays current.</p>
         </div>
-        <button class="rebuild" type="button" :disabled="triggering || status?.running" @click="rebuild">
+        <button
+          v-if="isAdmin"
+          class="rebuild"
+          type="button"
+          :disabled="triggering || status?.running"
+          @click="rebuild"
+        >
           <span>⟲</span> {{ status?.running ? 'Rebuilding…' : 'Rebuild the Manifest' }}
         </button>
+        <span v-else class="viewer-note">Only an admin can rebuild the Manifest.</span>
       </div>
 
       <div class="state">
@@ -125,6 +137,12 @@ h2 {
 .rebuild:disabled {
   opacity: 0.6;
   cursor: default;
+}
+.viewer-note {
+  flex: none;
+  align-self: center;
+  font: 500 12.5px var(--arg-body);
+  color: var(--arg-faint);
 }
 .state {
   margin-top: 20px;
