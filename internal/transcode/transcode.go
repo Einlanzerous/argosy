@@ -148,6 +148,14 @@ func (s *session) setState(st State, errMsg string) {
 	s.mu.Unlock()
 }
 
+// setEncoder updates the backend in use (e.g. after a hardware→software
+// fallback) so snapshots report what's actually encoding.
+func (s *session) setEncoder(enc string) {
+	s.mu.Lock()
+	s.encoder = enc
+	s.mu.Unlock()
+}
+
 func (s *session) touch(now time.Time) {
 	s.mu.Lock()
 	s.lastAccess = now
@@ -254,6 +262,20 @@ func (m *Manager) run(ctx context.Context, s *session, spec Spec) {
 	defer close(s.done)
 	s.setState(StateRunning, "")
 	err := m.backend.Run(ctx, spec, s.updateProgress)
+
+	// Hardware encode can fail at startup (driver missing, source codec the GPU
+	// can't decode, bad device). If nothing was served yet, fall back to software
+	// once so the session still plays. We don't retry once segments exist — a
+	// client may already be mid-stream.
+	if err != nil && ctx.Err() == nil && isHardwareEncoder(spec.Encoder) && !producedSegments(spec.OutputDir) {
+		m.logger.Warn("transcode: hardware encode failed at startup, retrying on software",
+			"id", s.id, "item", s.itemID, "encoder", spec.Encoder, "err", err)
+		_ = cleanDir(spec.OutputDir)
+		spec.Encoder = EncoderSoftware
+		s.setEncoder(EncoderSoftware)
+		err = m.backend.Run(ctx, spec, s.updateProgress)
+	}
+
 	switch {
 	case ctx.Err() != nil:
 		s.setState(StateStopped, "")
@@ -263,6 +285,22 @@ func (m *Manager) run(ctx context.Context, s *session, spec Spec) {
 	default:
 		s.setState(StateComplete, "")
 	}
+}
+
+// producedSegments reports whether any media segment was written — i.e. the
+// session got far enough that a client may have started playback.
+func producedSegments(dir string) bool {
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.m4s"))
+	return len(matches) > 0
+}
+
+// cleanDir empties a session's output dir before a fallback retry so stale
+// partial artifacts don't mislead the muxer or clients.
+func cleanDir(dir string) error {
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	return os.MkdirAll(dir, 0o755)
 }
 
 // Get returns a snapshot of the session, or ok=false if unknown.

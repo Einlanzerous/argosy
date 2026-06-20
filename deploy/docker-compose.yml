@@ -57,6 +57,13 @@ services:
       ARGOSY_ADMIN_PASSWORD: "${ARGOSY_ADMIN_PASSWORD:-changeme}"
     ports:
       - "${ARGOSY_HOST_PORT:-8096}:8096"
+    # Intel iGPU passthrough for hardware transcode (ARGY-30). The render node is
+    # group-owned by "render"; add the container to that GID so it can open it.
+    # RENDER_GID is host-specific (`getent group render`); default matches this box.
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${RENDER_GID:-993}"
     working_dir: /app
     volumes:
       - ..:/app                                              # source for hot reload

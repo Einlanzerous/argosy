@@ -25,12 +25,24 @@ RUN CGO_ENABLED=0 go build \
     -ldflags "-s -w -X github.com/Einlanzerous/argosy/internal/version.Version=${VERSION}" \
     -o /out/argosy ./cmd/argosy
 
-# 3) Runtime: slim base + ffmpeg
+# 3) Runtime: slim base + ffmpeg + Intel QSV/VAAPI runtime (ARGY-30).
+# intel-media-va-driver-non-free (iHD) + libmfx provide the QSV path h264_qsv
+# talks to; pass /dev/dri through at run time to use it (see docker-compose.yml).
 FROM debian:bookworm-slim AS runtime
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+RUN sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' \
+      /etc/apt/sources.list.d/debian.sources \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ffmpeg \
+      ca-certificates \
+      intel-media-va-driver-non-free \
+      libmfx1 \
+      libva2 \
+      libva-drm2 \
+      vainfo \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/argosy /usr/local/bin/argosy
-ENV ARGOSY_ADDR=":8096"
+ENV ARGOSY_ADDR=":8096" \
+    LIBVA_DRIVER_NAME=iHD
 EXPOSE 8096
 ENTRYPOINT ["argosy"]

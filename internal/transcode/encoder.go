@@ -32,11 +32,18 @@ type videoEncoder interface {
 // gracefully rather than failing.
 func encoderFor(name string) videoEncoder {
 	switch name {
-	// case EncoderQSV: return qsvEncoder{}   // ARGY-30
+	case EncoderQSV:
+		return qsvEncoder{}
 	// case EncoderVAAPI, EncoderNVENC: ...    // ARGY-61
 	default:
 		return softwareEncoder{}
 	}
+}
+
+// isHardwareEncoder reports whether name is a GPU backend (anything but
+// software) — used to decide whether a startup failure should retry on software.
+func isHardwareEncoder(name string) bool {
+	return name != "" && name != EncoderSoftware
 }
 
 // ResolvedEncoder reports the backend that will actually be used for name —
@@ -61,7 +68,12 @@ func (softwareEncoder) videoCodec() []string {
 	}
 }
 
-func (softwareEncoder) rateControl(idx int, r rung) []string {
+func (softwareEncoder) rateControl(idx int, r rung) []string { return vbrRateControl(idx, r) }
+
+// vbrRateControl emits VBV-constrained VBR flags for output idx (idx < 0 = the
+// single output, no stream specifier). libx264 and h264_qsv both accept this
+// shape, so the backends share it.
+func vbrRateControl(idx int, r rung) []string {
 	if idx < 0 {
 		return []string{"-b:v", r.videoBitrate, "-maxrate", r.maxRate, "-bufsize", r.bufSize}
 	}
@@ -70,4 +82,29 @@ func (softwareEncoder) rateControl(idx int, r rung) []string {
 		fmt.Sprintf("-maxrate:v:%d", idx), r.maxRate,
 		fmt.Sprintf("-bufsize:v:%d", idx), r.bufSize,
 	}
+}
+
+// qsvEncoder is the Intel Quick Sync path. It uses the software pipeline (CPU
+// decode + scale) but encodes with h264_qsv, which uploads frames to the iGPU
+// internally — an "encode-only" model. On this hardware that proved both faster
+// and far more robust than a full-GPU pipeline: libmfx's GPU scaler (scale_qsv)
+// is unimplemented, and the multi-rung GPU ladder hit surface-submission limits,
+// whereas encode-only ran the 1080p ladder ~73% faster than libx264 and a single
+// 720p rung at ~16x realtime. So QSV differs from software only in the codec.
+//
+// If the GPU/codec can't be used at all, the session layer (Manager.run) retries
+// on software, so this never hard-fails playback.
+type qsvEncoder struct{ softwareEncoder }
+
+func (qsvEncoder) name() string { return EncoderQSV }
+
+func (qsvEncoder) scale(height int) string {
+	// h264_qsv only accepts 8-bit nv12, so convert after scaling. Without this a
+	// 10-bit source (e.g. HEVC Main 10 from a 4K rip) fails with "Current pixel
+	// format is unsupported"; for 8-bit sources the conversion is a cheap repack.
+	return fmt.Sprintf("scale=-2:%d,format=nv12", height)
+}
+
+func (qsvEncoder) videoCodec() []string {
+	return []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-g", "48"}
 }
