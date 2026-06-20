@@ -173,6 +173,24 @@ func requireAuth(store *Store, next http.HandlerFunc) http.Handler {
 	return Middleware(store)(next)
 }
 
+// RequireAdmin wraps next so only an admin session reaches it; a viewer gets
+// 403. It must be composed *inside* Middleware (it reads the session from the
+// context Middleware populates): e.g. mw(auth.RequireAdmin(handler)).
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sess, ok := SessionFromContext(r.Context())
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "missing session")
+			return
+		}
+		if sess.Role != api.Admin {
+			writeError(w, http.StatusForbidden, "admin role required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // SessionFromContext returns the authenticated session set by requireAuth.
 func SessionFromContext(ctx context.Context) (api.Session, bool) {
 	sess, ok := ctx.Value(sessionKey).(api.Session)
