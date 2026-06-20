@@ -20,7 +20,6 @@ const heroDetail = ref<MovieDetail | null>(null)
 const loading = ref(true)
 
 const recent = computed(() => movies.value.slice(0, 12))
-const shows = computed(() => series.value.slice(0, 12))
 
 // The hero is the top continue-watching item when there is one (a real resume),
 // otherwise the most recent film as a featured spotlight.
@@ -142,20 +141,6 @@ onMounted(async () => {
           :anime="m.tags?.includes('anime')"
           :poster-url="m.posterUrl"
           :to="{ name: 'movie', params: { id: m.id } }"
-        />
-      </PosterRail>
-
-      <PosterRail v-if="shows.length" label="Shows" :view-all-to="{ name: 'library', query: { kind: 'series' } }">
-        <PosterCard
-          v-for="s in shows"
-          :key="s.id"
-          :width="158"
-          :title="s.title"
-          :subtitle="s.year ? String(s.year) : undefined"
-          kind="Series"
-          :anime="s.tags?.includes('anime')"
-          :poster-url="s.posterUrl"
-          :to="{ name: 'series', params: { id: s.id } }"
         />
       </PosterRail>
 
