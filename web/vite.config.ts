@@ -25,6 +25,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': proxyTarget,
+      '/artwork': proxyTarget, // cached posters/backdrops served by the Go static handler
       '/healthz': proxyTarget,
       '/stream': proxyTarget,
       '/hls': proxyTarget,
