@@ -14,6 +14,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/library"
 	"github.com/Einlanzerous/argosy/internal/stevedore"
+	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/Einlanzerous/argosy/internal/version"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,7 +24,7 @@ import (
 // API surface is generated from the OpenAPI spec in a later Phase 0 ticket.
 // pool may be nil when no database is configured; scheduler may be nil to
 // disable the scan trigger/status endpoints.
-func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *stevedore.Scheduler, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper) (*http.Server, error) {
+func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *stevedore.Scheduler, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service) (*http.Server, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthHandler(pool))
@@ -33,7 +34,7 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 	if pool != nil {
 		authStore := auth.NewStore(pool)
 		auth.RegisterRoutes(mux, authStore)
-		library.RegisterRoutes(mux, pool, authStore, cfg.ArtworkDir, "/artwork", logger, tc, caps, encoder, sweeper)
+		library.RegisterRoutes(mux, pool, authStore, cfg.ArtworkDir, "/artwork", logger, tc, caps, encoder, sweeper, subs)
 
 		if scheduler != nil {
 			mw := auth.Middleware(authStore)

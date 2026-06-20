@@ -5,6 +5,7 @@ export type PlayState = components['schemas']['PlayState']
 export type ContinueItem = components['schemas']['ContinueItem']
 export type PlaybackInfo = components['schemas']['PlaybackInfo']
 export type TranscodeSession = components['schemas']['TranscodeSession']
+export type SubtitleTrack = components['schemas']['SubtitleTrack']
 
 // startTranscode begins (or joins) a server-side HLS transcode for an item that
 // can't be direct-played, returning the session + its playlist URL.
@@ -36,6 +37,21 @@ export async function getPlaybackInfo(itemId: string): Promise<PlaybackInfo | nu
 // the Authorization header.
 export function streamUrl(itemId: string): string {
   return `/api/v1/items/${itemId}/stream?token=${encodeURIComponent(getToken() ?? '')}`
+}
+
+// listSubtitles returns the available subtitle tracks for an item (embedded text
+// tracks + OpenSubtitles candidates when configured).
+export async function listSubtitles(itemId: string): Promise<SubtitleTrack[]> {
+  const { data } = await api.GET('/api/v1/items/{itemId}/subtitles', {
+    params: { path: { itemId } },
+  })
+  return data ?? []
+}
+
+// subtitleUrl authorizes via ?token= for the same reason as the stream endpoint;
+// we fetch it as text (with the bearer header) and serve a blob to the <track>.
+export function subtitleUrl(itemId: string, trackId: string): string {
+  return `/api/v1/items/${itemId}/subtitles/${encodeURIComponent(trackId)}?token=${encodeURIComponent(getToken() ?? '')}`
 }
 
 export async function getProgress(itemId: string): Promise<PlayState | null> {

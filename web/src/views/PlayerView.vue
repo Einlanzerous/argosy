@@ -8,12 +8,16 @@ import { formatClock, formatTitle } from '@/lib/format'
 import {
   getPlaybackInfo,
   getProgress,
+  listSubtitles,
   reportProgress,
   setWatched,
   startTranscode,
   stopTranscode,
   streamUrl,
+  subtitleUrl,
+  type SubtitleTrack,
 } from '@/lib/playback'
+import { parseVttCues, shiftVtt } from '@/lib/vtt'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -34,6 +38,19 @@ const error = ref('')
 const starting = ref(false)
 const resumeOpen = ref(false)
 const resumeFrom = ref(0)
+const subtitleTracks = ref<SubtitleTrack[]>([])
+const activeSubtitle = ref<string | null>(null)
+const subMenuOpen = ref(false)
+// The active subtitle is rendered by feeding cues straight into a single
+// TextTrack (reused across switches); we track the cues we added so we can
+// clear them when changing or turning off subtitles.
+let subTrack: TextTrack | null = null
+let subCues: VTTCue[] = []
+// Chrome auto-hide: controls fade out after a few idle seconds while playing,
+// and reappear on any pointer movement.
+const controlsVisible = ref(true)
+const isFullscreen = ref(false)
+let hideTimer: ReturnType<typeof setTimeout> | null = null
 
 // Playback mode + the media offset at which the current source begins. Direct
 // play seeks natively (offset stays 0); a transcode seek restarts ffmpeg at the
@@ -56,6 +73,14 @@ onMounted(async () => {
     getPlaybackInfo(itemId).catch(() => null),
   ])
   item.value = data ?? null
+
+  // Subtitle tracks load in the background; an OpenSubtitles search can take a
+  // moment and shouldn't hold up playback.
+  void listSubtitles(itemId)
+    .then((t) => {
+      subtitleTracks.value = t
+    })
+    .catch(() => {})
 
   const el = video.value
   if (!el) return
@@ -145,11 +170,13 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
       })
       hls.loadSource(sess.playlistUrl)
       hls.attachMedia(el)
+      reapplySubtitle()
     } else {
       // Native-HLS browsers (iOS Safari) can't set an Authorization header on a
       // bare <video> src; token-in-URL support is a follow-up.
       el.src = sess.playlistUrl
       void el.play().catch(() => {})
+      reapplySubtitle()
     }
   } finally {
     starting.value = false
@@ -177,6 +204,8 @@ async function waitForPlaylist(url: string): Promise<boolean> {
 onBeforeUnmount(() => {
   flush()
   if (heartbeat) clearInterval(heartbeat)
+  if (hideTimer) clearTimeout(hideTimer)
+  removeSubtitleEl()
   if (hls) hls.destroy()
   if (transcodeSessionId) void stopTranscode(transcodeSessionId).catch(() => {})
   const el = video.value
@@ -199,9 +228,13 @@ function bindVideo(el: HTMLVideoElement): void {
   })
   el.addEventListener('play', () => {
     playing.value = true
+    poke()
   })
   el.addEventListener('pause', () => {
     playing.value = false
+    // Paused → keep the controls up so they're there when you come back.
+    controlsVisible.value = true
+    if (hideTimer) clearTimeout(hideTimer)
     flush()
   })
   el.addEventListener('seeked', flush)
@@ -233,7 +266,18 @@ function flush(): void {
   }
 }
 
+// poke reveals the controls and schedules them to hide again after an idle
+// stretch — but only while actually playing and with no menu/prompt open.
+function poke(): void {
+  controlsVisible.value = true
+  if (hideTimer) clearTimeout(hideTimer)
+  hideTimer = setTimeout(() => {
+    if (playing.value && !subMenuOpen.value && !resumeOpen.value) controlsVisible.value = false
+  }, 4000)
+}
+
 function togglePlay(): void {
+  poke()
   const el = video.value
   if (!el) return
   if (el.paused) void el.play().catch(() => {})
@@ -271,10 +315,89 @@ async function seekTo(t: number): Promise<void> {
   }
 }
 
+// selectSubtitle switches the active track (null = off). Selection persists
+// across transcode restarts via reapplySubtitle.
+async function selectSubtitle(trackId: string | null): Promise<void> {
+  subMenuOpen.value = false
+  activeSubtitle.value = trackId
+  removeSubtitleEl()
+  if (trackId) await applySubtitle(trackId)
+}
+
+// applySubtitle fetches the WebVTT (authenticated), rewrites its cue timings for
+// the current transcode offset, and loads the cues into the TextTrack. Rebuilding
+// per offset keeps cues aligned whether we direct-play or seek a transcode.
+async function applySubtitle(trackId: string): Promise<void> {
+  const el = video.value
+  const track = subtitleTracks.value.find((t) => t.id === trackId)
+  if (!el || !track) return
+  try {
+    const token = getToken()
+    const r = await fetch(subtitleUrl(itemId, trackId), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!r.ok) return
+    let text = await r.text()
+    if (baseOffset.value > 0) text = shiftVtt(text, -baseOffset.value)
+    // A stale selection may have changed while we awaited the fetch.
+    if (activeSubtitle.value !== trackId) return
+    const cues = parseVttCues(text)
+    clearSubCues()
+    if (!subTrack) subTrack = el.addTextTrack('subtitles', 'Argosy', track.language || 'und')
+    for (const c of cues) {
+      const cue = new VTTCue(c.start, c.end, c.text)
+      // Position cues at 84% height (from the top) so they sit above the control
+      // bar and stay visible when controls are up; the default pins them to the
+      // very bottom, behind the controls.
+      cue.snapToLines = false
+      cue.line = 84
+      subTrack.addCue(cue)
+      subCues.push(cue)
+    }
+    subTrack.mode = 'showing'
+  } catch {
+    /* leave subtitles off on failure */
+  }
+}
+
+// reapplySubtitle rebuilds the active track against a new transcode offset.
+function reapplySubtitle(): void {
+  if (activeSubtitle.value) void applySubtitle(activeSubtitle.value)
+}
+
+function clearSubCues(): void {
+  if (subTrack) {
+    for (const c of subCues) {
+      try {
+        subTrack.removeCue(c)
+      } catch {
+        /* cue already gone */
+      }
+    }
+  }
+  subCues = []
+}
+
+function removeSubtitleEl(): void {
+  clearSubCues()
+  if (subTrack) subTrack.mode = 'disabled'
+}
+
+// fullscreen toggles: exit when already fullscreen, otherwise expand the player.
 function fullscreen(): void {
+  if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => {})
+    return
+  }
   const el = video.value?.closest('.player') as HTMLElement | null
   if (el?.requestFullscreen) void el.requestFullscreen().catch(() => {})
 }
+
+function onFullscreenChange(): void {
+  isFullscreen.value = !!document.fullscreenElement
+}
+onMounted(() => document.addEventListener('fullscreenchange', onFullscreenChange))
+onBeforeUnmount(() => document.removeEventListener('fullscreenchange', onFullscreenChange))
 
 function resume(): void {
   resumeOpen.value = false
@@ -293,12 +416,17 @@ function goBack(): void {
 
 function onKey(e: KeyboardEvent): void {
   if (resumeOpen.value) return
+  if (e.key === 'Escape' && subMenuOpen.value) {
+    subMenuOpen.value = false
+    return
+  }
   if (e.key === ' ') {
     e.preventDefault()
     togglePlay()
   } else if (e.key === 'ArrowLeft') skip(-10)
   else if (e.key === 'ArrowRight') skip(10)
   else if (e.key === 'f') fullscreen()
+  else if (e.key === 'c' && subtitleTracks.value.length) subMenuOpen.value = !subMenuOpen.value
   else if (e.key === 'Escape') goBack()
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -306,14 +434,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="player">
+  <div class="player" :class="{ idle: !controlsVisible }" @mousemove="poke">
     <div class="backdrop" :style="backdrop" />
     <div class="arg-hatch backdrop-hatch" />
     <video ref="video" class="video" playsinline @click="togglePlay" />
     <div class="vignette" />
 
     <!-- top chrome -->
-    <div class="top">
+    <div class="top" :class="{ hidden: !controlsVisible }">
       <div class="top-left">
         <button class="back" type="button" @click="goBack">‹</button>
         <div>
@@ -322,6 +450,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </div>
       <div class="top-right">
+        <button
+          class="icon-btn"
+          type="button"
+          :title="isFullscreen ? 'Exit fullscreen' : 'Fullscreen'"
+          @click="fullscreen"
+        >
+          {{ isFullscreen ? '▢' : '⛶' }}
+        </button>
         <span v-if="quality" class="quality">{{ quality }}</span>
         <div class="device-pill">
           <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
@@ -353,7 +489,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </div>
 
     <!-- bottom controls -->
-    <div class="bottom">
+    <div class="bottom" :class="{ hidden: !controlsVisible }">
       <div class="scrub">
         <span class="t">{{ formatClock(position) }}</span>
         <div class="bar" @click="seek">
@@ -366,16 +502,51 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <button class="ctrl" type="button" title="Back 10s" @click="skip(-10)">
           <span class="ic">↺</span><span class="lbl">10s</span>
         </button>
-        <button class="ctrl primary" type="button" :title="playing ? 'Pause' : 'Play'" @click="togglePlay">
+        <button
+          class="ctrl primary"
+          :class="{ glow: !playing }"
+          type="button"
+          :title="playing ? 'Pause' : 'Play'"
+          @click="togglePlay"
+        >
           <span class="ic">{{ playing ? '❚❚' : '▶' }}</span>
           <span class="lbl">{{ playing ? 'Pause' : 'Play' }}</span>
         </button>
         <button class="ctrl" type="button" title="Forward 10s" @click="skip(10)">
           <span class="ic">↻</span><span class="lbl">10s</span>
         </button>
-        <button class="ctrl" type="button" title="Fullscreen" @click="fullscreen">
-          <span class="ic">⛶</span><span class="lbl">Fullscreen</span>
-        </button>
+        <div v-if="subtitleTracks.length" class="cc-wrap">
+          <button
+            class="ctrl icon-only"
+            :class="{ on: activeSubtitle }"
+            type="button"
+            title="Subtitles"
+            @click="subMenuOpen = !subMenuOpen"
+          >
+            <span class="ic cc">CC</span>
+          </button>
+          <div v-if="subMenuOpen" class="cc-menu">
+            <div class="cc-head">Subtitles</div>
+            <button class="cc-item" :class="{ sel: !activeSubtitle }" type="button" @click="selectSubtitle(null)">
+              <span class="cc-label">Off</span>
+              <span v-if="!activeSubtitle" class="cc-check">✓</span>
+            </button>
+            <button
+              v-for="t in subtitleTracks"
+              :key="t.id"
+              class="cc-item"
+              :class="{ sel: activeSubtitle === t.id }"
+              type="button"
+              @click="selectSubtitle(t.id)"
+            >
+              <span class="cc-label">
+                {{ t.label }}
+                <span class="cc-src">{{ t.source === 'opensubtitles' ? 'OpenSubtitles' : 'Embedded' }}</span>
+              </span>
+              <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -447,6 +618,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   align-items: center;
   justify-content: space-between;
   background: linear-gradient(#0c0c0bcc, transparent);
+  transition: opacity 0.3s ease;
+}
+.top.hidden,
+.bottom.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.player.idle {
+  cursor: none;
 }
 .top-left {
   display: flex;
@@ -486,6 +666,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   color: var(--arg-accent);
   font: 800 12px var(--arg-display);
   letter-spacing: 0.04em;
+}
+.icon-btn {
+  width: 38px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.5);
+  color: var(--arg-cream);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  border-color: var(--arg-accent);
+  color: #fff;
 }
 .device-pill {
   display: flex;
@@ -603,6 +798,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   bottom: 0;
   padding: 30px 40px;
   background: linear-gradient(transparent, var(--arg-ink) 70%);
+  transition: opacity 0.3s ease;
 }
 .scrub {
   display: flex;
@@ -641,6 +837,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   box-shadow: 0 0 0 4px rgba(201, 154, 78, 0.3);
 }
 .buttons {
+  position: relative;
   margin-top: 20px;
   display: flex;
   align-items: center;
@@ -672,10 +869,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   font: 600 14px var(--arg-body);
 }
 .ctrl.primary {
+  /* Fixed width so swapping Play ⇄ Pause never resizes the button. */
+  min-width: 138px;
+  justify-content: center;
   padding: 13px 30px;
   background: var(--arg-accent);
   border-color: var(--arg-accent);
   color: var(--arg-bg);
+}
+.ctrl.icon-only {
+  padding: 11px 14px;
+  gap: 0;
+}
+/* Paused → the play button breathes a brass glow, echoing the resume card. */
+.ctrl.primary.glow {
+  animation: playGlow 2.6s ease-in-out infinite;
+}
+@keyframes playGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 16px 1px rgba(201, 154, 78, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 30px 5px rgba(201, 154, 78, 0.72);
+  }
 }
 .ctrl.primary .ic {
   color: var(--arg-bg);
@@ -684,6 +901,82 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .ctrl.primary:hover {
   background: var(--arg-accent-hi);
   color: var(--arg-bg);
+}
+.ctrl.on {
+  border-color: var(--arg-accent);
+}
+.ctrl.on .ic.cc {
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+}
+.ic.cc {
+  font: 800 11px var(--arg-display);
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1.5px solid var(--arg-accent);
+  color: var(--arg-accent);
+}
+.cc-wrap {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.cc-menu {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  min-width: 248px;
+  padding: 7px;
+  border-radius: var(--arg-r-lg);
+  /* Translucent so the media stays visible behind the picker. */
+  background: rgba(18, 17, 15, 0.78);
+  backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid var(--arg-line-2);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  animation: argFade 0.16s ease;
+}
+.cc-head {
+  padding: 6px 10px 8px;
+  font: 700 10px var(--arg-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--arg-dim);
+}
+.cc-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 11px;
+  border: none;
+  border-radius: var(--arg-r);
+  background: transparent;
+  color: var(--arg-cream);
+  font: 600 13.5px var(--arg-body);
+  text-align: left;
+  cursor: pointer;
+}
+.cc-item:hover {
+  background: rgba(201, 154, 78, 0.12);
+}
+.cc-item.sel {
+  background: var(--arg-accent-bg);
+}
+.cc-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cc-src {
+  font: 500 10.5px var(--arg-body);
+  color: var(--arg-dim);
+}
+.cc-check {
+  color: var(--arg-accent);
+  font-size: 13px;
 }
 .resume-scrim {
   position: absolute;
@@ -787,5 +1080,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   text-align: center;
   font: 500 11px var(--arg-body);
   color: var(--arg-faint-2);
+}
+</style>
+
+<!-- ::cue lives on the native text-track overlay, which scoped styles can't
+     reach — keep this block unscoped (manually namespaced to .player). -->
+<style>
+.player video::cue {
+  font-size: 2.9vh; /* ~30% smaller than the browser default */
+  line-height: 1.32;
+  background: rgba(8, 8, 7, 0.62);
 }
 </style>

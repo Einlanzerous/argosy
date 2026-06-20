@@ -252,6 +252,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/items/{itemId}/subtitles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Available subtitle tracks for an item
+         * @description Lists subtitle tracks resolved through the priority chain: embedded text
+         *     tracks (from the container) plus OpenSubtitles candidates when configured.
+         *     Each track's `id` is fetched as WebVTT from the sibling endpoint.
+         */
+        get: operations["listSubtitles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/items/{itemId}/subtitles/{trackId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A subtitle track as WebVTT
+         * @description Produces (and disk-caches) the track as WebVTT. Auth is the per-device
+         *     token via the bearer header OR a `token` query param, since an HTML5
+         *     `<track>` element cannot set Authorization.
+         */
+        get: operations["getSubtitle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{itemId}/playback": {
         parameters: {
             query?: never;
@@ -492,6 +536,18 @@ export interface components {
             budgetBytes: number;
             sessionDirs: number;
             liveDirs: number;
+        };
+        SubtitleTrack: {
+            /** @description Track handle for the WebVTT endpoint (e.g. "embedded:3", "os:12345"). */
+            id: string;
+            /** @enum {string} */
+            source: "embedded" | "opensubtitles";
+            /** @description BCP-47 language code (e.g. "en"), or "und" when unknown. */
+            language: string;
+            /** @description Human-readable label for the subtitle picker. */
+            label: string;
+            forced: boolean;
+            default: boolean;
         };
         TranscodeCapabilities: {
             /** @description Encoder backends usable on this host (always includes "software"). */
@@ -1106,6 +1162,66 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listSubtitles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubtitleTrack"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getSubtitle: {
+        parameters: {
+            query?: {
+                /** @description Per-device token (alternative to the bearer header). */
+                token?: string;
+            };
+            header?: never;
+            path: {
+                itemId: string;
+                /** @description Track id from the list endpoint (e.g. `embedded:3`, `os:12345`). */
+                trackId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebVTT subtitle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/vtt": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Subtitle could not be produced (e.g. external fetch failed) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getPlaybackInfo: {
