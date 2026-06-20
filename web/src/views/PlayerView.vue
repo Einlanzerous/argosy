@@ -49,6 +49,7 @@ let subCues: VTTCue[] = []
 // Chrome auto-hide: controls fade out after a few idle seconds while playing,
 // and reappear on any pointer movement.
 const controlsVisible = ref(true)
+const isFullscreen = ref(false)
 let hideTimer: ReturnType<typeof setTimeout> | null = null
 
 // Playback mode + the media offset at which the current source begins. Direct
@@ -345,6 +346,11 @@ async function applySubtitle(trackId: string): Promise<void> {
     if (!subTrack) subTrack = el.addTextTrack('subtitles', 'Argosy', track.language || 'und')
     for (const c of cues) {
       const cue = new VTTCue(c.start, c.end, c.text)
+      // Position cues at 84% height (from the top) so they sit above the control
+      // bar and stay visible when controls are up; the default pins them to the
+      // very bottom, behind the controls.
+      cue.snapToLines = false
+      cue.line = 84
       subTrack.addCue(cue)
       subCues.push(cue)
     }
@@ -377,10 +383,21 @@ function removeSubtitleEl(): void {
   if (subTrack) subTrack.mode = 'disabled'
 }
 
+// fullscreen toggles: exit when already fullscreen, otherwise expand the player.
 function fullscreen(): void {
+  if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => {})
+    return
+  }
   const el = video.value?.closest('.player') as HTMLElement | null
   if (el?.requestFullscreen) void el.requestFullscreen().catch(() => {})
 }
+
+function onFullscreenChange(): void {
+  isFullscreen.value = !!document.fullscreenElement
+}
+onMounted(() => document.addEventListener('fullscreenchange', onFullscreenChange))
+onBeforeUnmount(() => document.removeEventListener('fullscreenchange', onFullscreenChange))
 
 function resume(): void {
   resumeOpen.value = false
@@ -433,7 +450,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </div>
       <div class="top-right">
-        <button class="icon-btn" type="button" title="Fullscreen" @click="fullscreen">⛶</button>
+        <button
+          class="icon-btn"
+          type="button"
+          :title="isFullscreen ? 'Exit fullscreen' : 'Fullscreen'"
+          @click="fullscreen"
+        >
+          {{ isFullscreen ? '▢' : '⛶' }}
+        </button>
         <span v-if="quality" class="quality">{{ quality }}</span>
         <div class="device-pill">
           <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
@@ -478,7 +502,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <button class="ctrl" type="button" title="Back 10s" @click="skip(-10)">
           <span class="ic">↺</span><span class="lbl">10s</span>
         </button>
-        <button class="ctrl primary" type="button" :title="playing ? 'Pause' : 'Play'" @click="togglePlay">
+        <button
+          class="ctrl primary"
+          :class="{ glow: !playing }"
+          type="button"
+          :title="playing ? 'Pause' : 'Play'"
+          @click="togglePlay"
+        >
           <span class="ic">{{ playing ? '❚❚' : '▶' }}</span>
           <span class="lbl">{{ playing ? 'Pause' : 'Play' }}</span>
         </button>
@@ -851,6 +881,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   padding: 11px 14px;
   gap: 0;
 }
+/* Paused → the play button breathes a brass glow, echoing the resume card. */
+.ctrl.primary.glow {
+  animation: playGlow 2.6s ease-in-out infinite;
+}
+@keyframes playGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 16px 1px rgba(201, 154, 78, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 30px 5px rgba(201, 154, 78, 0.72);
+  }
+}
 .ctrl.primary .ic {
   color: var(--arg-bg);
   font-size: 17px;
@@ -1037,5 +1080,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   text-align: center;
   font: 500 11px var(--arg-body);
   color: var(--arg-faint-2);
+}
+</style>
+
+<!-- ::cue lives on the native text-track overlay, which scoped styles can't
+     reach — keep this block unscoped (manually namespaced to .player). -->
+<style>
+.player video::cue {
+  font-size: 2.9vh; /* ~30% smaller than the browser default */
+  line-height: 1.32;
+  background: rgba(8, 8, 7, 0.62);
 }
 </style>
