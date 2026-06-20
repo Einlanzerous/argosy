@@ -206,7 +206,7 @@ watch(
   border-radius: var(--arg-r-xl);
   overflow: hidden;
   border: 1px solid var(--arg-line);
-  min-height: 330px;
+  min-height: 360px;
 }
 .hatch {
   position: absolute;
@@ -220,14 +220,16 @@ watch(
 /* Quadrant 1: top-left of the hero, aligned with the body's 40px inset. */
 .hero-back {
   position: absolute;
-  top: 60px;
+  top: 50px;
   left: 40px;
   z-index: 3;
 }
 .body {
   position: relative;
-  padding: 44px 40px 34px;
-  min-height: 330px;
+  /* Extra top padding reserves room for the back button (top:50 + 40h) so the
+     title always clears it even when the overview makes the content tall. */
+  padding: 104px 40px 34px;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
