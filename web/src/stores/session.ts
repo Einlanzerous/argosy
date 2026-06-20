@@ -22,13 +22,30 @@ export const useSessionStore = defineStore('session', () => {
 
   const isAuthenticated = computed(() => session.value !== null)
 
-  // Validate any persisted token against the server on first load.
+  // Validate any persisted token against the server on first load. Only a real
+  // 401 invalidates the token — a transient failure (server restart/deploy, a
+  // proxy 5xx, a network blip) must NOT log the user out, so we keep the token
+  // and retry a few times to ride out a brief outage.
   async function restore(): Promise<void> {
     if (ready.value) return
     if (getToken()) {
-      const { data } = await api.GET('/api/v1/auth/me')
-      if (data) session.value = data
-      else setToken(null)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const { data, response } = await api.GET('/api/v1/auth/me')
+          if (data) {
+            session.value = data
+            break
+          }
+          if (response?.status === 401) {
+            setToken(null) // token genuinely revoked/expired
+            break
+          }
+          // Any other non-200 (5xx/proxy error) is transient — fall through to retry.
+        } catch {
+          // Network error reaching the server — keep the token and retry.
+        }
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
+      }
     }
     ready.value = true
   }
