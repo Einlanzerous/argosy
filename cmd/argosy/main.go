@@ -20,6 +20,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/metadata"
 	"github.com/Einlanzerous/argosy/internal/server"
 	"github.com/Einlanzerous/argosy/internal/stevedore"
+	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/Einlanzerous/argosy/internal/version"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -119,7 +120,19 @@ func main() {
 		sweeper = ballast.NewSweeper(cfg.TranscodeDir, budget, cfg.TranscodeIdleTimeout, tcManager, logger)
 	}
 
-	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper)
+	// Subtitle pipeline: embedded text tracks + OpenSubtitles, served as WebVTT.
+	var subs *subtitle.Service
+	if pool != nil {
+		osClient := subtitle.NewOpenSubtitles(cfg.OpenSubtitlesAPIKey, cfg.OpenSubtitlesUsername, cfg.OpenSubtitlesPassword)
+		if osClient.Configured() {
+			logger.Info("subtitles: OpenSubtitles enabled", "langs", cfg.SubtitleLanguages)
+		} else if cfg.OpenSubtitlesAPIKey != "" {
+			logger.Warn("subtitles: OpenSubtitles disabled — needs OPEN_SUBTITLES_USERNAME + OPEN_SUBTITLES_PASSWORD (download is quota'd per user)")
+		}
+		subs = subtitle.NewService(osClient, cfg.SubtitleDir, cfg.SubtitleLanguages, logger)
+	}
+
+	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper, subs)
 	if err != nil {
 		logger.Error("failed to build server", "err", err)
 		os.Exit(1)

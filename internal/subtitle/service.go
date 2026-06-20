@@ -1,0 +1,252 @@
+package subtitle
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+// maxExternalTracks caps how many OpenSubtitles candidates are surfaced per item
+// — enough to offer alternates when the top match is mis-synced, without flooding
+// the picker.
+const maxExternalTracks = 5
+
+// trackIDRe is the servable-track allowlist; it doubles as the cache-filename
+// guard (the ":" becomes "-").
+var trackIDRe = regexp.MustCompile(`^(embedded|os):\d+$`)
+
+// textSubCodecs are the embedded subtitle codecs we can convert to WebVTT.
+// Image-based codecs (hdmv_pgs_subtitle, dvd_subtitle, dvb_subtitle) need OCR or
+// burn-in (ARGY-59) and are excluded.
+var textSubCodecs = map[string]bool{
+	"subrip": true, "srt": true, "ass": true, "ssa": true,
+	"mov_text": true, "webvtt": true, "text": true,
+}
+
+// Target is everything needed to resolve subtitles for one media item.
+type Target struct {
+	ItemID       string
+	Path         string          // absolute media path
+	Technical    json.RawMessage // stored ffprobe JSON
+	TMDBID       int64           // movie TMDB id (0 if none / is episode)
+	ParentTMDBID int64           // series TMDB id (episodes)
+	Season       int
+	Episode      int
+}
+
+// Track is one selectable subtitle, embedded or external.
+type Track struct {
+	ID       string `json:"id"`       // "embedded:<idx>" | "os:<fileID>"
+	Source   string `json:"source"`   // "embedded" | "opensubtitles"
+	Language string `json:"language"` // BCP-47 code (e.g. "en")
+	Label    string `json:"label"`    // human label for the picker
+	Forced   bool   `json:"forced"`
+	Default  bool   `json:"default"`
+}
+
+// Service resolves and produces WebVTT subtitle tracks. os may be nil when
+// OpenSubtitles isn't configured; embedded extraction still works.
+type Service struct {
+	os       *OpenSubtitles
+	cacheDir string
+	langs    []string
+	logger   *slog.Logger
+}
+
+// NewService builds a subtitle service. os may be nil; langs defaults to ["en"].
+func NewService(os *OpenSubtitles, cacheDir string, langs []string, logger *slog.Logger) *Service {
+	if len(langs) == 0 {
+		langs = []string{"en"}
+	}
+	return &Service{os: os, cacheDir: cacheDir, langs: langs, logger: logger}
+}
+
+// List returns the available subtitle tracks for an item: embedded text tracks
+// (from ffprobe) plus OpenSubtitles candidates when configured. A failed
+// external search degrades to embedded-only rather than erroring the whole list.
+func (s *Service) List(ctx context.Context, t Target) []Track {
+	tracks := embeddedTracks(t.Technical)
+	if s.os == nil || !s.os.Configured() {
+		return tracks
+	}
+
+	q := Query{
+		TMDBID:       t.TMDBID,
+		ParentTMDBID: t.ParentTMDBID,
+		Season:       t.Season,
+		Episode:      t.Episode,
+		Languages:    s.langs,
+	}
+	if h, err := MovieHash(t.Path); err != nil {
+		s.logger.Warn("subtitle: moviehash failed", "item", t.ItemID, "err", err)
+	} else {
+		q.MovieHash = h
+	}
+
+	results, err := s.os.Search(ctx, q)
+	if err != nil {
+		s.logger.Warn("subtitle: opensubtitles search failed", "item", t.ItemID, "err", err)
+		return tracks
+	}
+	for i, r := range results {
+		if i >= maxExternalTracks {
+			break
+		}
+		tracks = append(tracks, Track{
+			ID:       "os:" + strconv.FormatInt(r.FileID, 10),
+			Source:   "opensubtitles",
+			Language: r.Language,
+			Label:    externalLabel(r),
+		})
+	}
+	return tracks
+}
+
+// VTT produces (or returns the cached) WebVTT file for a track and returns its
+// path on disk. Production is atomic (temp file + rename), so concurrent callers
+// are safe.
+func (s *Service) VTT(ctx context.Context, t Target, trackID string) (string, error) {
+	if !trackIDRe.MatchString(trackID) {
+		return "", fmt.Errorf("invalid track id %q", trackID)
+	}
+	dir := filepath.Join(s.cacheDir, t.ItemID)
+	dest := filepath.Join(dir, strings.ReplaceAll(trackID, ":", "-")+".vtt")
+	if _, err := os.Stat(dest); err == nil {
+		return dest, nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+
+	tmp, err := os.CreateTemp(dir, ".vtt-*")
+	if err != nil {
+		return "", err
+	}
+	tmpName := tmp.Name()
+	_ = tmp.Close()
+	defer func() { _ = os.Remove(tmpName) }() // no-op once renamed
+
+	kind, arg, _ := strings.Cut(trackID, ":")
+	switch kind {
+	case "embedded":
+		if err := s.extractEmbedded(ctx, t.Path, arg, tmpName); err != nil {
+			return "", err
+		}
+	case "os":
+		if err := s.fetchExternal(ctx, arg, tmpName); err != nil {
+			return "", err
+		}
+	}
+	if err := os.Rename(tmpName, dest); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// extractEmbedded pulls one embedded subtitle stream out of the source and lets
+// ffmpeg convert it to WebVTT.
+func (s *Service) extractEmbedded(ctx context.Context, src, streamIdx, dest string) error {
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-loglevel", "error",
+		"-i", src, "-map", "0:"+streamIdx, "-c:s", "webvtt", "-f", "webvtt", dest)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("extract subtitle stream %s: %w: %s", streamIdx, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// fetchExternal downloads an OpenSubtitles file and converts it to WebVTT.
+func (s *Service) fetchExternal(ctx context.Context, fileIDStr, dest string) error {
+	if s.os == nil || !s.os.Configured() {
+		return fmt.Errorf("opensubtitles not configured")
+	}
+	fileID, err := strconv.ParseInt(fileIDStr, 10, 64)
+	if err != nil {
+		return err
+	}
+	srt, err := s.os.Download(ctx, fileID)
+	if err != nil {
+		return err
+	}
+	f, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	if err := SRTToVTT(strings.NewReader(string(srt)), f); err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+// embeddedTracks enumerates text-based subtitle streams from the stored ffprobe
+// JSON. Image-based streams are skipped (left to burn-in, ARGY-59).
+func embeddedTracks(technical json.RawMessage) []Track {
+	var doc struct {
+		Streams []struct {
+			Index     int    `json:"index"`
+			CodecType string `json:"codec_type"`
+			CodecName string `json:"codec_name"`
+			Tags      struct {
+				Language string `json:"language"`
+				Title    string `json:"title"`
+			} `json:"tags"`
+			Disposition struct {
+				Default int `json:"default"`
+				Forced  int `json:"forced"`
+			} `json:"disposition"`
+		} `json:"streams"`
+	}
+	tracks := []Track{}
+	if len(technical) == 0 {
+		return tracks
+	}
+	if err := json.Unmarshal(technical, &doc); err != nil {
+		return tracks
+	}
+	for _, st := range doc.Streams {
+		if st.CodecType != "subtitle" || !textSubCodecs[st.CodecName] {
+			continue
+		}
+		lang := langCode(st.Tags.Language)
+		tracks = append(tracks, Track{
+			ID:       "embedded:" + strconv.Itoa(st.Index),
+			Source:   "embedded",
+			Language: lang,
+			Label:    embeddedLabel(st.Tags.Title, lang, st.Disposition.Forced == 1),
+			Forced:   st.Disposition.Forced == 1,
+			Default:  st.Disposition.Default == 1,
+		})
+	}
+	return tracks
+}
+
+func embeddedLabel(title, lang string, forced bool) string {
+	if title != "" {
+		return title
+	}
+	label := langName(lang)
+	if forced {
+		label += " (Forced)"
+	}
+	return label
+}
+
+func externalLabel(r Subtitle) string {
+	label := langName(r.Language)
+	if r.MovieHashMatch {
+		label += " · exact match"
+	} else if r.Release != "" {
+		label += " · " + r.Release
+	}
+	if r.HearingImpaired {
+		label += " (SDH)"
+	}
+	return label
+}

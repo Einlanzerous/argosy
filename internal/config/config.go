@@ -51,6 +51,18 @@ type Config struct {
 	// TranscodeCacheBudget is the high-water mark (bytes) for the transcode
 	// cache dir; Ballast evicts idle sessions oldest-first when exceeded.
 	TranscodeCacheBudget int64
+	// SubtitleDir is where converted WebVTT subtitle files are cached. Defaults
+	// to <os.TempDir>/argosy-subtitles.
+	SubtitleDir string
+	// OpenSubtitles credentials. External subtitle fetch is enabled only when
+	// all three are set: search alone needs just the key, but download is quota'd
+	// per logged-in user, so username+password are required to be useful.
+	OpenSubtitlesAPIKey   string
+	OpenSubtitlesUsername string
+	OpenSubtitlesPassword string
+	// SubtitleLanguages is the ISO-639 language set to fetch external subtitles
+	// for (comma-separated, e.g. "en,es"). Empty defaults to English.
+	SubtitleLanguages []string
 }
 
 // Load reads configuration from the environment, applying sensible defaults.
@@ -72,6 +84,12 @@ func Load() Config {
 		EncoderPreference:    parseList(os.Getenv("ARGOSY_ENCODER_PREFERENCE")),
 		ForceSoftware:        os.Getenv("ARGOSY_FORCE_SOFTWARE") == "1" || os.Getenv("ARGOSY_FORCE_SOFTWARE") == "true",
 		TranscodeCacheBudget: parseSize(os.Getenv("ARGOSY_TRANSCODE_CACHE_BUDGET")),
+
+		SubtitleDir:           getenv("ARGOSY_SUBTITLE_DIR", filepath.Join(os.TempDir(), "argosy-subtitles")),
+		OpenSubtitlesAPIKey:   os.Getenv("OPEN_SUBTITLES_API_KEY"),
+		OpenSubtitlesUsername: os.Getenv("OPEN_SUBTITLES_USERNAME"),
+		OpenSubtitlesPassword: os.Getenv("OPEN_SUBTITLES_PASSWORD"),
+		SubtitleLanguages:     parseList(os.Getenv("ARGOSY_SUBTITLE_LANGUAGES")),
 	}
 }
 

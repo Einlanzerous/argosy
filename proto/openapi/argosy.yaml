@@ -296,6 +296,58 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/items/{itemId}/subtitles:
+    get:
+      tags: [library]
+      operationId: listSubtitles
+      summary: Available subtitle tracks for an item
+      description: |
+        Lists subtitle tracks resolved through the priority chain: embedded text
+        tracks (from the container) plus OpenSubtitles candidates when configured.
+        Each track's `id` is fetched as WebVTT from the sibling endpoint.
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubtitleTrack"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/items/{itemId}/subtitles/{trackId}:
+    get:
+      tags: [library]
+      operationId: getSubtitle
+      summary: A subtitle track as WebVTT
+      description: |
+        Produces (and disk-caches) the track as WebVTT. Auth is the per-device
+        token via the bearer header OR a `token` query param, since an HTML5
+        `<track>` element cannot set Authorization.
+      security: []
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: trackId, in: path, required: true, description: "Track id from the list endpoint (e.g. `embedded:3`, `os:12345`).", schema: { type: string } }
+        - { name: token, in: query, description: "Per-device token (alternative to the bearer header).", schema: { type: string } }
+      responses:
+        "200":
+          description: WebVTT subtitle
+          content:
+            text/vtt:
+              schema: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          description: Subtitle could not be produced (e.g. external fetch failed)
+
   /api/v1/items/{itemId}/playback:
     get:
       tags: [library]
@@ -625,6 +677,27 @@ components:
         budgetBytes: { type: integer, format: int64 }
         sessionDirs: { type: integer }
         liveDirs: { type: integer }
+
+    SubtitleTrack:
+      type: object
+      required: [id, source, language, label, forced, default]
+      properties:
+        id:
+          type: string
+          description: Track handle for the WebVTT endpoint (e.g. "embedded:3", "os:12345").
+        source:
+          type: string
+          enum: [embedded, opensubtitles]
+        language:
+          type: string
+          description: BCP-47 language code (e.g. "en"), or "und" when unknown.
+        label:
+          type: string
+          description: Human-readable label for the subtitle picker.
+        forced:
+          type: boolean
+        default:
+          type: boolean
 
     TranscodeCapabilities:
       type: object

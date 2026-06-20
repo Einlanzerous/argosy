@@ -8,6 +8,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/ballast"
+	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -19,14 +20,15 @@ type handlers struct {
 	caps    transcode.Capabilities
 	encoder string
 	cache   *ballast.Sweeper
+	subs    *subtitle.Service
 }
 
 // RegisterRoutes wires the auth-scoped browse endpoints and the public artwork
 // file server onto mux. artworkDir == "" disables artwork serving. tc may be nil
 // to disable the transcode (The Helm) endpoints; sweeper may be nil to disable
 // the cache-stats endpoint.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper) {
-	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper}
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service) {
+	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs}
 	mw := auth.Middleware(authStore)
 
 	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))
@@ -42,6 +44,14 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	// Streaming authenticates inline (token may be a ?token= query param) since
 	// an HTML5 <video> element can't set the Authorization header.
 	mux.Handle("GET /api/v1/items/{itemId}/stream", streamHandler(h.store, authStore, logger))
+
+	// Subtitles (ARGY-31): list tracks behind the bearer middleware; serve the
+	// WebVTT file with inline auth (a <track> element can't set headers, so the
+	// per-device token may arrive as ?token=).
+	if subs != nil {
+		mux.Handle("GET /api/v1/items/{itemId}/subtitles", mw(http.HandlerFunc(h.listSubtitles)))
+		mux.Handle("GET /api/v1/items/{itemId}/subtitles/{trackId}", subtitleFileHandler(h.store, subs, authStore, logger))
+	}
 
 	// The Helm: transcode session orchestration + HLS delivery (ARGY-27).
 	if tc != nil {
