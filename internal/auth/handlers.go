@@ -21,6 +21,7 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.HandleFunc("POST /api/v1/auth/devices", handleRegisterDevice(store))
 	mux.Handle("GET /api/v1/auth/devices", requireAuth(store, handleListDevices(store)))
 	mux.Handle("DELETE /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRevokeDevice(store)))
+	mux.Handle("PATCH /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRenameDevice(store)))
 	mux.Handle("GET /api/v1/auth/me", requireAuth(store, handleMe()))
 }
 
@@ -57,7 +58,7 @@ func handleRegisterDevice(store *Store) http.HandlerFunc {
 func handleListDevices(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := SessionFromContext(r.Context())
-		devices, err := store.ListDevices(r.Context(), sess.AccountId)
+		devices, err := store.ListDevices(r.Context(), sess)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
@@ -82,6 +83,32 @@ func handleRevokeDevice(store *Store) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func handleRenameDevice(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		id, err := uuid.Parse(r.PathValue("deviceId"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid device id")
+			return
+		}
+		var req api.DeviceRenameRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		name := strings.TrimSpace(req.Name)
+		if name == "" {
+			writeError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+		dev, err := store.RenameDevice(r.Context(), sess, id, name)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, dev)
 	}
 }
 

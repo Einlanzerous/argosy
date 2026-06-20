@@ -125,7 +125,11 @@ export interface paths {
         delete: operations["revokeDevice"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename a device in the Fleet
+         * @description Give a device a friendly label. Admins may rename any device in the account; a viewer may rename only their own.
+         */
+        patch: operations["renameDevice"];
         trace?: never;
     };
     "/api/v1/auth/me": {
@@ -617,18 +621,27 @@ export interface components {
              */
             userId: string;
             deviceName: string;
+            /** @description Client platform/type label (e.g. "web", "tv", "phone"); shown in the Fleet. */
+            platform?: string;
         };
         Device: {
             /** Format: uuid */
             id: string;
             name: string;
+            /** @description Client platform/type label captured at registration. */
+            platform?: string | null;
             /** Format: uuid */
             userId: string | null;
+            /** @description Display name of the profile this device is bound to (the Fleet shows whose device it is). */
+            userName?: string | null;
             /** Format: date-time */
             lastSeenAt?: string | null;
             revoked: boolean;
             /** Format: date-time */
             createdAt: string;
+        };
+        DeviceRenameRequest: {
+            name: string;
         };
         DeviceRegistrationResponse: {
             device: components["schemas"]["Device"];
@@ -998,6 +1011,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    renameDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description Renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

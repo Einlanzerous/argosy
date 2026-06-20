@@ -98,11 +98,15 @@ func (s *Store) RegisterDevice(ctx context.Context, req api.DeviceRegistrationRe
 	if err != nil {
 		return api.DeviceRegistrationResponse{}, err
 	}
+	var platform *string
+	if req.Platform != nil && *req.Platform != "" {
+		platform = req.Platform
+	}
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO devices (account_id, user_id, name, token_hash)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id::text, name, user_id::text, last_seen_at, revoked_at, created_at`,
-		accID, userID, req.DeviceName, hashToken(token))
+		`INSERT INTO devices (account_id, user_id, name, token_hash, platform)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id::text, name, platform, user_id::text, last_seen_at, revoked_at, created_at`,
+		accID, userID, req.DeviceName, hashToken(token), platform)
 	dev, err := scanDevice(row)
 	if err != nil {
 		return api.DeviceRegistrationResponse{}, err
@@ -134,20 +138,39 @@ func (s *Store) AuthenticateDevice(ctx context.Context, token string) (api.Sessi
 	return sess, nil
 }
 
-// ListDevices returns all devices in the account.
-func (s *Store) ListDevices(ctx context.Context, accountID openapi_types.UUID) ([]api.Device, error) {
+// ListDevices returns the account's Fleet. Admins see every device in the
+// account; a viewer sees only their own. Each device carries the owning
+// profile's display name so the Fleet can show whose device it is.
+func (s *Store) ListDevices(ctx context.Context, sess api.Session) ([]api.Device, error) {
+	where := `WHERE d.account_id = $1`
+	args := []any{sess.AccountId.String()}
+	if sess.Role != api.Admin {
+		where += ` AND d.user_id = $2`
+		args = append(args, sess.UserId.String())
+	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT id::text, name, user_id::text, last_seen_at, revoked_at, created_at
-		 FROM devices WHERE account_id = $1 ORDER BY created_at`, accountID.String())
+		`SELECT d.id::text, d.name, d.platform, d.user_id::text, u.name, d.last_seen_at, d.revoked_at, d.created_at
+		 FROM devices d LEFT JOIN users u ON u.id = d.user_id `+where+` ORDER BY d.created_at`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []api.Device
+	out := []api.Device{}
 	for rows.Next() {
-		dev, err := scanDevice(rows)
-		if err != nil {
+		var id, name string
+		var platform, userID, userName *string
+		var lastSeen, revokedAt *time.Time
+		var createdAt time.Time
+		if err := rows.Scan(&id, &name, &platform, &userID, &userName, &lastSeen, &revokedAt, &createdAt); err != nil {
 			return nil, err
+		}
+		dev := api.Device{
+			Id: parseUUID(id), Name: name, Platform: platform, UserName: userName,
+			LastSeenAt: lastSeen, Revoked: revokedAt != nil, CreatedAt: createdAt,
+		}
+		if userID != nil {
+			u := parseUUID(*userID)
+			dev.UserId = &u
 		}
 		out = append(out, dev)
 	}
@@ -176,6 +199,33 @@ func (s *Store) RevokeDevice(ctx context.Context, sess api.Session, deviceID ope
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE devices SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, deviceID.String())
 	return err
+}
+
+// RenameDevice gives a device a friendly label, returning the updated device.
+// Admins may rename any device in their account; viewers only their own.
+func (s *Store) RenameDevice(ctx context.Context, sess api.Session, deviceID openapi_types.UUID, name string) (api.Device, error) {
+	var devAccount string
+	var devUser *string
+	err := s.pool.QueryRow(ctx,
+		`SELECT account_id::text, user_id::text FROM devices WHERE id = $1`, deviceID.String()).
+		Scan(&devAccount, &devUser)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.Device{}, ErrNotFound
+	}
+	if err != nil {
+		return api.Device{}, err
+	}
+	if devAccount != sess.AccountId.String() {
+		return api.Device{}, ErrNotFound
+	}
+	if sess.Role != api.Admin && (devUser == nil || *devUser != sess.UserId.String()) {
+		return api.Device{}, ErrForbidden
+	}
+	row := s.pool.QueryRow(ctx,
+		`UPDATE devices SET name = $1 WHERE id = $2
+		 RETURNING id::text, name, platform, user_id::text, last_seen_at, revoked_at, created_at`,
+		name, deviceID.String())
+	return scanDevice(row)
 }
 
 func (s *Store) verify(ctx context.Context, username, password string) (id, name string, err error) {
@@ -220,15 +270,16 @@ type row interface {
 
 func scanDevice(r row) (api.Device, error) {
 	var id, name string
-	var userID *string
+	var platform, userID *string
 	var lastSeen, revokedAt *time.Time
 	var createdAt time.Time
-	if err := r.Scan(&id, &name, &userID, &lastSeen, &revokedAt, &createdAt); err != nil {
+	if err := r.Scan(&id, &name, &platform, &userID, &lastSeen, &revokedAt, &createdAt); err != nil {
 		return api.Device{}, err
 	}
 	dev := api.Device{
 		Id:         parseUUID(id),
 		Name:       name,
+		Platform:   platform,
 		LastSeenAt: lastSeen,
 		Revoked:    revokedAt != nil,
 		CreatedAt:  createdAt,

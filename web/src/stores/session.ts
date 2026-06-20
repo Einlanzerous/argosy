@@ -69,7 +69,7 @@ export const useSessionStore = defineStore('session', () => {
     name: string,
   ): Promise<void> {
     const { data, error } = await api.POST('/api/v1/auth/devices', {
-      body: { username, password, userId, deviceName: name },
+      body: { username, password, userId, deviceName: name, platform: 'web' },
     })
     if (error || !data) throw new Error('Could not pair this device.')
     setToken(data.token)

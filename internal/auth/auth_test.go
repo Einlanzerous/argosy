@@ -60,11 +60,13 @@ func TestAuthFlow(t *testing.T) {
 	}
 	adminProfile := login.Profiles[0].Id
 
+	platform := "tv"
 	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
 		Username:   username,
 		Password:   password,
 		UserId:     adminProfile,
 		DeviceName: "Test TV",
+		Platform:   &platform,
 	})
 	if err != nil {
 		t.Fatalf("register device: %v", err)
@@ -88,12 +90,26 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatalf("bad token: got %v, want ErrInvalidCredentials", err)
 	}
 
-	devices, err := store.ListDevices(ctx, login.Account.Id)
+	devices, err := store.ListDevices(ctx, sess)
 	if err != nil {
 		t.Fatalf("list devices: %v", err)
 	}
 	if len(devices) != 1 || devices[0].Revoked {
 		t.Fatalf("expected one active device, got %+v", devices)
+	}
+	if devices[0].Platform == nil || *devices[0].Platform != "tv" {
+		t.Errorf("device platform = %v, want tv", devices[0].Platform)
+	}
+	if devices[0].UserName == nil || *devices[0].UserName == "" {
+		t.Errorf("device should carry its owner profile name, got %v", devices[0].UserName)
+	}
+
+	renamed, err := store.RenameDevice(ctx, sess, reg.Device.Id, "Living Room TV")
+	if err != nil {
+		t.Fatalf("rename device: %v", err)
+	}
+	if renamed.Name != "Living Room TV" {
+		t.Errorf("renamed device name = %q, want Living Room TV", renamed.Name)
 	}
 
 	if err := store.RevokeDevice(ctx, sess, reg.Device.Id); err != nil {
