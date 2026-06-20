@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -49,6 +50,61 @@ func decide(ext, videoCodec, audioCodec string) (method, reason string) {
 	default:
 		return methodRemux, "the " + strings.TrimPrefix(ext, ".") + " container will be remuxed"
 	}
+}
+
+// hevcNames are the ffprobe/codec spellings for H.265.
+var hevcNames = map[string]bool{"hevc": true, "h265": true, "hvc1": true, "hev1": true}
+
+func isHEVC(codec string) bool { return hevcNames[strings.ToLower(codec)] }
+
+// transcodePlan is the resolved recipe for an HLS session: copy vs re-encode the
+// video, which output codec, and whether the audio needs re-encoding.
+type transcodePlan struct {
+	method         string // methodRemux (copy video) or methodTranscode (re-encode)
+	videoCodec     string // transcode.CodecH264 / CodecHEVC — output or copied codec
+	transcodeAudio bool   // remux path: re-encode audio to AAC instead of copying
+	reason         string
+}
+
+// planPlayback picks the cheapest HLS recipe given the source codecs, the source
+// height, and whether the client can play HEVC. The video stream is copied
+// whenever the client can play it as-is — H.264 always, HEVC when the client
+// negotiated it (clientHEVC) — which preserves native resolution/HDR (true 4K)
+// and avoids a video re-encode; only the audio is transcoded if it isn't
+// browser-friendly. Re-encodes target HEVC for >1080p capable clients (H.264's
+// 4K bitrate is impractical) and H.264 otherwise.
+func planPlayback(videoCodec, audioCodec string, clientHEVC bool, height int) transcodePlan {
+	v := strings.ToLower(videoCodec)
+	audioOK := audioCodec == "" || directAudio[strings.ToLower(audioCodec)]
+	copyVideo := directVideo[v] || (clientHEVC && isHEVC(v))
+
+	if copyVideo {
+		p := transcodePlan{method: methodRemux, videoCodec: transcode.CodecH264, transcodeAudio: !audioOK}
+		if isHEVC(v) {
+			p.videoCodec = transcode.CodecHEVC
+		}
+		switch {
+		case isHEVC(v) && p.transcodeAudio:
+			p.reason = "copying HEVC video at native resolution; transcoding " + audioCodec + " audio"
+		case isHEVC(v):
+			p.reason = "copying HEVC video at native resolution (direct 4K)"
+		case p.transcodeAudio:
+			p.reason = "copying video; transcoding " + audioCodec + " audio"
+		default:
+			p.reason = "remuxing into a browser-friendly container"
+		}
+		return p
+	}
+
+	// Video must be re-encoded.
+	p := transcodePlan{method: methodTranscode, videoCodec: transcode.CodecH264}
+	if clientHEVC && height > 1080 {
+		p.videoCodec = transcode.CodecHEVC
+		p.reason = "re-encoding " + videoCodec + " to HEVC (4K)"
+	} else {
+		p.reason = "re-encoding " + videoCodec + " to H.264"
+	}
+	return p
 }
 
 // codecsFromTechnical pulls the first video/audio codec names out of the stored

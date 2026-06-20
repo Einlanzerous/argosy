@@ -17,14 +17,6 @@ const (
 	EncoderNVENC    = "nvenc"
 )
 
-// encoderH264 maps our encoder names to their ffmpeg H.264 encoder.
-var encoderH264 = map[string]string{
-	EncoderSoftware: "libx264",
-	EncoderQSV:      "h264_qsv",
-	EncoderVAAPI:    "h264_vaapi",
-	EncoderNVENC:    "h264_nvenc",
-}
-
 // DefaultPreference is the encoder fallback order used when none is configured.
 var DefaultPreference = []string{EncoderNVENC, EncoderQSV, EncoderVAAPI, EncoderSoftware}
 
@@ -53,7 +45,9 @@ func Probe(ctx context.Context, bin string, preference []string) Capabilities {
 
 	avail := []string{EncoderSoftware} // libx264 ships with every ffmpeg build we use
 	for _, enc := range []string{EncoderQSV, EncoderVAAPI, EncoderNVENC} {
-		if !built[encoderH264[enc]] {
+		// A backend counts as available when its H.264 encoder is built; the HEVC
+		// variant ships alongside it in the ffmpeg builds we use.
+		if !built[ffmpegEncoder[enc][CodecH264]] {
 			continue
 		}
 		switch enc {
@@ -90,9 +84,11 @@ func builtEncoders(ctx context.Context, bin string) map[string]bool {
 		return nil
 	}
 	set := make(map[string]bool)
-	for _, name := range encoderH264 {
-		if strings.Contains(string(out), name) {
-			set[name] = true
+	for _, byCodec := range ffmpegEncoder {
+		for _, name := range byCodec {
+			if strings.Contains(string(out), name) {
+				set[name] = true
+			}
 		}
 	}
 	return set
