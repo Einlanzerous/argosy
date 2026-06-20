@@ -113,39 +113,39 @@ func buildArgs(spec Spec) []string {
 // (only the container changes — the cheap path when the codecs are already
 // browser-friendly but the container isn't, e.g. H.264/AAC in Matroska).
 func buildRemuxArgs(spec Spec) []string {
-	args := inputArgs(spec)
+	// Remux copies codecs (no re-encode), so the encoder backend is irrelevant;
+	// software contributes no hwaccel flags.
+	args := inputArgs(spec, softwareEncoder{})
 	args = append(args, "-map", "0:v:0", "-map", "0:a:0", "-c", "copy")
 	return append(args, singleOutputTail()...)
 }
 
 // buildTranscodeArgs re-encodes the source. A single rung emits one media
 // playlist (index.m3u8) directly; multiple rungs emit a master playlist + one
-// variant playlist/init/segments per rung for adaptive streaming. The encoder
-// switch (qsv/vaapi/nvenc) lands in ARGY-30; today it's software libx264/aac.
+// variant playlist/init/segments per rung for adaptive streaming. The video
+// codec/scale/hwaccel flags come from the selected encoder backend (software
+// today; qsv/vaapi/nvenc in ARGY-30/61).
 func buildTranscodeArgs(spec Spec) []string {
+	enc := encoderFor(spec.Encoder)
 	rungs := rungsFor(spec.SourceHeight)
 	if len(rungs) == 1 {
-		return buildSingleTranscodeArgs(spec, rungs[0])
+		return buildSingleTranscodeArgs(spec, enc, rungs[0])
 	}
-	return buildLadderArgs(spec, rungs)
+	return buildLadderArgs(spec, enc, rungs)
 }
 
-func buildSingleTranscodeArgs(spec Spec, r rung) []string {
-	args := inputArgs(spec)
-	args = append(args,
-		"-map", "0:v:0", "-map", "0:a:0",
-		"-vf", fmt.Sprintf("scale=-2:%d", r.height),
-		"-c:v", "libx264", "-preset", "veryfast",
-		"-g", "48", "-keyint_min", "48", "-sc_threshold", "0",
-		"-b:v", r.videoBitrate, "-maxrate", r.maxRate, "-bufsize", r.bufSize,
-		"-c:a", "aac", "-b:a", audioBitrate, "-ac", "2",
-	)
+func buildSingleTranscodeArgs(spec Spec, enc videoEncoder, r rung) []string {
+	args := inputArgs(spec, enc)
+	args = append(args, "-map", "0:v:0", "-map", "0:a:0", "-vf", enc.scale(r.height))
+	args = append(args, enc.videoCodec()...)
+	args = append(args, enc.rateControl(-1, r)...)
+	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
 	return append(args, singleOutputTail()...)
 }
 
-func buildLadderArgs(spec Spec, rungs []rung) []string {
+func buildLadderArgs(spec Spec, enc videoEncoder, rungs []rung) []string {
 	n := len(rungs)
-	args := inputArgs(spec)
+	args := inputArgs(spec, enc)
 
 	// Split the video once and scale each branch to its rung height (-2 keeps
 	// the width even and preserves aspect ratio).
@@ -155,7 +155,7 @@ func buildLadderArgs(spec Spec, rungs []rung) []string {
 		fmt.Fprintf(&fc, "[v%d]", i)
 	}
 	for i, r := range rungs {
-		fmt.Fprintf(&fc, ";[v%d]scale=-2:%d[v%do]", i, r.height, i)
+		fmt.Fprintf(&fc, ";[v%d]%s[v%do]", i, enc.scale(r.height), i)
 	}
 	args = append(args, "-filter_complex", fc.String())
 
@@ -166,13 +166,9 @@ func buildLadderArgs(spec Spec, rungs []rung) []string {
 		args = append(args, "-map", "0:a:0")
 	}
 
-	args = append(args, "-c:v", "libx264", "-preset", "veryfast",
-		"-g", "48", "-keyint_min", "48", "-sc_threshold", "0")
+	args = append(args, enc.videoCodec()...)
 	for i, r := range rungs {
-		args = append(args,
-			fmt.Sprintf("-b:v:%d", i), r.videoBitrate,
-			fmt.Sprintf("-maxrate:v:%d", i), r.maxRate,
-			fmt.Sprintf("-bufsize:v:%d", i), r.bufSize)
+		args = append(args, enc.rateControl(i, r)...)
 	}
 	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
 
@@ -197,8 +193,10 @@ func buildLadderArgs(spec Spec, rungs []rung) []string {
 	return args
 }
 
-func inputArgs(spec Spec) []string {
+func inputArgs(spec Spec, enc videoEncoder) []string {
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error"}
+	// Hardware backends inject device/hwaccel init here, before the input.
+	args = append(args, enc.globalArgs()...)
 	if spec.StartAt > 0 {
 		args = append(args, "-ss", strconv.FormatFloat(spec.StartAt, 'f', 3, 64))
 	}

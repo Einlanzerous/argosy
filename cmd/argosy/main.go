@@ -97,15 +97,17 @@ func main() {
 	// authenticated, account-scoped items).
 	var tcManager *transcode.Manager
 	var caps transcode.Capabilities
-	// ARGY-27 encodes software-only; the LocalFFmpeg backend wires the hardware
-	// encoders in ARGY-30. The probe still reports what hardware is available so
-	// /capabilities is truthful ahead of that work.
+	// The probe reports what hardware is available and selects by preference
+	// order; encoding resolves that to the backend actually wired up (hardware
+	// paths land in ARGY-30/61, so an un-implemented selection degrades to
+	// software). "selected" vs "encoding" in the log make that explicit.
 	encoder := transcode.EncoderSoftware
 	if pool != nil {
 		caps = transcode.Probe(context.Background(), "", cfg.EncoderPreference)
 		if cfg.ForceSoftware {
 			caps.Selected = transcode.EncoderSoftware
 		}
+		encoder = transcode.ResolvedEncoder(caps.Selected)
 		tcManager = transcode.NewManager(transcode.LocalFFmpeg{}, cfg.TranscodeDir, cfg.TranscodeIdleTimeout, cfg.MaxTranscodeSessions, logger)
 		logger.Info("transcode ready", "available", caps.Available, "selected", caps.Selected, "encoding", encoder, "workDir", cfg.TranscodeDir)
 	}
