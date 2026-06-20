@@ -524,9 +524,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
     <!-- bottom controls -->
     <div class="bottom" :class="{ hidden: !controlsVisible }">
-      <div class="device-pill">
-        <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
-      </div>
       <div class="scrub">
         <span class="t">{{ formatClock(position) }}</span>
         <div class="bar" @click="seek">
@@ -536,6 +533,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <span class="t">{{ formatClock(duration) }}</span>
       </div>
       <div class="buttons">
+        <div class="device-pill">
+          <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
+        </div>
         <button class="ctrl" type="button" title="Back 10s" @click="skip(-10)">
           <span class="ic">↺</span><span class="lbl">10s</span>
         </button>
@@ -722,13 +722,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color: var(--arg-accent);
   color: #fff;
 }
-/* Bottom-left of the player, above the scrubber (inside .bottom, so it hides
-   with the controls). inline-flex keeps it a compact pill, not full-width. */
+/* Under the progress bar, pinned to the far left of the buttons row — the
+   mirror of the CC control on the far right. Absolute so it doesn't shift the
+   centered transport buttons. */
 .device-pill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
   padding: 8px 13px;
   border-radius: 999px;
   border: 1px solid var(--arg-line-2);
@@ -920,9 +924,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color: var(--arg-accent);
   color: var(--arg-bg);
 }
+/* CC drops the outer transport pill — just the "CC" badge, no surrounding
+   border/background. */
 .ctrl.icon-only {
-  padding: 11px 14px;
+  padding: 8px;
   gap: 0;
+  border-color: transparent;
+  background: transparent;
+}
+.ctrl.icon-only:hover {
+  border-color: transparent;
+  background: rgba(234, 234, 229, 0.06);
 }
 /* Paused → the play button breathes a brass glow, echoing the resume card. */
 .ctrl.primary.glow {
