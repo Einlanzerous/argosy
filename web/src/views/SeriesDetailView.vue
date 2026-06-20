@@ -124,12 +124,10 @@ watch(
 
 <template>
   <div v-if="series">
-    <div class="detail-top">
-      <BackButton fallback="library" />
-    </div>
     <section class="hero" :style="heroStyle">
       <div class="arg-hatch hatch" />
       <div class="shade" />
+      <BackButton class="hero-back" fallback="library" />
       <div class="body">
         <h1>{{ series.title }}</h1>
         <div class="meta">
@@ -219,8 +217,12 @@ watch(
   inset: 0;
   background: linear-gradient(0deg, #171717 4%, rgba(23, 23, 23, 0.5) 55%, rgba(23, 23, 23, 0.15) 100%);
 }
-.detail-top {
-  margin-bottom: 14px;
+/* Quadrant 1: top-left of the hero, aligned with the body's 40px inset. */
+.hero-back {
+  position: absolute;
+  top: 20px;
+  left: 40px;
+  z-index: 3;
 }
 .body {
   position: relative;

@@ -65,12 +65,10 @@ watch(
 
 <template>
   <div v-if="movie">
-    <div class="detail-top">
-      <BackButton fallback="library" />
-    </div>
     <section class="hero" :style="heroStyle">
       <div class="arg-hatch hatch" />
       <div class="shade" />
+      <BackButton class="hero-back" fallback="library" />
       <div class="body">
         <div class="poster" :style="posterTile">
           <div class="poster-title">{{ movie.title }}</div>
@@ -155,8 +153,13 @@ watch(
   inset: 0;
   background: linear-gradient(0deg, #171717 4%, rgba(23, 23, 23, 0.5) 50%, rgba(23, 23, 23, 0.15) 100%);
 }
-.detail-top {
-  margin-bottom: 14px;
+/* Quadrant 1: top-left of the hero, aligned with the poster's left edge (the
+   hero body's 40px inset) so it sits above the art, left of the title. */
+.hero-back {
+  position: absolute;
+  top: 20px;
+  left: 40px;
+  z-index: 3;
 }
 .body {
   position: relative;
