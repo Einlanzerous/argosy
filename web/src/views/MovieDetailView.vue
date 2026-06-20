@@ -68,13 +68,15 @@ watch(
     <section class="hero" :style="heroStyle">
       <div class="arg-hatch hatch" />
       <div class="shade" />
-      <BackButton class="hero-back" fallback="library" />
       <div class="body">
         <div class="poster" :style="posterTile">
           <div class="poster-title">{{ movie.title }}</div>
         </div>
         <div class="info">
-          <h1>{{ movie.title }}</h1>
+          <div class="title-row">
+            <BackButton fallback="library" />
+            <h1>{{ movie.title }}</h1>
+          </div>
           <div class="meta">
             <span>{{ movie.year ?? '—' }}</span>
             <span class="sep">•</span>
@@ -153,11 +155,10 @@ watch(
   inset: 0;
   background: linear-gradient(0deg, #171717 4%, rgba(23, 23, 23, 0.5) 50%, rgba(23, 23, 23, 0.15) 100%);
 }
-.hero-back {
-  position: absolute;
-  top: 18px;
-  left: 20px;
-  z-index: 3;
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 .body {
   position: relative;
