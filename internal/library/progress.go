@@ -65,6 +65,13 @@ func (s *Store) GetProgress(ctx context.Context, accountID, userID, itemID strin
 
 // SetProgress upserts the resume position for (user, item), auto-flagging the
 // item watched once it passes watchedThreshold. nil when the item isn't owned.
+//
+// Conflict policy (cross-device, ARGY-35): last-write-wins per (user, item).
+// The single playhead reflects the user's most recent action, which correctly
+// honors a deliberate rewind (a "furthest-progress" rule would not). Two of a
+// user's devices playing the same item at once is rare (it's one person), and
+// Beacon pushes every change to the other devices, so a write is never a silent
+// clobber — the other device sees it within seconds.
 func (s *Store) SetProgress(ctx context.Context, accountID, userID, itemID string, pos float64, dur *float64) (*api.PlayState, error) {
 	ok, err := s.itemInAccount(ctx, accountID, itemID)
 	if err != nil {
