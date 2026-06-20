@@ -14,9 +14,9 @@ import (
 )
 
 // maxExternalTracks caps how many OpenSubtitles candidates are surfaced per item
-// — enough to offer alternates when the top match is mis-synced, without flooding
+// — a couple of alternates in case the top match is mis-synced, without flooding
 // the picker.
-const maxExternalTracks = 5
+const maxExternalTracks = 3
 
 // trackIDRe is the servable-track allowlist; it doubles as the cache-filename
 // guard (the ":" becomes "-").
@@ -95,15 +95,21 @@ func (s *Service) List(ctx context.Context, t Target) []Track {
 		s.logger.Warn("subtitle: opensubtitles search failed", "item", t.ItemID, "err", err)
 		return tracks
 	}
+	seen := map[string]int{} // de-dupe identical labels with a counter suffix
 	for i, r := range results {
 		if i >= maxExternalTracks {
 			break
+		}
+		label := externalLabel(r)
+		seen[label]++
+		if n := seen[label]; n > 1 {
+			label = fmt.Sprintf("%s (%d)", label, n)
 		}
 		tracks = append(tracks, Track{
 			ID:       "os:" + strconv.FormatInt(r.FileID, 10),
 			Source:   "opensubtitles",
 			Language: r.Language,
-			Label:    externalLabel(r),
+			Label:    label,
 		})
 	}
 	return tracks
@@ -238,15 +244,22 @@ func embeddedLabel(title, lang string, forced bool) string {
 	return label
 }
 
+// resRe pulls a resolution token out of a release name for a compact label.
+var resRe = regexp.MustCompile(`(?i)\b(2160p|1440p|1080p|720p|480p)\b`)
+
+// externalLabel builds a short, scannable label: the language plus one
+// distinguishing hint — "best match" for the moviehash hit, else a resolution
+// token from the release (raw release names are too noisy for a picker).
 func externalLabel(r Subtitle) string {
 	label := langName(r.Language)
-	if r.MovieHashMatch {
-		label += " · exact match"
-	} else if r.Release != "" {
-		label += " · " + r.Release
+	switch {
+	case r.MovieHashMatch:
+		label += " · best match"
+	case resRe.FindString(r.Release) != "":
+		label += " · " + strings.ToLower(resRe.FindString(r.Release))
 	}
 	if r.HearingImpaired {
-		label += " (SDH)"
+		label += " · SDH"
 	}
 	return label
 }

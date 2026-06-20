@@ -36,6 +36,33 @@ function shiftTimingLine(line: string, delta: number): string | null {
   return settings ? `${head} ${settings}` : head
 }
 
+export interface VttCue {
+  start: number
+  end: number
+  text: string
+}
+
+// parseVttCues extracts cues from WebVTT text so we can add them directly to a
+// TextTrack via the VTTCue API — more reliable than depending on the browser to
+// parse a <track src> blob and fire its load event at the right time.
+export function parseVttCues(text: string): VttCue[] {
+  const cues: VttCue[] = []
+  const blocks = text.replace(/\r/g, '').split(/\n[ \t]*\n/)
+  for (const block of blocks) {
+    const lines = block.split('\n')
+    const tIdx = lines.findIndex((l) => l.includes('-->'))
+    if (tIdx === -1) continue // header or note block
+    const [left, right] = lines[tIdx].split('-->')
+    if (right === undefined) continue
+    const start = parseTs(left.trim())
+    const end = parseTs(right.trim().split(/\s+/)[0])
+    if (!(end > start)) continue
+    const body = lines.slice(tIdx + 1).join('\n').trim()
+    if (body) cues.push({ start, end, text: body })
+  }
+  return cues
+}
+
 // parseTs reads HH:MM:SS.mmm or MM:SS.mmm into seconds.
 function parseTs(ts: string): number {
   const [hms, ms = '0'] = ts.split('.')

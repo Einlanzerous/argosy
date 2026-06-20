@@ -17,7 +17,7 @@ import {
   subtitleUrl,
   type SubtitleTrack,
 } from '@/lib/playback'
-import { shiftVtt } from '@/lib/vtt'
+import { parseVttCues, shiftVtt } from '@/lib/vtt'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -41,10 +41,15 @@ const resumeFrom = ref(0)
 const subtitleTracks = ref<SubtitleTrack[]>([])
 const activeSubtitle = ref<string | null>(null)
 const subMenuOpen = ref(false)
-// The active subtitle is rendered via a <track> fed from an in-memory blob, so
-// we hold the element + object URL for cleanup.
-let subEl: HTMLTrackElement | null = null
-let subBlobUrl = ''
+// The active subtitle is rendered by feeding cues straight into a single
+// TextTrack (reused across switches); we track the cues we added so we can
+// clear them when changing or turning off subtitles.
+let subTrack: TextTrack | null = null
+let subCues: VTTCue[] = []
+// Chrome auto-hide: controls fade out after a few idle seconds while playing,
+// and reappear on any pointer movement.
+const controlsVisible = ref(true)
+let hideTimer: ReturnType<typeof setTimeout> | null = null
 
 // Playback mode + the media offset at which the current source begins. Direct
 // play seeks natively (offset stays 0); a transcode seek restarts ffmpeg at the
@@ -198,6 +203,7 @@ async function waitForPlaylist(url: string): Promise<boolean> {
 onBeforeUnmount(() => {
   flush()
   if (heartbeat) clearInterval(heartbeat)
+  if (hideTimer) clearTimeout(hideTimer)
   removeSubtitleEl()
   if (hls) hls.destroy()
   if (transcodeSessionId) void stopTranscode(transcodeSessionId).catch(() => {})
@@ -221,9 +227,13 @@ function bindVideo(el: HTMLVideoElement): void {
   })
   el.addEventListener('play', () => {
     playing.value = true
+    poke()
   })
   el.addEventListener('pause', () => {
     playing.value = false
+    // Paused → keep the controls up so they're there when you come back.
+    controlsVisible.value = true
+    if (hideTimer) clearTimeout(hideTimer)
     flush()
   })
   el.addEventListener('seeked', flush)
@@ -255,7 +265,18 @@ function flush(): void {
   }
 }
 
+// poke reveals the controls and schedules them to hide again after an idle
+// stretch — but only while actually playing and with no menu/prompt open.
+function poke(): void {
+  controlsVisible.value = true
+  if (hideTimer) clearTimeout(hideTimer)
+  hideTimer = setTimeout(() => {
+    if (playing.value && !subMenuOpen.value && !resumeOpen.value) controlsVisible.value = false
+  }, 4000)
+}
+
 function togglePlay(): void {
+  poke()
   const el = video.value
   if (!el) return
   if (el.paused) void el.play().catch(() => {})
@@ -303,7 +324,7 @@ async function selectSubtitle(trackId: string | null): Promise<void> {
 }
 
 // applySubtitle fetches the WebVTT (authenticated), rewrites its cue timings for
-// the current transcode offset, and feeds it to a <track> as a blob. Rebuilding
+// the current transcode offset, and loads the cues into the TextTrack. Rebuilding
 // per offset keeps cues aligned whether we direct-play or seek a transcode.
 async function applySubtitle(trackId: string): Promise<void> {
   const el = video.value
@@ -319,19 +340,15 @@ async function applySubtitle(trackId: string): Promise<void> {
     if (baseOffset.value > 0) text = shiftVtt(text, -baseOffset.value)
     // A stale selection may have changed while we awaited the fetch.
     if (activeSubtitle.value !== trackId) return
-    removeSubtitleEl()
-    subBlobUrl = URL.createObjectURL(new Blob([text], { type: 'text/vtt' }))
-    const tEl = document.createElement('track')
-    tEl.kind = 'subtitles'
-    tEl.label = track.label
-    tEl.srclang = track.language
-    tEl.src = subBlobUrl
-    tEl.default = true
-    el.appendChild(tEl)
-    tEl.addEventListener('load', () => {
-      if (tEl.track) tEl.track.mode = 'showing'
-    })
-    subEl = tEl
+    const cues = parseVttCues(text)
+    clearSubCues()
+    if (!subTrack) subTrack = el.addTextTrack('subtitles', 'Argosy', track.language || 'und')
+    for (const c of cues) {
+      const cue = new VTTCue(c.start, c.end, c.text)
+      subTrack.addCue(cue)
+      subCues.push(cue)
+    }
+    subTrack.mode = 'showing'
   } catch {
     /* leave subtitles off on failure */
   }
@@ -342,15 +359,22 @@ function reapplySubtitle(): void {
   if (activeSubtitle.value) void applySubtitle(activeSubtitle.value)
 }
 
+function clearSubCues(): void {
+  if (subTrack) {
+    for (const c of subCues) {
+      try {
+        subTrack.removeCue(c)
+      } catch {
+        /* cue already gone */
+      }
+    }
+  }
+  subCues = []
+}
+
 function removeSubtitleEl(): void {
-  if (subEl) {
-    subEl.remove()
-    subEl = null
-  }
-  if (subBlobUrl) {
-    URL.revokeObjectURL(subBlobUrl)
-    subBlobUrl = ''
-  }
+  clearSubCues()
+  if (subTrack) subTrack.mode = 'disabled'
 }
 
 function fullscreen(): void {
@@ -393,14 +417,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="player">
+  <div class="player" :class="{ idle: !controlsVisible }" @mousemove="poke">
     <div class="backdrop" :style="backdrop" />
     <div class="arg-hatch backdrop-hatch" />
     <video ref="video" class="video" playsinline @click="togglePlay" />
     <div class="vignette" />
 
     <!-- top chrome -->
-    <div class="top">
+    <div class="top" :class="{ hidden: !controlsVisible }">
       <div class="top-left">
         <button class="back" type="button" @click="goBack">‹</button>
         <div>
@@ -409,6 +433,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </div>
       <div class="top-right">
+        <button class="icon-btn" type="button" title="Fullscreen" @click="fullscreen">⛶</button>
         <span v-if="quality" class="quality">{{ quality }}</span>
         <div class="device-pill">
           <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
@@ -440,7 +465,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </div>
 
     <!-- bottom controls -->
-    <div class="bottom">
+    <div class="bottom" :class="{ hidden: !controlsVisible }">
       <div class="scrub">
         <span class="t">{{ formatClock(position) }}</span>
         <div class="bar" @click="seek">
@@ -460,18 +485,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <button class="ctrl" type="button" title="Forward 10s" @click="skip(10)">
           <span class="ic">↻</span><span class="lbl">10s</span>
         </button>
-        <button class="ctrl" type="button" title="Fullscreen" @click="fullscreen">
-          <span class="ic">⛶</span><span class="lbl">Fullscreen</span>
-        </button>
         <div v-if="subtitleTracks.length" class="cc-wrap">
           <button
-            class="ctrl"
+            class="ctrl icon-only"
             :class="{ on: activeSubtitle }"
             type="button"
             title="Subtitles"
             @click="subMenuOpen = !subMenuOpen"
           >
-            <span class="ic cc">CC</span><span class="lbl">Subtitles</span>
+            <span class="ic cc">CC</span>
           </button>
           <div v-if="subMenuOpen" class="cc-menu">
             <div class="cc-head">Subtitles</div>
@@ -566,6 +588,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   align-items: center;
   justify-content: space-between;
   background: linear-gradient(#0c0c0bcc, transparent);
+  transition: opacity 0.3s ease;
+}
+.top.hidden,
+.bottom.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.player.idle {
+  cursor: none;
 }
 .top-left {
   display: flex;
@@ -605,6 +636,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   color: var(--arg-accent);
   font: 800 12px var(--arg-display);
   letter-spacing: 0.04em;
+}
+.icon-btn {
+  width: 38px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.5);
+  color: var(--arg-cream);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  border-color: var(--arg-accent);
+  color: #fff;
 }
 .device-pill {
   display: flex;
@@ -722,6 +768,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   bottom: 0;
   padding: 30px 40px;
   background: linear-gradient(transparent, var(--arg-ink) 70%);
+  transition: opacity 0.3s ease;
 }
 .scrub {
   display: flex;
@@ -760,6 +807,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   box-shadow: 0 0 0 4px rgba(201, 154, 78, 0.3);
 }
 .buttons {
+  position: relative;
   margin-top: 20px;
   display: flex;
   align-items: center;
@@ -791,10 +839,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   font: 600 14px var(--arg-body);
 }
 .ctrl.primary {
+  /* Fixed width so swapping Play ⇄ Pause never resizes the button. */
+  min-width: 138px;
+  justify-content: center;
   padding: 13px 30px;
   background: var(--arg-accent);
   border-color: var(--arg-accent);
   color: var(--arg-bg);
+}
+.ctrl.icon-only {
+  padding: 11px 14px;
+  gap: 0;
 }
 .ctrl.primary .ic {
   color: var(--arg-bg);
@@ -820,7 +875,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   color: var(--arg-accent);
 }
 .cc-wrap {
-  position: relative;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
 }
 .cc-menu {
   position: absolute;
@@ -829,7 +887,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   min-width: 248px;
   padding: 7px;
   border-radius: var(--arg-r-lg);
-  background: linear-gradient(160deg, #221f19, #161513);
+  /* Translucent so the media stays visible behind the picker. */
+  background: rgba(18, 17, 15, 0.78);
+  backdrop-filter: blur(16px) saturate(1.1);
   border: 1px solid var(--arg-line-2);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
   animation: argFade 0.16s ease;
