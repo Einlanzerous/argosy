@@ -97,12 +97,16 @@ func main() {
 	// authenticated, account-scoped items).
 	var tcManager *transcode.Manager
 	var caps transcode.Capabilities
-	// The probe reports what hardware is available and selects by preference
-	// order; encoding resolves that to the backend actually wired up (hardware
-	// paths land in ARGY-30/61, so an un-implemented selection degrades to
-	// software). "selected" vs "encoding" in the log make that explicit.
+	// The probe reports what hardware is available (QSV/VAAPI/NVENC + software)
+	// and selects by preference order; encoding resolves that to the backend
+	// actually wired up. An unknown selection degrades to software. "selected"
+	// vs "encoding" in the log make that explicit.
 	encoder := transcode.EncoderSoftware
 	if pool != nil {
+		// Per-host VAAPI GPU override (e.g. /dev/dri/renderD129 for a discrete card).
+		if dev := os.Getenv("ARGOSY_VAAPI_DEVICE"); dev != "" {
+			transcode.VAAPIDevice = dev
+		}
 		caps = transcode.Probe(context.Background(), "", cfg.EncoderPreference)
 		if cfg.ForceSoftware {
 			caps.Selected = transcode.EncoderSoftware

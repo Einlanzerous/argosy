@@ -6,13 +6,13 @@ import (
 )
 
 func TestEncoderForResolution(t *testing.T) {
-	// Implemented backends resolve to themselves; un-implemented ones (VAAPI/
-	// NVENC, ARGY-61) and unknown names degrade to software rather than failing.
+	// Implemented backends resolve to themselves; unknown names degrade to
+	// software rather than failing.
 	cases := map[string]string{
 		EncoderSoftware: EncoderSoftware,
-		EncoderQSV:      EncoderQSV, // wired in ARGY-30
-		EncoderVAAPI:    EncoderSoftware,
-		EncoderNVENC:    EncoderSoftware,
+		EncoderQSV:      EncoderQSV,   // wired in ARGY-30
+		EncoderVAAPI:    EncoderVAAPI, // wired in ARGY-61
+		EncoderNVENC:    EncoderNVENC, // wired in ARGY-61
 		"nonsense":      EncoderSoftware,
 		"":              EncoderSoftware,
 	}
@@ -20,6 +20,38 @@ func TestEncoderForResolution(t *testing.T) {
 		if got := ResolvedEncoder(name); got != want {
 			t.Errorf("ResolvedEncoder(%q) = %q, want %q", name, got, want)
 		}
+	}
+}
+
+func TestVAAPIEncoderPieces(t *testing.T) {
+	enc := vaapiEncoder{}
+	// VAAPI needs the device initialized before the input and frames uploaded to
+	// a GPU surface (unlike QSV's internal upload).
+	if got := strings.Join(enc.globalArgs(), " "); !strings.Contains(got, "-vaapi_device") {
+		t.Errorf("vaapi globalArgs = %q, want -vaapi_device", got)
+	}
+	if got := enc.scale(720); got != "scale=-2:720,format=nv12,hwupload" {
+		t.Errorf("vaapi scale(720) = %q, want CPU scale + hwupload", got)
+	}
+	if got := strings.Join(enc.videoCodec(CodecH264), " "); !strings.Contains(got, "h264_vaapi") {
+		t.Errorf("vaapi videoCodec(h264) = %q, want h264_vaapi", got)
+	}
+	if got := strings.Join(enc.videoCodec(CodecHEVC), " "); !strings.Contains(got, "hevc_vaapi") {
+		t.Errorf("vaapi videoCodec(hevc) = %q, want hevc_vaapi", got)
+	}
+}
+
+func TestNVENCEncoderPieces(t *testing.T) {
+	enc := nvencEncoder{}
+	// Encode-only like QSV: no hwaccel init, internal frame upload.
+	if enc.globalArgs() != nil {
+		t.Errorf("nvenc globalArgs = %v, want nil (encode-only)", enc.globalArgs())
+	}
+	if got := enc.scale(720); got != "scale=-2:720,format=nv12" {
+		t.Errorf("nvenc scale(720) = %q", got)
+	}
+	if got := strings.Join(enc.videoCodec(CodecHEVC), " "); !strings.Contains(got, "hevc_nvenc") {
+		t.Errorf("nvenc videoCodec(hevc) = %q, want hevc_nvenc", got)
 	}
 }
 
