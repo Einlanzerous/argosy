@@ -157,7 +157,7 @@ watch(
    hero body's 40px inset) so it sits above the art, left of the title. */
 .hero-back {
   position: absolute;
-  top: 20px;
+  top: 40px;
   left: 40px;
   z-index: 3;
 }

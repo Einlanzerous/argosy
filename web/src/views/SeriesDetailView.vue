@@ -220,7 +220,7 @@ watch(
 /* Quadrant 1: top-left of the hero, aligned with the body's 40px inset. */
 .hero-back {
   position: absolute;
-  top: 20px;
+  top: 40px;
   left: 40px;
   z-index: 3;
 }
