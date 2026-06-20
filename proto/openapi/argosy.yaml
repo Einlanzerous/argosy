@@ -451,6 +451,34 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/recent:
+    get:
+      tags: [library]
+      operationId: listRecent
+      summary: Recently-added items (films + series) across the account
+      description: >
+        A unified "newly arrived" feed across every library: standalone films
+        and series, newest first. A series' arrival time is the most recent of
+        its episodes' added-at timestamps, so adding an episode resurfaces the
+        series (deduped to a single card) rather than listing each episode.
+        Each item's `kind` is "movie" or "series".
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 24, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MediaItemSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v1/items/{itemId}/transcode:
     post:
       tags: [transcode]

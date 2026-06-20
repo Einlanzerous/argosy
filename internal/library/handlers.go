@@ -37,6 +37,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/series/{seriesId}", mw(http.HandlerFunc(h.getSeries)))
 	mux.Handle("GET /api/v1/items/{itemId}", mw(http.HandlerFunc(h.getItem)))
 	mux.Handle("GET /api/v1/continue", mw(http.HandlerFunc(h.listContinue)))
+	mux.Handle("GET /api/v1/recent", mw(http.HandlerFunc(h.listRecent)))
 	mux.Handle("GET /api/v1/items/{itemId}/playback", mw(http.HandlerFunc(h.getPlayback)))
 	mux.Handle("GET /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.getProgress)))
 	mux.Handle("PUT /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.reportProgress)))
@@ -97,6 +98,22 @@ func (h *handlers) listSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+func (h *handlers) listRecent(w http.ResponseWriter, r *http.Request) {
+	limit := 24
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
+		limit = v
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	items, err := h.store.ListRecent(r.Context(), accountOf(r), limit)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {

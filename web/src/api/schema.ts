@@ -365,6 +365,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recently-added items (films + series) across the account
+         * @description A unified "newly arrived" feed across every library: standalone films and series, newest first. A series' arrival time is the most recent of its episodes' added-at timestamps, so adding an episode resurfaces the series (deduped to a single card) rather than listing each episode. Each item's `kind` is "movie" or "series".
+         */
+        get: operations["listRecent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{itemId}/transcode": {
         parameters: {
             query?: never;
@@ -1346,6 +1366,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContinueItem"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listRecent: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaItemSummary"][];
                 };
             };
             401: components["responses"]["Unauthorized"];

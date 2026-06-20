@@ -6,20 +6,22 @@ import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime, formatTitle } from '@/lib/format'
-import { getLibraries, getMovies, getSeries, type MovieSummary, type SeriesSummary } from '@/lib/manifest'
+import { getRecent, type RecentItem } from '@/lib/manifest'
 import { getContinue, type ContinueItem } from '@/lib/playback'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
 type MovieDetail = components['schemas']['MediaItemDetail']
 
-const movies = ref<MovieSummary[]>([])
-const series = ref<SeriesSummary[]>([])
+const recentItems = ref<RecentItem[]>([])
 const continueItems = ref<ContinueItem[]>([])
 const heroDetail = ref<MovieDetail | null>(null)
 const loading = ref(true)
 
-const recent = computed(() => movies.value.slice(0, 12))
+const recent = computed(() => recentItems.value.slice(0, 12))
+// The hero's film fallback is the newest *film* (a series id isn't directly
+// playable). Films keep kind "movie"; series carry kind "series".
+const newestFilm = computed(() => recentItems.value.find((i) => i.kind !== 'series'))
 
 // The hero is the top continue-watching item when there is one (a real resume),
 // otherwise the most recent film as a featured spotlight.
@@ -38,7 +40,7 @@ const hero = computed(() => {
         : { name: 'movie', params: { id: r.id } }) as RouteLocationRaw,
     }
   }
-  const f = movies.value[0]
+  const f = newestFilm.value
   if (f) {
     return {
       id: f.id,
@@ -57,10 +59,8 @@ const heroStyle = computed(() => posterStyle(hero.value?.posterUrl, hero.value?.
 
 onMounted(async () => {
   setPage('Home')
-  const libs = await getLibraries()
-  ;[movies.value, series.value, continueItems.value] = await Promise.all([
-    getMovies({ sort: 'added' }, libs),
-    getSeries({ sort: 'title' }, libs),
+  ;[recentItems.value, continueItems.value] = await Promise.all([
+    getRecent().catch(() => []),
     getContinue().catch(() => []),
   ])
   loading.value = false
@@ -140,11 +140,13 @@ onMounted(async () => {
           :kind="m.kind"
           :anime="m.tags?.includes('anime')"
           :poster-url="m.posterUrl"
-          :to="{ name: 'movie', params: { id: m.id } }"
+          :to="m.kind === 'series'
+            ? { name: 'series', params: { id: m.id } }
+            : { name: 'movie', params: { id: m.id } }"
         />
       </PosterRail>
 
-      <div v-if="!loading && !movies.length && !series.length" class="hold-empty">
+      <div v-if="!loading && !recent.length && !continueItems.length" class="hold-empty">
         <img src="/argosy_logo_dark.png" alt="" />
         <h2>The hold is empty</h2>
         <p>
