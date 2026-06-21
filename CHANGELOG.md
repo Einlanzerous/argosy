@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/Einlanzerous/argosy/compare/v0.3.0...v0.3.1) (2026-06-21)
+
+
+### Bug Fixes
+
+* **docker:** pin bun to 1.3.14 in the web build stage ([#58](https://github.com/Einlanzerous/argosy/issues/58)) ([f446f09](https://github.com/Einlanzerous/argosy/commit/f446f097c47e914f4c1e555d39d4567fb6153d26))
+* **web:** add *.vue type shim so the Docker build's vue-tsc resolves SFCs ([#60](https://github.com/Einlanzerous/argosy/issues/60)) ([ee83da2](https://github.com/Einlanzerous/argosy/commit/ee83da2e743c8fe6a7c64d0c6d4623614ca31a48))
+
 ## [0.3.0](https://github.com/Einlanzerous/argosy/compare/v0.2.0...v0.3.0) (2026-06-21)
 
 
