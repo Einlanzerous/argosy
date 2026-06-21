@@ -219,6 +219,7 @@ class _EpisodeTile extends StatelessWidget {
     final playable = episode.mediaItemId != null;
     final watched = episode.watched ?? false;
     final inProgress = _percent > 0 && !watched;
+    final epTitle = formatTitle(episode.title);
 
     return Opacity(
       opacity: playable ? 1 : 0.5,
@@ -240,7 +241,7 @@ class _EpisodeTile extends StatelessWidget {
               ),
             ),
             title: Text(
-              episode.title ?? 'Episode ${episode.episodeNumber}',
+              epTitle.isEmpty ? 'Episode ${episode.episodeNumber}' : epTitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

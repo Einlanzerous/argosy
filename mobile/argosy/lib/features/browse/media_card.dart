@@ -44,7 +44,7 @@ class MediaCard {
   factory MediaCard.fromSummary(MediaItemSummary m) => MediaCard(
         id: m.id,
         kind: m.kind == 'series' ? MediaKind.series : MediaKind.movie,
-        title: m.title,
+        title: formatTitle(m.title),
         year: m.year,
         rating: m.rating,
         posterUrl: m.posterUrl,
@@ -55,7 +55,7 @@ class MediaCard {
   factory MediaCard.fromSeries(SeriesSummary s) => MediaCard(
         id: s.id,
         kind: MediaKind.series,
-        title: s.title,
+        title: formatTitle(s.title),
         year: s.year,
         rating: s.rating,
         posterUrl: s.posterUrl,

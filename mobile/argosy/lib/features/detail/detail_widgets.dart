@@ -58,6 +58,17 @@ class DetailBackdrop extends ConsumerWidget {
   }
 }
 
+/// The "ghost" action-button style — the secondary detail actions (Start over,
+/// Add to Vault). Same shape + size as the filled Play/Resume button, but a
+/// subtle dark fill, hairline border, and cream label so it reads as secondary
+/// without collapsing into the small dashed "+ Label" pill. Mirrors the web's
+/// `.ghost` / `.trigger`.
+ButtonStyle ghostButtonStyle(BuildContext context) => FilledButton.styleFrom(
+      backgroundColor: const Color(0x66141413),
+      foregroundColor: ArgosyColors.cream,
+      side: BorderSide(color: context.argosy.line2),
+    );
+
 /// A row of read-only metadata chips — genres (neutral) and path tags (brass).
 class GenreTagChips extends StatelessWidget {
   const GenreTagChips({super.key, this.genres = const [], this.tags = const []});

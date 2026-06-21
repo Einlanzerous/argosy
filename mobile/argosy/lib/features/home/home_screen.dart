@@ -58,7 +58,11 @@ class HomeScreen extends ConsumerWidget {
                     if (home.hero != null) _Hero(hero: home.hero!),
                     const SizedBox(height: 20),
                     if (home.continueRow.isNotEmpty) ...[
-                      _rail('Continue Watching', home.continueRow),
+                      // Continue Watching gets larger tiles — it's the primary
+                      // "pick up where you left off" row and shouldn't feel
+                      // squished against the rails below it.
+                      _rail('Continue Watching', home.continueRow,
+                          height: 296, cardWidth: 158),
                       const SizedBox(height: 24),
                     ],
                     if (home.onDeck.isNotEmpty) ...[
@@ -84,9 +88,18 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _rail(String title, List<MediaCard> cards) => MediaRail(
+  Widget _rail(
+    String title,
+    List<MediaCard> cards, {
+    double height = 248,
+    double cardWidth = 132,
+  }) =>
+      MediaRail(
         title: title,
-        children: [for (final c in cards) MediaPosterCard(card: c)],
+        height: height,
+        children: [
+          for (final c in cards) MediaPosterCard(card: c, width: cardWidth),
+        ],
       );
 }
 

@@ -152,7 +152,8 @@ class _Actions extends StatelessWidget {
             icon: const Icon(Icons.play_arrow, size: 20),
             label: const Text('Resume'),
           ),
-          OutlinedButton(
+          FilledButton(
+            style: ghostButtonStyle(context),
             onPressed: () => openPlayer(context, itemId),
             child: const Text('Start over'),
           ),

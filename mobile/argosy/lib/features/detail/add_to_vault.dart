@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
 import '../../theme/argosy_colors.dart';
+import 'detail_widgets.dart';
 
 /// "Add to Vault" action — opens a sheet of the vaults the profile may curate
 /// (its own, or any shared household vault) and files the title into the chosen
@@ -18,8 +19,10 @@ class AddToVaultButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return OutlinedButton.icon(
-      onPressed: () => _AddToVaultSheet.show(context, movieId: movieId, seriesId: seriesId),
+    return FilledButton.icon(
+      style: ghostButtonStyle(context),
+      onPressed: () =>
+          _AddToVaultSheet.show(context, movieId: movieId, seriesId: seriesId),
       icon: const Icon(Icons.add, size: 18),
       label: const Text('Add to Vault'),
     );
