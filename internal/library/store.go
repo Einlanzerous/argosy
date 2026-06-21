@@ -129,9 +129,7 @@ func (s *Store) ListSeries(ctx context.Context, accountID, libraryID string, lim
 		if err := rows.Scan(&id, &title, &year, &tags, &prov, &over); err != nil {
 			return page, err
 		}
-		p, o := decodeMap(prov), decodeMap(over)
-		item := api.SeriesSummary{Id: parseUUID(id), Title: effectiveTitle(o, p, title), Year: effectiveYear(o, p, year), PosterUrl: posterURL(s.artworkBase, o, p), BackdropUrl: backdropURL(s.artworkBase, o, p), Tags: nonNil(tags)}
-		page.Items = append(page.Items, item)
+		page.Items = append(page.Items, s.seriesSummary(id, title, year, tags, prov, over))
 	}
 	return page, rows.Err()
 }
@@ -312,6 +310,18 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 		}
 	}
 	return &detail, rows.Err()
+}
+
+func (s *Store) seriesSummary(id, title string, year *int, tags []string, prov, over []byte) api.SeriesSummary {
+	p, o := decodeMap(prov), decodeMap(over)
+	return api.SeriesSummary{
+		Id:          parseUUID(id),
+		Title:       effectiveTitle(o, p, title),
+		Year:        effectiveYear(o, p, year),
+		PosterUrl:   posterURL(s.artworkBase, o, p),
+		BackdropUrl: backdropURL(s.artworkBase, o, p),
+		Tags:        nonNil(tags),
+	}
 }
 
 func (s *Store) summary(id, kind, title string, year *int, tags []string, prov, over []byte) api.MediaItemSummary {

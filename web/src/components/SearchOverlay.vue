@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 import { closeSearch } from '@/lib/ui'
+import { searchManifest, type MovieSummary, type SeriesSummary } from '@/lib/manifest'
+import { posterStyle } from '@/lib/poster'
 
 const router = useRouter()
 const input = ref<HTMLInputElement | null>(null)
 const query = ref('')
+
+const movies = ref<MovieSummary[]>([])
+const series = ref<SeriesSummary[]>([])
+const loading = ref(false)
+const searched = ref(false) // a query has resolved at least once for the current text
+
+const hasQuery = computed(() => query.value.trim().length > 0)
+const hasResults = computed(() => movies.value.length > 0 || series.value.length > 0)
 
 const browse: { label: string; icon: string; to: RouteLocationRaw }[] = [
   { label: 'Movies', icon: '▦', to: { name: 'library', query: { kind: 'movies' } } },
@@ -16,14 +26,51 @@ const browse: { label: string; icon: string; to: RouteLocationRaw }[] = [
   { label: '4K', icon: '◇', to: { name: 'library', query: { tag: '4K' } } },
 ]
 
+// Debounced live search. A monotonically increasing token discards out-of-order
+// responses so a slow earlier request can't overwrite a newer one's results.
+let debounce: ReturnType<typeof setTimeout> | undefined
+let token = 0
+
+watch(query, (q) => {
+  if (debounce) clearTimeout(debounce)
+  if (!q.trim()) {
+    movies.value = []
+    series.value = []
+    loading.value = false
+    searched.value = false
+    return
+  }
+  loading.value = true
+  debounce = setTimeout(() => void run(q), 180)
+})
+
+async function run(q: string): Promise<void> {
+  const mine = ++token
+  const res = await searchManifest(q)
+  if (mine !== token) return // a newer keystroke superseded this request
+  movies.value = res.movies
+  series.value = res.series
+  loading.value = false
+  searched.value = true
+}
+
 function go(to: RouteLocationRaw): void {
   closeSearch()
   void router.push(to)
 }
 
+function openMovie(m: MovieSummary): void {
+  go({ name: 'movie', params: { id: m.id } })
+}
+
+function openSeries(s: SeriesSummary): void {
+  go({ name: 'series', params: { id: s.id } })
+}
+
+// Enter jumps to the top result (films first, then series).
 function submit(): void {
-  // Free-text search isn't backed yet; Enter opens the full Manifest.
-  go({ name: 'library' })
+  if (movies.value.length) openMovie(movies.value[0])
+  else if (series.value.length) openSeries(series.value[0])
 }
 
 function onKey(e: KeyboardEvent): void {
@@ -34,7 +81,10 @@ onMounted(() => {
   window.addEventListener('keydown', onKey)
   input.value?.focus()
 })
-onUnmounted(() => window.removeEventListener('keydown', onKey))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey)
+  if (debounce) clearTimeout(debounce)
+})
 </script>
 
 <template>
@@ -52,12 +102,50 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           @keyup.enter="submit"
         />
       </div>
-      <div class="chips">
-        <button v-for="b in browse" :key="b.label" class="chip" type="button" @click="go(b.to)">
-          <span class="chip-icon">{{ b.icon }}</span> {{ b.label }}
-        </button>
+      <template v-if="!hasQuery">
+        <div class="chips">
+          <button v-for="b in browse" :key="b.label" class="chip" type="button" @click="go(b.to)">
+            <span class="chip-icon">{{ b.icon }}</span> {{ b.label }}
+          </button>
+        </div>
+        <div class="hint">Press a tag to browse, or start typing to search the Manifest</div>
+      </template>
+
+      <div v-else class="results">
+        <div v-if="series.length" class="group">
+          <div class="group-head">Series</div>
+          <button
+            v-for="s in series"
+            :key="s.id"
+            class="result"
+            type="button"
+            @click="openSeries(s)"
+          >
+            <span class="thumb" :style="posterStyle(s.posterUrl, s.title)" />
+            <span class="meta">
+              <span class="title">{{ s.title }}</span>
+              <span class="sub">Series<template v-if="s.year"> · {{ s.year }}</template></span>
+            </span>
+          </button>
+        </div>
+        <div v-if="movies.length" class="group">
+          <div class="group-head">Films</div>
+          <button
+            v-for="m in movies"
+            :key="m.id"
+            class="result"
+            type="button"
+            @click="openMovie(m)"
+          >
+            <span class="thumb" :style="posterStyle(m.posterUrl, m.title)" />
+            <span class="meta">
+              <span class="title">{{ m.title }}</span>
+              <span class="sub">Film<template v-if="m.year"> · {{ m.year }}</template></span>
+            </span>
+          </button>
+        </div>
+        <div v-if="searched && !hasResults" class="hint">No matches for "{{ query.trim() }}"</div>
       </div>
-      <div class="hint">Press a tag to open the Manifest · full-text search arrives soon</div>
     </div>
   </div>
 </template>
@@ -147,6 +235,63 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .hint {
   margin-top: 26px;
   font: 500 12.5px var(--arg-body);
+  color: var(--arg-faint);
+}
+.results {
+  margin-top: 22px;
+  text-align: left;
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+}
+.group + .group {
+  margin-top: 18px;
+}
+.group-head {
+  font: 700 11px var(--arg-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--arg-faint);
+  padding: 0 4px 8px;
+}
+.result {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: none;
+  color: var(--arg-cream);
+  cursor: pointer;
+  text-align: left;
+}
+.result:hover {
+  background: var(--arg-panel);
+  border-color: var(--arg-line-2);
+}
+.thumb {
+  flex: none;
+  width: 40px;
+  height: 58px;
+  border-radius: 6px;
+  border: 1px solid var(--arg-line-2);
+  background-color: var(--arg-panel-2);
+}
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.title {
+  font: 600 15px var(--arg-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sub {
+  font: 500 12px var(--arg-body);
   color: var(--arg-faint);
 }
 </style>
