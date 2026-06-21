@@ -332,6 +332,28 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/facets:
+    get:
+      tags: [library]
+      operationId: listFacets
+      summary: Most common facets (genres + tags) across the account's manifest
+      description: >-
+        The most-used genres and labels/tags across the account's films and
+        series, ranked by item count — used to surface discovery chips. Genres
+        and tags are merged into one ranking, each carrying its own type.
+      parameters:
+        - { name: limit, in: query, description: "Max facets to return.", schema: { type: integer, default: 8, minimum: 1, maximum: 50 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Facet" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v1/series/{seriesId}:
     get:
       tags: [library]
@@ -1220,6 +1242,14 @@ components:
       properties:
         movies: { type: array, items: { $ref: "#/components/schemas/MediaItemSummary" } }
         series: { type: array, items: { $ref: "#/components/schemas/SeriesSummary" } }
+
+    Facet:
+      type: object
+      required: [type, value, count]
+      properties:
+        type: { type: string, enum: [genre, tag], description: "Which dimension the value belongs to." }
+        value: { type: string }
+        count: { type: integer, description: "Number of films + series carrying it." }
 
     EpisodeSummary:
       type: object
