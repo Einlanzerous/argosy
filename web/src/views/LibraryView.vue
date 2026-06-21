@@ -40,7 +40,6 @@ const WATCHED: { key: WatchedState; label: string }[] = [
   { key: 'in_progress', label: 'In progress' },
   { key: 'watched', label: 'Watched' },
 ]
-const RATINGS = [6, 7, 8]
 
 type Scope = 'all' | 'movies' | 'series'
 const KINDS: { key: Scope; label: string }[] = [
@@ -99,6 +98,21 @@ const hasFilters = computed(
     !!label.value,
 )
 
+// The advanced filter panel is collapsed by default (it's tall); the toggle shows
+// how many facets are active so a collapsed panel still signals an active filter.
+const panelOpen = ref(false)
+const activeCount = computed(
+  () =>
+    genres.value.length +
+    (watched.value ? 1 : 0) +
+    (ratingMin.value ? 1 : 0) +
+    (yearFrom.value || yearTo.value ? 1 : 0) +
+    (label.value ? 1 : 0),
+)
+// Live label for the rating slider while dragging (committed on change).
+const ratingLabel = ref(0)
+watch(ratingMin, (v) => (ratingLabel.value = v ?? 0), { immediate: true })
+
 // patch merges a change into the query and drops emptied keys.
 function patch(next: Record<string, unknown>): void {
   const q: Record<string, unknown> = { ...route.query, ...next }
@@ -123,7 +137,7 @@ function setWatched(w: WatchedState): void {
   patch({ watched: watched.value === w ? undefined : w })
 }
 function setRating(r: number): void {
-  patch({ rating_min: ratingMin.value === r ? undefined : r })
+  patch({ rating_min: r > 0 ? r : undefined })
 }
 function toggleLabel(l: string): void {
   const v = l.toLowerCase()
@@ -254,7 +268,21 @@ watch(
         </div>
       </div>
 
-      <div class="panel">
+      <div class="filterbar">
+        <button
+          class="filters-toggle"
+          :class="{ on: panelOpen || activeCount > 0 }"
+          type="button"
+          @click="panelOpen = !panelOpen"
+        >
+          <span class="i">⚑</span> Filters
+          <span v-if="activeCount" class="fbadge">{{ activeCount }}</span>
+          <span class="caret">{{ panelOpen ? '▴' : '▾' }}</span>
+        </button>
+        <button v-if="hasFilters" class="clear" type="button" @click="clearFilters">Clear</button>
+      </div>
+
+      <div v-show="panelOpen" class="panel">
         <div class="facet">
           <span class="facet-label">Genre</span>
           <div class="chips">
@@ -267,38 +295,6 @@ watch(
               @click="toggleGenre(g)"
             >
               {{ g }}
-            </button>
-          </div>
-        </div>
-
-        <div class="facet">
-          <span class="facet-label">Watched</span>
-          <div class="chips">
-            <button
-              v-for="w in WATCHED"
-              :key="w.key"
-              class="chip"
-              :class="{ on: watched === w.key }"
-              type="button"
-              @click="setWatched(w.key)"
-            >
-              {{ w.label }}
-            </button>
-          </div>
-        </div>
-
-        <div class="facet">
-          <span class="facet-label">Rating</span>
-          <div class="chips">
-            <button
-              v-for="r in RATINGS"
-              :key="r"
-              class="chip"
-              :class="{ on: ratingMin === r }"
-              type="button"
-              @click="setRating(r)"
-            >
-              {{ r }}+
             </button>
           </div>
         </div>
@@ -319,30 +315,60 @@ watch(
           </div>
         </div>
 
-        <div class="facet">
-          <span class="facet-label">Year</span>
-          <div class="years">
-            <input
-              type="number"
-              class="year"
-              placeholder="From"
-              :value="yearFrom ?? ''"
-              @change="setYear('year_from', $event)"
-            />
-            <span class="dash">–</span>
-            <input
-              type="number"
-              class="year"
-              placeholder="To"
-              :value="yearTo ?? ''"
-              @change="setYear('year_to', $event)"
-            />
+        <div class="facet-row">
+          <div class="facet">
+            <span class="facet-label">Watched</span>
+            <div class="chips">
+              <button
+                v-for="w in WATCHED"
+                :key="w.key"
+                class="chip"
+                :class="{ on: watched === w.key }"
+                type="button"
+                @click="setWatched(w.key)"
+              >
+                {{ w.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="facet">
+            <span class="facet-label">Rating</span>
+            <div class="rating">
+              <input
+                type="range"
+                min="0"
+                max="10"
+                step="0.5"
+                :value="ratingLabel"
+                @input="ratingLabel = +($event.target as HTMLInputElement).value"
+                @change="setRating(+($event.target as HTMLInputElement).value)"
+              />
+              <span class="rating-val">{{ ratingLabel ? `★ ${ratingLabel.toFixed(1)}+` : 'Any' }}</span>
+            </div>
+          </div>
+
+          <div class="facet">
+            <span class="facet-label">Year</span>
+            <div class="years">
+              <input
+                type="number"
+                class="year"
+                placeholder="From"
+                :value="yearFrom ?? ''"
+                @change="setYear('year_from', $event)"
+              />
+              <span class="dash">–</span>
+              <input
+                type="number"
+                class="year"
+                placeholder="To"
+                :value="yearTo ?? ''"
+                @change="setYear('year_to', $event)"
+              />
+            </div>
           </div>
         </div>
-
-        <button v-if="hasFilters" class="clear" type="button" @click="clearFilters">
-          Clear filters
-        </button>
       </div>
 
       <div class="showing">Showing {{ cards.length }} titles</div>
@@ -533,15 +559,53 @@ h1 {
   border-color: rgba(201, 154, 78, 0.5);
   color: var(--arg-accent);
 }
-.panel {
+.filterbar {
   margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.5);
+  color: var(--arg-soft);
+  font: 600 12.5px var(--arg-body);
+  cursor: pointer;
+}
+.filters-toggle.on {
+  border-color: var(--arg-accent);
+  color: var(--arg-cream);
+}
+.filters-toggle .i {
+  color: var(--arg-accent);
+}
+.fbadge {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+  font: 700 11px var(--arg-display);
+  text-align: center;
+}
+.caret {
+  color: var(--arg-faint);
+  font-size: 10px;
+}
+.panel {
+  margin-top: 12px;
   padding: 18px 20px;
   border-radius: var(--arg-r-lg);
   border: 1px solid var(--arg-line-2);
   background: rgba(20, 20, 19, 0.5);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 .facet {
   display: flex;
@@ -556,6 +620,32 @@ h1 {
   text-transform: uppercase;
   color: var(--arg-faint);
   padding-top: 8px;
+}
+.facet-row {
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+.facet-row .facet {
+  align-items: center;
+}
+.facet-row .facet-label {
+  width: auto;
+  padding-top: 0;
+}
+.rating {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rating input[type='range'] {
+  width: 150px;
+  accent-color: var(--arg-accent);
+}
+.rating-val {
+  min-width: 58px;
+  font: 600 12.5px var(--arg-body);
+  color: var(--arg-soft);
 }
 .years {
   display: flex;
@@ -579,8 +669,7 @@ h1 {
   color: var(--arg-faint);
 }
 .clear {
-  align-self: flex-start;
-  padding: 7px 16px;
+  padding: 9px 16px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
