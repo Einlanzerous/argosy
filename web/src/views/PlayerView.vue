@@ -961,6 +961,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color: var(--arg-accent);
 }
 .ctrl.on .ic.cc {
+  border-color: var(--arg-accent);
   background: var(--arg-accent);
   color: var(--arg-bg);
 }
@@ -969,8 +970,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   letter-spacing: 0.04em;
   padding: 2px 5px;
   border-radius: 4px;
-  border: 1.5px solid var(--arg-accent);
-  color: var(--arg-accent);
+  border: 1.5px solid var(--arg-cream);
+  color: var(--arg-cream);
 }
 .cc-wrap {
   position: absolute;
