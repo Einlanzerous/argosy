@@ -1,22 +1,32 @@
 # ARGY-77 — Flutter player spike: decision doc
 
-**Status:** Recommendation drafted (desk research complete). **Pending:** on-device PiP validation + Arin's build-vs-buy/server-change sign-off before the spike can close.
+**Status:** Recommendation drafted (desk research complete). Scope set to **Android-first** (2026-06-21). **Pending:** on-device Android validation + Arin's player sign-off before the spike can close.
 **Date:** 2026-06-21
 
-This doc is the *recommendation* half of ARGY-77. The *throwaway proof* half (a `mobile/` Flutter app exercising the live `:8097` server) still needs a hands-on session with the Flutter SDK and **real Android + iOS devices** — PiP and HW HEVC cannot be validated headless. The "Validation checklist" at the end is the exact script for that session.
+This doc is the *recommendation* half of ARGY-77. The *throwaway proof* half (a `mobile/` Flutter app exercising the live `:8097` server) still needs a hands-on session with the Flutter SDK and a **real Android device** — PiP and HW HEVC cannot be validated headless. The "Validation checklist" at the end is the exact script for that session.
 
 ---
 
-## TL;DR recommendation
+## ⚠️ Scope update (2026-06-21): Android-first, iOS in theory only
 
-1. **Player layer:** Build a **thin native plugin** over **Media3/ExoPlayer (Android) + AVPlayer/AVKit (iOS)**. It is the only approach that delivers *native PiP on iOS with subtitles that survive inside the PiP window* — Argosy's hard requirement.
-2. **Pragmatic shortcut to spike first:** **`better_player_plus`** (v1.3.4, actively maintained, AVPlayer/ExoPlayer-backed) claims the whole matrix. If its iOS subtitle behaviour holds up *inside PiP* against a manifest-delivered track, it saves us the native plugin. It probably won't (it's AVPlayer-backed and shares the constraint) — but it's a one-day spike that could save weeks, so try it before hand-rolling.
-3. **Two server-side changes make the mobile player dramatically simpler** (details below). Both mirror patterns the server already implements. This contradicts the Phase 6 memory's "no server work expected for the MVP" — the spike found otherwise.
-4. **Runner-up:** **media_kit** (libmpv). Single most capable engine *if* its unmerged iOS-PiP PR (#1410) ever ships and stabilises. Today it's blocked on that PR + a self-declared "Limited Maintenance" notice + an open question on HLS ABR control. Hold as fallback.
+Direction set after the desk research: **ship and validate Android now; cover iOS *in theory* (keep a low-friction path) but do not build or verify it for now.** This sharpens the recommendation:
+
+- The whole native-plugin-vs-library tension below was driven by **iOS** PiP + iOS sidecar subtitles. Drop iOS-for-now and it mostly dissolves.
+- **The two server changes (S1/S2) are NOT needed for the Android MVP** — they're iOS-only. Filed as **ARGY-82** (Backlog, low) and deferred until iOS is real. Android works against the server as-is: ExoPlayer sets auth headers and accepts sidecar WebVTT.
+- **media_kit is out for the MVP**: its PiP is unmerged for **both** platforms (PR #1410 covers Android 8+ *and* iOS 15+), so it can't do PiP on **Android** either — and PiP is a hard requirement on the platform we're shipping.
+
+The "two requirements in tension," "server collision," and S1/S2 sections that follow are retained as the **iOS-future reference** (what ARGY-82 + the iOS player work will need), not MVP blockers.
+
+## TL;DR recommendation (Android-first)
+
+1. **Lead pick: `better_player_plus`** (v1.3.4, actively maintained, ExoPlayer/AVPlayer-backed). On **Android** it gives native PiP + background/lock-screen + HLS/ABR + sidecar-WebVTT track selection out of the box, in one Dart wrapper. It already ships an **AVPlayer iOS backend**, so iOS later is *"validate + patch,"* not *"build from scratch"* — the low-friction iOS-future path. Verify its Android PiP + subtitle behaviour in the proof.
+2. **Escape hatch: a thin native Android plugin over Media3/ExoPlayer** — if `better_player_plus`'s Android PiP/subtitles disappoint in the proof. Not throwaway: it's exactly the Android half of an eventual cross-platform native plugin, and ExoPlayer Activity-PiP is rock-solid.
+3. **Dropped for MVP: media_kit** (no native PiP on Android today; revisit only if PR #1410 lands and stabilises).
+4. **iOS server work (S1/S2): deferred to ARGY-82.** Documented below so the iOS path is understood now, not rediscovered later.
 
 ---
 
-## Why this is hard: two requirements in direct tension
+## (iOS-future reference) Why iOS is hard: two requirements in direct tension
 
 Argosy wants, on iOS, **both**:
 - **Native OS-level Picture-in-Picture** — which requires an `AVPlayer`/`AVPlayerLayer` (or `AVSampleBufferDisplayLayer`) surface. Texture-rendered players (media_kit/libmpv, fvp/libmdk, VLC) cannot get native iOS video PiP without bridging into one of those. (flutter/flutter#60048, open since 2020.)
@@ -91,28 +101,30 @@ Extracted from code — see citations at bottom.
 
 ## Decision points for Arin (before the spike closes)
 
-1. **Approve the two server changes** S1 (token query on transcode HLS — strongly recommended, near-zero cost) and S2 (manifest subtitle injection — recommended; fallback is iOS resource-loader glue)?
-2. **Build-vs-buy the player:** authorise the native plugin, or require a `better_player_plus` spike first to try to avoid it?
-3. **Accept the cost:** native plugin = two codebases we maintain forever vs. better_player_plus single-fork dependency vs. waiting on media_kit #1410.
+Under the Android-first scope the decisions shrink to:
+1. **Endorse `better_player_plus` as the Android lead**, with the native-ExoPlayer plugin as the escape hatch if the proof's Android PiP/subtitle tests fail? (media_kit dropped — no Android PiP today.)
+2. **Confirm the iOS server work stays deferred** to **ARGY-82** (S1 token-on-HLS + S2 manifest subtitles) — i.e. iOS is theory-only for now. *Already filed Backlog/low; this is just a confirm.*
 
-These are architectural + ongoing-maintenance commitments, so they're Arin's call, not mine — hence the spike stays open pending sign-off.
+The bus-factor of depending on a single-maintainer fork (`better_player_plus`) is the one ongoing-maintenance call worth a conscious nod — mitigated by it being a thin wrapper over ExoPlayer, so the escape hatch shares the same engine knowledge.
 
 ---
 
 ## Validation checklist — the throwaway proof (hands-on session)
 
-Run against the live dev server on **:8097**, on a **real Android device and a real iOS device** (PiP + HW HEVC can't be validated on simulators/headless):
+Run against the live dev server on **:8097**, on a **real Android device** (PiP + HW HEVC can't be validated on simulators/headless). Use `better_player_plus`; if a checked item fails, fall to the native-ExoPlayer escape hatch.
 
 - [ ] Install Flutter SDK; scaffold a throwaway app under `mobile/`.
 - [ ] Auth: `login` → `devices` → store token → `me`.
 - [ ] **Direct play:** `/items/{id}/stream?token=` an H.264/AAC mp4; seek + resume.
-- [ ] **Transcode HLS:** `POST /transcode {hevc:true}` → play `playlistUrl`. **Confirms S1** is needed/works (does the player auth to the m3u8 + `.m4s`?). Watch an ABR rendition switch happen.
-- [ ] **HEVC/4K:** play a true-4K HEVC source with `hevc:true`; confirm HW decode (no SW fallback) on each device; confirm fallback to H.264 transcode when the gate says so.
-- [ ] **Subtitles:** select a WebVTT track; **confirm it renders — and stays visible inside the PiP window — on iOS** (this is the make-or-break test for S2 vs sidecar).
-- [ ] **PiP:** enter PiP from a user gesture on Android **and** iOS; playback continues; controls work.
+- [ ] **Transcode HLS:** `POST /transcode {hevc:true}` → play `playlistUrl` with the Bearer header (Android sets headers fine — no S1 needed). Watch an ABR rendition switch happen.
+- [ ] **HEVC/4K:** play a true-4K HEVC source with `hevc:true`; confirm HW decode (no SW fallback) on the device; confirm fallback to H.264 transcode when the gate says so.
+- [ ] **Subtitles:** select a sidecar WebVTT track; confirm it renders + switches at runtime (ExoPlayer handles sidecar VTT natively).
+- [ ] **PiP:** enter PiP from a user gesture on Android; playback continues; controls work. *(This is the make-or-break test for `better_player_plus` vs the native escape hatch.)*
 - [ ] **Background / lock screen:** audio continues; now-playing controls (play/pause/seek) appear and work.
 - [ ] **Resume + Beacon:** `PUT /progress` heartbeat; kill app, reopen, resume from `/progress`; change position on another device and confirm the SSE `position` event updates this client (and that self-origin echoes are ignored).
-- [ ] Record APK/IPA size delta for the chosen engine.
+- [ ] Record APK size delta for the chosen engine.
+
+**iOS (deferred — do NOT run now):** when iOS is targeted, land **ARGY-82** (S1 token-on-HLS + S2 manifest subtitles) first, then validate AVPlayer HLS auth, subtitle-track-in-PiP, and PiP-from-gesture on a real iPhone (needs a Mac + Apple Developer Program).
 
 Outcome of this session → final recommendation, then the spike closes and feeds ARGY-45 (scaffold) + ARGY-79 (player screen).
 
