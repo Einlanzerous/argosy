@@ -225,6 +225,40 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/user/preferences:
+    get:
+      tags: [auth]
+      operationId: getUserPreferences
+      summary: Get the calling profile's account-wide preferences
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [auth]
+      operationId: setUserPreferences
+      summary: Update the calling profile's account-wide preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPreferences"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v1/auth/me:
     get:
       tags: [auth]
@@ -1253,6 +1287,15 @@ components:
       properties:
         name:
           type: string
+
+    UserPreferences:
+      type: object
+      required: [homeLayout]
+      properties:
+        homeLayout:
+          type: string
+          enum: [focused, discovery]
+          description: "Home density — focused trims to personal rows; discovery shows everything."
 
     DevicePreferences:
       type: object

@@ -35,6 +35,36 @@ func uniqueUsername() string {
 	return "test_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 }
 
+func TestUserPreferences(t *testing.T) {
+	store, ctx := testStore(t)
+	username := uniqueUsername()
+	password := "pw-" + uniqueUsername()
+	if _, err := store.CreateAccount(ctx, username, password, "Prefs Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	login, err := store.Login(ctx, username, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID := login.Profiles[0].Id.String()
+
+	// Default is discovery when nothing saved.
+	if p, err := store.GetUserPreferences(ctx, userID); err != nil || p.HomeLayout != api.Discovery {
+		t.Fatalf("default = %+v (err %v), want discovery", p, err)
+	}
+	// Set focused, read it back.
+	if p, err := store.SetUserPreferences(ctx, userID, api.UserPreferences{HomeLayout: api.Focused}); err != nil || p.HomeLayout != api.Focused {
+		t.Fatalf("set focused = %+v (err %v)", p, err)
+	}
+	if p, _ := store.GetUserPreferences(ctx, userID); p.HomeLayout != api.Focused {
+		t.Errorf("after set, layout = %q, want focused", p.HomeLayout)
+	}
+	// An invalid layout falls back to discovery rather than violating the CHECK.
+	if p, err := store.SetUserPreferences(ctx, userID, api.UserPreferences{HomeLayout: "nonsense"}); err != nil || p.HomeLayout != api.Discovery {
+		t.Errorf("invalid layout = %+v (err %v), want discovery", p, err)
+	}
+}
+
 func TestAuthFlow(t *testing.T) {
 	store, ctx := testStore(t)
 	username := uniqueUsername()

@@ -14,7 +14,13 @@ import {
   getLibraries,
   type RecentItem,
 } from '@/lib/manifest'
-import { getContinue, getOnDeck, type ContinueItem, type OnDeckItem } from '@/lib/playback'
+import {
+  getContinue,
+  getOnDeck,
+  getUserPreferences,
+  type ContinueItem,
+  type OnDeckItem,
+} from '@/lib/playback'
 import { listVaults, getVault } from '@/lib/vaults'
 import { subscribeBeacon } from '@/lib/beacon'
 import { setPage } from '@/lib/page'
@@ -167,8 +173,14 @@ onMounted(async () => {
     getOnDeck().catch(() => []),
   ])
   loading.value = false
-  void buildVaultRows().catch(() => {})
-  void buildGenreRows().catch(() => {})
+  // Vaults + genre rows are the "discovery" pieces — only built (and fetched) when
+  // the profile's home layout is discovery (the default). Focused keeps just the
+  // personal rows: Continue Watching, On Deck, Newly Arrived.
+  const userPrefs = await getUserPreferences().catch(() => null)
+  if (userPrefs?.homeLayout !== 'focused') {
+    void buildVaultRows().catch(() => {})
+    void buildGenreRows().catch(() => {})
+  }
   if (hero.value) {
     const { data } = await api.GET('/api/v1/items/{itemId}', {
       params: { path: { itemId: hero.value.id } },
