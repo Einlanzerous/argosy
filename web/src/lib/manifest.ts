@@ -6,8 +6,54 @@ export type MovieSummary = components['schemas']['MediaItemSummary']
 export type SeriesSummary = components['schemas']['SeriesSummary']
 export type SearchResults = components['schemas']['SearchResults']
 
-export type MovieSort = 'title' | 'added' | 'year'
-export type SeriesSort = 'title' | 'year'
+export type MovieSort = 'title' | 'added' | 'year' | 'rating'
+export type SeriesSort = 'title' | 'year' | 'rating'
+export type WatchedState = 'watched' | 'unwatched' | 'in_progress'
+
+// Facet filters shared by the movie + series browse helpers. All optional;
+// omitted/empty fields impose no constraint.
+export type BrowseFilter = {
+  tag?: string
+  genres?: string[]
+  ratingMin?: number
+  watched?: WatchedState
+  yearFrom?: number
+  yearTo?: number
+}
+
+// Genres offered by the filter panel — the TMDB names Stevedore now stores.
+export const GENRES = [
+  'Action',
+  'Adventure',
+  'Animation',
+  'Comedy',
+  'Crime',
+  'Documentary',
+  'Drama',
+  'Family',
+  'Fantasy',
+  'Horror',
+  'Mystery',
+  'Romance',
+  'Science Fiction',
+  'Thriller',
+  'War',
+  'Western',
+]
+
+// Real labels/tags Stevedore derives from the path layout — distinct from genres.
+export const LABELS = ['Anime']
+
+function filterQuery(f: BrowseFilter) {
+  return {
+    tag: f.tag || undefined,
+    genre: f.genres && f.genres.length ? f.genres : undefined,
+    rating_min: f.ratingMin || undefined,
+    watched: f.watched || undefined,
+    year_from: f.yearFrom || undefined,
+    year_to: f.yearTo || undefined,
+  }
+}
 
 // The browse API is per-library; the UI presents one unified Manifest, so these
 // helpers fan out across every library the account owns and merge the results.
@@ -18,7 +64,7 @@ export async function getLibraries(): Promise<Library[]> {
 }
 
 export async function getMovies(
-  opts: { tag?: string; sort?: MovieSort } = {},
+  opts: { sort?: MovieSort } & BrowseFilter = {},
   libraries?: Library[],
 ): Promise<MovieSummary[]> {
   const libs = libraries ?? (await getLibraries())
@@ -27,7 +73,7 @@ export async function getMovies(
       api.GET('/api/v1/libraries/{libraryId}/movies', {
         params: {
           path: { libraryId: l.id },
-          query: { limit: 200, sort: opts.sort, tag: opts.tag || undefined },
+          query: { limit: 200, sort: opts.sort, ...filterQuery(opts) },
         },
       }),
     ),
@@ -36,7 +82,7 @@ export async function getMovies(
 }
 
 export async function getSeries(
-  opts: { tag?: string; sort?: SeriesSort } = {},
+  opts: { sort?: SeriesSort } & BrowseFilter = {},
   libraries?: Library[],
 ): Promise<SeriesSummary[]> {
   const libs = libraries ?? (await getLibraries())
@@ -45,7 +91,7 @@ export async function getSeries(
       api.GET('/api/v1/libraries/{libraryId}/series', {
         params: {
           path: { libraryId: l.id },
-          query: { limit: 200, sort: opts.sort, tag: opts.tag || undefined },
+          query: { limit: 200, sort: opts.sort, ...filterQuery(opts) },
         },
       }),
     ),
@@ -73,6 +119,3 @@ export async function searchManifest(q: string, limit = 8): Promise<SearchResult
   return data ?? { movies: [], series: [] }
 }
 
-// Tags surfaced as filter chips. "All" is the no-filter sentinel; the rest match
-// the path-derived/override tags Stevedore writes (anime, etc.).
-export const TAG_FILTERS = ['All', 'Anime', 'Sci-Fi', 'Drama', 'Action', 'Documentary', '4K']

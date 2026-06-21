@@ -2,7 +2,6 @@ package library
 
 import (
 	"encoding/json"
-	"strconv"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -32,6 +31,16 @@ func mint(m map[string]any, k string) (int, bool) {
 		return int(n), true
 	case int:
 		return n, true
+	}
+	return 0, false
+}
+
+func mfloat(m map[string]any, k string) (float64, bool) {
+	switch n := m[k].(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
 	}
 	return 0, false
 }
@@ -90,6 +99,18 @@ func effectiveGenres(over, prov map[string]any) *[]string {
 	return nil
 }
 
+// effectiveRating returns the provider rating (vote_average, 0–10), override
+// blob winning over provider, or nil when neither carries one.
+func effectiveRating(over, prov map[string]any) *float64 {
+	if v, ok := mfloat(over, "vote_average"); ok {
+		return &v
+	}
+	if v, ok := mfloat(prov, "vote_average"); ok {
+		return &v
+	}
+	return nil
+}
+
 func posterURL(base string, over, prov map[string]any) *string {
 	rel := firstNonEmpty(mstr(over, "poster"), mstr(prov, "poster"))
 	if rel == "" {
@@ -115,7 +136,14 @@ func parseUUID(s string) openapi_types.UUID {
 	return u
 }
 
-func itoa(n int) string { return strconv.Itoa(n) }
+// f32 narrows an optional float64 to the float32 the generated API types use.
+func f32(v *float64) *float32 {
+	if v == nil {
+		return nil
+	}
+	f := float32(*v)
+	return &f
+}
 
 // nonNil normalizes a nil slice to an empty one so required JSON arrays
 // serialize as [] rather than null.

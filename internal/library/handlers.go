@@ -95,7 +95,7 @@ func (h *handlers) listLibraries(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
-	page, err := h.store.ListMovies(r.Context(), accountOf(r), r.PathValue("libraryId"), limit, offset, r.URL.Query().Get("sort"), r.URL.Query().Get("tag"))
+	page, err := h.store.ListMovies(r.Context(), accountOf(r), r.PathValue("libraryId"), userOf(r), limit, offset, r.URL.Query().Get("sort"), parseFilter(r))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -105,7 +105,7 @@ func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) listSeries(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
-	page, err := h.store.ListSeries(r.Context(), accountOf(r), r.PathValue("libraryId"), limit, offset, r.URL.Query().Get("sort"), r.URL.Query().Get("tag"))
+	page, err := h.store.ListSeries(r.Context(), accountOf(r), r.PathValue("libraryId"), userOf(r), limit, offset, r.URL.Query().Get("sort"), parseFilter(r))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -188,6 +188,30 @@ func pagination(r *http.Request) (limit, offset int) {
 		offset = v
 	}
 	return limit, offset
+}
+
+// parseFilter extracts the optional browse facet filters from the query string.
+// Unknown/zero values mean "no constraint".
+func parseFilter(r *http.Request) browseFilter {
+	q := r.URL.Query()
+	f := browseFilter{Tag: q.Get("tag"), Genres: q["genre"], Watched: q.Get("watched")}
+	if v, err := strconv.ParseFloat(q.Get("rating_min"), 64); err == nil {
+		f.RatingMin = v
+	}
+	if v, err := strconv.Atoi(q.Get("year_from")); err == nil {
+		f.YearFrom = v
+	}
+	if v, err := strconv.Atoi(q.Get("year_to")); err == nil {
+		f.YearTo = v
+	}
+	// Reject an unrecognized watched value so it doesn't fall through to a state
+	// that filters everything out.
+	switch f.Watched {
+	case "watched", "unwatched", "in_progress":
+	default:
+		f.Watched = ""
+	}
+	return f
 }
 
 func (h *handlers) fail(w http.ResponseWriter, err error) {

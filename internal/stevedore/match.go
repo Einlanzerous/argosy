@@ -155,6 +155,15 @@ func (m *Matcher) store(ctx context.Context, table, artworkSub, id string, match
 		"overview":  match.Overview,
 		"genre_ids": match.GenreIDs,
 	}
+	// genres (names) and rating power the genre + rating filters; omit when absent
+	// so unmatched/unrated items don't carry empty facets.
+	if len(match.Genres) > 0 {
+		pm["genres"] = match.Genres
+	}
+	if match.VoteCount > 0 {
+		pm["vote_average"] = match.VoteAverage
+		pm["vote_count"] = match.VoteCount
+	}
 	if posterRel != "" {
 		pm["poster"] = posterRel
 	}

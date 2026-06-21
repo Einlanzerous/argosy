@@ -22,16 +22,19 @@ func NewStore(pool *pgxpool.Pool, artworkBase string) *Store {
 	return &Store{pool: pool, artworkBase: artworkBase}
 }
 
-// Whitelisted ORDER BY clauses (never interpolate user input directly).
+// Whitelisted ORDER BY clauses (never interpolate user input directly). The
+// rating clause reads the effective rating (override blob over provider blob).
 var movieSort = map[string]string{
-	"title": "mi.sort_title ASC NULLS LAST, mi.title ASC",
-	"added": "mi.added_at DESC",
-	"year":  "mi.year DESC NULLS LAST, mi.title ASC",
+	"title":  "mi.sort_title ASC NULLS LAST, mi.title ASC",
+	"added":  "mi.added_at DESC",
+	"year":   "mi.year DESC NULLS LAST, mi.title ASC",
+	"rating": "(COALESCE(mi.metadata->>'vote_average', mi.provider_metadata->>'vote_average'))::numeric DESC NULLS LAST, mi.sort_title ASC NULLS LAST, mi.title ASC",
 }
 
 var seriesSort = map[string]string{
-	"title": "r.sort_title ASC NULLS LAST, r.title ASC",
-	"year":  "r.year DESC NULLS LAST, r.title ASC",
+	"title":  "r.sort_title ASC NULLS LAST, r.title ASC",
+	"year":   "r.year DESC NULLS LAST, r.title ASC",
+	"rating": "(COALESCE(r.metadata->>'vote_average', r.provider_metadata->>'vote_average'))::numeric DESC NULLS LAST, r.sort_title ASC NULLS LAST, r.title ASC",
 }
 
 // ListLibraries returns the account's libraries.
@@ -52,30 +55,29 @@ func (s *Store) ListLibraries(ctx context.Context, accountID string) ([]api.Libr
 	return out, rows.Err()
 }
 
-// ListMovies returns a paginated page of movies in a library. A non-empty tag
-// filters to movies carrying it.
-func (s *Store) ListMovies(ctx context.Context, accountID, libraryID string, limit, offset int, sort, tag string) (api.MediaItemPage, error) {
+// ListMovies returns a paginated page of movies in a library, narrowed by the
+// given facet filter (tag, genres, rating, year range, and the per-user watched
+// state — hence userID).
+func (s *Store) ListMovies(ctx context.Context, accountID, libraryID, userID string, limit, offset int, sort string, f browseFilter) (api.MediaItemPage, error) {
 	order := movieSort[sort]
 	if order == "" {
 		order = movieSort["title"]
 	}
 	page := api.MediaItemPage{Items: []api.MediaItemSummary{}, Limit: limit, Offset: offset}
-	where := `WHERE l.account_id = $1 AND mi.library_id = $2 AND mi.kind = 'movie'`
-	args := []any{accountID, libraryID}
-	if tag != "" {
-		args = append(args, tag)
-		where += ` AND $3 = ANY(mi.tags)`
-	}
-	if err := s.pool.QueryRow(ctx,
-		`SELECT count(*) FROM media_items mi JOIN libraries l ON l.id = mi.library_id `+where,
-		args...).Scan(&page.Total); err != nil {
+	a := &sqlArgs{}
+	acc, lib := a.add(accountID), a.add(libraryID)
+	watchJoin, watchWhere := f.movieWatched(a, userID)
+	from := ` FROM media_items mi JOIN libraries l ON l.id = mi.library_id` + watchJoin +
+		` WHERE l.account_id = ` + acc + ` AND mi.library_id = ` + lib + ` AND mi.kind = 'movie'` +
+		f.common("mi", a) + watchWhere
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+from, a.vals...).Scan(&page.Total); err != nil {
 		return page, err
 	}
+	lim, off := a.add(limit), a.add(offset)
 	rows, err := s.pool.Query(ctx,
-		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.tags, mi.provider_metadata, mi.metadata
-		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id `+where+`
-		 ORDER BY `+order+` LIMIT $`+itoa(len(args)+1)+` OFFSET $`+itoa(len(args)+2),
-		append(args, limit, offset)...)
+		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.tags, mi.provider_metadata, mi.metadata`+
+			from+` ORDER BY `+order+` LIMIT `+lim+` OFFSET `+off,
+		a.vals...)
 	if err != nil {
 		return page, err
 	}
@@ -93,30 +95,27 @@ func (s *Store) ListMovies(ctx context.Context, accountID, libraryID string, lim
 	return page, rows.Err()
 }
 
-// ListSeries returns a paginated page of series in a library. A non-empty tag
-// filters to series carrying it.
-func (s *Store) ListSeries(ctx context.Context, accountID, libraryID string, limit, offset int, sort, tag string) (api.SeriesPage, error) {
+// ListSeries returns a paginated page of series in a library, narrowed by the
+// given facet filter. Watched state aggregates over each series' episodes.
+func (s *Store) ListSeries(ctx context.Context, accountID, libraryID, userID string, limit, offset int, sort string, f browseFilter) (api.SeriesPage, error) {
 	order := seriesSort[sort]
 	if order == "" {
 		order = seriesSort["title"]
 	}
 	page := api.SeriesPage{Items: []api.SeriesSummary{}, Limit: limit, Offset: offset}
-	where := `WHERE l.account_id = $1 AND r.library_id = $2`
-	args := []any{accountID, libraryID}
-	if tag != "" {
-		args = append(args, tag)
-		where += ` AND $3 = ANY(r.tags)`
-	}
-	if err := s.pool.QueryRow(ctx,
-		`SELECT count(*) FROM series r JOIN libraries l ON l.id = r.library_id `+where,
-		args...).Scan(&page.Total); err != nil {
+	a := &sqlArgs{}
+	acc, lib := a.add(accountID), a.add(libraryID)
+	from := ` FROM series r JOIN libraries l ON l.id = r.library_id` +
+		` WHERE l.account_id = ` + acc + ` AND r.library_id = ` + lib +
+		f.common("r", a) + f.seriesWatched(a, userID)
+	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+from, a.vals...).Scan(&page.Total); err != nil {
 		return page, err
 	}
+	lim, off := a.add(limit), a.add(offset)
 	rows, err := s.pool.Query(ctx,
-		`SELECT r.id::text, r.title, r.year, r.tags, r.provider_metadata, r.metadata
-		 FROM series r JOIN libraries l ON l.id = r.library_id `+where+`
-		 ORDER BY `+order+` LIMIT $`+itoa(len(args)+1)+` OFFSET $`+itoa(len(args)+2),
-		append(args, limit, offset)...)
+		`SELECT r.id::text, r.title, r.year, r.tags, r.provider_metadata, r.metadata`+
+			from+` ORDER BY `+order+` LIMIT `+lim+` OFFSET `+off,
+		a.vals...)
 	if err != nil {
 		return page, err
 	}
@@ -217,6 +216,7 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 		FilePath:       filePath,
 		ReviewRequired: reviewRequired,
 		Tags:           nonNil(tags),
+		Rating:         f32(effectiveRating(o, p)),
 	}
 	if duration != nil {
 		f := float32(*duration)
@@ -321,6 +321,7 @@ func (s *Store) seriesSummary(id, title string, year *int, tags []string, prov, 
 		PosterUrl:   posterURL(s.artworkBase, o, p),
 		BackdropUrl: backdropURL(s.artworkBase, o, p),
 		Tags:        nonNil(tags),
+		Rating:      f32(effectiveRating(o, p)),
 	}
 }
 
@@ -334,5 +335,6 @@ func (s *Store) summary(id, kind, title string, year *int, tags []string, prov, 
 		PosterUrl:   posterURL(s.artworkBase, o, p),
 		BackdropUrl: backdropURL(s.artworkBase, o, p),
 		Tags:        nonNil(tags),
+		Rating:      f32(effectiveRating(o, p)),
 	}
 }
