@@ -47,6 +47,32 @@ const subMenuOpen = ref(false)
 // This device's saved playback preferences (subtitle language/on-off), applied
 // when tracks load and updated when the viewer changes the subtitle (ARGY-37).
 const prefs = ref<DevicePreferences | null>(null)
+
+// Caption styling (ARGY-43), persisted per-device, applied via ::cue.
+type CaptionBg = 'translucent' | 'solid' | 'none'
+const CAPTION_DEFAULTS = { scale: 1, color: '#ffffff', background: 'translucent' as CaptionBg }
+const CAPTION_SCALES = [
+  { v: 0.8, label: 'S' },
+  { v: 1, label: 'M' },
+  { v: 1.3, label: 'L' },
+  { v: 1.6, label: 'XL' },
+]
+const CAPTION_COLORS = ['#ffffff', '#ffe082', '#80d8ff', '#a5d6a7']
+const captionScale = ref(CAPTION_DEFAULTS.scale)
+const captionColor = ref<string>(CAPTION_DEFAULTS.color)
+const captionBackground = ref<CaptionBg>(CAPTION_DEFAULTS.background)
+
+// A global ::cue rule styled from the prefs above. font-size as a percentage of
+// the browser's default cue size keeps it scaling with the video.
+const cueCss = computed(() => {
+  const bg =
+    captionBackground.value === 'none'
+      ? 'transparent'
+      : captionBackground.value === 'solid'
+        ? '#000'
+        : 'rgba(0, 0, 0, 0.6)'
+  return `::cue{font-size:${Math.round(captionScale.value * 100)}%;color:${captionColor.value};background-color:${bg};}`
+})
 // The active subtitle is rendered by feeding cues straight into a single
 // TextTrack (reused across switches); we track the cues we added so we can
 // clear them when changing or turning off subtitles.
@@ -83,6 +109,11 @@ onMounted(async () => {
   ])
   item.value = data ?? null
   prefs.value = devicePrefs
+  if (devicePrefs) {
+    captionScale.value = devicePrefs.captionScale ?? CAPTION_DEFAULTS.scale
+    captionColor.value = devicePrefs.captionColor ?? CAPTION_DEFAULTS.color
+    captionBackground.value = (devicePrefs.captionBackground as CaptionBg) ?? CAPTION_DEFAULTS.background
+  }
 
   // Subtitle tracks load in the background; an OpenSubtitles search can take a
   // moment and shouldn't hold up playback. Once they arrive, auto-enable the
@@ -340,15 +371,46 @@ async function selectSubtitle(trackId: string | null, persist = true): Promise<v
 
 // savePreferredSubtitle persists the subtitle choice for this device. Turning
 // subtitles off keeps the last language, so re-enabling remembers it.
+// buildPrefs assembles a full DevicePreferences from current state, so saving one
+// facet (subtitle choice or caption style) never clobbers the others.
+function buildPrefs(over: Partial<DevicePreferences>): DevicePreferences {
+  return {
+    subtitleEnabled: prefs.value?.subtitleEnabled ?? false,
+    subtitleLanguage: prefs.value?.subtitleLanguage ?? null,
+    audioLanguage: prefs.value?.audioLanguage ?? null,
+    captionScale: captionScale.value,
+    captionColor: captionColor.value,
+    captionBackground: captionBackground.value,
+    ...over,
+  }
+}
+
 function savePreferredSubtitle(trackId: string | null): Promise<void> {
   const track = trackId ? subtitleTracks.value.find((t) => t.id === trackId) : null
-  const next: DevicePreferences = {
+  const next = buildPrefs({
     subtitleEnabled: trackId != null,
     subtitleLanguage: track?.language ?? prefs.value?.subtitleLanguage ?? null,
-    audioLanguage: prefs.value?.audioLanguage ?? null,
-  }
+  })
   prefs.value = next
   return putPreferences(next).catch(() => {})
+}
+
+function saveCaptionStyle(): void {
+  const next = buildPrefs({})
+  prefs.value = next
+  void putPreferences(next).catch(() => {})
+}
+function setCaptionScale(v: number): void {
+  captionScale.value = v
+  saveCaptionStyle()
+}
+function setCaptionColor(v: string): void {
+  captionColor.value = v
+  saveCaptionStyle()
+}
+function setCaptionBackground(v: CaptionBg): void {
+  captionBackground.value = v
+  saveCaptionStyle()
 }
 
 // applyPreferredSubtitle auto-enables the saved subtitle language once tracks
@@ -471,6 +533,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
+  <!-- Per-device caption styling, applied to the native ::cue pseudo-element. -->
+  <component :is="'style'">{{ cueCss }}</component>
   <div class="player" :class="{ idle: !controlsVisible }" @mousemove="poke">
     <div class="backdrop" :style="backdrop" />
     <div class="arg-hatch backdrop-hatch" />
@@ -587,6 +651,62 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               </span>
               <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
             </button>
+
+            <div class="cc-head cc-style-head">Caption style</div>
+            <div class="cc-style-row">
+              <span class="cc-style-label">Size</span>
+              <div class="cc-seg">
+                <button
+                  v-for="s in CAPTION_SCALES"
+                  :key="s.v"
+                  type="button"
+                  :class="{ on: captionScale === s.v }"
+                  @click="setCaptionScale(s.v)"
+                >
+                  {{ s.label }}
+                </button>
+              </div>
+            </div>
+            <div class="cc-style-row">
+              <span class="cc-style-label">Color</span>
+              <div class="cc-swatches">
+                <button
+                  v-for="c in CAPTION_COLORS"
+                  :key="c"
+                  type="button"
+                  class="cc-swatch"
+                  :class="{ on: captionColor === c }"
+                  :style="{ background: c }"
+                  @click="setCaptionColor(c)"
+                />
+              </div>
+            </div>
+            <div class="cc-style-row">
+              <span class="cc-style-label">Background</span>
+              <div class="cc-seg">
+                <button
+                  type="button"
+                  :class="{ on: captionBackground === 'translucent' }"
+                  @click="setCaptionBackground('translucent')"
+                >
+                  Dim
+                </button>
+                <button
+                  type="button"
+                  :class="{ on: captionBackground === 'solid' }"
+                  @click="setCaptionBackground('solid')"
+                >
+                  Solid
+                </button>
+                <button
+                  type="button"
+                  :class="{ on: captionBackground === 'none' }"
+                  @click="setCaptionBackground('none')"
+                >
+                  None
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         </div>
@@ -1014,6 +1134,56 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--arg-dim);
+}
+.cc-style-head {
+  margin-top: 6px;
+  border-top: 1px solid var(--arg-line-2);
+  padding-top: 12px;
+}
+.cc-style-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+}
+.cc-style-label {
+  font: 500 12.5px var(--arg-body);
+  color: var(--arg-soft);
+}
+.cc-seg {
+  display: flex;
+  gap: 4px;
+}
+.cc-seg button {
+  min-width: 34px;
+  padding: 5px 9px;
+  border-radius: var(--arg-r-sm);
+  border: 1px solid var(--arg-line-2);
+  background: transparent;
+  color: var(--arg-soft);
+  font: 600 11.5px var(--arg-body);
+  cursor: pointer;
+}
+.cc-seg button.on {
+  background: var(--arg-accent);
+  border-color: var(--arg-accent);
+  color: var(--arg-bg);
+}
+.cc-swatches {
+  display: flex;
+  gap: 7px;
+}
+.cc-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.cc-swatch.on {
+  border-color: var(--arg-accent);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5) inset;
 }
 .cc-item {
   width: 100%;

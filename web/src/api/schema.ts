@@ -874,6 +874,15 @@ export interface components {
             subtitleEnabled: boolean;
             /** @description Preferred audio language (ISO code). Persisted; applied once audio-track selection ships. */
             audioLanguage?: string | null;
+            /** @description Caption font scale (1.0 = default). */
+            captionScale?: number | null;
+            /** @description Caption text color (hex). */
+            captionColor?: string | null;
+            /**
+             * @description Caption background box style.
+             * @enum {string|null}
+             */
+            captionBackground?: "translucent" | "solid" | "none" | null;
         };
         DeviceRegistrationResponse: {
             device: components["schemas"]["Device"];
