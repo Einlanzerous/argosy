@@ -64,6 +64,24 @@ export async function getLibraries(): Promise<Library[]> {
   return data ?? []
 }
 
+// createLibrary registers a new media root (admin only). The path must be an
+// existing directory on the server.
+export async function createLibrary(body: {
+  name: string
+  path: string
+  kind?: 'movie' | 'show' | 'mixed'
+}): Promise<{ ok: boolean; error?: string; library?: Library }> {
+  const { data, error, response } = await api.POST('/api/v1/libraries', {
+    body: { ...body, kind: body.kind ?? 'mixed' },
+  })
+  if (data) return { ok: true, library: data }
+  return { ok: false, error: (error as { error?: string })?.error ?? `HTTP ${response.status}` }
+}
+
+export async function deleteLibraryById(id: string): Promise<void> {
+  await api.DELETE('/api/v1/libraries/{libraryId}', { params: { path: { libraryId: id } } })
+}
+
 export async function getMovies(
   opts: { sort?: MovieSort } & BrowseFilter = {},
   libraries?: Library[],

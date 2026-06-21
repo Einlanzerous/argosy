@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 
+	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/ballast"
 	"github.com/Einlanzerous/argosy/internal/beacon"
@@ -36,6 +38,8 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mw := auth.Middleware(authStore)
 
 	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))
+	mux.Handle("POST /api/v1/libraries", mw(auth.RequireAdmin(http.HandlerFunc(h.createLibrary))))
+	mux.Handle("DELETE /api/v1/libraries/{libraryId}", mw(auth.RequireAdmin(http.HandlerFunc(h.deleteLibrary))))
 	mux.Handle("GET /api/v1/libraries/{libraryId}/movies", mw(http.HandlerFunc(h.listMovies)))
 	mux.Handle("GET /api/v1/libraries/{libraryId}/series", mw(http.HandlerFunc(h.listSeries)))
 	mux.Handle("GET /api/v1/series/{seriesId}", mw(http.HandlerFunc(h.getSeries)))
@@ -102,7 +106,51 @@ func (h *handlers) listLibraries(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
+	// The server-side path is admin-only; hide it from viewers.
+	if !isAdmin(r) {
+		for i := range libs {
+			libs[i].RootPath = nil
+		}
+	}
 	writeJSON(w, http.StatusOK, libs)
+}
+
+func (h *handlers) createLibrary(w http.ResponseWriter, r *http.Request) {
+	var req api.CreateLibraryRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.Name == "" || req.Path == "" {
+		writeJSON(w, http.StatusBadRequest, errorBody("name and path are required"))
+		return
+	}
+	if info, err := os.Stat(req.Path); err != nil || !info.IsDir() {
+		writeJSON(w, http.StatusBadRequest, errorBody("path must be an existing directory on the server"))
+		return
+	}
+	kind := "mixed"
+	if req.Kind != nil {
+		kind = string(*req.Kind)
+	}
+	lib, err := h.store.CreateLibrary(r.Context(), accountOf(r), req.Name, req.Path, kind)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, lib)
+}
+
+func (h *handlers) deleteLibrary(w http.ResponseWriter, r *http.Request) {
+	removed, err := h.store.DeleteLibrary(r.Context(), accountOf(r), r.PathValue("libraryId"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if !removed {
+		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
@@ -196,6 +244,11 @@ func (h *handlers) getItem(w http.ResponseWriter, r *http.Request) {
 func accountOf(r *http.Request) string {
 	sess, _ := auth.SessionFromContext(r.Context())
 	return sess.AccountId.String()
+}
+
+func isAdmin(r *http.Request) bool {
+	sess, _ := auth.SessionFromContext(r.Context())
+	return sess.Role == api.Admin
 }
 
 func pagination(r *http.Request) (limit, offset int) {

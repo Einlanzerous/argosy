@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { formatRelative } from '@/lib/format'
 import { setPage } from '@/lib/page'
 import { useSessionStore } from '@/stores/session'
+import { getLibraries, createLibrary, deleteLibraryById, type Library } from '@/lib/manifest'
 import type { components } from '@/api/schema'
 
 type ScanStatus = components['schemas']['ScanStatus']
@@ -16,6 +17,43 @@ const status = ref<ScanStatus | null>(null)
 const message = ref('')
 const triggering = ref(false)
 let poll: ReturnType<typeof setInterval> | null = null
+
+const libraries = ref<Library[]>([])
+const newName = ref('')
+const newPath = ref('')
+const newKind = ref<'movie' | 'show' | 'mixed'>('mixed')
+const addBusy = ref(false)
+const addError = ref('')
+
+async function loadLibraries(): Promise<void> {
+  libraries.value = await getLibraries().catch(() => [])
+}
+
+async function addLibrary(): Promise<void> {
+  const name = newName.value.trim()
+  const path = newPath.value.trim()
+  if (!name || !path || addBusy.value) return
+  addBusy.value = true
+  addError.value = ''
+  const res = await createLibrary({ name, path, kind: newKind.value })
+  addBusy.value = false
+  if (!res.ok) {
+    addError.value = res.error ?? 'Could not add the library.'
+    return
+  }
+  newName.value = ''
+  newPath.value = ''
+  newKind.value = 'mixed'
+  await loadLibraries()
+  void rebuild() // scan + match the freshly-added library
+}
+
+async function removeLibrary(l: Library): Promise<void> {
+  if (!confirm(`Remove “${l.name}” and its items from the Manifest? Files on disk are untouched.`)) return
+  await deleteLibraryById(l.id).catch(() => {})
+  await loadLibraries()
+  await refresh()
+}
 
 async function refresh(): Promise<void> {
   const { data } = await api.GET('/api/v1/scan/status')
@@ -43,6 +81,7 @@ async function rebuild(): Promise<void> {
 onMounted(() => {
   setPage('Settings', 'The Helm · keep the Manifest current.')
   void refresh()
+  void loadLibraries()
 })
 onUnmounted(() => {
   if (poll) clearInterval(poll)
@@ -89,6 +128,42 @@ onUnmounted(() => {
         </div>
       </div>
       <p v-else class="hint">No libraries registered yet.</p>
+    </section>
+
+    <section v-if="isAdmin" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Libraries</h2>
+          <p>Point Argosy at media folders on the server. Adding one kicks off a scan.</p>
+        </div>
+      </div>
+
+      <div v-if="libraries.length" class="libs">
+        <div v-for="l in libraries" :key="l.id" class="lib lib-manage">
+          <div class="lib-info">
+            <span class="lib-name">{{ l.name }}</span>
+            <span class="lib-path">{{ l.rootPath }}</span>
+          </div>
+          <div class="lib-right">
+            <span class="kind-badge">{{ l.kind }}</span>
+            <button class="remove" type="button" @click="removeLibrary(l)">Remove</button>
+          </div>
+        </div>
+      </div>
+
+      <form class="addlib" @submit.prevent="addLibrary">
+        <input v-model="newName" type="text" placeholder="Library name" />
+        <input v-model="newPath" type="text" placeholder="/path/on/server" />
+        <select v-model="newKind">
+          <option value="mixed">Mixed</option>
+          <option value="movie">Movies</option>
+          <option value="show">Shows</option>
+        </select>
+        <button type="submit" :disabled="addBusy || !newName.trim() || !newPath.trim()">
+          {{ addBusy ? 'Adding…' : 'Add & scan' }}
+        </button>
+      </form>
+      <p v-if="addError" class="message err-msg">{{ addError }}</p>
     </section>
   </div>
 </template>
@@ -214,5 +289,87 @@ h2 {
   margin-top: 18px;
   font: 500 13px var(--arg-body);
   color: var(--arg-faint);
+}
+.lib-manage {
+  align-items: center;
+}
+.lib-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lib-path {
+  font: 500 12px var(--arg-mono, var(--arg-body));
+  color: var(--arg-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lib-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kind-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--arg-line-2);
+  color: var(--arg-soft);
+  font: 600 10px var(--arg-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.remove {
+  padding: 6px 12px;
+  border-radius: var(--arg-r-sm);
+  border: 1px solid var(--arg-line-2);
+  background: transparent;
+  color: var(--arg-soft);
+  font: 600 12px var(--arg-body);
+  cursor: pointer;
+}
+.remove:hover {
+  border-color: #b4513a;
+  color: #e9836c;
+}
+.addlib {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.addlib input,
+.addlib select {
+  padding: 10px 12px;
+  border-radius: var(--arg-r-sm);
+  border: 1px solid var(--arg-line-2);
+  background: transparent;
+  color: var(--arg-cream);
+  font: 500 13px var(--arg-body);
+  outline: none;
+}
+.addlib input {
+  flex: 1;
+  min-width: 160px;
+}
+.addlib input:focus {
+  border-color: var(--arg-accent);
+}
+.addlib button {
+  padding: 10px 18px;
+  border-radius: var(--arg-r-sm);
+  border: none;
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+  font: 700 13px var(--arg-display);
+  cursor: pointer;
+}
+.addlib button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.err-msg {
+  color: #e9836c;
 }
 </style>
