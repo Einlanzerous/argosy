@@ -6,6 +6,7 @@ import BackButton from '@/components/BackButton.vue'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import AddToVault from '@/components/AddToVault.vue'
+import LabelEditor from '@/components/LabelEditor.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime, formatClock } from '@/lib/format'
 import { getMovies, type MovieSummary } from '@/lib/manifest'
@@ -90,6 +91,7 @@ watch(
             <span v-for="g in movie.genres ?? []" :key="`g-${g}`" class="tag">{{ g }}</span>
             <span v-for="t in movie.tags ?? []" :key="`t-${t}`" class="tag accent">{{ t }}</span>
           </div>
+          <LabelEditor :movie-id="movie.id" :initial="movie.labels ?? []" />
           <div class="actions">
             <template v-if="resumable">
               <RouterLink

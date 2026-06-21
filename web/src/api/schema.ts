@@ -382,6 +382,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The calling profile's distinct custom labels */
+        get: operations["listLabels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/items/{itemId}/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add one of the profile's custom labels to a film */
+        post: operations["addItemLabel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/items/{itemId}/labels/{label}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a custom label from a film */
+        delete: operations["removeItemLabel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/series/{seriesId}/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add one of the profile's custom labels to a series */
+        post: operations["addSeriesLabel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/series/{seriesId}/labels/{label}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a custom label from a series */
+        delete: operations["removeSeriesLabel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/series/{seriesId}": {
         parameters: {
             query?: never;
@@ -1140,6 +1225,8 @@ export interface components {
             tags: string[];
             /** @description Effective provider rating, 0–10. */
             rating?: number | null;
+            /** @description The calling profile's custom labels on this item. */
+            labels?: string[];
         };
         MediaItemPage: {
             items: components["schemas"]["MediaItemSummary"][];
@@ -1209,6 +1296,11 @@ export interface components {
             backdropUrl?: string | null;
             seasons: components["schemas"]["SeasonSummary"][];
             tags: string[];
+            /** @description The calling profile's custom labels on this series. */
+            labels?: string[];
+        };
+        AddLabelRequest: {
+            label: string;
         };
     };
     responses: {
@@ -1680,6 +1772,8 @@ export interface operations {
                 sort?: "title" | "added" | "year" | "rating";
                 /** @description Filter to items carrying this label/tag (e.g. anime). */
                 tag?: string;
+                /** @description Filter to items the calling profile has labelled with this custom label. */
+                label?: string;
                 /** @description Filter to items in any of these genres (repeatable). */
                 genre?: string[];
                 /** @description Minimum effective rating (0–10). */
@@ -1719,6 +1813,8 @@ export interface operations {
                 sort?: "title" | "year" | "rating";
                 /** @description Filter to series carrying this label/tag (e.g. anime). */
                 tag?: string;
+                /** @description Filter to series the calling profile has labelled with this custom label. */
+                label?: string;
                 /** @description Filter to series in any of these genres (repeatable). */
                 genre?: string[];
                 /** @description Minimum effective rating (0–10). */
@@ -2066,6 +2162,139 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    listLabels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    addItemLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddLabelRequest"];
+            };
+        };
+        responses: {
+            /** @description The item's labels after the add */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Item not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeItemLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    addSeriesLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seriesId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddLabelRequest"];
+            };
+        };
+        responses: {
+            /** @description The series' labels after the add */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Series not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeSeriesLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seriesId: string;
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     getSeries: {

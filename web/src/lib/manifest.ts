@@ -15,6 +15,7 @@ export type WatchedState = 'watched' | 'unwatched' | 'in_progress'
 // omitted/empty fields impose no constraint.
 export type BrowseFilter = {
   tag?: string
+  label?: string // user-applied custom label (per-profile)
   genres?: string[]
   ratingMin?: number
   watched?: WatchedState
@@ -48,6 +49,7 @@ export const LABELS = ['Anime']
 function filterQuery(f: BrowseFilter) {
   return {
     tag: f.tag || undefined,
+    label: f.label || undefined,
     genre: f.genres && f.genres.length ? f.genres : undefined,
     rating_min: f.ratingMin || undefined,
     watched: f.watched || undefined,
