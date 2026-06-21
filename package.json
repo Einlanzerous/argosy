@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "docker compose -f deploy/docker-compose.yml up -d --build && cd web && bun install && bun run dev",
     "dev:down": "docker compose -f deploy/docker-compose.yml down",
-    "seed": "bash scripts/seed-sample.sh"
+    "seed": "bash scripts/seed-sample.sh",
+    "gen:dart": "openapi-generator-cli generate -c proto/openapi/dart-openapi.yaml"
+  },
+  "devDependencies": {
+    "@openapitools/openapi-generator-cli": "^2.25.0"
   }
 }

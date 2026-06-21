@@ -76,9 +76,10 @@ test: ensure-embed ## Run Go tests
 tidy: ## Tidy go.mod
 	$(GO) mod tidy
 
-generate: ## Regenerate the Go server interface + TS client from the OpenAPI spec
+generate: ## Regenerate the Go server interface + TS client + Dart client from the OpenAPI spec
 	$(GO) tool oapi-codegen -config proto/openapi/oapi-codegen.yaml proto/openapi/argosy.yaml
 	cd $(WEB) && $(BUN) install --frozen-lockfile && $(BUN) run gen:api
+	$(BUN) install --frozen-lockfile && $(BUN) run gen:dart
 
 clean: ## Remove build artifacts (restores the embed placeholder)
 	rm -rf bin $(EMBED_DIR)
