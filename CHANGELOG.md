@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.3.0](https://github.com/Einlanzerous/argosy/compare/v0.2.0...v0.3.0) (2026-06-21)
+
+
+### Features
+
+* **artwork:** fetch TMDB backdrops for crisp full-screen heroes ([#53](https://github.com/Einlanzerous/argosy/issues/53)) ([0d35de4](https://github.com/Einlanzerous/argosy/commit/0d35de46deebef20be254699843065c4fa8b3bd1))
+* **auth:** enforce admin vs viewer roles (ARGY-38) ([#51](https://github.com/Einlanzerous/argosy/issues/51)) ([52658ae](https://github.com/Einlanzerous/argosy/commit/52658aed8a5e37d0bb9371ecfdcff99cf14c56d7))
+* Ballast — transcode cache cleanup worker + stats (ARGY-32) ([#30](https://github.com/Einlanzerous/argosy/issues/30)) ([99becf6](https://github.com/Einlanzerous/argosy/commit/99becf6a0191201abc128227289b7d26ba91786f))
+* **beacon:** live play-state push over Postgres LISTEN/NOTIFY → SSE (ARGY-36) ([#48](https://github.com/Einlanzerous/argosy/issues/48)) ([4cfeb51](https://github.com/Einlanzerous/argosy/commit/4cfeb515021ecbdff547c8d91f129f77f663780f))
+* **fleet:** Fleet management — role-scoped device list, owner, platform, rename (ARGY-33) ([#46](https://github.com/Einlanzerous/argosy/issues/46)) ([b5e8e94](https://github.com/Einlanzerous/argosy/commit/b5e8e94fdfa05696f9d6d3149d2079168a070d71))
+* HLS/CMAF bitrate ladder + web HLS playback (ARGY-28) ([#28](https://github.com/Einlanzerous/argosy/issues/28)) ([3a3f19a](https://github.com/Einlanzerous/argosy/commit/3a3f19a937f0db8ae24f07f8cb1f00324ce6daa3))
+* **prefs:** per-device playback preferences (ARGY-37) ([#50](https://github.com/Einlanzerous/argosy/issues/50)) ([2c4f740](https://github.com/Einlanzerous/argosy/commit/2c4f7407aa771bbc9d80a92a34ec153c54851ceb))
+* **presence:** live playback session model (ARGY-34) ([#47](https://github.com/Einlanzerous/argosy/issues/47)) ([06fee91](https://github.com/Einlanzerous/argosy/commit/06fee91b022881c66eb190042bcddaf80a71522c))
+* **resume:** live cross-device resume sync via Beacon (ARGY-35) ([#49](https://github.com/Einlanzerous/argosy/issues/49)) ([736ff0d](https://github.com/Einlanzerous/argosy/commit/736ff0d01b29acf6cad1f519c179035b654e0d02))
+* series detail — episode runtime + progress, series resume, even pill spacing ([#32](https://github.com/Einlanzerous/argosy/issues/32)) ([12cdda9](https://github.com/Einlanzerous/argosy/commit/12cdda98fc88595120fdb24318ef7932b56ad568))
+* **subtitles:** embedded text + OpenSubtitles → WebVTT (ARGY-31) ([#35](https://github.com/Einlanzerous/argosy/issues/35)) ([c93cbef](https://github.com/Einlanzerous/argosy/commit/c93cbefe024ad55137dcb6bce6ad975af6771dfe))
+* transcode decision engine — direct play → remux → transcode (ARGY-29) ([#29](https://github.com/Einlanzerous/argosy/issues/29)) ([8631d6c](https://github.com/Einlanzerous/argosy/commit/8631d6ccff84c6ad07c3bb31b6de60566e338250))
+* transcode session orchestration — The Helm (ARGY-27) ([#26](https://github.com/Einlanzerous/argosy/issues/26)) ([e0a53dd](https://github.com/Einlanzerous/argosy/commit/e0a53ddadc031e23707d3b378376e27d507b8daf))
+* **transcode:** HEVC output + per-client codec negotiation / true 4K (ARGY-62) ([#42](https://github.com/Einlanzerous/argosy/issues/42)) ([7326154](https://github.com/Einlanzerous/argosy/commit/73261545d07e100a84e13ce2fd874705c2951c3d))
+* **transcode:** QSV hardware encode + software fallback (ARGY-30) ([#41](https://github.com/Einlanzerous/argosy/issues/41)) ([ef2b039](https://github.com/Einlanzerous/argosy/commit/ef2b039c90c4f0308af0d3291c04cbeb5faf5c85))
+* **transcode:** VAAPI + NVENC encoder backends (ARGY-61) ([#43](https://github.com/Einlanzerous/argosy/issues/43)) ([e6c5437](https://github.com/Einlanzerous/argosy/commit/e6c5437a19c69c28e6204551fd479df876d2e75c))
+* **web:** detail-page back button + resume/start-over ([#54](https://github.com/Einlanzerous/argosy/issues/54)) ([82619f9](https://github.com/Einlanzerous/argosy/commit/82619f96af1b3e41a4f6e63cb7734c557cb9ae82))
+* **web:** drop the Shows rail from the home page ([#40](https://github.com/Einlanzerous/argosy/issues/40)) ([3685808](https://github.com/Einlanzerous/argosy/commit/368580846544be0e64225feb0247905aae312bd9))
+* **web:** Newly Arrived includes series, not just films ([#44](https://github.com/Einlanzerous/argosy/issues/44)) ([bb44e82](https://github.com/Einlanzerous/argosy/commit/bb44e82022f53501b198483cf9af2afd572326bf))
+* **web:** redesign series episode rows (name + runtime, progress line) ([#34](https://github.com/Einlanzerous/argosy/issues/34)) ([fff6f77](https://github.com/Einlanzerous/argosy/commit/fff6f770cc041866cbd996324fdc293223d147c0))
+
+
+### Bug Fixes
+
+* **fleet:** consistent device actions, green "this device" tag, rename/retire modals ([#52](https://github.com/Einlanzerous/argosy/issues/52)) ([31795b9](https://github.com/Einlanzerous/argosy/commit/31795b9b4ac8cf77c2c116fd9d3770613a761ec8))
+* **web:** CC active outline + robust far-left "Playing on" placement ([#55](https://github.com/Einlanzerous/argosy/issues/55)) ([27b5bdc](https://github.com/Einlanzerous/argosy/commit/27b5bdc0d2c2411953c1bd59ff233328d3e8b1f3))
+* **web:** correct player duration/seek, bigger controls, quality badge, humanize episode titles ([#31](https://github.com/Einlanzerous/argosy/issues/31)) ([a16ad23](https://github.com/Einlanzerous/argosy/commit/a16ad23dbd56a288758623b140ccfe30ef285b73))
+* **web:** don't log out on transient auth-check failures ([#36](https://github.com/Einlanzerous/argosy/issues/36)) ([bc9a835](https://github.com/Einlanzerous/argosy/commit/bc9a835ae99dd8d517ba2ff6b03e45e65a5a1ea7))
+* **web:** poster corner bleed + unified translucent brand pill ([#39](https://github.com/Einlanzerous/argosy/issues/39)) ([f761aa7](https://github.com/Einlanzerous/argosy/commit/f761aa78da5c055ad6ad5e0a7e45ca34e9230839))
+* **web:** proxy /artwork in the vite dev server ([#38](https://github.com/Einlanzerous/argosy/issues/38)) ([c2dc495](https://github.com/Einlanzerous/argosy/commit/c2dc49585e2b5fbf14557519055e7fffe67413c3))
+* **web:** Resume jumps straight in; only plain Play asks ([#33](https://github.com/Einlanzerous/argosy/issues/33)) ([e5a4d4b](https://github.com/Einlanzerous/argosy/commit/e5a4d4b37063df67d700a699e890f9df0cc16262))
+
 ## [0.2.0](https://github.com/Einlanzerous/argosy/compare/v0.1.0...v0.2.0) (2026-06-19)
 
 
