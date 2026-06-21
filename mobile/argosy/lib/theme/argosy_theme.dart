@@ -114,6 +114,30 @@ ThemeData buildArgosyTheme() {
       color: ArgosyColors.accent,
       linearTrackColor: ArgosyColors.line2,
     ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: ArgosyColors.bg2,
+      hintStyle: const TextStyle(color: ArgosyColors.faint),
+      labelStyle: const TextStyle(color: ArgosyColors.dim),
+      floatingLabelStyle: const TextStyle(color: ArgosyColors.accentHi),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(ArgosyTokens.dark.radius),
+        borderSide: const BorderSide(color: ArgosyColors.line2),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(ArgosyTokens.dark.radius),
+        borderSide: const BorderSide(color: ArgosyColors.accent, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(ArgosyTokens.dark.radius),
+        borderSide: const BorderSide(color: ArgosyColors.danger),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(ArgosyTokens.dark.radius),
+        borderSide: const BorderSide(color: ArgosyColors.danger, width: 1.5),
+      ),
+    ),
   );
 }
 
