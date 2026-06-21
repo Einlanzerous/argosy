@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.0](https://github.com/Einlanzerous/argosy/compare/v0.3.1...v0.4.0) (2026-06-21)
+
+
+### Features
+
+* **discovery:** data-driven search chips + genre de-dup (ARGY-71) ([#65](https://github.com/Einlanzerous/argosy/issues/65)) ([bfd1759](https://github.com/Einlanzerous/argosy/commit/bfd175993795e9819c1358ec0b6e9ba660e368eb))
+* **filters:** faceted browse — genre, rating, watched, year + rating sort ([#63](https://github.com/Einlanzerous/argosy/issues/63)) ([5d823f4](https://github.com/Einlanzerous/argosy/commit/5d823f4a4648c7bb6ccd97eaf01e4b68fe057792))
+* **home:** Focused vs Discovery home layout ([#73](https://github.com/Einlanzerous/argosy/issues/73)) ([1578e00](https://github.com/Einlanzerous/argosy/commit/1578e00e02dfcf74f3cc79cab06bb24096c9d2e0))
+* **home:** On Deck row + auto genre rows ([#67](https://github.com/Einlanzerous/argosy/issues/67)) ([e5aac83](https://github.com/Einlanzerous/argosy/commit/e5aac83cc7beab73b0bf6e39a785cc049233f639))
+* **labels:** user-applied custom labels on films + series ([#74](https://github.com/Einlanzerous/argosy/issues/74)) ([8e8dfe2](https://github.com/Einlanzerous/argosy/commit/8e8dfe27c53923921ebded268edb07e31f793236))
+* **libraries:** add/manage media libraries from Settings ([#70](https://github.com/Einlanzerous/argosy/issues/70)) ([0738235](https://github.com/Einlanzerous/argosy/commit/073823526063bfeee9d644e1caf0911237fd2fa6))
+* **player:** closed-caption styling controls ([#71](https://github.com/Einlanzerous/argosy/issues/71)) ([bbebf00](https://github.com/Einlanzerous/argosy/commit/bbebf00acfa0959d1bfc4299890fb03cc3e64195))
+* **search:** account-wide full-text search over The Manifest ([#61](https://github.com/Einlanzerous/argosy/issues/61)) ([8e877ae](https://github.com/Einlanzerous/argosy/commit/8e877ae6ea983c9d11b9ed4b180f12fe5e114d03))
+* **vaults:** user-curated collections of films + series ([#68](https://github.com/Einlanzerous/argosy/issues/68)) ([ed5a054](https://github.com/Einlanzerous/argosy/commit/ed5a05448e15a16d06157ad313f3b6c30779168b))
+
+
+### Bug Fixes
+
+* **beacon:** preserve http.Flusher through the request-logging wrapper ([#66](https://github.com/Einlanzerous/argosy/issues/66)) ([0dd91b2](https://github.com/Einlanzerous/argosy/commit/0dd91b2503e255f745da7be6127e2b4d37328e76))
+* **library:** collapsible filter panel + rating slider ([#69](https://github.com/Einlanzerous/argosy/issues/69)) ([08759ca](https://github.com/Einlanzerous/argosy/commit/08759cab2ec30cc2ed405bf288fec6cddf1dae9a))
+* **vaults:** Add-to-Vault menu clipped by hero + button alignment ([#72](https://github.com/Einlanzerous/argosy/issues/72)) ([60cb050](https://github.com/Einlanzerous/argosy/commit/60cb050aa86805a110415a11fb1a8e3852213178))
+
 ## [0.3.1](https://github.com/Einlanzerous/argosy/compare/v0.3.0...v0.3.1) (2026-06-21)
 
 
