@@ -839,6 +839,8 @@ export interface components {
             /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
             backdropUrl?: string | null;
             tags: string[];
+            /** @description Effective provider rating, 0–10. */
+            rating?: number | null;
         };
         MediaItemDetail: {
             /** Format: uuid */
@@ -856,6 +858,8 @@ export interface components {
             filePath: string;
             reviewRequired: boolean;
             tags: string[];
+            /** @description Effective provider rating, 0–10. */
+            rating?: number | null;
         };
         MediaItemPage: {
             items: components["schemas"]["MediaItemSummary"][];
@@ -872,6 +876,8 @@ export interface components {
             /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
             backdropUrl?: string | null;
             tags: string[];
+            /** @description Effective provider rating, 0–10. */
+            rating?: number | null;
         };
         SeriesPage: {
             items: components["schemas"]["SeriesSummary"][];
@@ -1261,9 +1267,19 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
-                sort?: "title" | "added" | "year";
-                /** @description Filter to items carrying this tag (e.g. anime). */
+                sort?: "title" | "added" | "year" | "rating";
+                /** @description Filter to items carrying this label/tag (e.g. anime). */
                 tag?: string;
+                /** @description Filter to items in any of these genres (repeatable). */
+                genre?: string[];
+                /** @description Minimum effective rating (0–10). */
+                rating_min?: number;
+                /** @description Per-user watched state. */
+                watched?: "watched" | "unwatched" | "in_progress";
+                /** @description Earliest release year (inclusive). */
+                year_from?: number;
+                /** @description Latest release year (inclusive). */
+                year_to?: number;
             };
             header?: never;
             path: {
@@ -1290,9 +1306,19 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
-                sort?: "title" | "year";
-                /** @description Filter to series carrying this tag (e.g. anime). */
+                sort?: "title" | "year" | "rating";
+                /** @description Filter to series carrying this label/tag (e.g. anime). */
                 tag?: string;
+                /** @description Filter to series in any of these genres (repeatable). */
+                genre?: string[];
+                /** @description Minimum effective rating (0–10). */
+                rating_min?: number;
+                /** @description Per-user watched state (aggregated over episodes). */
+                watched?: "watched" | "unwatched" | "in_progress";
+                /** @description Earliest release year (inclusive). */
+                year_from?: number;
+                /** @description Latest release year (inclusive). */
+                year_to?: number;
             };
             header?: never;
             path: {

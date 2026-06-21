@@ -51,15 +51,17 @@ func NewTMDB(readToken, apiKey string) *TMDB {
 func (t *TMDB) Configured() bool { return t.readToken != "" || t.apiKey != "" }
 
 type tmdbResult struct {
-	ID           int64  `json:"id"`
-	Title        string `json:"title"` // movies
-	Name         string `json:"name"`  // tv
-	Overview     string `json:"overview"`
-	PosterPath   string `json:"poster_path"`
-	BackdropPath string `json:"backdrop_path"`
-	ReleaseDate  string `json:"release_date"`   // movies
-	FirstAirDate string `json:"first_air_date"` // tv
-	GenreIDs     []int  `json:"genre_ids"`
+	ID           int64   `json:"id"`
+	Title        string  `json:"title"` // movies
+	Name         string  `json:"name"`  // tv
+	Overview     string  `json:"overview"`
+	PosterPath   string  `json:"poster_path"`
+	BackdropPath string  `json:"backdrop_path"`
+	ReleaseDate  string  `json:"release_date"`   // movies
+	FirstAirDate string  `json:"first_air_date"` // tv
+	GenreIDs     []int   `json:"genre_ids"`
+	VoteAverage  float64 `json:"vote_average"`
+	VoteCount    int     `json:"vote_count"`
 }
 
 // SearchMovie returns the best movie match for title (and year, if known).
@@ -72,8 +74,7 @@ func (t *TMDB) SearchMovie(ctx context.Context, title string, year int) (*Match,
 	if err != nil || len(results) == 0 {
 		return nil, err
 	}
-	r := results[0]
-	return t.toMatch(r.ID, r.Title, r.Overview, r.ReleaseDate, r.PosterPath, r.BackdropPath, r.GenreIDs), nil
+	return t.toMatch(results[0], results[0].Title, results[0].ReleaseDate), nil
 }
 
 // SearchSeries returns the best TV-series match for title.
@@ -82,17 +83,27 @@ func (t *TMDB) SearchSeries(ctx context.Context, title string) (*Match, error) {
 	if err != nil || len(results) == 0 {
 		return nil, err
 	}
-	r := results[0]
-	return t.toMatch(r.ID, r.Name, r.Overview, r.FirstAirDate, r.PosterPath, r.BackdropPath, r.GenreIDs), nil
+	return t.toMatch(results[0], results[0].Name, results[0].FirstAirDate), nil
 }
 
-func (t *TMDB) toMatch(id int64, title, overview, date, poster, backdrop string, genres []int) *Match {
-	m := &Match{TMDBID: id, Title: title, Overview: overview, GenreIDs: genres, Year: yearOf(date)}
-	if poster != "" {
-		m.PosterURL = t.imageBase + "/" + posterSize + poster
+// toMatch normalizes a raw TMDB result into a Match. title and date are passed
+// explicitly because movies and TV use different field names for them.
+func (t *TMDB) toMatch(r tmdbResult, title, date string) *Match {
+	m := &Match{
+		TMDBID:      r.ID,
+		Title:       title,
+		Overview:    r.Overview,
+		GenreIDs:    r.GenreIDs,
+		Genres:      GenreNames(r.GenreIDs),
+		VoteAverage: r.VoteAverage,
+		VoteCount:   r.VoteCount,
+		Year:        yearOf(date),
 	}
-	if backdrop != "" {
-		m.BackdropURL = t.imageBase + "/" + backdropSize + backdrop
+	if r.PosterPath != "" {
+		m.PosterURL = t.imageBase + "/" + posterSize + r.PosterPath
+	}
+	if r.BackdropPath != "" {
+		m.BackdropURL = t.imageBase + "/" + backdropSize + r.BackdropPath
 	}
 	return m
 }

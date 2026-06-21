@@ -1,17 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { RouteLocationRaw } from 'vue-router'
+import type { LocationQueryRaw, RouteLocationRaw } from 'vue-router'
 import PosterCard from '@/components/PosterCard.vue'
 import { posterStyle } from '@/lib/poster'
 import { openSearch } from '@/lib/ui'
-import { getLibraries, getMovies, getSeries, TAG_FILTERS, type MovieSort } from '@/lib/manifest'
+import {
+  getLibraries,
+  getMovies,
+  getSeries,
+  GENRES,
+  LABELS,
+  type BrowseFilter,
+  type MovieSort,
+  type SeriesSort,
+  type WatchedState,
+} from '@/lib/manifest'
 import { setPage } from '@/lib/page'
 
 type Card = {
   id: string
   title: string
-  year?: number
+  subtitle?: string
   kind: string
   anime: boolean
   posterUrl?: string | null
@@ -23,7 +33,14 @@ const SORTS: { key: MovieSort; label: string }[] = [
   { key: 'added', label: 'Recently Added' },
   { key: 'title', label: 'Title' },
   { key: 'year', label: 'Year' },
+  { key: 'rating', label: 'Rating' },
 ]
+const WATCHED: { key: WatchedState; label: string }[] = [
+  { key: 'unwatched', label: 'Unwatched' },
+  { key: 'in_progress', label: 'In progress' },
+  { key: 'watched', label: 'Watched' },
+]
+const RATINGS = [6, 7, 8]
 
 type Scope = 'all' | 'movies' | 'series'
 const KINDS: { key: Scope; label: string }[] = [
@@ -32,28 +49,93 @@ const KINDS: { key: Scope; label: string }[] = [
   { key: 'series', label: 'Shows' },
 ]
 
+const ALLOWED_SORT = ['title', 'added', 'year', 'rating']
+const ALLOWED_WATCHED = ['watched', 'unwatched', 'in_progress']
+
 const route = useRoute()
 const router = useRouter()
-const tag = ref('All')
-const sort = ref<MovieSort>('added')
 const cards = ref<Card[]>([])
 const loading = ref(true)
 
-// Movies vs. Shows is a filter on the single Library page, driven by ?kind=
-// rather than a dedicated route.
+function asArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string')
+  if (typeof v === 'string' && v) return [v]
+  return []
+}
+function num(v: unknown): number | undefined {
+  const n = Number(v)
+  return typeof v === 'string' && v !== '' && !Number.isNaN(n) ? n : undefined
+}
+
+// All filter/sort state lives in the URL query so views are bookmarkable and
+// shareable; these computeds decode it and the chips/inputs write it back.
 const scope = computed<Scope>(() => {
   const k = route.query.kind
   if (k === 'movies') return 'movies'
   if (k === 'series' || k === 'shows') return 'series'
   return 'all'
 })
+const sort = computed<MovieSort>(() => {
+  const s = route.query.sort
+  return typeof s === 'string' && ALLOWED_SORT.includes(s) ? (s as MovieSort) : 'added'
+})
+const genres = computed(() => asArray(route.query.genre))
+const watched = computed<WatchedState | undefined>(() => {
+  const w = route.query.watched
+  return typeof w === 'string' && ALLOWED_WATCHED.includes(w) ? (w as WatchedState) : undefined
+})
+const ratingMin = computed(() => num(route.query.rating_min))
+const yearFrom = computed(() => num(route.query.year_from))
+const yearTo = computed(() => num(route.query.year_to))
+const label = computed(() => (typeof route.query.tag === 'string' ? route.query.tag : ''))
+
+const hasFilters = computed(
+  () =>
+    genres.value.length > 0 ||
+    !!watched.value ||
+    !!ratingMin.value ||
+    !!yearFrom.value ||
+    !!yearTo.value ||
+    !!label.value,
+)
+
+// patch merges a change into the query and drops emptied keys.
+function patch(next: Record<string, unknown>): void {
+  const q: Record<string, unknown> = { ...route.query, ...next }
+  for (const k of Object.keys(q)) {
+    const v = q[k]
+    if (v === undefined || v === '' || v === null || (Array.isArray(v) && v.length === 0)) delete q[k]
+  }
+  void router.replace({ name: 'library', query: q as LocationQueryRaw })
+}
 
 function setKind(k: Scope): void {
-  const query = { ...route.query }
-  if (k === 'all') delete query.kind
-  else query.kind = k
-  void router.replace({ name: 'library', query })
+  patch({ kind: k === 'all' ? undefined : k })
 }
+function setSort(s: MovieSort): void {
+  patch({ sort: s })
+}
+function toggleGenre(g: string): void {
+  const cur = genres.value
+  patch({ genre: cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g] })
+}
+function setWatched(w: WatchedState): void {
+  patch({ watched: watched.value === w ? undefined : w })
+}
+function setRating(r: number): void {
+  patch({ rating_min: ratingMin.value === r ? undefined : r })
+}
+function toggleLabel(l: string): void {
+  const v = l.toLowerCase()
+  patch({ tag: label.value === v ? undefined : v })
+}
+function setYear(which: 'year_from' | 'year_to', e: Event): void {
+  patch({ [which]: (e.target as HTMLInputElement).value || undefined })
+}
+function clearFilters(): void {
+  void router.replace({ name: 'library', query: scope.value === 'all' ? {} : { kind: scope.value } })
+}
+
 const libTitle = computed(() =>
   scope.value === 'movies' ? 'Movies' : scope.value === 'series' ? 'Shows' : 'All Titles',
 )
@@ -61,18 +143,32 @@ const backdropStyle = computed(() =>
   posterStyle(cards.value[0]?.backdropUrl ?? cards.value[0]?.posterUrl, libTitle.value),
 )
 
+function subtitleOf(year?: number | null, rating?: number | null): string | undefined {
+  const parts: string[] = []
+  if (year) parts.push(String(year))
+  if (rating) parts.push(`★ ${rating.toFixed(1)}`)
+  return parts.length ? parts.join('  ·  ') : undefined
+}
+
 async function load(): Promise<void> {
   loading.value = true
-  const t = tag.value === 'All' ? undefined : tag.value.toLowerCase()
+  const f: BrowseFilter = {
+    tag: label.value || undefined,
+    genres: genres.value,
+    ratingMin: ratingMin.value,
+    watched: watched.value,
+    yearFrom: yearFrom.value,
+    yearTo: yearTo.value,
+  }
   const libs = await getLibraries()
   const out: Card[] = []
   if (scope.value !== 'series') {
-    const movies = await getMovies({ tag: t, sort: sort.value }, libs)
+    const movies = await getMovies({ sort: sort.value, ...f }, libs)
     out.push(
       ...movies.map((m) => ({
         id: m.id,
         title: m.title,
-        year: m.year ?? undefined,
+        subtitle: subtitleOf(m.year, m.rating),
         kind: m.kind,
         anime: !!m.tags?.includes('anime'),
         posterUrl: m.posterUrl,
@@ -82,13 +178,14 @@ async function load(): Promise<void> {
     )
   }
   if (scope.value !== 'movies') {
-    const seriesSort = sort.value === 'year' ? 'year' : 'title'
-    const series = await getSeries({ tag: t, sort: seriesSort }, libs)
+    // Series have no "added" sort; fall back to title for it.
+    const seriesSort: SeriesSort = sort.value === 'year' || sort.value === 'rating' ? sort.value : 'title'
+    const series = await getSeries({ sort: seriesSort, ...f }, libs)
     out.push(
       ...series.map((s) => ({
         id: s.id,
         title: s.title,
-        year: s.year ?? undefined,
+        subtitle: subtitleOf(s.year, s.rating),
         kind: 'Series',
         anime: !!s.tags?.includes('anime'),
         posterUrl: s.posterUrl,
@@ -101,22 +198,9 @@ async function load(): Promise<void> {
   loading.value = false
 }
 
-onMounted(() => {
-  if (typeof route.query.tag === 'string' && TAG_FILTERS.includes(route.query.tag)) {
-    tag.value = route.query.tag
-  }
-  void load()
-})
-
-// React to scope (route), tag, sort, and a tag arriving via the search overlay.
+// Any change to the scope/sort/filter query reloads (and retitles) the view.
 watch(
-  () => route.query.tag,
-  (q) => {
-    if (typeof q === 'string' && TAG_FILTERS.includes(q)) tag.value = q
-  },
-)
-watch(
-  () => [scope.value, tag.value, sort.value],
+  () => route.fullPath,
   () => {
     setPage(libTitle.value)
     void load()
@@ -143,31 +227,17 @@ watch(
       </header>
 
       <div class="controls">
-        <div class="filters">
-          <div class="kinds">
-            <button
-              v-for="k in KINDS"
-              :key="k.key"
-              class="kind"
-              :class="{ on: scope === k.key }"
-              type="button"
-              @click="setKind(k.key)"
-            >
-              {{ k.label }}
-            </button>
-          </div>
-          <div class="chips">
-            <button
-              v-for="t in TAG_FILTERS"
-              :key="t"
-              class="chip"
-              :class="{ on: tag === t }"
-              type="button"
-              @click="tag = t"
-            >
-              {{ t }}
-            </button>
-          </div>
+        <div class="kinds">
+          <button
+            v-for="k in KINDS"
+            :key="k.key"
+            class="kind"
+            :class="{ on: scope === k.key }"
+            type="button"
+            @click="setKind(k.key)"
+          >
+            {{ k.label }}
+          </button>
         </div>
         <div class="sorts">
           <span class="sort-label">Sort</span>
@@ -177,11 +247,102 @@ watch(
             class="sort"
             :class="{ on: sort === s.key }"
             type="button"
-            @click="sort = s.key"
+            @click="setSort(s.key)"
           >
             {{ s.label }}
           </button>
         </div>
+      </div>
+
+      <div class="panel">
+        <div class="facet">
+          <span class="facet-label">Genre</span>
+          <div class="chips">
+            <button
+              v-for="g in GENRES"
+              :key="g"
+              class="chip"
+              :class="{ on: genres.includes(g) }"
+              type="button"
+              @click="toggleGenre(g)"
+            >
+              {{ g }}
+            </button>
+          </div>
+        </div>
+
+        <div class="facet">
+          <span class="facet-label">Watched</span>
+          <div class="chips">
+            <button
+              v-for="w in WATCHED"
+              :key="w.key"
+              class="chip"
+              :class="{ on: watched === w.key }"
+              type="button"
+              @click="setWatched(w.key)"
+            >
+              {{ w.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="facet">
+          <span class="facet-label">Rating</span>
+          <div class="chips">
+            <button
+              v-for="r in RATINGS"
+              :key="r"
+              class="chip"
+              :class="{ on: ratingMin === r }"
+              type="button"
+              @click="setRating(r)"
+            >
+              {{ r }}+
+            </button>
+          </div>
+        </div>
+
+        <div class="facet" v-if="LABELS.length">
+          <span class="facet-label">Label</span>
+          <div class="chips">
+            <button
+              v-for="l in LABELS"
+              :key="l"
+              class="chip"
+              :class="{ on: label === l.toLowerCase() }"
+              type="button"
+              @click="toggleLabel(l)"
+            >
+              {{ l }}
+            </button>
+          </div>
+        </div>
+
+        <div class="facet">
+          <span class="facet-label">Year</span>
+          <div class="years">
+            <input
+              type="number"
+              class="year"
+              placeholder="From"
+              :value="yearFrom ?? ''"
+              @change="setYear('year_from', $event)"
+            />
+            <span class="dash">–</span>
+            <input
+              type="number"
+              class="year"
+              placeholder="To"
+              :value="yearTo ?? ''"
+              @change="setYear('year_to', $event)"
+            />
+          </div>
+        </div>
+
+        <button v-if="hasFilters" class="clear" type="button" @click="clearFilters">
+          Clear filters
+        </button>
       </div>
 
       <div class="showing">Showing {{ cards.length }} titles</div>
@@ -191,7 +352,7 @@ watch(
           v-for="c in cards"
           :key="c.id"
           :title="c.title"
-          :subtitle="c.year ? String(c.year) : undefined"
+          :subtitle="c.subtitle"
           :kind="c.kind"
           :anime="c.anime"
           :poster-url="c.posterUrl"
@@ -371,6 +532,64 @@ h1 {
   background: var(--arg-accent-bg-2);
   border-color: rgba(201, 154, 78, 0.5);
   color: var(--arg-accent);
+}
+.panel {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: var(--arg-r-lg);
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.facet {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.facet-label {
+  flex: none;
+  width: 64px;
+  font: 700 11px var(--arg-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--arg-faint);
+  padding-top: 8px;
+}
+.years {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.year {
+  width: 90px;
+  padding: 8px 12px;
+  border-radius: var(--arg-r-sm);
+  border: 1px solid var(--arg-line-2);
+  background: transparent;
+  color: var(--arg-cream);
+  font: 500 13px var(--arg-body);
+  outline: none;
+}
+.year:focus {
+  border-color: var(--arg-accent);
+}
+.dash {
+  color: var(--arg-faint);
+}
+.clear {
+  align-self: flex-start;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--arg-accent);
+  font: 600 12.5px var(--arg-body);
+  cursor: pointer;
+}
+.clear:hover {
+  border-color: var(--arg-accent);
 }
 .showing {
   margin: 22px 0;

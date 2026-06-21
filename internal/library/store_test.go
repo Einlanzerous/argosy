@@ -73,7 +73,7 @@ func TestBrowseStore(t *testing.T) {
 		t.Fatalf("libraries = %v (err %v), want 1", libs, err)
 	}
 
-	movies, err := s.ListMovies(ctx, accID, libID, 50, 0, "title", "")
+	movies, err := s.ListMovies(ctx, accID, libID, "", 50, 0, "title", browseFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,14 +95,14 @@ func TestBrowseStore(t *testing.T) {
 	}
 
 	// Tag filter: 'anime' matches the movie; an unknown tag matches nothing.
-	if tagged, err := s.ListMovies(ctx, accID, libID, 50, 0, "title", "anime"); err != nil || tagged.Total != 1 {
+	if tagged, err := s.ListMovies(ctx, accID, libID, "", 50, 0, "title", browseFilter{Tag: "anime"}); err != nil || tagged.Total != 1 {
 		t.Fatalf("ListMovies tag=anime = %+v (err %v), want total 1", tagged, err)
 	}
-	if none, err := s.ListMovies(ctx, accID, libID, 50, 0, "title", "nope"); err != nil || none.Total != 0 {
+	if none, err := s.ListMovies(ctx, accID, libID, "", 50, 0, "title", browseFilter{Tag: "nope"}); err != nil || none.Total != 0 {
 		t.Fatalf("ListMovies tag=nope = %+v (err %v), want total 0", none, err)
 	}
 
-	series, err := s.ListSeries(ctx, accID, libID, 50, 0, "title", "")
+	series, err := s.ListSeries(ctx, accID, libID, "", 50, 0, "title", browseFilter{})
 	if err != nil || series.Total != 1 || series.Items[0].Title != "Provider Show" {
 		t.Fatalf("series page = %+v (err %v), want 1 'Provider Show'", series, err)
 	}

@@ -14,6 +14,9 @@ type Match struct {
 	PosterURL   string // full poster (portrait) image URL, or "" when none
 	BackdropURL string // full backdrop (landscape) image URL, or "" when none
 	GenreIDs    []int
+	Genres      []string // GenreIDs resolved to names (TMDB's fixed list)
+	VoteAverage float64  // provider rating, 0–10 (0 when unrated/unknown)
+	VoteCount   int      // number of votes behind VoteAverage
 }
 
 // Provider looks up metadata for films and series.
