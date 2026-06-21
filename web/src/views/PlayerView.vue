@@ -533,9 +533,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <span class="t">{{ formatClock(duration) }}</span>
       </div>
       <div class="buttons">
-        <div class="device-pill">
-          <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
+        <div class="btn-left">
+          <div class="device-pill">
+            <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
+          </div>
         </div>
+        <div class="btn-mid">
         <button class="ctrl" type="button" title="Back 10s" @click="skip(-10)">
           <span class="ic">↺</span><span class="lbl">10s</span>
         </button>
@@ -552,6 +555,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <button class="ctrl" type="button" title="Forward 10s" @click="skip(10)">
           <span class="ic">↻</span><span class="lbl">10s</span>
         </button>
+        </div>
+        <div class="btn-right">
         <div v-if="subtitleTracks.length" class="cc-wrap">
           <button
             class="ctrl icon-only"
@@ -583,6 +588,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -722,14 +728,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color: var(--arg-accent);
   color: #fff;
 }
-/* Under the progress bar, pinned to the far left of the buttons row — the
-   mirror of the CC control on the far right. Absolute so it doesn't shift the
-   centered transport buttons. */
+/* Lives in the left zone of the controls row (far left, under the progress bar)
+   — the mirror of the CC control in the right zone. */
 .device-pill {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -888,7 +889,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   margin-top: 20px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 18px;
+}
+/* Three zones: device pill (far left), transport controls (centered by the
+   equal-flex sides), CC (far right). */
+.btn-left,
+.btn-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.btn-right {
+  justify-content: flex-end;
+}
+.btn-mid {
+  display: flex;
+  align-items: center;
   gap: 18px;
 }
 .ctrl {
@@ -957,8 +973,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   background: var(--arg-accent-hi);
   color: var(--arg-bg);
 }
+/* Active CC keeps the same (borderless) outer as inactive — the inner badge
+   fill is signal enough; no gold outline. */
 .ctrl.on {
-  border-color: var(--arg-accent);
+  border-color: transparent;
 }
 .ctrl.on .ic.cc {
   border-color: var(--arg-accent);
@@ -970,14 +988,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   letter-spacing: 0.04em;
   padding: 2px 5px;
   border-radius: 4px;
-  border: 1.5px solid var(--arg-cream);
-  color: var(--arg-cream);
+  border: 1.5px solid var(--arg-accent);
+  color: var(--arg-accent);
 }
 .cc-wrap {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  position: relative;
 }
 .cc-menu {
   position: absolute;
