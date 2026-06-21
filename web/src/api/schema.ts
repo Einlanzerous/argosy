@@ -427,6 +427,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ondeck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * On-deck (up-next) episodes for series the user is currently watching
+         * @description The next unstarted episode of each series the current profile has made progress in — i.e. has watched at least one episode and has a later episode not yet started. Excludes in-progress items (those live in /continue), so the two rows don't overlap. Newest activity first.
+         */
+        get: operations["listOnDeck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/recent": {
         parameters: {
             query?: never;
@@ -842,6 +862,24 @@ export interface components {
             /** Format: uuid */
             seriesId?: string | null;
             seriesTitle?: string | null;
+        };
+        OnDeckItem: {
+            /**
+             * Format: uuid
+             * @description The episode's playable media-item id.
+             */
+            id: string;
+            /** Format: uuid */
+            seriesId: string;
+            seriesTitle: string;
+            seasonNumber: number;
+            episodeNumber: number;
+            /** @description Episode title. */
+            title?: string | null;
+            posterUrl?: string | null;
+            /** @description Landscape backdrop; falls back to posterUrl. */
+            backdropUrl?: string | null;
+            durationSeconds?: number | null;
         };
         Library: {
             /** Format: uuid */
@@ -1682,6 +1720,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContinueItem"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listOnDeck: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnDeckItem"][];
                 };
             };
             401: components["responses"]["Unauthorized"];

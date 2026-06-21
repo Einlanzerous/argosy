@@ -41,6 +41,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/series/{seriesId}", mw(http.HandlerFunc(h.getSeries)))
 	mux.Handle("GET /api/v1/items/{itemId}", mw(http.HandlerFunc(h.getItem)))
 	mux.Handle("GET /api/v1/continue", mw(http.HandlerFunc(h.listContinue)))
+	mux.Handle("GET /api/v1/ondeck", mw(http.HandlerFunc(h.listOnDeck)))
 	mux.Handle("GET /api/v1/recent", mw(http.HandlerFunc(h.listRecent)))
 	mux.Handle("GET /api/v1/search", mw(http.HandlerFunc(h.search)))
 	mux.Handle("GET /api/v1/facets", mw(http.HandlerFunc(h.listFacets)))
