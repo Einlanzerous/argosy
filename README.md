@@ -10,6 +10,29 @@ Self-hosted, owned-media streaming server — a Plex alternative you actually bu
 
 Tracked in Switchyard under project **ARGY**.
 
+## The app
+
+<p align="center">
+  <img alt="Home — hero + Continue Watching" src="assets/screenshots/home.png" width="800" />
+</p>
+
+The **home** page leads with a hero (resume what you were watching, or a featured title) over rails for **Continue Watching** and **Newly Arrived** — films *and* shows, newest first:
+
+<p align="center">
+  <img alt="Continue Watching + Newly Arrived rails" src="assets/screenshots/home-rails.png" width="800" />
+</p>
+
+| | |
+|---|---|
+| <img alt="The Manifest — library browse" src="assets/screenshots/manifest.png" width="390" /> | <img alt="Player — HLS with subtitles" src="assets/screenshots/player.png" width="390" /> |
+| **The Manifest** — browse the library (films + series) with TMDB art and backdrops. | **Player** — adaptive HLS (direct-play → remux → transcode), hardware-accelerated, with subtitle selection. |
+| <img alt="Cross-device resume prompt" src="assets/screenshots/resume.png" width="390" /> | <img alt="Fleet — device management" src="assets/screenshots/fleet.png" width="390" /> |
+| **Cross-device resume** — pick up exactly where you left off, on any device in your Fleet. | **Fleet** — every authorized device; rename or retire any of them. |
+
+<p align="center">
+  <img alt="Search" src="assets/screenshots/search.png" width="800" />
+</p>
+
 ## Stack
 
 - **Backend:** Go — orchestration, metadata, HTTP, session management; shells out to `ffmpeg`/`ffprobe`.
