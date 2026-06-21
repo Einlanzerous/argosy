@@ -299,6 +299,29 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/search:
+    get:
+      tags: [library]
+      operationId: search
+      summary: Full-text search across the account's films and series
+      description: >-
+        Ranked full-text search over titles, tags, genres, and overviews,
+        scoped to the calling account's libraries. Results are grouped by kind
+        (films vs. series). The query supports typeahead — the last token of
+        each word is treated as a prefix. People/cast are not yet searchable.
+      parameters:
+        - { name: q, in: query, required: true, description: "Search text (prefix-matched per token).", schema: { type: string } }
+        - { name: limit, in: query, description: "Max results per group.", schema: { type: integer, default: 8, minimum: 1, maximum: 25 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v1/series/{seriesId}:
     get:
       tags: [library]
@@ -1177,6 +1200,13 @@ components:
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
+
+    SearchResults:
+      type: object
+      required: [movies, series]
+      properties:
+        movies: { type: array, items: { $ref: "#/components/schemas/MediaItemSummary" } }
+        series: { type: array, items: { $ref: "#/components/schemas/SeriesSummary" } }
 
     EpisodeSummary:
       type: object

@@ -218,6 +218,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Full-text search across the account's films and series
+         * @description Ranked full-text search over titles, tags, genres, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix. People/cast are not yet searchable.
+         */
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/series/{seriesId}": {
         parameters: {
             query?: never;
@@ -859,6 +879,10 @@ export interface components {
             limit: number;
             offset: number;
         };
+        SearchResults: {
+            movies: components["schemas"]["MediaItemSummary"][];
+            series: components["schemas"]["SeriesSummary"][];
+        };
         EpisodeSummary: {
             /** Format: uuid */
             id: string;
@@ -1285,6 +1309,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SeriesPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    search: {
+        parameters: {
+            query: {
+                /** @description Search text (prefix-matched per token). */
+                q: string;
+                /** @description Max results per group. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResults"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -4,6 +4,7 @@ import type { components } from '@/api/schema'
 export type Library = components['schemas']['Library']
 export type MovieSummary = components['schemas']['MediaItemSummary']
 export type SeriesSummary = components['schemas']['SeriesSummary']
+export type SearchResults = components['schemas']['SearchResults']
 
 export type MovieSort = 'title' | 'added' | 'year'
 export type SeriesSort = 'title' | 'year'
@@ -60,6 +61,16 @@ export type RecentItem = MovieSummary
 export async function getRecent(limit = 24): Promise<RecentItem[]> {
   const { data } = await api.GET('/api/v1/recent', { params: { query: { limit } } })
   return data ?? []
+}
+
+// searchManifest runs the account-wide full-text search (titles, tags, genres,
+// overviews), already grouped into films + series by the API. A blank query
+// short-circuits to empty results so the caller needn't special-case it.
+export async function searchManifest(q: string, limit = 8): Promise<SearchResults> {
+  const query = q.trim()
+  if (!query) return { movies: [], series: [] }
+  const { data } = await api.GET('/api/v1/search', { params: { query: { q: query, limit } } })
+  return data ?? { movies: [], series: [] }
 }
 
 // Tags surfaced as filter chips. "All" is the no-filter sentinel; the rest match

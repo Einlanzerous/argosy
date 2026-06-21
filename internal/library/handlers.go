@@ -42,6 +42,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/items/{itemId}", mw(http.HandlerFunc(h.getItem)))
 	mux.Handle("GET /api/v1/continue", mw(http.HandlerFunc(h.listContinue)))
 	mux.Handle("GET /api/v1/recent", mw(http.HandlerFunc(h.listRecent)))
+	mux.Handle("GET /api/v1/search", mw(http.HandlerFunc(h.search)))
 	if pres != nil {
 		mux.Handle("GET /api/v1/sessions", mw(http.HandlerFunc(h.listSessions)))
 	}
@@ -126,6 +127,19 @@ func (h *handlers) listRecent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (h *handlers) search(w http.ResponseWriter, r *http.Request) {
+	limit := 8
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
+		limit = v
+	}
+	res, err := h.store.Search(r.Context(), accountOf(r), r.URL.Query().Get("q"), limit)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {
