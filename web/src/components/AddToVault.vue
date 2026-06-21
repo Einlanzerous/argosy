@@ -5,12 +5,18 @@ import { listVaults, createVault, addToVault, type Vault } from '@/lib/vaults'
 // Exactly one of these identifies the title being filed.
 const props = defineProps<{ movieId?: string; seriesId?: string }>()
 
+const triggerEl = ref<HTMLElement | null>(null)
 const open = ref(false)
 const vaults = ref<Vault[]>([])
 const loaded = ref(false)
 const flash = ref('')
 const creating = ref(false)
 const newName = ref('')
+// The menu is teleported to <body> and positioned with fixed coords so it
+// escapes the detail hero's `overflow: hidden` (which otherwise clips it).
+const menuStyle = ref<{ top: string; left: string }>({ top: '0px', left: '0px' })
+
+const MENU_WIDTH = 248
 
 // Only vaults the profile may curate (its own, or any shared household one).
 function editable(v: Vault): boolean {
@@ -19,7 +25,13 @@ function editable(v: Vault): boolean {
 
 async function toggle(): Promise<void> {
   open.value = !open.value
-  if (open.value && !loaded.value) {
+  if (!open.value) return
+  const r = triggerEl.value?.getBoundingClientRect()
+  if (r) {
+    const left = Math.min(r.left, window.innerWidth - MENU_WIDTH - 12)
+    menuStyle.value = { top: `${r.bottom + 6}px`, left: `${Math.max(12, left)}px` }
+  }
+  if (!loaded.value) {
     vaults.value = (await listVaults().catch(() => [])).filter(editable)
     loaded.value = true
   }
@@ -29,12 +41,16 @@ function ref_(): { movieId?: string; seriesId?: string } {
   return props.seriesId ? { seriesId: props.seriesId } : { movieId: props.movieId }
 }
 
+function flashAdded(name: string): void {
+  flash.value = `Added to ${name}`
+  setTimeout(() => {
+    if (flash.value === `Added to ${name}`) flash.value = ''
+  }, 1800)
+}
+
 async function add(v: Vault): Promise<void> {
   await addToVault(v.id, ref_()).catch(() => {})
-  flash.value = `Added to ${v.name}`
-  setTimeout(() => {
-    if (flash.value === `Added to ${v.name}`) flash.value = ''
-  }, 1800)
+  flashAdded(v.name)
   open.value = false
 }
 
@@ -44,8 +60,7 @@ async function createAndAdd(): Promise<void> {
   const v = await createVault({ name }).catch(() => null)
   if (v) {
     await addToVault(v.id, ref_()).catch(() => {})
-    flash.value = `Added to ${v.name}`
-    setTimeout(() => (flash.value = ''), 1800)
+    flashAdded(v.name)
   }
   newName.value = ''
   creating.value = false
@@ -55,13 +70,13 @@ async function createAndAdd(): Promise<void> {
 </script>
 
 <template>
-  <div class="atv">
-    <button class="trigger" type="button" @click="toggle">
-      <span>＋</span> {{ flash || 'Add to Vault' }}
-    </button>
+  <button ref="triggerEl" class="trigger" type="button" @click="toggle">
+    <span>＋</span> {{ flash || 'Add to Vault' }}
+  </button>
+  <Teleport to="body">
     <template v-if="open">
-      <div class="scrim" @click="open = false" />
-      <div class="menu">
+      <div class="atv-scrim" @click="open = false" />
+      <div class="atv-menu" :style="menuStyle">
         <div class="menu-head">Add to…</div>
         <button v-for="v in vaults" :key="v.id" class="row" type="button" @click="add(v)">
           <span class="nm">{{ v.name }}</span>
@@ -75,40 +90,35 @@ async function createAndAdd(): Promise<void> {
         <button v-else class="row create" type="button" @click="creating = true">＋ New vault…</button>
       </div>
     </template>
-  </div>
+  </Teleport>
 </template>
 
 <style scoped>
-.atv {
-  position: relative;
-  display: inline-block;
-}
+/* Matches the secondary "Start Over"/ghost buttons on the detail pages. */
 .trigger {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 20px;
+  padding: 13px 22px;
   border-radius: var(--arg-r);
-  border: 1px solid var(--arg-line-3);
-  background: rgba(20, 20, 19, 0.6);
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.4);
   color: var(--arg-cream);
-  font: 700 14px var(--arg-display);
+  font: 600 14px var(--arg-body);
   cursor: pointer;
 }
 .trigger:hover {
   border-color: var(--arg-accent);
 }
-.scrim {
+.atv-scrim {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 200;
 }
-.menu {
-  position: absolute;
-  z-index: 41;
-  top: calc(100% + 8px);
-  left: 0;
-  min-width: 240px;
+.atv-menu {
+  position: fixed;
+  z-index: 201;
+  width: 248px;
   padding: 8px;
   border-radius: var(--arg-r);
   border: 1px solid var(--arg-line-2);
@@ -162,6 +172,7 @@ async function createAndAdd(): Promise<void> {
 }
 .new input {
   flex: 1;
+  min-width: 0;
   padding: 8px 10px;
   border-radius: var(--arg-r-sm);
   border: 1px solid var(--arg-line-2);
