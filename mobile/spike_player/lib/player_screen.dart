@@ -23,9 +23,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   BetterPlayerController? _controller;
   final List<String> _log = [];
   String? _transcodeSessionId;
+  double _startOffset = 0; // movie-time at the player's 0 position (transcode startAt)
   Timer? _heartbeat;
   http.Client? _beaconClient;
   bool _forceTranscode = false;
+  bool _ignoreResume = false;
 
   void _logLine(String s) {
     // ignore: avoid_print
@@ -42,13 +44,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _start() async {
     try {
       final api = widget.api;
+      _startOffset = 0;
       final info = await api.playback(widget.itemId);
       _logLine('playback: directPlay=${info['directPlay']} '
           'method=${info['method']} container=${info['container']} '
           'video=${info['videoCodec']} audio=${info['audioCodec']}');
 
       final ps = await api.progress(widget.itemId);
-      final resume = (ps?['positionSeconds'] as num?)?.toDouble() ?? 0;
+      final resume =
+          _ignoreResume ? 0.0 : ((ps?['positionSeconds'] as num?)?.toDouble() ?? 0);
       final dur = (ps?['durationSeconds'] as num?)?.toDouble();
       if (resume > 0) _logLine('resume from ${resume.toStringAsFixed(0)}s');
 
@@ -79,6 +83,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Advertise HEVC so true-4K HEVC is remuxed at native res, not down-rezzed.
         final t = await api.startTranscode(widget.itemId,
             startAt: resume, hevc: true);
+        _startOffset = resume; // HLS timeline is 0-based from startAt
         _transcodeSessionId = t['id'] as String;
         final playlist = api.absolute(t['playlistUrl'] as String);
         _logLine('TRANSCODE method=${t['method']} encoder=${t['encoder']} '
@@ -88,6 +93,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
           BetterPlayerDataSourceType.network,
           playlist,
           videoFormat: BetterPlayerVideoFormat.hls,
+          // SPIKE FINDING — neither value is correct with the current server:
+          //   false → ExoPlayer treats the still-growing transcode playlist as a
+          //           finished short VOD, hits a premature end → replay/loop.
+          //   true  → plays continuously BUT live = non-seekable: no scrub bar,
+          //           no lock-screen transport controls.
+          // hls.js (web) tolerates the growing playlist; ExoPlayer does not.
+          // Real fix is server-side: emit a seekable manifest with known full
+          // duration (VOD) or EXT-X-PLAYLIST-TYPE:EVENT, not an early ENDLIST.
+          liveStream: true,
           // THE S1 TEST: does ExoPlayer carry this header to the .m3u8 AND .m4s?
           headers: api.authHeaders,
           subtitles: subSources,
@@ -147,12 +161,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _startHeartbeat(double? dur) {
     _heartbeat = Timer.periodic(const Duration(seconds: 10), (_) async {
       final pos = _controller?.videoPlayerController?.value.position;
-      final d = _controller?.videoPlayerController?.value.duration ?? Duration.zero;
       if (pos == null) return;
-      final secs = pos.inMilliseconds / 1000.0;
-      await widget.api.reportProgress(
-          widget.itemId, secs, d.inSeconds > 0 ? d.inSeconds.toDouble() : dur);
-      _logLine('heartbeat → progress ${secs.toStringAsFixed(0)}s');
+      final secs = pos.inMilliseconds / 1000.0 + _startOffset; // → absolute movie-time
+      await widget.api.reportProgress(widget.itemId, secs, dur);
+      _logLine('heartbeat → ${secs.toStringAsFixed(0)}s (offset ${_startOffset.toStringAsFixed(0)})');
     });
   }
 
@@ -181,6 +193,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (e) {
       _logLine('Beacon error: $e');
     }
+  }
+
+  void _reload() {
+    _logLine('reload (ignoreResume=$_ignoreResume forceTranscode=$_forceTranscode)');
+    _controller?.dispose();
+    _controller = null;
+    if (_transcodeSessionId != null) {
+      widget.api.stopTranscode(_transcodeSessionId!);
+      _transcodeSessionId = null;
+    }
+    _heartbeat?.cancel();
+    _start();
   }
 
   Future<void> _enterPip() async {
@@ -212,18 +236,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
               onPressed: _controller == null ? null : _enterPip,
               icon: const Icon(Icons.picture_in_picture_alt)),
           IconButton(
+            tooltip: 'Restart from 0:00',
+            onPressed: _controller == null
+                ? null
+                : () {
+                    setState(() => _ignoreResume = true);
+                    _reload();
+                  },
+            icon: const Icon(Icons.restart_alt),
+          ),
+          IconButton(
             tooltip: _forceTranscode ? 'Forcing transcode' : 'Force transcode',
             onPressed: () {
               setState(() => _forceTranscode = !_forceTranscode);
-              _logLine('force transcode = $_forceTranscode — reloading');
-              _controller?.dispose();
-              _controller = null;
-              if (_transcodeSessionId != null) {
-                widget.api.stopTranscode(_transcodeSessionId!);
-                _transcodeSessionId = null;
-              }
-              _heartbeat?.cancel();
-              _start();
+              _reload();
             },
             icon: Icon(_forceTranscode ? Icons.hd : Icons.hd_outlined),
           ),

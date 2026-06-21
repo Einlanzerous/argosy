@@ -1,6 +1,6 @@
 # ARGY-77 — Flutter player spike: decision doc
 
-**Status:** Recommendation drafted (desk research complete). Scope set to **Android-first** (2026-06-21). **Pending:** on-device Android validation + Arin's player sign-off before the spike can close.
+**Status:** Recommendation drafted + **proven on-device (Pixel 9 Pro, 2026-06-21)** — see "On-device validation" below. Scope: **Android-first**. **Pending:** Arin's sign-off; HEVC/4K + direct-play unverified (no content in dev library).
 **Date:** 2026-06-21
 
 This doc is the *recommendation* half of ARGY-77. The *throwaway proof* half (a `mobile/` Flutter app exercising the live `:8097` server) still needs a hands-on session with the Flutter SDK and a **real Android device** — PiP and HW HEVC cannot be validated headless. The "Validation checklist" at the end is the exact script for that session.
@@ -23,6 +23,32 @@ The "two requirements in tension," "server collision," and S1/S2 sections that f
 2. **Escape hatch: a thin native Android plugin over Media3/ExoPlayer** — if `better_player_plus`'s Android PiP/subtitles disappoint in the proof. Not throwaway: it's exactly the Android half of an eventual cross-platform native plugin, and ExoPlayer Activity-PiP is rock-solid.
 3. **Dropped for MVP: media_kit** (no native PiP on Android today; revisit only if PR #1410 lands and stabilises).
 4. **iOS server work (S1/S2): deferred to ARGY-82.** Documented below so the iOS path is understood now, not rediscovered later.
+
+---
+
+## On-device validation — Pixel 9 Pro, Android (2026-06-21)
+
+Built the throwaway proof (`mobile/spike_player/`, `better_player_plus` 1.3.4) and ran it against the live dev server (`:8097`) over wireless adb.
+
+**Confirmed working ✅**
+- Auth (login → profile → device-token), libraries/movies browse.
+- **Transcode-session HLS playback** end-to-end (MKV / H.264 / TrueHD → qsv **remux**, audio→AAC).
+- **HLS auth via the Bearer header on the playlist AND `.m4s` segments** — ExoPlayer carries the header through. ⇒ **S1 (token-on-HLS) is NOT needed for Android.**
+- **Hardware H.264 decode** (Tensor/Exynos c2 decoder).
+- **Picture-in-Picture** — enters; floating window keeps playing over the home screen. *The decisive result: `better_player_plus` stands for Android; the native-plugin fallback is unnecessary.*
+- **Background / lock-screen audio** (foreground media service keeps audio alive when locked).
+- **Sidecar WebVTT subtitles render** (confirmed once offset = 0).
+- **Beacon SSE** connects (200) and delivers position events.
+
+**Findings / work items (feed ARGY-79) ⚠️**
+1. **Transcode-HLS playlist semantics — the biggest item.** Argosy's growing on-the-fly transcode playlist isn't consumed well by ExoPlayer: as VOD it hits a premature end → replay/loop; as `liveStream:true` it plays continuously but loses the scrub bar **and** lock-screen transport controls. `hls.js` (web) tolerates the growing playlist; ExoPlayer does not. **Likely a server-side fix** — emit a seekable manifest with the full known duration (VOD) or `EXT-X-PLAYLIST-TYPE:EVENT`, no early `ENDLIST`. New, separate from S1/S2; may warrant its own server ticket.
+2. **Subtitle timing offset on resumed transcode.** Sidecar WebVTT cues are absolute movie-time, but the transcode HLS timeline restarts at 0 from `startAt`, so subtitles are blank/misaligned on resume (they render fine at offset 0). Fix: server shifts cues by `startAt` (or emits `PROGRAM-DATE-TIME`), or the client offsets cue times.
+3. **Progress must report absolute position** (player position + `startAt`); the naive relative value clobbers the resume point. Fixed in the spike.
+4. Minor: the Beacon SSE client needs reconnect/error handling (unhandled `ClientException` on stream close); the media notification needs a poster URL (cosmetic `BitmapFactory` errors).
+
+**Not validated — no content available:** HEVC/4K hardware decode + the "copy true-4K HEVC" remux path, and the **direct-play** path — the dev library currently holds a single H.264 MKV. Validate when 4K/HEVC and a direct-play (mp4) file exist.
+
+**Net:** `better_player_plus` is the right Android pick — PiP, HW decode, background, header-auth, and subtitle rendering all work. The substantive remaining engineering is the **transcode-HLS ↔ ExoPlayer playlist contract** (item 1), which may add a server-side task beyond S1/S2.
 
 ---
 
