@@ -282,6 +282,37 @@ func (s *Store) SetDevicePreferences(ctx context.Context, deviceID string, p api
 	return s.GetDevicePreferences(ctx, deviceID)
 }
 
+// GetUserPreferences returns the profile's account-wide preferences, defaulting
+// to the discovery home layout when none have been saved.
+func (s *Store) GetUserPreferences(ctx context.Context, userID string) (api.UserPreferences, error) {
+	var layout string
+	err := s.pool.QueryRow(ctx,
+		`SELECT home_layout FROM user_preferences WHERE user_id = $1`, userID).Scan(&layout)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.UserPreferences{HomeLayout: api.Discovery}, nil
+	}
+	if err != nil {
+		return api.UserPreferences{}, err
+	}
+	return api.UserPreferences{HomeLayout: api.UserPreferencesHomeLayout(layout)}, nil
+}
+
+// SetUserPreferences upserts the profile's preferences. Unknown layouts fall back
+// to discovery (the DB CHECK would otherwise reject them).
+func (s *Store) SetUserPreferences(ctx context.Context, userID string, p api.UserPreferences) (api.UserPreferences, error) {
+	layout := string(p.HomeLayout)
+	if layout != "focused" && layout != "discovery" {
+		layout = "discovery"
+	}
+	if _, err := s.pool.Exec(ctx,
+		`INSERT INTO user_preferences (user_id, home_layout, updated_at) VALUES ($1, $2, now())
+		 ON CONFLICT (user_id) DO UPDATE SET home_layout = EXCLUDED.home_layout, updated_at = now()`,
+		userID, layout); err != nil {
+		return api.UserPreferences{}, err
+	}
+	return s.GetUserPreferences(ctx, userID)
+}
+
 func (s *Store) verify(ctx context.Context, username, password string) (id, name string, err error) {
 	var hash string
 	err = s.pool.QueryRow(ctx,

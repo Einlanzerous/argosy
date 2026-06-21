@@ -25,6 +25,8 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("GET /api/v1/auth/me", requireAuth(store, handleMe()))
 	mux.Handle("GET /api/v1/preferences", requireAuth(store, handleGetPreferences(store)))
 	mux.Handle("PUT /api/v1/preferences", requireAuth(store, handleSetPreferences(store)))
+	mux.Handle("GET /api/v1/user/preferences", requireAuth(store, handleGetUserPreferences(store)))
+	mux.Handle("PUT /api/v1/user/preferences", requireAuth(store, handleSetUserPreferences(store)))
 }
 
 func handleGetPreferences(store *Store) http.HandlerFunc {
@@ -47,6 +49,34 @@ func handleSetPreferences(store *Store) http.HandlerFunc {
 			return
 		}
 		out, err := store.SetDevicePreferences(r.Context(), sess.DeviceId.String(), p)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+func handleGetUserPreferences(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		p, err := store.GetUserPreferences(r.Context(), sess.UserId.String())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	}
+}
+
+func handleSetUserPreferences(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		var p api.UserPreferences
+		if !decode(w, r, &p) {
+			return
+		}
+		out, err := store.SetUserPreferences(r.Context(), sess.UserId.String(), p)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return

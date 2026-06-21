@@ -5,6 +5,7 @@ import { formatRelative } from '@/lib/format'
 import { setPage } from '@/lib/page'
 import { useSessionStore } from '@/stores/session'
 import { getLibraries, createLibrary, deleteLibraryById, type Library } from '@/lib/manifest'
+import { getUserPreferences, putUserPreferences } from '@/lib/playback'
 import type { components } from '@/api/schema'
 
 type ScanStatus = components['schemas']['ScanStatus']
@@ -27,6 +28,18 @@ const addError = ref('')
 
 async function loadLibraries(): Promise<void> {
   libraries.value = await getLibraries().catch(() => [])
+}
+
+type HomeLayout = 'focused' | 'discovery'
+const homeLayout = ref<HomeLayout>('discovery')
+async function loadUserPrefs(): Promise<void> {
+  const p = await getUserPreferences().catch(() => null)
+  if (p?.homeLayout === 'focused' || p?.homeLayout === 'discovery') homeLayout.value = p.homeLayout
+}
+async function setHomeLayout(v: HomeLayout): Promise<void> {
+  if (homeLayout.value === v) return
+  homeLayout.value = v
+  await putUserPreferences({ homeLayout: v }).catch(() => {})
 }
 
 async function addLibrary(): Promise<void> {
@@ -82,6 +95,7 @@ onMounted(() => {
   setPage('Settings', 'The Helm · keep the Manifest current.')
   void refresh()
   void loadLibraries()
+  void loadUserPrefs()
 })
 onUnmounted(() => {
   if (poll) clearInterval(poll)
@@ -90,6 +104,35 @@ onUnmounted(() => {
 
 <template>
   <div class="settings">
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Home layout</h2>
+          <p>Choose how much the home page shows.</p>
+        </div>
+      </div>
+      <div class="layout-opts">
+        <button
+          class="layout-opt"
+          :class="{ on: homeLayout === 'focused' }"
+          type="button"
+          @click="setHomeLayout('focused')"
+        >
+          <span class="layout-name">Focused</span>
+          <span class="layout-desc">Just the essentials — Continue Watching, On Deck, Newly Arrived.</span>
+        </button>
+        <button
+          class="layout-opt"
+          :class="{ on: homeLayout === 'discovery' }"
+          type="button"
+          @click="setHomeLayout('discovery')"
+        >
+          <span class="layout-name">Discovery</span>
+          <span class="layout-desc">Everything, plus your Vaults and genre rows for browsing.</span>
+        </button>
+      </div>
+    </section>
+
     <section class="panel">
       <div class="panel-head">
         <div>
@@ -371,5 +414,39 @@ h2 {
 }
 .err-msg {
   color: #e9836c;
+}
+.layout-opts {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.layout-opt {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 18px;
+  border-radius: var(--arg-r-lg);
+  border: 1px solid var(--arg-line-2);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.layout-opt:hover {
+  border-color: var(--arg-soft);
+}
+.layout-opt.on {
+  border-color: var(--arg-accent);
+  background: var(--arg-accent-bg-2);
+}
+.layout-name {
+  font: 700 15px var(--arg-display);
+  color: var(--arg-cream);
+}
+.layout-desc {
+  font: 400 13px/1.5 var(--arg-body);
+  color: var(--arg-dim);
 }
 </style>

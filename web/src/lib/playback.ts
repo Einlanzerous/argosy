@@ -8,6 +8,18 @@ export type PlaybackInfo = components['schemas']['PlaybackInfo']
 export type TranscodeSession = components['schemas']['TranscodeSession']
 export type SubtitleTrack = components['schemas']['SubtitleTrack']
 export type DevicePreferences = components['schemas']['DevicePreferences']
+export type UserPreferences = components['schemas']['UserPreferences']
+
+// getUserPreferences returns the profile's account-wide preferences (e.g. the
+// home layout), defaulting to discovery on the server when unset.
+export async function getUserPreferences(): Promise<UserPreferences | null> {
+  const { data } = await api.GET('/api/v1/user/preferences')
+  return data ?? null
+}
+
+export async function putUserPreferences(prefs: UserPreferences): Promise<void> {
+  await api.PUT('/api/v1/user/preferences', { body: prefs })
+}
 
 // getPreferences returns this device's saved playback preferences (subtitle
 // language/on-off, audio language). Defaults (subtitles off) when none saved.
