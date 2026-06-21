@@ -3,6 +3,7 @@ import type { components } from '@/api/schema'
 
 export type PlayState = components['schemas']['PlayState']
 export type ContinueItem = components['schemas']['ContinueItem']
+export type OnDeckItem = components['schemas']['OnDeckItem']
 export type PlaybackInfo = components['schemas']['PlaybackInfo']
 export type TranscodeSession = components['schemas']['TranscodeSession']
 export type SubtitleTrack = components['schemas']['SubtitleTrack']
@@ -106,5 +107,12 @@ export async function setWatched(itemId: string, watched: boolean): Promise<void
 
 export async function getContinue(): Promise<ContinueItem[]> {
   const { data } = await api.GET('/api/v1/continue')
+  return data ?? []
+}
+
+// getOnDeck returns the next-up episode of each series the profile is current on
+// (distinct from in-progress items, which are in getContinue).
+export async function getOnDeck(): Promise<OnDeckItem[]> {
+  const { data } = await api.GET('/api/v1/ondeck')
   return data ?? []
 }

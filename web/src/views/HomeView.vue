@@ -6,18 +6,73 @@ import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime, formatTitle } from '@/lib/format'
-import { getRecent, type RecentItem } from '@/lib/manifest'
-import { getContinue, type ContinueItem } from '@/lib/playback'
+import {
+  getRecent,
+  getFacets,
+  getMovies,
+  getSeries,
+  getLibraries,
+  type RecentItem,
+} from '@/lib/manifest'
+import { getContinue, getOnDeck, type ContinueItem, type OnDeckItem } from '@/lib/playback'
 import { subscribeBeacon } from '@/lib/beacon'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
 type MovieDetail = components['schemas']['MediaItemDetail']
 
+type GenreCard = {
+  id: string
+  title: string
+  year?: number
+  kind: string
+  anime: boolean
+  posterUrl?: string | null
+  to: RouteLocationRaw
+}
+
 const recentItems = ref<RecentItem[]>([])
 const continueItems = ref<ContinueItem[]>([])
+const onDeckItems = ref<OnDeckItem[]>([])
+const genreRows = ref<{ genre: string; cards: GenreCard[] }[]>([])
 const heroDetail = ref<MovieDetail | null>(null)
 const loading = ref(true)
+
+// Build a couple of auto "Because it's in the hold" genre rows from the most
+// common genres, newest-rated first. Films + series for each, capped per row.
+async function buildGenreRows(): Promise<void> {
+  const libs = await getLibraries()
+  const top = (await getFacets(8)).filter((f) => f.type === 'genre').slice(0, 2)
+  genreRows.value = await Promise.all(
+    top.map(async (f) => {
+      const [movies, series] = await Promise.all([
+        getMovies({ genres: [f.value], sort: 'rating' }, libs),
+        getSeries({ genres: [f.value], sort: 'rating' }, libs),
+      ])
+      const cards: GenreCard[] = [
+        ...movies.map((m) => ({
+          id: m.id,
+          title: m.title,
+          year: m.year ?? undefined,
+          kind: m.kind,
+          anime: !!m.tags?.includes('anime'),
+          posterUrl: m.posterUrl,
+          to: { name: 'movie', params: { id: m.id } } as RouteLocationRaw,
+        })),
+        ...series.map((s) => ({
+          id: s.id,
+          title: s.title,
+          year: s.year ?? undefined,
+          kind: 'Series',
+          anime: !!s.tags?.includes('anime'),
+          posterUrl: s.posterUrl,
+          to: { name: 'series', params: { id: s.id } } as RouteLocationRaw,
+        })),
+      ].slice(0, 12)
+      return { genre: f.value, cards }
+    }),
+  )
+}
 
 const recent = computed(() => recentItems.value.slice(0, 12))
 // The hero's film fallback is the newest *film* (a series id isn't directly
@@ -81,11 +136,13 @@ function refreshContinueSoon(): void {
 
 onMounted(async () => {
   setPage('Home')
-  ;[recentItems.value, continueItems.value] = await Promise.all([
+  ;[recentItems.value, continueItems.value, onDeckItems.value] = await Promise.all([
     getRecent().catch(() => []),
     getContinue().catch(() => []),
+    getOnDeck().catch(() => []),
   ])
   loading.value = false
+  void buildGenreRows().catch(() => {})
   if (hero.value) {
     const { data } = await api.GET('/api/v1/items/{itemId}', {
       params: { path: { itemId: hero.value.id } },
@@ -161,6 +218,19 @@ onUnmounted(() => {
         </RouterLink>
       </PosterRail>
 
+      <PosterRail v-if="onDeckItems.length" label="On Deck" hint="next up in shows you're watching">
+        <PosterCard
+          v-for="o in onDeckItems"
+          :key="o.id"
+          :width="158"
+          :title="o.seriesTitle"
+          :subtitle="`S${o.seasonNumber} · E${o.episodeNumber}`"
+          kind="Up Next"
+          :poster-url="o.posterUrl"
+          :to="{ name: 'player', params: { id: o.id } }"
+        />
+      </PosterRail>
+
       <PosterRail v-if="recent.length" label="Newly Arrived" :view-all-to="{ name: 'library' }">
         <PosterCard
           v-for="m in recent"
@@ -174,6 +244,25 @@ onUnmounted(() => {
           :to="m.kind === 'series'
             ? { name: 'series', params: { id: m.id } }
             : { name: 'movie', params: { id: m.id } }"
+        />
+      </PosterRail>
+
+      <PosterRail
+        v-for="row in genreRows"
+        :key="row.genre"
+        :label="row.genre"
+        :view-all-to="{ name: 'library', query: { genre: row.genre } }"
+      >
+        <PosterCard
+          v-for="c in row.cards"
+          :key="c.id"
+          :width="158"
+          :title="c.title"
+          :subtitle="c.year ? String(c.year) : undefined"
+          :kind="c.kind"
+          :anime="c.anime"
+          :poster-url="c.posterUrl"
+          :to="c.to"
         />
       </PosterRail>
 

@@ -573,6 +573,33 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/ondeck:
+    get:
+      tags: [library]
+      operationId: listOnDeck
+      summary: On-deck (up-next) episodes for series the user is currently watching
+      description: >
+        The next unstarted episode of each series the current profile has made
+        progress in — i.e. has watched at least one episode and has a later
+        episode not yet started. Excludes in-progress items (those live in
+        /continue), so the two rows don't overlap. Newest activity first.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 50 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnDeckItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v1/recent:
     get:
       tags: [library]
@@ -1165,6 +1192,20 @@ components:
         percent: { type: number }
         seriesId: { type: string, format: uuid, nullable: true }
         seriesTitle: { type: string, nullable: true }
+
+    OnDeckItem:
+      type: object
+      required: [id, seriesId, seriesTitle, seasonNumber, episodeNumber]
+      properties:
+        id: { type: string, format: uuid, description: "The episode's playable media-item id." }
+        seriesId: { type: string, format: uuid }
+        seriesTitle: { type: string }
+        seasonNumber: { type: integer }
+        episodeNumber: { type: integer }
+        title: { type: string, nullable: true, description: "Episode title." }
+        posterUrl: { type: string, nullable: true }
+        backdropUrl: { type: string, nullable: true, description: "Landscape backdrop; falls back to posterUrl." }
+        durationSeconds: { type: number, nullable: true }
 
     Library:
       type: object

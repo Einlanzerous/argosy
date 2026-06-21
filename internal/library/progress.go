@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/api"
@@ -288,6 +289,19 @@ func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) listContinue(w http.ResponseWriter, r *http.Request) {
 	items, err := h.store.ContinueWatching(r.Context(), accountOf(r), userOf(r), 20)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (h *handlers) listOnDeck(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
+		limit = v
+	}
+	items, err := h.store.OnDeck(r.Context(), accountOf(r), userOf(r), limit)
 	if err != nil {
 		h.fail(w, err)
 		return
