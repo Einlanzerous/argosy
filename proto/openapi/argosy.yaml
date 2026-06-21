@@ -256,6 +256,44 @@ paths:
                   $ref: "#/components/schemas/Library"
         "401":
           $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [library]
+      operationId: createLibrary
+      summary: Register a new media library (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateLibraryRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Library" }
+        "400":
+          description: Invalid path (not an existing directory) or missing fields
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin only
+
+  /api/v1/libraries/{libraryId}:
+    delete:
+      tags: [library]
+      operationId: deleteLibrary
+      summary: Remove a library and its items (admin only)
+      parameters:
+        - { name: libraryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin only
+        "404":
+          description: Not found
 
   /api/v1/libraries/{libraryId}/movies:
     get:
@@ -1435,6 +1473,15 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
         kind: { type: string }
+        rootPath: { type: string, nullable: true, description: "Server-side media root (admin only)." }
+
+    CreateLibraryRequest:
+      type: object
+      required: [name, path]
+      properties:
+        name: { type: string }
+        path: { type: string, description: "Absolute path on the server; must be an existing directory." }
+        kind: { type: string, enum: [movie, show, mixed], default: mixed }
 
     MediaItemSummary:
       type: object

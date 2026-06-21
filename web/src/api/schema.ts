@@ -177,8 +177,26 @@ export interface paths {
         /** List the account's libraries */
         get: operations["listLibraries"];
         put?: never;
-        post?: never;
+        /** Register a new media library (admin only) */
+        post: operations["createLibrary"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libraries/{libraryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a library and its items (admin only) */
+        delete: operations["deleteLibrary"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1044,6 +1062,18 @@ export interface components {
             id: string;
             name: string;
             kind: string;
+            /** @description Server-side media root (admin only). */
+            rootPath?: string | null;
+        };
+        CreateLibraryRequest: {
+            name: string;
+            /** @description Absolute path on the server; must be an existing directory. */
+            path: string;
+            /**
+             * @default mixed
+             * @enum {string}
+             */
+            kind: "movie" | "show" | "mixed";
         };
         MediaItemSummary: {
             /** Format: uuid */
@@ -1486,6 +1516,80 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    createLibrary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLibraryRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description Invalid path (not an existing directory) or missing fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Admin only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteLibrary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                libraryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Admin only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listMovies: {

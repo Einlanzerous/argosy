@@ -37,22 +37,42 @@ var seriesSort = map[string]string{
 	"rating": "(COALESCE(r.metadata->>'vote_average', r.provider_metadata->>'vote_average'))::numeric DESC NULLS LAST, r.sort_title ASC NULLS LAST, r.title ASC",
 }
 
-// ListLibraries returns the account's libraries.
+// ListLibraries returns the account's libraries. rootPath is populated here; the
+// handler strips it for non-admins.
 func (s *Store) ListLibraries(ctx context.Context, accountID string) ([]api.Library, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id::text, name, kind FROM libraries WHERE account_id = $1 ORDER BY name`, accountID)
+	rows, err := s.pool.Query(ctx, `SELECT id::text, name, kind, root_path FROM libraries WHERE account_id = $1 ORDER BY name`, accountID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []api.Library{}
 	for rows.Next() {
-		var id, name, kind string
-		if err := rows.Scan(&id, &name, &kind); err != nil {
+		var id, name, kind, rootPath string
+		if err := rows.Scan(&id, &name, &kind, &rootPath); err != nil {
 			return nil, err
 		}
-		out = append(out, api.Library{Id: parseUUID(id), Name: name, Kind: kind})
+		rp := rootPath
+		out = append(out, api.Library{Id: parseUUID(id), Name: name, Kind: kind, RootPath: &rp})
 	}
 	return out, rows.Err()
+}
+
+// CreateLibrary registers a new media library under the account.
+func (s *Store) CreateLibrary(ctx context.Context, accountID, name, path, kind string) (api.Library, error) {
+	var id string
+	if err := s.pool.QueryRow(ctx,
+		`INSERT INTO libraries (account_id, name, kind, root_path) VALUES ($1,$2,$3,$4) RETURNING id::text`,
+		accountID, name, kind, path).Scan(&id); err != nil {
+		return api.Library{}, err
+	}
+	rp := path
+	return api.Library{Id: parseUUID(id), Name: name, Kind: kind, RootPath: &rp}, nil
+}
+
+// DeleteLibrary removes a library (its media cascades). Reports whether a row went.
+func (s *Store) DeleteLibrary(ctx context.Context, accountID, libraryID string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM libraries WHERE id = $1 AND account_id = $2`, libraryID, accountID)
+	return tag.RowsAffected() > 0, err
 }
 
 // ListMovies returns a paginated page of movies in a library, narrowed by the
