@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import BackButton from '@/components/BackButton.vue'
+import AddToVault from '@/components/AddToVault.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
 import { setPage } from '@/lib/page'
@@ -150,6 +151,7 @@ watch(
           <button v-else class="play" type="button" :disabled="!firstPlayable" @click="playFirst">
             <span>▶</span> Play
           </button>
+          <AddToVault v-if="series" :series-id="series.id" />
         </div>
       </div>
     </section>

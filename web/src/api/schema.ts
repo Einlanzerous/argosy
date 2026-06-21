@@ -258,6 +258,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List vaults visible to the current profile (own + shared) */
+        get: operations["listVaults"];
+        put?: never;
+        /** Create a vault */
+        post: operations["createVault"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vaults/{vaultId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Vault detail with its items */
+        get: operations["getVault"];
+        put?: never;
+        post?: never;
+        /** Delete a vault (owner or admin) */
+        delete: operations["deleteVault"];
+        options?: never;
+        head?: never;
+        /** Rename / re-describe / toggle sharing (owner or admin) */
+        patch: operations["updateVault"];
+        trace?: never;
+    };
+    "/api/v1/vaults/{vaultId}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a film or series to a vault */
+        post: operations["addVaultItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vaults/{vaultId}/items/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an item from a vault */
+        delete: operations["removeVaultItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vaults/{vaultId}/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Reorder a vault's items */
+        put: operations["reorderVault"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/series/{seriesId}": {
         parameters: {
             query?: never;
@@ -881,6 +969,76 @@ export interface components {
             backdropUrl?: string | null;
             durationSeconds?: number | null;
         };
+        Vault: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            /** @description Visible to and curatable by the whole household. */
+            shared: boolean;
+            /** Format: uuid */
+            ownerId: string;
+            ownerName: string;
+            itemCount: number;
+            /** @description Whether the calling profile owns this vault. */
+            isOwner: boolean;
+        };
+        VaultEntry: {
+            /**
+             * Format: uuid
+             * @description The vault membership id (for remove/reorder).
+             */
+            entryId: string;
+            /** @enum {string} */
+            kind: "movie" | "series";
+            /**
+             * Format: uuid
+             * @description The film or series id (for routing).
+             */
+            id: string;
+            title: string;
+            year?: number | null;
+            posterUrl?: string | null;
+            backdropUrl?: string | null;
+            rating?: number | null;
+        };
+        VaultDetail: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            shared: boolean;
+            /** Format: uuid */
+            ownerId: string;
+            ownerName: string;
+            itemCount: number;
+            isOwner: boolean;
+            /** @description Whether the calling profile may add/remove/reorder items. */
+            canEdit: boolean;
+            items: components["schemas"]["VaultEntry"][];
+        };
+        CreateVaultRequest: {
+            name: string;
+            description?: string | null;
+            /** @default false */
+            shared: boolean;
+        };
+        UpdateVaultRequest: {
+            name?: string;
+            description?: string | null;
+            shared?: boolean;
+        };
+        /** @description Exactly one of movieId or seriesId. */
+        AddVaultItemRequest: {
+            /** Format: uuid */
+            movieId?: string | null;
+            /** Format: uuid */
+            seriesId?: string | null;
+        };
+        ReorderVaultRequest: {
+            /** @description Entry ids in the desired order. */
+            entryIds: string[];
+        };
         Library: {
             /** Format: uuid */
             id: string;
@@ -1456,6 +1614,274 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    listVaults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vault"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVaultRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vault"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vaultId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Not found or not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vaultId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vaultId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVaultRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vault"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    addVaultItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vaultId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddVaultItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultEntry"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Vault not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeVaultItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vaultId: string;
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reorderVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vaultId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderVaultRequest"];
+            };
+        };
+        responses: {
+            /** @description Reordered */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getSeries: {

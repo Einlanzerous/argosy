@@ -45,6 +45,16 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/recent", mw(http.HandlerFunc(h.listRecent)))
 	mux.Handle("GET /api/v1/search", mw(http.HandlerFunc(h.search)))
 	mux.Handle("GET /api/v1/facets", mw(http.HandlerFunc(h.listFacets)))
+
+	// Vaults (ARGY-42): user-curated collections.
+	mux.Handle("GET /api/v1/vaults", mw(http.HandlerFunc(h.listVaults)))
+	mux.Handle("POST /api/v1/vaults", mw(http.HandlerFunc(h.createVault)))
+	mux.Handle("GET /api/v1/vaults/{vaultId}", mw(http.HandlerFunc(h.getVault)))
+	mux.Handle("PATCH /api/v1/vaults/{vaultId}", mw(http.HandlerFunc(h.updateVault)))
+	mux.Handle("DELETE /api/v1/vaults/{vaultId}", mw(http.HandlerFunc(h.deleteVault)))
+	mux.Handle("POST /api/v1/vaults/{vaultId}/items", mw(http.HandlerFunc(h.addVaultItem)))
+	mux.Handle("DELETE /api/v1/vaults/{vaultId}/items/{entryId}", mw(http.HandlerFunc(h.removeVaultItem)))
+	mux.Handle("PUT /api/v1/vaults/{vaultId}/order", mw(http.HandlerFunc(h.reorderVault)))
 	if pres != nil {
 		mux.Handle("GET /api/v1/sessions", mw(http.HandlerFunc(h.listSessions)))
 	}
