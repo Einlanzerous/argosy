@@ -1269,6 +1269,19 @@ components:
           type: string
           nullable: true
           description: Preferred audio language (ISO code). Persisted; applied once audio-track selection ships.
+        captionScale:
+          type: number
+          nullable: true
+          description: Caption font scale (1.0 = default).
+        captionColor:
+          type: string
+          nullable: true
+          description: Caption text color (hex).
+        captionBackground:
+          type: string
+          nullable: true
+          enum: [translucent, solid, none]
+          description: Caption background box style.
 
     DeviceRegistrationResponse:
       type: object

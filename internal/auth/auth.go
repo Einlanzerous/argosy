@@ -231,32 +231,52 @@ func (s *Store) RenameDevice(ctx context.Context, sess api.Session, deviceID ope
 // GetDevicePreferences returns a device's playback preferences, or sensible
 // defaults (subtitles off) when none have been saved yet.
 func (s *Store) GetDevicePreferences(ctx context.Context, deviceID string) (api.DevicePreferences, error) {
-	var subLang, audLang *string
+	var subLang, audLang, capColor, capBg *string
+	var capScale *float64
 	var subEnabled bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT subtitle_language, subtitle_enabled, audio_language
+		`SELECT subtitle_language, subtitle_enabled, audio_language,
+		        caption_scale, caption_color, caption_background
 		 FROM device_preferences WHERE device_id = $1`, deviceID).
-		Scan(&subLang, &subEnabled, &audLang)
+		Scan(&subLang, &subEnabled, &audLang, &capScale, &capColor, &capBg)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.DevicePreferences{SubtitleEnabled: false}, nil
 	}
 	if err != nil {
 		return api.DevicePreferences{}, err
 	}
-	return api.DevicePreferences{SubtitleLanguage: subLang, SubtitleEnabled: subEnabled, AudioLanguage: audLang}, nil
+	out := api.DevicePreferences{SubtitleLanguage: subLang, SubtitleEnabled: subEnabled, AudioLanguage: audLang, CaptionColor: capColor}
+	if capScale != nil {
+		f := float32(*capScale)
+		out.CaptionScale = &f
+	}
+	if capBg != nil {
+		bg := api.DevicePreferencesCaptionBackground(*capBg)
+		out.CaptionBackground = &bg
+	}
+	return out, nil
 }
 
 // SetDevicePreferences upserts a device's playback preferences.
 func (s *Store) SetDevicePreferences(ctx context.Context, deviceID string, p api.DevicePreferences) (api.DevicePreferences, error) {
+	var capBg *string
+	if p.CaptionBackground != nil {
+		s := string(*p.CaptionBackground)
+		capBg = &s
+	}
 	if _, err := s.pool.Exec(ctx,
-		`INSERT INTO device_preferences (device_id, subtitle_language, subtitle_enabled, audio_language, updated_at)
-		 VALUES ($1, $2, $3, $4, now())
+		`INSERT INTO device_preferences
+		   (device_id, subtitle_language, subtitle_enabled, audio_language, caption_scale, caption_color, caption_background, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, now())
 		 ON CONFLICT (device_id) DO UPDATE SET
 		   subtitle_language = EXCLUDED.subtitle_language,
 		   subtitle_enabled = EXCLUDED.subtitle_enabled,
 		   audio_language = EXCLUDED.audio_language,
+		   caption_scale = EXCLUDED.caption_scale,
+		   caption_color = EXCLUDED.caption_color,
+		   caption_background = EXCLUDED.caption_background,
 		   updated_at = now()`,
-		deviceID, p.SubtitleLanguage, p.SubtitleEnabled, p.AudioLanguage); err != nil {
+		deviceID, p.SubtitleLanguage, p.SubtitleEnabled, p.AudioLanguage, p.CaptionScale, p.CaptionColor, capBg); err != nil {
 		return api.DevicePreferences{}, err
 	}
 	return s.GetDevicePreferences(ctx, deviceID)
