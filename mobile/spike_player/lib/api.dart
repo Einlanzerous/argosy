@@ -58,6 +58,21 @@ class ApiClient {
     return (jsonDecode(r.body) as Map<String, dynamic>)['items'] as List<dynamic>;
   }
 
+  Future<List<dynamic>> series(String libraryId) async {
+    final r = await http.get(
+        _u('/api/v1/libraries/$libraryId/series', {'limit': '200'}),
+        headers: authHeaders);
+    if (r.statusCode != 200) return [];
+    return (jsonDecode(r.body) as Map<String, dynamic>)['items'] as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> seriesDetail(String seriesId) async {
+    final r =
+        await http.get(_u('/api/v1/series/$seriesId'), headers: authHeaders);
+    if (r.statusCode != 200) throw 'series $seriesId ${r.statusCode}';
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
   Future<List<dynamic>> recent() async {
     final r =
         await http.get(_u('/api/v1/recent', {'limit': '50'}), headers: authHeaders);

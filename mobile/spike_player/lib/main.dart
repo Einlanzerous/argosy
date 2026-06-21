@@ -172,7 +172,7 @@ class _LibrariesScreenState extends State<LibrariesScreen> {
                 onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => MoviesScreen(
+                        builder: (_) => LibraryBrowseScreen(
                             api: widget.api,
                             libraryId: l['id'] as String,
                             libraryName: l['name'] as String))),
@@ -184,43 +184,66 @@ class _LibrariesScreenState extends State<LibrariesScreen> {
   }
 }
 
-class MoviesScreen extends StatefulWidget {
+class LibraryBrowseScreen extends StatefulWidget {
   final ApiClient api;
   final String libraryId;
   final String libraryName;
-  const MoviesScreen(
+  const LibraryBrowseScreen(
       {super.key,
       required this.api,
       required this.libraryId,
       required this.libraryName});
   @override
-  State<MoviesScreen> createState() => _MoviesScreenState();
+  State<LibraryBrowseScreen> createState() => _LibraryBrowseScreenState();
 }
 
-class _MoviesScreenState extends State<MoviesScreen> {
-  late Future<List<dynamic>> _movies;
+class _LibraryBrowseScreenState extends State<LibraryBrowseScreen> {
+  late Future<List<List<dynamic>>> _content;
   @override
   void initState() {
     super.initState();
-    _movies = widget.api.movies(widget.libraryId);
+    _content = Future.wait([
+      widget.api.series(widget.libraryId),
+      widget.api.movies(widget.libraryId),
+    ]);
   }
+
+  Widget _header(String s) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(s, style: const TextStyle(fontWeight: FontWeight.bold)));
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.libraryName)),
-      body: FutureBuilder<List<dynamic>>(
-        future: _movies,
+      body: FutureBuilder<List<List<dynamic>>>(
+        future: _content,
         builder: (_, snap) {
           if (snap.hasError) return Center(child: Text('${snap.error}'));
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final movies = snap.data!;
-          if (movies.isEmpty) {
-            return const Center(child: Text('No movies in this library'));
+          final series = snap.data![0];
+          final movies = snap.data![1];
+          if (series.isEmpty && movies.isEmpty) {
+            return const Center(child: Text('Empty library'));
           }
           return ListView(children: [
+            if (series.isNotEmpty) _header('SERIES'),
+            for (final s in series)
+              ListTile(
+                leading: const Icon(Icons.live_tv),
+                title: Text(s['title'] as String),
+                subtitle: s['year'] != null ? Text('${s['year']}') : null,
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => SeriesDetailScreen(
+                            api: widget.api,
+                            seriesId: s['id'] as String,
+                            title: s['title'] as String))),
+              ),
+            if (movies.isNotEmpty) _header('MOVIES'),
             for (final m in movies)
               ListTile(
                 leading: const Icon(Icons.movie),
@@ -238,6 +261,72 @@ class _MoviesScreenState extends State<MoviesScreen> {
                             title: m['title'] as String))),
               ),
           ]);
+        },
+      ),
+    );
+  }
+}
+
+class SeriesDetailScreen extends StatefulWidget {
+  final ApiClient api;
+  final String seriesId;
+  final String title;
+  const SeriesDetailScreen(
+      {super.key,
+      required this.api,
+      required this.seriesId,
+      required this.title});
+  @override
+  State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
+}
+
+class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
+  late Future<Map<String, dynamic>> _detail;
+  @override
+  void initState() {
+    super.initState();
+    _detail = widget.api.seriesDetail(widget.seriesId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title)),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _detail,
+        builder: (_, snap) {
+          if (snap.hasError) return Center(child: Text('${snap.error}'));
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final seasons = (snap.data!['seasons'] as List?) ?? const [];
+          final tiles = <Widget>[];
+          for (final season in seasons) {
+            final sn = season['seasonNumber'];
+            for (final ep in (season['episodes'] as List? ?? const [])) {
+              final mediaId = ep['mediaItemId'] as String?;
+              final epNum = ep['episodeNumber'];
+              final epTitle = ep['title'] as String? ?? 'Episode $epNum';
+              final label = 'S${sn}E$epNum · $epTitle';
+              tiles.add(ListTile(
+                enabled: mediaId != null,
+                leading: const Icon(Icons.play_circle_outline),
+                title: Text(label),
+                subtitle: mediaId == null ? const Text('not playable') : null,
+                onTap: mediaId == null
+                    ? null
+                    : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => PlayerScreen(
+                                api: widget.api,
+                                itemId: mediaId,
+                                title: label))),
+              ));
+            }
+          }
+          if (tiles.isEmpty) return const Center(child: Text('No episodes'));
+          return ListView(children: tiles);
         },
       ),
     );

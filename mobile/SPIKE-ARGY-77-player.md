@@ -1,6 +1,6 @@
 # ARGY-77 — Flutter player spike: decision doc
 
-**Status:** Recommendation drafted + **proven on-device (Pixel 9 Pro, 2026-06-21)** — see "On-device validation" below. Scope: **Android-first**. **Pending:** Arin's sign-off; HEVC/4K + direct-play unverified (no content in dev library).
+**Status:** Recommendation drafted + **proven on-device (Pixel 9 Pro, 2026-06-21)** — PiP + transcode-HLS + HW H.264 **and** HEVC-4K all confirmed. Scope: **Android-first**. **Pending:** Arin's sign-off; only plain direct-play unverified (no mp4 in dev library).
 **Date:** 2026-06-21
 
 This doc is the *recommendation* half of ARGY-77. The *throwaway proof* half (a `mobile/` Flutter app exercising the live `:8097` server) still needs a hands-on session with the Flutter SDK and a **real Android device** — PiP and HW HEVC cannot be validated headless. The "Validation checklist" at the end is the exact script for that session.
@@ -35,6 +35,7 @@ Built the throwaway proof (`mobile/spike_player/`, `better_player_plus` 1.3.4) a
 - **Transcode-session HLS playback** end-to-end (MKV / H.264 / TrueHD → qsv **remux**, audio→AAC).
 - **HLS auth via the Bearer header on the playlist AND `.m4s` segments** — ExoPlayer carries the header through. ⇒ **S1 (token-on-HLS) is NOT needed for Android.**
 - **Hardware H.264 decode** (Tensor/Exynos c2 decoder).
+- **HEVC / true-4K** — session **remuxes the HEVC at native 4K** (`hevc:true`, not downscaled), **hardware** `c2.exynos.hevc.decoder`; video smooth (audio-sync = finding #5).
 - **Picture-in-Picture** — enters; floating window keeps playing over the home screen. *The decisive result: `better_player_plus` stands for Android; the native-plugin fallback is unnecessary.*
 - **Background / lock-screen audio** (foreground media service keeps audio alive when locked).
 - **Sidecar WebVTT subtitles render** (confirmed once offset = 0).
@@ -45,8 +46,11 @@ Built the throwaway proof (`mobile/spike_player/`, `better_player_plus` 1.3.4) a
 2. **Subtitle timing offset on resumed transcode.** Sidecar WebVTT cues are absolute movie-time, but the transcode HLS timeline restarts at 0 from `startAt`, so subtitles are blank/misaligned on resume (they render fine at offset 0). Fix: server shifts cues by `startAt` (or emits `PROGRAM-DATE-TIME`), or the client offsets cue times.
 3. **Progress must report absolute position** (player position + `startAt`); the naive relative value clobbers the resume point. Fixed in the spike.
 4. Minor: the Beacon SSE client needs reconnect/error handling (unhandled `ClientException` on stream close); the media notification needs a poster URL (cosmetic `BitmapFactory` errors).
+5. **Slight A/V desync on the 4K remux path** (video copied, TrueHD→AAC audio re-encoded) — audio a touch behind the (smooth) video. Resembles typical mobile/Bluetooth-latency desync, so possibly environmental; confirm on wired/speaker output, and check the server aligns audio-transcode timestamps with the copied video on the remux path.
 
-**Not validated — no content available:** HEVC/4K hardware decode + the "copy true-4K HEVC" remux path, and the **direct-play** path — the dev library currently holds a single H.264 MKV. Validate when 4K/HEVC and a direct-play (mp4) file exist.
+**HEVC / true-4K — CONFIRMED** (Fallout 4K episode, MKV/HEVC/TrueHD): gate→transcode, but the session **remuxes/copies the HEVC at native 4K** (the `hevc:true` path — not downscaled to H.264 1080p), decoded in **hardware** (`c2.exynos.hevc.decoder`). Video smooth; audio slightly out of sync (finding #5).
+
+**Only remaining unvalidated item: plain direct-play** (`/stream`) — the dev library has no direct-playable mp4 (everything needs transcode). It's the *easy* path (a normal seekable file); validate when an mp4 exists.
 
 **Net:** `better_player_plus` is the right Android pick — PiP, HW decode, background, header-auth, and subtitle rendering all work. The substantive remaining engineering is the **transcode-HLS ↔ ExoPlayer playlist contract** (item 1), which may add a server-side task beyond S1/S2.
 
