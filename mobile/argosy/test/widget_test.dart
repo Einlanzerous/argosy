@@ -31,7 +31,8 @@ void main() {
     // Let the redirect settle.
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome aboard'), findsOneWidget);
-    expect(find.text('Connect'), findsOneWidget);
+    // Pairing flow opens on the server-address step.
+    expect(find.text('Connect to your server'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
   });
 }
