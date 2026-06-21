@@ -1,15 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../api/api_providers.dart';
+
 /// Where the session stands. [unknown] is the pre-bootstrap state used to hold
-/// on the splash while we try to restore a saved device token.
+/// on the splash while we restore a saved device token.
 enum AuthStatus { unknown, unauthenticated, authenticated }
 
-/// Owns the auth/session state the router gates on.
+/// Owns the auth/session state the router gates on, backed by the persisted
+/// [TokenStore].
 ///
-/// This is a scaffold placeholder: bootstrap and sign-in are stubbed. Real
-/// device-token restore (`GET /auth/me`) and pairing (`POST /auth/login` →
-/// profile → `POST /auth/devices`) land in ARGY-46 once the Dart API client
-/// (ARGY-78) exists.
+/// ARGY-78 delivers token persistence + the API client plumbing. Real pairing
+/// (`POST /auth/login` → profile → `POST /auth/devices`) and session validation
+/// via `AuthApi.getCurrentSession()` land in ARGY-46 — [signIn] is still a
+/// placeholder that just persists a token so the gate survives a restart.
 class AuthController extends Notifier<AuthStatus> {
   @override
   AuthStatus build() {
@@ -18,19 +21,40 @@ class AuthController extends Notifier<AuthStatus> {
   }
 
   Future<void> _bootstrap() async {
-    // TODO(ARGY-46): restore a persisted device token and validate it via
-    // GET /auth/me; fall through to unauthenticated on miss/expiry.
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (state == AuthStatus.unknown) {
+    final store = ref.read(tokenStoreProvider);
+    try {
+      await store.load();
+    } catch (_) {
+      // Secure storage unavailable/corrupt (or absent in tests) — treat as
+      // signed-out rather than bricking the app.
       state = AuthStatus.unauthenticated;
+      return;
     }
+
+    // Re-seed the base-URL state from the freshly loaded store.
+    final base = store.baseUrl;
+    if (base != null && base.isNotEmpty) {
+      ref.read(baseUrlProvider.notifier).set(base);
+    }
+
+    // TODO(ARGY-46): when a token exists, validate it via
+    // AuthApi.getCurrentSession() and drop to unauthenticated on 401.
+    state = store.hasToken
+        ? AuthStatus.authenticated
+        : AuthStatus.unauthenticated;
   }
 
-  /// Placeholder sign-in — flips the gate so the rest of the shell is
-  /// reachable. Replaced by real pairing in ARGY-46.
-  void signIn() => state = AuthStatus.authenticated;
+  /// Placeholder sign-in — persists a token so the session survives restarts.
+  /// Replaced by real pairing in ARGY-46.
+  Future<void> signIn() async {
+    await ref.read(tokenStoreProvider).setToken('dev-placeholder-token');
+    state = AuthStatus.authenticated;
+  }
 
-  void signOut() => state = AuthStatus.unauthenticated;
+  Future<void> signOut() async {
+    await ref.read(tokenStoreProvider).clearToken();
+    state = AuthStatus.unauthenticated;
+  }
 }
 
 final authControllerProvider =

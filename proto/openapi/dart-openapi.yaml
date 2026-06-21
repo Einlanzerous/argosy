@@ -1,0 +1,17 @@
+# openapi-generator config for the Dart/Flutter client (ARGY-78).
+# Generator: `dart` (plain http-based, no build_runner) — see the Phase 6
+# decision to keep the mobile toolchain lightweight.
+# Run via `make generate` (or `bun run gen:dart` from the repo root).
+generatorName: dart
+inputSpec: proto/openapi/argosy.yaml
+outputDir: mobile/argosy/packages/argosy_api
+# Skip generated tests/docs — they add noise and we don't vendor them.
+globalProperties:
+  apiTests: "false"
+  modelTests: "false"
+  apiDocs: "false"
+  modelDocs: "false"
+additionalProperties:
+  pubName: argosy_api
+  pubVersion: 0.1.0
+  pubDescription: "Generated Argosy API client. Do not edit by hand — run `make generate`."
