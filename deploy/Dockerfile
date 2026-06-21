@@ -6,7 +6,9 @@
 #   docker build -f deploy/Dockerfile -t argosy:latest .
 
 # 1) Build the Vue SPA -> internal/webui/dist
-FROM oven/bun:1-debian AS web
+# Pin bun to match CI (.github/workflows/ci.yml). A floating "1-debian" pulls a
+# newer bun that breaks vue-tsc's .vue module resolution at `bun run build`.
+FROM oven/bun:1.3.14-debian AS web
 WORKDIR /app/web
 COPY web/package.json web/bun.lock ./
 RUN bun install --frozen-lockfile
