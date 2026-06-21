@@ -55,8 +55,10 @@ services:
       # First-run admin bootstrap (created only if absent).
       ARGOSY_ADMIN_USERNAME: "${ARGOSY_ADMIN_USERNAME:-admin}"
       ARGOSY_ADMIN_PASSWORD: "${ARGOSY_ADMIN_PASSWORD:-changeme}"
+    # 8096 is the production container's host port; publish the dev server on 8097
+    # so the two run side by side (the container always listens on 8096).
     ports:
-      - "${ARGOSY_HOST_PORT:-8096}:8096"
+      - "${ARGOSY_HOST_PORT:-8097}:8096"
     # Intel iGPU passthrough for hardware transcode (ARGY-30). The render node is
     # group-owned by "render"; add the container to that GID so it can open it.
     # RENDER_GID is host-specific (`getent group render`); default matches this box.
