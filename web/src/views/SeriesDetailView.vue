@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
+import BackButton from '@/components/BackButton.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
 import { setPage } from '@/lib/page'
@@ -126,6 +127,7 @@ watch(
     <section class="hero" :style="heroStyle">
       <div class="arg-hatch hatch" />
       <div class="shade" />
+      <BackButton class="hero-back" fallback="library" />
       <div class="body">
         <h1>{{ series.title }}</h1>
         <div class="meta">
@@ -204,7 +206,7 @@ watch(
   border-radius: var(--arg-r-xl);
   overflow: hidden;
   border: 1px solid var(--arg-line);
-  min-height: 330px;
+  min-height: 360px;
 }
 .hatch {
   position: absolute;
@@ -215,10 +217,19 @@ watch(
   inset: 0;
   background: linear-gradient(0deg, #171717 4%, rgba(23, 23, 23, 0.5) 55%, rgba(23, 23, 23, 0.15) 100%);
 }
+/* Quadrant 1: top-left of the hero, aligned with the body's 40px inset. */
+.hero-back {
+  position: absolute;
+  top: 50px;
+  left: 40px;
+  z-index: 3;
+}
 .body {
   position: relative;
-  padding: 44px 40px 34px;
-  min-height: 330px;
+  /* Extra top padding reserves room for the back button (top:50 + 40h) so the
+     title always clears it even when the overview makes the content tall. */
+  padding: 104px 40px 34px;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;

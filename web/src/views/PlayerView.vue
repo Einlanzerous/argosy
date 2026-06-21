@@ -487,6 +487,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </div>
       <div class="top-right">
+        <span v-if="quality" class="quality">{{ quality }}</span>
         <button
           class="icon-btn"
           type="button"
@@ -495,10 +496,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         >
           {{ isFullscreen ? '▢' : '⛶' }}
         </button>
-        <span v-if="quality" class="quality">{{ quality }}</span>
-        <div class="device-pill">
-          <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
-        </div>
       </div>
     </div>
 
@@ -536,6 +533,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <span class="t">{{ formatClock(duration) }}</span>
       </div>
       <div class="buttons">
+        <div class="device-pill">
+          <span class="dot" /> Playing on {{ session.deviceName || 'this device' }}
+        </div>
         <button class="ctrl" type="button" title="Back 10s" @click="skip(-10)">
           <span class="ic">↺</span><span class="lbl">10s</span>
         </button>
@@ -696,8 +696,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   gap: 10px;
 }
 .quality {
-  padding: 6px 11px;
-  border-radius: 7px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 8px;
   border: 1px solid rgba(201, 154, 78, 0.5);
   background: var(--arg-accent-bg-2);
   color: var(--arg-accent);
@@ -719,8 +722,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color: var(--arg-accent);
   color: #fff;
 }
+/* Under the progress bar, pinned to the far left of the buttons row — the
+   mirror of the CC control on the far right. Absolute so it doesn't shift the
+   centered transport buttons. */
 .device-pill {
-  display: flex;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 8px 13px;
@@ -914,9 +924,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color: var(--arg-accent);
   color: var(--arg-bg);
 }
+/* CC drops the outer transport pill — just the "CC" badge, no surrounding
+   border/background. */
 .ctrl.icon-only {
-  padding: 11px 14px;
+  padding: 8px;
   gap: 0;
+  border-color: transparent;
+  background: transparent;
+}
+.ctrl.icon-only:hover {
+  border-color: transparent;
+  background: rgba(234, 234, 229, 0.06);
 }
 /* Paused → the play button breathes a brass glow, echoing the resume card. */
 .ctrl.primary.glow {
@@ -943,6 +961,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color: var(--arg-accent);
 }
 .ctrl.on .ic.cc {
+  border-color: var(--arg-accent);
   background: var(--arg-accent);
   color: var(--arg-bg);
 }
@@ -951,8 +970,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   letter-spacing: 0.04em;
   padding: 2px 5px;
   border-radius: 4px;
-  border: 1.5px solid var(--arg-accent);
-  color: var(--arg-accent);
+  border: 1.5px solid var(--arg-cream);
+  color: var(--arg-cream);
 }
 .cc-wrap {
   position: absolute;
