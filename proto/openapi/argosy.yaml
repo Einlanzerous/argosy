@@ -354,6 +354,158 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/vaults:
+    get:
+      tags: [library]
+      operationId: listVaults
+      summary: List vaults visible to the current profile (own + shared)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Vault" } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [library]
+      operationId: createVault
+      summary: Create a vault
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateVaultRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vault" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/vaults/{vaultId}:
+    get:
+      tags: [library]
+      operationId: getVault
+      summary: Vault detail with its items
+      parameters:
+        - { name: vaultId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VaultDetail" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Not found or not visible
+    patch:
+      tags: [library]
+      operationId: updateVault
+      summary: Rename / re-describe / toggle sharing (owner or admin)
+      parameters:
+        - { name: vaultId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateVaultRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vault" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not permitted
+        "404":
+          description: Not found
+    delete:
+      tags: [library]
+      operationId: deleteVault
+      summary: Delete a vault (owner or admin)
+      parameters:
+        - { name: vaultId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not permitted
+        "404":
+          description: Not found
+
+  /api/v1/vaults/{vaultId}/items:
+    post:
+      tags: [library]
+      operationId: addVaultItem
+      summary: Add a film or series to a vault
+      parameters:
+        - { name: vaultId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddVaultItemRequest" }
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VaultEntry" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not permitted
+        "404":
+          description: Vault not found
+
+  /api/v1/vaults/{vaultId}/items/{entryId}:
+    delete:
+      tags: [library]
+      operationId: removeVaultItem
+      summary: Remove an item from a vault
+      parameters:
+        - { name: vaultId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: entryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204":
+          description: Removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not permitted
+        "404":
+          description: Not found
+
+  /api/v1/vaults/{vaultId}/order:
+    put:
+      tags: [library]
+      operationId: reorderVault
+      summary: Reorder a vault's items
+      parameters:
+        - { name: vaultId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReorderVaultRequest" }
+      responses:
+        "204":
+          description: Reordered
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not permitted
+        "404":
+          description: Not found
+
   /api/v1/series/{seriesId}:
     get:
       tags: [library]
@@ -1206,6 +1358,75 @@ components:
         posterUrl: { type: string, nullable: true }
         backdropUrl: { type: string, nullable: true, description: "Landscape backdrop; falls back to posterUrl." }
         durationSeconds: { type: number, nullable: true }
+
+    Vault:
+      type: object
+      required: [id, name, shared, ownerId, ownerName, itemCount, isOwner]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        shared: { type: boolean, description: "Visible to and curatable by the whole household." }
+        ownerId: { type: string, format: uuid }
+        ownerName: { type: string }
+        itemCount: { type: integer }
+        isOwner: { type: boolean, description: "Whether the calling profile owns this vault." }
+
+    VaultEntry:
+      type: object
+      required: [entryId, kind, id, title]
+      properties:
+        entryId: { type: string, format: uuid, description: "The vault membership id (for remove/reorder)." }
+        kind: { type: string, enum: [movie, series] }
+        id: { type: string, format: uuid, description: "The film or series id (for routing)." }
+        title: { type: string }
+        year: { type: integer, nullable: true }
+        posterUrl: { type: string, nullable: true }
+        backdropUrl: { type: string, nullable: true }
+        rating: { type: number, nullable: true }
+
+    VaultDetail:
+      type: object
+      required: [id, name, shared, ownerId, ownerName, itemCount, isOwner, canEdit, items]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        shared: { type: boolean }
+        ownerId: { type: string, format: uuid }
+        ownerName: { type: string }
+        itemCount: { type: integer }
+        isOwner: { type: boolean }
+        canEdit: { type: boolean, description: "Whether the calling profile may add/remove/reorder items." }
+        items: { type: array, items: { $ref: "#/components/schemas/VaultEntry" } }
+
+    CreateVaultRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        shared: { type: boolean, default: false }
+
+    UpdateVaultRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        shared: { type: boolean }
+
+    AddVaultItemRequest:
+      type: object
+      description: "Exactly one of movieId or seriesId."
+      properties:
+        movieId: { type: string, format: uuid, nullable: true }
+        seriesId: { type: string, format: uuid, nullable: true }
+
+    ReorderVaultRequest:
+      type: object
+      required: [entryIds]
+      properties:
+        entryIds: { type: array, items: { type: string, format: uuid }, description: "Entry ids in the desired order." }
 
     Library:
       type: object

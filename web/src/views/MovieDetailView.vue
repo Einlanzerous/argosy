@@ -5,6 +5,7 @@ import { api } from '@/api/client'
 import BackButton from '@/components/BackButton.vue'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
+import AddToVault from '@/components/AddToVault.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime, formatClock } from '@/lib/format'
 import { getMovies, type MovieSummary } from '@/lib/manifest'
@@ -107,7 +108,7 @@ watch(
             <RouterLink v-else class="play" :to="{ name: 'player', params: { id: movie.id } }">
               <span>▶</span> Play
             </RouterLink>
-            <button class="vault" type="button" title="Add to a Vault">+</button>
+            <AddToVault :movie-id="movie.id" />
           </div>
           <div v-if="resumable && progress" class="resume-bar">
             <div class="track"><div class="fill" :style="{ width: `${percent}%` }" /></div>

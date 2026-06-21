@@ -28,6 +28,8 @@ export const router = createRouter({
         { path: 'library', name: 'library', component: () => import('@/views/LibraryView.vue') },
         { path: 'movie/:id', name: 'movie', component: () => import('@/views/MovieDetailView.vue') },
         { path: 'series/:id', name: 'series', component: () => import('@/views/SeriesDetailView.vue') },
+        { path: 'vaults', name: 'vaults', component: () => import('@/views/VaultsView.vue') },
+        { path: 'vault/:id', name: 'vault', component: () => import('@/views/VaultDetailView.vue') },
         { path: 'fleet', name: 'fleet', component: () => import('@/views/FleetView.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue') },
       ],

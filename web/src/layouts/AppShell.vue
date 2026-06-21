@@ -42,8 +42,8 @@ function logout(): void {
         </button>
       </div>
       <div class="bar-right">
-        <button class="pill" type="button" @click="openSearch"><span class="i">▤</span> Browse</button>
-        <button class="pill" type="button" @click="nav('library')"><span class="i">◈</span> Yours</button>
+        <button class="pill" type="button" @click="nav('library')"><span class="i">▤</span> Browse</button>
+        <button class="pill" type="button" @click="nav('vaults')"><span class="i">▣</span> Vaults</button>
         <div class="profile">
           <button class="avatar" type="button" @click="menuOpen = !menuOpen">{{ initial }}</button>
           <template v-if="menuOpen">

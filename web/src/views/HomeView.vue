@@ -15,6 +15,7 @@ import {
   type RecentItem,
 } from '@/lib/manifest'
 import { getContinue, getOnDeck, type ContinueItem, type OnDeckItem } from '@/lib/playback'
+import { listVaults, getVault } from '@/lib/vaults'
 import { subscribeBeacon } from '@/lib/beacon'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
@@ -35,6 +36,30 @@ const recentItems = ref<RecentItem[]>([])
 const continueItems = ref<ContinueItem[]>([])
 const onDeckItems = ref<OnDeckItem[]>([])
 const genreRows = ref<{ genre: string; cards: GenreCard[] }[]>([])
+const vaultRows = ref<{ id: string; name: string; cards: GenreCard[] }[]>([])
+
+// Surface up to three non-empty vaults as home rows.
+async function buildVaultRows(): Promise<void> {
+  const vs = (await listVaults()).filter((v) => v.itemCount > 0).slice(0, 3)
+  const details = await Promise.all(vs.map((v) => getVault(v.id).catch(() => null)))
+  vaultRows.value = details
+    .filter((d): d is NonNullable<typeof d> => !!d)
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      cards: d.items.slice(0, 12).map((e) => ({
+        id: e.id,
+        title: e.title,
+        year: e.year ?? undefined,
+        kind: e.kind === 'series' ? 'Series' : 'Film',
+        anime: false,
+        posterUrl: e.posterUrl,
+        to: (e.kind === 'series'
+          ? { name: 'series', params: { id: e.id } }
+          : { name: 'movie', params: { id: e.id } }) as RouteLocationRaw,
+      })),
+    }))
+}
 const heroDetail = ref<MovieDetail | null>(null)
 const loading = ref(true)
 
@@ -142,6 +167,7 @@ onMounted(async () => {
     getOnDeck().catch(() => []),
   ])
   loading.value = false
+  void buildVaultRows().catch(() => {})
   void buildGenreRows().catch(() => {})
   if (hero.value) {
     const { data } = await api.GET('/api/v1/items/{itemId}', {
@@ -244,6 +270,25 @@ onUnmounted(() => {
           :to="m.kind === 'series'
             ? { name: 'series', params: { id: m.id } }
             : { name: 'movie', params: { id: m.id } }"
+        />
+      </PosterRail>
+
+      <PosterRail
+        v-for="row in vaultRows"
+        :key="row.id"
+        :label="row.name"
+        :view-all-to="{ name: 'vault', params: { id: row.id } }"
+      >
+        <PosterCard
+          v-for="c in row.cards"
+          :key="c.id"
+          :width="158"
+          :title="c.title"
+          :subtitle="c.year ? String(c.year) : undefined"
+          :kind="c.kind"
+          :anime="c.anime"
+          :poster-url="c.posterUrl"
+          :to="c.to"
         />
       </PosterRail>
 
