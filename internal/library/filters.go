@@ -9,12 +9,24 @@ import (
 // browse endpoints. Zero values mean "no constraint", so an empty browseFilter
 // is the unfiltered listing.
 type browseFilter struct {
-	Tag       string   // label: item must carry this tag
+	Tag       string   // path tag: item must carry this (e.g. anime)
+	Label     string   // user label: the calling profile labelled the item with this
 	Genres    []string // any-of: effective genres must include at least one
 	RatingMin float64  // effective rating >= this (0 disables)
 	Watched   string   // per-user state: "watched" | "unwatched" | "in_progress"
 	YearFrom  int      // effective year >= this (0 disables)
 	YearTo    int      // effective year <= this (0 disables)
+}
+
+// labelClause filters to items the user has tagged with f.Label. col is the
+// user_labels column for the entity ("media_item_id" or "series_id"), alias the
+// row alias ("mi" or "r").
+func (f browseFilter) labelClause(alias, col, userID string, a *sqlArgs) string {
+	if f.Label == "" {
+		return ""
+	}
+	return " AND EXISTS (SELECT 1 FROM user_labels ul WHERE ul.user_id = " + a.add(userID) +
+		" AND ul." + col + " = " + alias + ".id AND ul.label = " + a.add(f.Label) + ")"
 }
 
 // sqlArgs accumulates positional query args and hands out $N placeholders, so a

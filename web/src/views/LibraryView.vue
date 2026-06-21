@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw, RouteLocationRaw } from 'vue-router'
 import PosterCard from '@/components/PosterCard.vue'
@@ -16,6 +16,7 @@ import {
   type SeriesSort,
   type WatchedState,
 } from '@/lib/manifest'
+import { listMyLabels } from '@/lib/labels'
 import { setPage } from '@/lib/page'
 
 type Card = {
@@ -87,6 +88,9 @@ const ratingMin = computed(() => num(route.query.rating_min))
 const yearFrom = computed(() => num(route.query.year_from))
 const yearTo = computed(() => num(route.query.year_to))
 const label = computed(() => (typeof route.query.tag === 'string' ? route.query.tag : ''))
+// User-applied custom label (?label=), distinct from the path tag above.
+const userLabel = computed(() => (typeof route.query.label === 'string' ? route.query.label : ''))
+const userLabels = ref<string[]>([])
 
 const hasFilters = computed(
   () =>
@@ -95,7 +99,8 @@ const hasFilters = computed(
     !!ratingMin.value ||
     !!yearFrom.value ||
     !!yearTo.value ||
-    !!label.value,
+    !!label.value ||
+    !!userLabel.value,
 )
 
 // The advanced filter panel is collapsed by default (it's tall); the toggle shows
@@ -107,7 +112,8 @@ const activeCount = computed(
     (watched.value ? 1 : 0) +
     (ratingMin.value ? 1 : 0) +
     (yearFrom.value || yearTo.value ? 1 : 0) +
-    (label.value ? 1 : 0),
+    (label.value ? 1 : 0) +
+    (userLabel.value ? 1 : 0),
 )
 // Live label for the rating slider while dragging (committed on change).
 const ratingLabel = ref(0)
@@ -143,6 +149,9 @@ function toggleLabel(l: string): void {
   const v = l.toLowerCase()
   patch({ tag: label.value === v ? undefined : v })
 }
+function toggleUserLabel(l: string): void {
+  patch({ label: userLabel.value === l ? undefined : l })
+}
 function setYear(which: 'year_from' | 'year_to', e: Event): void {
   patch({ [which]: (e.target as HTMLInputElement).value || undefined })
 }
@@ -168,6 +177,7 @@ async function load(): Promise<void> {
   loading.value = true
   const f: BrowseFilter = {
     tag: label.value || undefined,
+    label: userLabel.value || undefined,
     genres: genres.value,
     ratingMin: ratingMin.value,
     watched: watched.value,
@@ -211,6 +221,13 @@ async function load(): Promise<void> {
   cards.value = out
   loading.value = false
 }
+
+// The profile's custom labels populate the Labels facet (fetched once).
+onMounted(() => {
+  void listMyLabels()
+    .then((l) => (userLabels.value = l))
+    .catch(() => {})
+})
 
 // Any change to the scope/sort/filter query reloads (and retitles) the view.
 watch(
@@ -300,7 +317,7 @@ watch(
         </div>
 
         <div class="facet" v-if="LABELS.length">
-          <span class="facet-label">Label</span>
+          <span class="facet-label">Tags</span>
           <div class="chips">
             <button
               v-for="l in LABELS"
@@ -309,6 +326,22 @@ watch(
               :class="{ on: label === l.toLowerCase() }"
               type="button"
               @click="toggleLabel(l)"
+            >
+              {{ l }}
+            </button>
+          </div>
+        </div>
+
+        <div class="facet" v-if="userLabels.length">
+          <span class="facet-label">Labels</span>
+          <div class="chips">
+            <button
+              v-for="l in userLabels"
+              :key="l"
+              class="chip"
+              :class="{ on: userLabel === l }"
+              type="button"
+              @click="toggleUserLabel(l)"
             >
               {{ l }}
             </button>

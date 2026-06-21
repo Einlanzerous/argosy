@@ -89,7 +89,7 @@ func (s *Store) ListMovies(ctx context.Context, accountID, libraryID, userID str
 	watchJoin, watchWhere := f.movieWatched(a, userID)
 	from := ` FROM media_items mi JOIN libraries l ON l.id = mi.library_id` + watchJoin +
 		` WHERE l.account_id = ` + acc + ` AND mi.library_id = ` + lib + ` AND mi.kind = 'movie'` +
-		f.common("mi", a) + watchWhere
+		f.common("mi", a) + watchWhere + f.labelClause("mi", "media_item_id", userID, a)
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+from, a.vals...).Scan(&page.Total); err != nil {
 		return page, err
 	}
@@ -127,7 +127,7 @@ func (s *Store) ListSeries(ctx context.Context, accountID, libraryID, userID str
 	acc, lib := a.add(accountID), a.add(libraryID)
 	from := ` FROM series r JOIN libraries l ON l.id = r.library_id` +
 		` WHERE l.account_id = ` + acc + ` AND r.library_id = ` + lib +
-		f.common("r", a) + f.seriesWatched(a, userID)
+		f.common("r", a) + f.seriesWatched(a, userID) + f.labelClause("r", "series_id", userID, a)
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+from, a.vals...).Scan(&page.Total); err != nil {
 		return page, err
 	}

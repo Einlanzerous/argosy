@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import BackButton from '@/components/BackButton.vue'
 import AddToVault from '@/components/AddToVault.vue'
+import LabelEditor from '@/components/LabelEditor.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
 import { setPage } from '@/lib/page'
@@ -153,6 +154,7 @@ watch(
           </button>
           <AddToVault v-if="series" :series-id="series.id" />
         </div>
+        <LabelEditor v-if="series" :series-id="series.id" :initial="series.labels ?? []" />
       </div>
     </section>
 
