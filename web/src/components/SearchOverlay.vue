@@ -3,7 +3,12 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 import { closeSearch } from '@/lib/ui'
-import { searchManifest, type MovieSummary, type SeriesSummary } from '@/lib/manifest'
+import {
+  getFacets,
+  searchManifest,
+  type MovieSummary,
+  type SeriesSummary,
+} from '@/lib/manifest'
 import { posterStyle } from '@/lib/poster'
 
 const router = useRouter()
@@ -18,13 +23,17 @@ const searched = ref(false) // a query has resolved at least once for the curren
 const hasQuery = computed(() => query.value.trim().length > 0)
 const hasResults = computed(() => movies.value.length > 0 || series.value.length > 0)
 
-const browse: { label: string; icon: string; to: RouteLocationRaw }[] = [
+type Chip = { label: string; icon: string; to: RouteLocationRaw }
+
+// Movies + Series are always offered; the rest are the most-common facets
+// (genres + tags) in the manifest, fetched on open — so the chips reflect what's
+// actually in the library rather than a hardcoded guess.
+const staticChips: Chip[] = [
   { label: 'Movies', icon: '▦', to: { name: 'library', query: { kind: 'movies' } } },
   { label: 'Shows', icon: '▥', to: { name: 'library', query: { kind: 'series' } } },
-  { label: 'Anime', icon: '◆', to: { name: 'library', query: { tag: 'Anime' } } },
-  { label: 'Documentary', icon: '❖', to: { name: 'library', query: { tag: 'Documentary' } } },
-  { label: '4K', icon: '◇', to: { name: 'library', query: { tag: '4K' } } },
 ]
+const facetChips = ref<Chip[]>([])
+const browse = computed<Chip[]>(() => [...staticChips, ...facetChips.value])
 
 // Debounced live search. A monotonically increasing token discards out-of-order
 // responses so a slow earlier request can't overwrite a newer one's results.
@@ -77,9 +86,16 @@ function onKey(e: KeyboardEvent): void {
   if (e.key === 'Escape') closeSearch()
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('keydown', onKey)
   input.value?.focus()
+  // A genre chip filters by genre; a tag chip by tag — routed to the Library.
+  const facets = await getFacets(6)
+  facetChips.value = facets.map((f) => ({
+    label: f.value,
+    icon: f.type === 'tag' ? '◆' : '◇',
+    to: { name: 'library', query: f.type === 'tag' ? { tag: f.value } : { genre: f.value } },
+  }))
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)

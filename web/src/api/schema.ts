@@ -238,6 +238,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Most common facets (genres + tags) across the account's manifest
+         * @description The most-used genres and labels/tags across the account's films and series, ranked by item count — used to surface discovery chips. Genres and tags are merged into one ranking, each carrying its own type.
+         */
+        get: operations["listFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/series/{seriesId}": {
         parameters: {
             query?: never;
@@ -889,6 +909,16 @@ export interface components {
             movies: components["schemas"]["MediaItemSummary"][];
             series: components["schemas"]["SeriesSummary"][];
         };
+        Facet: {
+            /**
+             * @description Which dimension the value belongs to.
+             * @enum {string}
+             */
+            type: "genre" | "tag";
+            value: string;
+            /** @description Number of films + series carrying it. */
+            count: number;
+        };
         EpisodeSummary: {
             /** Format: uuid */
             id: string;
@@ -1361,6 +1391,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchResults"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listFacets: {
+        parameters: {
+            query?: {
+                /** @description Max facets to return. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Facet"][];
                 };
             };
             401: components["responses"]["Unauthorized"];

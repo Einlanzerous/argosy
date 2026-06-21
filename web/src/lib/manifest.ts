@@ -5,6 +5,7 @@ export type Library = components['schemas']['Library']
 export type MovieSummary = components['schemas']['MediaItemSummary']
 export type SeriesSummary = components['schemas']['SeriesSummary']
 export type SearchResults = components['schemas']['SearchResults']
+export type Facet = components['schemas']['Facet']
 
 export type MovieSort = 'title' | 'added' | 'year' | 'rating'
 export type SeriesSort = 'title' | 'year' | 'rating'
@@ -35,7 +36,7 @@ export const GENRES = [
   'Horror',
   'Mystery',
   'Romance',
-  'Science Fiction',
+  'Sci-Fi',
   'Thriller',
   'War',
   'Western',
@@ -117,5 +118,12 @@ export async function searchManifest(q: string, limit = 8): Promise<SearchResult
   if (!query) return { movies: [], series: [] }
   const { data } = await api.GET('/api/v1/search', { params: { query: { q: query, limit } } })
   return data ?? { movies: [], series: [] }
+}
+
+// getFacets returns the most-common genres + tags across the account's manifest,
+// ranked by item count — used to build the discovery chips.
+export async function getFacets(limit = 6): Promise<Facet[]> {
+  const { data } = await api.GET('/api/v1/facets', { params: { query: { limit } } })
+  return data ?? []
 }
 
