@@ -36,7 +36,7 @@ export const GENRES = [
   'Horror',
   'Mystery',
   'Romance',
-  'Science Fiction',
+  'Sci-Fi',
   'Thriller',
   'War',
   'Western',

@@ -26,14 +26,14 @@ var tmdbGenres = map[int][]string{
 	10402: {"Music"},
 	9648:  {"Mystery"},
 	10749: {"Romance"},
-	878:   {"Science Fiction"},
+	878:   {"Sci-Fi"},
 	10770: {"TV Movie"},
 	53:    {"Thriller"},
 	10752: {"War"},
 	37:    {"Western"},
 	// TV-specific genres, normalized to the movie vocabulary where they overlap.
 	10759: {"Action", "Adventure"},        // Action & Adventure
-	10765: {"Science Fiction", "Fantasy"}, // Sci-Fi & Fantasy
+	10765: {"Sci-Fi", "Fantasy"}, // Sci-Fi & Fantasy
 	10768: {"War"},                        // War & Politics
 	10762: {"Kids"},
 	10763: {"News"},
