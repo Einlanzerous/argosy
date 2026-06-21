@@ -30,14 +30,14 @@ go-build: ensure-embed ## Build the server binary (embeds whatever is in the emb
 server-dev: ensure-embed ## Run the Go server (serves a placeholder until the web is built)
 	$(GO) run ./cmd/argosy
 
-web-dev: ## Run the Vite dev server with HMR (proxies API/stream routes to :8096)
+web-dev: ## Run the Vite dev server with HMR (proxies API/stream routes to :8097)
 	cd $(WEB) && $(BUN) install && $(BUN) run dev
 
 dev: ## Start the backend stack, then the Vite dev server (one command)
 	$(COMPOSE) up -d --build
 	$(MAKE) web-dev
 
-compose-up: ## Start the dev stack: Postgres + server (air hot-reload) on :8096
+compose-up: ## Start the dev stack: Postgres + server (air hot-reload) on :8097
 	$(COMPOSE) up -d --build
 
 compose-web: ## Start the dev stack incl. the Vite dev server (HMR) on :5173
