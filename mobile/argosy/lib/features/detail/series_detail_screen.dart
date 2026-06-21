@@ -180,6 +180,7 @@ class _SeriesActions extends StatelessWidget {
       children: [
         if (resume != null)
           FilledButton.icon(
+            style: brassButtonStyle(context),
             onPressed: () =>
                 openPlayer(context, resume!.ep.mediaItemId!, resume: true),
             icon: const Icon(Icons.play_arrow, size: 20),
@@ -188,6 +189,7 @@ class _SeriesActions extends StatelessWidget {
           )
         else
           FilledButton.icon(
+            style: brassButtonStyle(context),
             onPressed: firstPlayable == null
                 ? null
                 : () => openPlayer(context, firstPlayable!),

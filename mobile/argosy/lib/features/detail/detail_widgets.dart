@@ -58,12 +58,23 @@ class DetailBackdrop extends ConsumerWidget {
   }
 }
 
+/// Shared fixed height for the detail action buttons so the brass and ghost
+/// variants are always the same size regardless of icon/label. (Width still
+/// flexes with the label, like the web row.)
+const _detailButtonMinSize = Size(0, 52);
+
+/// The primary action style (Play / Resume) — brass fill from the theme,
+/// pinned to the shared action-button height.
+ButtonStyle brassButtonStyle(BuildContext context) =>
+    FilledButton.styleFrom(minimumSize: _detailButtonMinSize);
+
 /// The "ghost" action-button style — the secondary detail actions (Start over,
-/// Add to Vault). Same shape + size as the filled Play/Resume button, but a
+/// Add to Vault). Same shape + size as the brass Play/Resume button, but a
 /// subtle dark fill, hairline border, and cream label so it reads as secondary
 /// without collapsing into the small dashed "+ Label" pill. Mirrors the web's
 /// `.ghost` / `.trigger`.
 ButtonStyle ghostButtonStyle(BuildContext context) => FilledButton.styleFrom(
+      minimumSize: _detailButtonMinSize,
       backgroundColor: const Color(0x66141413),
       foregroundColor: ArgosyColors.cream,
       side: BorderSide(color: context.argosy.line2),

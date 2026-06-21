@@ -148,17 +148,20 @@ class _Actions extends StatelessWidget {
       children: [
         if (resumable) ...[
           FilledButton.icon(
+            style: brassButtonStyle(context),
             onPressed: () => openPlayer(context, itemId, resume: true),
             icon: const Icon(Icons.play_arrow, size: 20),
             label: const Text('Resume'),
           ),
-          FilledButton(
+          FilledButton.icon(
             style: ghostButtonStyle(context),
             onPressed: () => openPlayer(context, itemId),
-            child: const Text('Start over'),
+            icon: const Icon(Icons.replay, size: 18),
+            label: const Text('Start over'),
           ),
         ] else
           FilledButton.icon(
+            style: brassButtonStyle(context),
             onPressed: () => openPlayer(context, itemId),
             icon: const Icon(Icons.play_arrow, size: 20),
             label: const Text('Play'),
