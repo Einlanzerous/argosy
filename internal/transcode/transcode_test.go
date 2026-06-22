@@ -214,11 +214,43 @@ func TestBuildArgsRemux(t *testing.T) {
 		}
 	}
 	// Remux must not re-encode, scale, or use the %v multi-variant layout (which
-	// ffmpeg won't expand in the init filename for a single variant).
-	for _, bad := range []string{"libx264", "filter_complex", "var_stream_map", "%v", "-tag:v hvc1"} {
+	// ffmpeg won't expand in the init filename for a single variant). Without a
+	// seek there is nothing to align, so no -noaccurate_seek either.
+	for _, bad := range []string{"libx264", "filter_complex", "var_stream_map", "%v", "-tag:v hvc1", "-noaccurate_seek"} {
 		if strings.Contains(joined, bad) {
 			t.Errorf("remux must not contain %q\nargs: %s", bad, joined)
 		}
+	}
+}
+
+// TestBuildArgsRemuxSeekKeepsAVSync covers ARGY-84: a resumed (StartAt>0) remux
+// copies the video, so accurate seek would keep the video from its keyframe but
+// drop the audio up to the exact StartAt, leaving audio trailing the video. The
+// remux path must use -noaccurate_seek (before -i) so both streams enter at the
+// same keyframe; the transcode path re-encodes and must NOT (it seeks exactly).
+func TestBuildArgsRemuxSeekKeepsAVSync(t *testing.T) {
+	remux := strings.Join(buildArgs(Spec{
+		Source: "/m/4k.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+		VideoCodec: CodecHEVC, TranscodeAudio: true, StartAt: 90,
+	}), " ")
+	if !strings.Contains(remux, "-ss 90.000") {
+		t.Errorf("remux seek missing -ss\nargs: %s", remux)
+	}
+	if !strings.Contains(remux, "-noaccurate_seek") {
+		t.Errorf("seeked remux must use -noaccurate_seek to keep A/V in sync\nargs: %s", remux)
+	}
+	if i, j := strings.Index(remux, "-noaccurate_seek"), strings.Index(remux, "-i "); i < 0 || j < 0 || i > j {
+		t.Errorf("-noaccurate_seek must precede -i (it is an input option)\nargs: %s", remux)
+	}
+
+	// Transcode re-encodes the video and can seek to the exact frame, so it
+	// keeps accurate seek (no -noaccurate_seek).
+	transcode := strings.Join(buildArgs(Spec{
+		Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodTranscode,
+		Encoder: EncoderSoftware, SourceHeight: 1080, StartAt: 90,
+	}), " ")
+	if strings.Contains(transcode, "-noaccurate_seek") {
+		t.Errorf("transcode path must keep accurate seek\nargs: %s", transcode)
 	}
 }
 
