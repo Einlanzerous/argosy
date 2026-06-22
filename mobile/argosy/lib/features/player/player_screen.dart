@@ -8,6 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api/api_providers.dart';
 import '../../api/artwork.dart';
 import '../../platform/pip.dart';
+import '../../theme/argosy_colors.dart';
+import '../../theme/button_styles.dart';
+import '../../util/format.dart';
 import '../../widgets/async_view.dart';
 import 'playback_controller.dart';
 import 'player_controls.dart';
@@ -17,10 +20,20 @@ import 'player_providers.dart';
 /// controls overlay, subtitle/audio track selection, resume, and progress
 /// reporting. Built on the player proven in the ARGY-77 spike.
 class PlayerScreen extends ConsumerWidget {
-  const PlayerScreen({super.key, required this.itemId, this.resume = false});
+  const PlayerScreen({
+    super.key,
+    required this.itemId,
+    this.resume = false,
+    this.startOver = false,
+  });
 
   final String itemId;
+
+  /// Resume straight from the saved position without asking.
   final bool resume;
+
+  /// Force playback from the top without asking.
+  final bool startOver;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,17 +43,23 @@ class PlayerScreen extends ConsumerWidget {
       body: AsyncView(
         value: setup,
         onRetry: () => ref.invalidate(playerSetupProvider(itemId)),
-        builder: (data) => _PlayerView(setup: data, resume: resume),
+        builder: (data) =>
+            _PlayerView(setup: data, resume: resume, startOver: startOver),
       ),
     );
   }
 }
 
 class _PlayerView extends ConsumerStatefulWidget {
-  const _PlayerView({required this.setup, required this.resume});
+  const _PlayerView({
+    required this.setup,
+    required this.resume,
+    required this.startOver,
+  });
 
   final PlayerSetup setup;
   final bool resume;
+  final bool startOver;
 
   @override
   ConsumerState<_PlayerView> createState() => _PlayerViewState();
@@ -55,6 +74,12 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
 
   bool _pipSupported = false;
   bool _inPip = false;
+
+  // Resume-vs-start-over prompt (web parity): shown when there's saved progress
+  // and the entry point didn't explicitly choose. Playback is deferred until
+  // the user picks.
+  bool _showResumePrompt = false;
+  double _resumePosition = 0;
 
   @override
   void initState() {
@@ -83,8 +108,25 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       subtitles: setup.subtitles,
       prefs: setup.prefs,
     );
-    _controller.start(_startOffset());
+    _beginPlayback();
     _setupPip();
+  }
+
+  /// Mirrors the web entry-point logic: `resume` jumps straight to the saved
+  /// position, `startOver` forces the top, and a bare open *asks* (the resume
+  /// prompt) when there's history — otherwise it just starts from the top.
+  void _beginPlayback() {
+    final resumePos = _resumablePosition();
+    if (resumePos != null && widget.resume) {
+      _controller.start(resumePos);
+    } else if (resumePos != null && !widget.startOver) {
+      setState(() {
+        _resumePosition = resumePos;
+        _showResumePrompt = true;
+      });
+    } else {
+      _controller.start(0);
+    }
   }
 
   /// Enables auto-enter-on-leave PiP (Android) and tracks PiP mode so the
@@ -130,12 +172,23 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     }
   }
 
-  /// Resume from the saved position only when the entry point asked to (the
-  /// detail screen offers Resume vs. Start over); otherwise start at 0.
-  double _startOffset() {
+  /// The saved position to resume from, or null when there's nothing resumable
+  /// (no history, already watched, or barely started).
+  double? _resumablePosition() {
     final p = widget.setup.progress;
     final resumable = p != null && !p.watched && p.positionSeconds > 5;
-    return (widget.resume && resumable) ? p.positionSeconds.toDouble() : 0;
+    return resumable ? p.positionSeconds.toDouble() : null;
+  }
+
+  void _onResume() {
+    final pos = _resumePosition;
+    setState(() => _showResumePrompt = false);
+    _controller.start(pos);
+  }
+
+  void _onStartOver() {
+    setState(() => _showResumePrompt = false);
+    _controller.start(0);
   }
 
   @override
@@ -167,14 +220,161 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
             },
           ),
           // In PiP the system window shows only the video — suppress all chrome.
-          if (!_inPip)
+          // The resume prompt also owns the screen until the user chooses.
+          if (!_inPip && !_showResumePrompt)
             PlayerControls(
               controller: _controller,
               title: widget.setup.item.title,
               onBack: () => Navigator.of(context).maybePop(),
               onEnterPip: _pipSupported ? _enterPip : null,
             ),
+          if (_showResumePrompt && !_inPip)
+            _ResumePrompt(
+              title: widget.setup.item.title,
+              position: _resumePosition,
+              duration: widget.setup.item.durationSeconds?.toDouble() ?? 0,
+              onResume: _onResume,
+              onStartOver: _onStartOver,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/// The Resume / Start-over chooser shown over a black backdrop when a title has
+/// saved progress and the entry point didn't pre-decide — mirrors the web
+/// player's resume card, down to the brass glow on the primary button.
+class _ResumePrompt extends StatefulWidget {
+  const _ResumePrompt({
+    required this.title,
+    required this.position,
+    required this.duration,
+    required this.onResume,
+    required this.onStartOver,
+    required this.onBack,
+  });
+
+  final String title;
+  final double position;
+  final double duration;
+  final VoidCallback onResume;
+  final VoidCallback onStartOver;
+  final VoidCallback onBack;
+
+  @override
+  State<_ResumePrompt> createState() => _ResumePromptState();
+}
+
+class _ResumePromptState extends State<_ResumePrompt>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = (widget.duration - widget.position)
+        .clamp(0, widget.duration > 0 ? widget.duration : widget.position);
+    return ColoredBox(
+      color: const Color(0xE6000000),
+      child: SafeArea(
+        child: Stack(
+          children: [
+            Align(
+              alignment: Alignment.topLeft,
+              child: IconButton(
+                onPressed: widget.onBack,
+                icon: const Icon(Icons.arrow_back, color: ArgosyColors.cream),
+              ),
+            ),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'CROSS-DEVICE RESUME',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: ArgosyColors.accent,
+                              letterSpacing: 1.6,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Pick up where you left off?',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${formatTitle(widget.title)} · ${formatClock(remaining)} remaining',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: ArgosyColors.soft),
+                      ),
+                      const SizedBox(height: 24),
+                      AnimatedBuilder(
+                        animation: _glow,
+                        builder: (context, child) {
+                          final t = _glow.value;
+                          return DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: ArgosyColors.accent
+                                      .withValues(alpha: 0.45 + 0.27 * t),
+                                  blurRadius: 16 + 14 * t,
+                                  spreadRadius: 1 + 4 * t,
+                                ),
+                              ],
+                            ),
+                            child: child,
+                          );
+                        },
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            style: brassButtonStyle(context),
+                            onPressed: widget.onResume,
+                            icon: const Icon(Icons.play_arrow, size: 20),
+                            label: Text(
+                                'Resume from ${formatClock(widget.position)}'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: ghostButtonStyle(context),
+                          onPressed: widget.onStartOver,
+                          icon: const Icon(Icons.replay, size: 18),
+                          label: const Text('Start from the beginning'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

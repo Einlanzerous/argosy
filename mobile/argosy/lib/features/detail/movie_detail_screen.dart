@@ -155,7 +155,7 @@ class _Actions extends StatelessWidget {
           ),
           FilledButton.icon(
             style: ghostButtonStyle(context),
-            onPressed: () => openPlayer(context, itemId),
+            onPressed: () => openPlayer(context, itemId, startOver: true),
             icon: const Icon(Icons.replay, size: 18),
             label: const Text('Start over'),
           ),
