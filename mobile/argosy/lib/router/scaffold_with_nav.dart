@@ -32,7 +32,7 @@ class ScaffoldWithNav extends StatelessWidget {
         indicatorColor: ArgosyColors.accentBg2,
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: _goBranch,
-        height: landscape ? 52 : null,
+        height: landscape ? 64 : null,
         labelBehavior: landscape
             ? NavigationDestinationLabelBehavior.alwaysHide
             : NavigationDestinationLabelBehavior.alwaysShow,

@@ -215,6 +215,12 @@ class _EpisodeTile extends StatelessWidget {
     return (pos / dur).clamp(0.0, 1.0).toDouble();
   }
 
+  num get _remainingSeconds {
+    final dur = episode.durationSeconds ?? 0;
+    final pos = episode.positionSeconds ?? 0;
+    return (dur - pos).clamp(0, dur);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = context.argosy;
@@ -231,6 +237,8 @@ class _EpisodeTile extends StatelessWidget {
             onTap:
                 playable ? () => openPlayer(context, episode.mediaItemId!) : null,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            minLeadingWidth: 32,
+            horizontalTitleGap: 16,
             leading: SizedBox(
               width: 32,
               child: Text(
@@ -259,15 +267,35 @@ class _EpisodeTile extends StatelessWidget {
                     : null,
           ),
           if (inProgress)
+            // Indented to start under the episode title (past the number column)
+            // and capped to a set width, leaving room for the percentage +
+            // time-remaining label — mirrors the web continue-watching bar.
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: LinearProgressIndicator(
-                  value: _percent,
-                  minHeight: 3,
-                  backgroundColor: tokens.line2,
-                  valueColor: AlwaysStoppedAnimation(tokens.progress),
+              padding: const EdgeInsets.fromLTRB(60, 0, 12, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: _percent,
+                            minHeight: 3,
+                            backgroundColor: tokens.line2,
+                            valueColor: AlwaysStoppedAnimation(tokens.progress),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '${(_percent * 100).round()}% · ${formatRuntime(_remainingSeconds)} left',
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
