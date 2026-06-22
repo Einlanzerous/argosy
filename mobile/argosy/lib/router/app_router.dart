@@ -11,6 +11,7 @@ import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/player/player_screen.dart';
 import '../features/search/search_screen.dart';
+import '../features/settings/settings_screen.dart';
 import '../features/splash/splash_screen.dart';
 import 'scaffold_with_nav.dart';
 
@@ -21,6 +22,7 @@ abstract final class Routes {
   static const home = '/home';
   static const library = '/library';
   static const search = '/search';
+  static const settings = '/settings';
 
   static String movie(String id) => '/movie/$id';
   static String series(String id) => '/series/$id';
@@ -37,6 +39,9 @@ void openDetail(BuildContext context, MediaKind kind, String id) {
 void openPlayer(BuildContext context, String itemId, {bool resume = false}) {
   context.push('${Routes.player(itemId)}${resume ? '?resume=1' : ''}');
 }
+
+/// Pushes the Settings screen over the nav shell.
+void openSettings(BuildContext context) => context.push(Routes.settings);
 
 final _rootKey = GlobalKey<NavigatorState>();
 
@@ -117,6 +122,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           itemId: state.pathParameters['id']!,
           resume: state.uri.queryParameters['resume'] == '1',
         ),
+      ),
+      GoRoute(
+        path: Routes.settings,
+        parentNavigatorKey: _rootKey,
+        builder: (_, _) => const SettingsScreen(),
       ),
     ],
   );

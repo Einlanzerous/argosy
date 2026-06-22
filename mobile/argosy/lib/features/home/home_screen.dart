@@ -10,7 +10,6 @@ import '../../widgets/argosy_mark.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
 import '../../widgets/media_rail.dart';
-import '../auth/auth_controller.dart';
 import '../browse/media_card.dart';
 import '../browse/media_poster_card.dart';
 import 'home_providers.dart';
@@ -37,9 +36,9 @@ class HomeScreen extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => openSettings(context),
           ),
           const SizedBox(width: 4),
         ],
