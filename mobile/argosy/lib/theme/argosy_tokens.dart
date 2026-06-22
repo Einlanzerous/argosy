@@ -32,7 +32,7 @@ class ArgosyTokens extends ThemeExtension<ArgosyTokens> {
   /// Brighter accent for hover/active emphasis.
   final Color accentHi;
 
-  /// Watch-progress / success green.
+  /// Watch-progress fill — brass accent, matching the web UI (`--arg-accent`).
   final Color progress;
 
   /// Hairline borders.
@@ -54,7 +54,7 @@ class ArgosyTokens extends ThemeExtension<ArgosyTokens> {
     dimInk: ArgosyColors.dim,
     faintInk: ArgosyColors.faint,
     accentHi: ArgosyColors.accentHi,
-    progress: ArgosyColors.green,
+    progress: ArgosyColors.accent,
     line: ArgosyColors.line,
     line2: ArgosyColors.line2,
     accentLine: ArgosyColors.accentLine,

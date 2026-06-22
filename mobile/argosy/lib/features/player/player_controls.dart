@@ -17,11 +17,16 @@ class PlayerControls extends StatefulWidget {
     required this.controller,
     required this.title,
     required this.onBack,
+    this.onEnterPip,
   });
 
   final PlaybackController controller;
   final String title;
   final VoidCallback onBack;
+
+  /// Enters Picture-in-Picture; null when PiP is unsupported (the button is then
+  /// hidden). See ARGY-50.
+  final Future<void> Function()? onEnterPip;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -149,6 +154,14 @@ class _PlayerControlsState extends State<PlayerControls> {
                   ?.copyWith(color: ArgosyColors.cream),
             ),
           ),
+          if (_c.qualityLabel != null) _QualityStamp(label: _c.qualityLabel!),
+          if (widget.onEnterPip != null)
+            IconButton(
+              tooltip: 'Picture-in-picture',
+              onPressed: () => widget.onEnterPip!(),
+              icon: const Icon(Icons.picture_in_picture_alt,
+                  color: ArgosyColors.cream),
+            ),
         ],
       ),
     );
@@ -252,6 +265,36 @@ class _PlayerControlsState extends State<PlayerControls> {
   void _seekBy(double delta) {
     _c.seekTo(_c.position + delta);
     _scheduleHide();
+  }
+}
+
+/// Brass quality pill ("4K" / "1080p"), matching the web player's `.quality`
+/// badge in the top-right chrome.
+class _QualityStamp extends StatelessWidget {
+  const _QualityStamp({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: ArgosyColors.accentBg2,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: ArgosyColors.accent.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: ArgosyColors.accent,
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
   }
 }
 

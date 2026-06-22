@@ -34,10 +34,21 @@ void openDetail(BuildContext context, MediaKind kind, String id) {
   context.push(kind == MediaKind.series ? Routes.series(id) : Routes.movie(id));
 }
 
-/// Pushes the player for a playable item. `resume` jumps to the saved position;
-/// otherwise playback starts from the top.
-void openPlayer(BuildContext context, String itemId, {bool resume = false}) {
-  context.push('${Routes.player(itemId)}${resume ? '?resume=1' : ''}');
+/// Pushes the player for a playable item. `resume` jumps straight to the saved
+/// position; `startOver` forces playback from the top. With neither, the player
+/// asks (Resume vs. Start over) when there's saved progress — mirroring the web.
+void openPlayer(
+  BuildContext context,
+  String itemId, {
+  bool resume = false,
+  bool startOver = false,
+}) {
+  final query = resume
+      ? '?resume=1'
+      : startOver
+          ? '?start=1'
+          : '';
+  context.push('${Routes.player(itemId)}$query');
 }
 
 /// Pushes the Settings screen over the nav shell.
@@ -121,6 +132,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => PlayerScreen(
           itemId: state.pathParameters['id']!,
           resume: state.uri.queryParameters['resume'] == '1',
+          startOver: state.uri.queryParameters['start'] == '1',
         ),
       ),
       GoRoute(

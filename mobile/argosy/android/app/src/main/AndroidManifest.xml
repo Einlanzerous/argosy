@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Streaming playback + API access (transcode HLS, direct play, Beacon). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+: required for the media-playback foreground-service
+         notification (lock-screen / shade transport controls) to be shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="argosy"
         android:name="${applicationName}"
@@ -14,6 +17,7 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
+            android:supportsPictureInPicture="true"
             android:windowSoftInputMode="adjustResize">
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user

@@ -19,6 +19,11 @@ class ScaffoldWithNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Landscape is screen-height constrained (notably the player and phones held
+    // sideways), so drop the destination labels and tighten the bar to reclaim
+    // vertical space; portrait keeps the labelled, full-height bar.
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     return Scaffold(
       backgroundColor: ArgosyColors.bg,
       body: navigationShell,
@@ -27,6 +32,10 @@ class ScaffoldWithNav extends StatelessWidget {
         indicatorColor: ArgosyColors.accentBg2,
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: _goBranch,
+        height: landscape ? 64 : null,
+        labelBehavior: landscape
+            ? NavigationDestinationLabelBehavior.alwaysHide
+            : NavigationDestinationLabelBehavior.alwaysShow,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
