@@ -6,6 +6,11 @@ import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
 import '../../widgets/hatch_pattern.dart';
 
+// The brass/ghost action-button styles now live in the shared theme module so
+// every surface (detail row, Bridge hero, …) draws the same family. Re-exported
+// here so existing callers keep importing them from `detail_widgets`.
+export '../../theme/button_styles.dart' show brassButtonStyle, ghostButtonStyle;
+
 /// The full-bleed backdrop at the top of a detail screen: landscape artwork
 /// (falling back to the poster, then a hatch placeholder) under a charcoal
 /// fade so the overlaid title stays legible.
@@ -57,28 +62,6 @@ class DetailBackdrop extends ConsumerWidget {
     );
   }
 }
-
-/// Shared fixed height for the detail action buttons so the brass and ghost
-/// variants are always the same size regardless of icon/label. (Width still
-/// flexes with the label, like the web row.)
-const _detailButtonMinSize = Size(0, 52);
-
-/// The primary action style (Play / Resume) — brass fill from the theme,
-/// pinned to the shared action-button height.
-ButtonStyle brassButtonStyle(BuildContext context) =>
-    FilledButton.styleFrom(minimumSize: _detailButtonMinSize);
-
-/// The "ghost" action-button style — the secondary detail actions (Start over,
-/// Add to Vault). Same shape + size as the brass Play/Resume button, but a
-/// subtle dark fill, hairline border, and cream label so it reads as secondary
-/// without collapsing into the small dashed "+ Label" pill. Mirrors the web's
-/// `.ghost` / `.trigger`.
-ButtonStyle ghostButtonStyle(BuildContext context) => FilledButton.styleFrom(
-      minimumSize: _detailButtonMinSize,
-      backgroundColor: const Color(0x66141413),
-      foregroundColor: ArgosyColors.cream,
-      side: BorderSide(color: context.argosy.line2),
-    );
 
 /// A row of read-only metadata chips — genres (neutral) and path tags (brass).
 class GenreTagChips extends StatelessWidget {

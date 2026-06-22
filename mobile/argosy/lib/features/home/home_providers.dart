@@ -15,6 +15,7 @@ class HomeHero {
     this.subtitle,
     required this.kind,
     required this.detailId,
+    this.playableId,
     this.posterUrl,
     this.backdropUrl,
     this.percent,
@@ -27,6 +28,11 @@ class HomeHero {
 
   /// The id the hero's "Details" tap opens (series id for a resumed episode).
   final String detailId;
+
+  /// The directly-playable item id for the primary Play/Resume button — the
+  /// resumed *episode* for a series, the film itself otherwise. Null only if
+  /// nothing is playable.
+  final String? playableId;
   final String? posterUrl;
   final String? backdropUrl;
 
@@ -111,6 +117,8 @@ HomeHero? _heroFrom(List<ContinueItem> cont, List<MediaItemSummary> recent) {
           : (r.year != null ? '${r.year}' : null),
       kind: r.seriesId != null ? MediaKind.series : MediaKind.movie,
       detailId: r.seriesId ?? r.id,
+      // r.id is the resumed item itself (the episode for a series) — playable.
+      playableId: r.id,
       posterUrl: r.posterUrl,
       backdropUrl: r.backdropUrl,
       percent: (r.percent / 100).clamp(0.0, 1.0).toDouble(),
@@ -125,6 +133,7 @@ HomeHero? _heroFrom(List<ContinueItem> cont, List<MediaItemSummary> recent) {
       subtitle: film.year != null ? '${film.year}' : null,
       kind: MediaKind.movie,
       detailId: film.id,
+      playableId: film.id,
       posterUrl: film.posterUrl,
       backdropUrl: film.backdropUrl,
     );

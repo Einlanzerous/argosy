@@ -5,6 +5,7 @@ import '../../api/artwork.dart';
 import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../theme/button_styles.dart';
 import '../../widgets/argosy_mark.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
@@ -104,6 +105,10 @@ class HomeScreen extends ConsumerWidget {
 }
 
 /// The full-bleed spotlight. Tapping it opens the item's detail screen.
+/// Slightly shorter than the detail-screen action row ([kActionButtonSize]),
+/// so the hero's Resume/Details pair sits compactly over the artwork.
+const _heroButtonSize = Size(0, 44);
+
 class _Hero extends ConsumerWidget {
   const _Hero({required this.hero});
 
@@ -178,11 +183,31 @@ class _Hero extends ConsumerWidget {
                     ),
                   ],
                   const SizedBox(height: 14),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        openDetail(context, hero.kind, hero.detailId),
-                    icon: const Icon(Icons.info_outline, size: 18),
-                    label: const Text('Details'),
+                  Row(
+                    children: [
+                      if (hero.playableId != null) ...[
+                        FilledButton.icon(
+                          style: brassButtonStyle(context,
+                              minimumSize: _heroButtonSize),
+                          onPressed: () => openPlayer(
+                            context,
+                            hero.playableId!,
+                            resume: hero.percent != null,
+                          ),
+                          icon: const Icon(Icons.play_arrow, size: 20),
+                          label: Text(hero.percent != null ? 'Resume' : 'Play'),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      FilledButton.icon(
+                        style: ghostButtonStyle(context,
+                            minimumSize: _heroButtonSize),
+                        onPressed: () =>
+                            openDetail(context, hero.kind, hero.detailId),
+                        icon: const Icon(Icons.info_outline, size: 18),
+                        label: const Text('Details'),
+                      ),
+                    ],
                   ),
                 ],
               ),
