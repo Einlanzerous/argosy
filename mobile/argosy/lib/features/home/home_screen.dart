@@ -61,9 +61,14 @@ class HomeScreen extends ConsumerWidget {
                     if (home.continueRow.isNotEmpty) ...[
                       // Continue Watching gets larger tiles — it's the primary
                       // "pick up where you left off" row and shouldn't feel
-                      // squished against the rails below it.
+                      // squished against the rails below it. Tapping a tile
+                      // resumes the item directly (its id is the playable
+                      // episode/film), not a detour through detail.
                       _rail('Continue Watching', home.continueRow,
-                          height: 296, cardWidth: 158),
+                          height: 296,
+                          cardWidth: 158,
+                          onCardTap: (c) =>
+                              openPlayer(context, c.id, resume: true)),
                       const SizedBox(height: 24),
                     ],
                     if (home.onDeck.isNotEmpty) ...[
@@ -94,12 +99,18 @@ class HomeScreen extends ConsumerWidget {
     List<MediaCard> cards, {
     double height = 248,
     double cardWidth = 132,
+    void Function(MediaCard card)? onCardTap,
   }) =>
       MediaRail(
         title: title,
         height: height,
         children: [
-          for (final c in cards) MediaPosterCard(card: c, width: cardWidth),
+          for (final c in cards)
+            MediaPosterCard(
+              card: c,
+              width: cardWidth,
+              onTap: onCardTap == null ? null : () => onCardTap(c),
+            ),
         ],
       );
 }
