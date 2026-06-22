@@ -17,11 +17,16 @@ class PlayerControls extends StatefulWidget {
     required this.controller,
     required this.title,
     required this.onBack,
+    this.onEnterPip,
   });
 
   final PlaybackController controller;
   final String title;
   final VoidCallback onBack;
+
+  /// Enters Picture-in-Picture; null when PiP is unsupported (the button is then
+  /// hidden). See ARGY-50.
+  final Future<void> Function()? onEnterPip;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -149,6 +154,13 @@ class _PlayerControlsState extends State<PlayerControls> {
                   ?.copyWith(color: ArgosyColors.cream),
             ),
           ),
+          if (widget.onEnterPip != null)
+            IconButton(
+              tooltip: 'Picture-in-picture',
+              onPressed: () => widget.onEnterPip!(),
+              icon: const Icon(Icons.picture_in_picture_alt,
+                  color: ArgosyColors.cream),
+            ),
         ],
       ),
     );

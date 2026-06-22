@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
+import '../../api/artwork.dart';
+import '../../platform/pip.dart';
 import '../../widgets/async_view.dart';
 import 'playback_controller.dart';
 import 'player_controls.dart';
@@ -45,6 +49,13 @@ class _PlayerView extends ConsumerStatefulWidget {
 class _PlayerViewState extends ConsumerState<_PlayerView> {
   late final PlaybackController _controller;
 
+  /// Attached to the [BetterPlayer] widget so better_player_plus can locate the
+  /// video's render box for iOS AVKit PiP.
+  final GlobalKey _playerKey = GlobalKey();
+
+  bool _pipSupported = false;
+  bool _inPip = false;
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +72,11 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       baseUrl: ref.read(baseUrlProvider),
       token: ref.read(tokenStoreProvider).token,
       itemId: setup.item.id,
+      title: setup.item.title,
+      notificationAuthor: setup.item.year?.toString(),
+      artworkUrl: ref.read(artworkResolverProvider)(
+        setup.item.posterUrl ?? setup.item.backdropUrl,
+      ),
       catalogDuration: setup.item.durationSeconds?.toDouble() ?? 0,
       isTranscode: setup.isTranscode,
       hevc: setup.hevc,
@@ -68,6 +84,35 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       prefs: setup.prefs,
     );
     _controller.start(_startOffset());
+    _setupPip();
+  }
+
+  /// Enables auto-enter-on-leave PiP (Android) and tracks PiP mode so the
+  /// overlay can hide its chrome while floating (ARGY-50). On iOS, PiP is
+  /// AVKit-driven by better_player_plus, so the button is always offered and
+  /// the system supplies its own PiP overlay.
+  Future<void> _setupPip() async {
+    if (Platform.isIOS) {
+      setState(() => _pipSupported = true);
+      return;
+    }
+    final supported = await PiP.isSupported();
+    if (!mounted) return;
+    setState(() => _pipSupported = supported);
+    if (!supported) return;
+    PiP.onChanged((inPip) {
+      if (mounted) setState(() => _inPip = inPip);
+    });
+    await PiP.setActive(true);
+  }
+
+  /// Enters PiP: native on Android, AVKit (via better_player_plus) on iOS.
+  Future<void> _enterPip() async {
+    if (Platform.isIOS) {
+      await _controller.player?.enablePictureInPicture(_playerKey);
+    } else {
+      await PiP.enter();
+    }
   }
 
   /// Resume from the saved position only when the entry point asked to (the
@@ -80,6 +125,8 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
 
   @override
   void dispose() {
+    PiP.onChanged(null);
+    PiP.setActive(false);
     _controller.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
@@ -100,14 +147,17 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
               if (player == null || !(player.isVideoInitialized() ?? false)) {
                 return const ColoredBox(color: Colors.black);
               }
-              return Center(child: BetterPlayer(controller: player));
+              return Center(child: BetterPlayer(key: _playerKey, controller: player));
             },
           ),
-          PlayerControls(
-            controller: _controller,
-            title: widget.setup.item.title,
-            onBack: () => Navigator.of(context).maybePop(),
-          ),
+          // In PiP the system window shows only the video — suppress all chrome.
+          if (!_inPip)
+            PlayerControls(
+              controller: _controller,
+              title: widget.setup.item.title,
+              onBack: () => Navigator.of(context).maybePop(),
+              onEnterPip: _pipSupported ? _enterPip : null,
+            ),
         ],
       ),
     );

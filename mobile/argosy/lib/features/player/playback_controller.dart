@@ -4,6 +4,7 @@ import 'package:argosy_api/api.dart';
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'vtt.dart';
 
@@ -28,11 +29,14 @@ class PlaybackController extends ChangeNotifier {
     required this.baseUrl,
     required this.token,
     required this.itemId,
+    required this.title,
     required this.catalogDuration,
     required this.isTranscode,
     required this.hevc,
     required this.subtitles,
     required this.prefs,
+    this.notificationAuthor,
+    this.artworkUrl,
   });
 
   final LibraryApi libraryApi;
@@ -41,6 +45,16 @@ class PlaybackController extends ChangeNotifier {
   final String baseUrl;
   final String? token;
   final String itemId;
+
+  /// Title shown in the lock-screen / notification media controls (ARGY-50).
+  final String title;
+
+  /// Secondary line for the media notification (e.g. the year); optional.
+  final String? notificationAuthor;
+
+  /// Absolute artwork URL for the media notification; optional. The server
+  /// serves artwork unauthenticated, so no token is appended.
+  final String? artworkUrl;
 
   /// Total runtime from the catalog, in seconds (the scrub bar's domain).
   final double catalogDuration;
@@ -85,6 +99,19 @@ class PlaybackController extends ChangeNotifier {
   Map<String, String> get _authHeaders =>
       (token != null && token!.isNotEmpty) ? {'Authorization': 'Bearer $token'} : {};
 
+  /// Lock-screen / notification media controls + background audio (ARGY-50).
+  /// Enabling this also starts better_player_plus's `mediaPlayback` foreground
+  /// service and, as a side effect, disables the library's auto-pause-on-
+  /// background — which is exactly what we want for background playback.
+  BetterPlayerNotificationConfiguration get _notificationConfig =>
+      BetterPlayerNotificationConfiguration(
+        showNotification: true,
+        title: title,
+        author: notificationAuthor,
+        imageUrl: artworkUrl,
+        activityName: 'MainActivity',
+      );
+
   /// Absolute media position in seconds (`baseOffset + player.position`).
   double get position {
     final ms = videoValue?.position.inMilliseconds ?? 0;
@@ -128,6 +155,7 @@ class PlaybackController extends ChangeNotifier {
         BetterPlayerDataSourceType.network,
         '$baseUrl/api/v1/items/$itemId/stream$qp',
         headers: _authHeaders,
+        notificationConfiguration: _notificationConfig,
       ));
       if (offset > 0) {
         await _player!.seekTo(Duration(milliseconds: (offset * 1000).round()));
@@ -174,6 +202,7 @@ class PlaybackController extends ChangeNotifier {
         videoFormat: BetterPlayerVideoFormat.hls,
         liveStream: true,
         headers: _authHeaders,
+        notificationConfiguration: _notificationConfig,
       ));
       await _player!.play();
       await _applyActiveSubtitle();
@@ -394,13 +423,26 @@ class PlaybackController extends ChangeNotifier {
         // A restart tears the data source down and back up; only surface an
         // exception when we're not mid-(re)start.
         if (!starting) _fail('Playback stopped unexpectedly.');
+      case BetterPlayerEventType.play:
+        // Hold the screen awake while actively playing (ARGY-50). The wakelock
+        // is window-scoped, so it lifts automatically once the app backgrounds
+        // for audio-only / PiP — no need to react to lifecycle here.
+        _setWakelock(true);
       case BetterPlayerEventType.finished:
       case BetterPlayerEventType.pause:
+        _setWakelock(false);
+        _flush();
       case BetterPlayerEventType.seekTo:
         _flush();
       default:
         break;
     }
+  }
+
+  void _setWakelock(bool on) {
+    // Fire-and-forget; the plugin no-ops if already in the requested state.
+    unawaited((on ? WakelockPlus.enable() : WakelockPlus.disable())
+        .catchError((_) {}));
   }
 
   void _fail(String message) {
@@ -417,6 +459,7 @@ class PlaybackController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _heartbeat?.cancel();
+    _setWakelock(false);
     _flush();
     final sid = _sessionId;
     _sessionId = null;
