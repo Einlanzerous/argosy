@@ -5,6 +5,7 @@ import '../../api/artwork.dart';
 import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../theme/button_styles.dart';
 import '../../widgets/argosy_mark.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
@@ -60,9 +61,14 @@ class HomeScreen extends ConsumerWidget {
                     if (home.continueRow.isNotEmpty) ...[
                       // Continue Watching gets larger tiles — it's the primary
                       // "pick up where you left off" row and shouldn't feel
-                      // squished against the rails below it.
+                      // squished against the rails below it. Tapping a tile
+                      // resumes the item directly (its id is the playable
+                      // episode/film), not a detour through detail.
                       _rail('Continue Watching', home.continueRow,
-                          height: 296, cardWidth: 158),
+                          height: 296,
+                          cardWidth: 158,
+                          onCardTap: (c) =>
+                              openPlayer(context, c.id, resume: true)),
                       const SizedBox(height: 24),
                     ],
                     if (home.onDeck.isNotEmpty) ...[
@@ -93,17 +99,27 @@ class HomeScreen extends ConsumerWidget {
     List<MediaCard> cards, {
     double height = 248,
     double cardWidth = 132,
+    void Function(MediaCard card)? onCardTap,
   }) =>
       MediaRail(
         title: title,
         height: height,
         children: [
-          for (final c in cards) MediaPosterCard(card: c, width: cardWidth),
+          for (final c in cards)
+            MediaPosterCard(
+              card: c,
+              width: cardWidth,
+              onTap: onCardTap == null ? null : () => onCardTap(c),
+            ),
         ],
       );
 }
 
 /// The full-bleed spotlight. Tapping it opens the item's detail screen.
+/// Slightly shorter than the detail-screen action row ([kActionButtonSize]),
+/// so the hero's Resume/Details pair sits compactly over the artwork.
+const _heroButtonSize = Size(0, 44);
+
 class _Hero extends ConsumerWidget {
   const _Hero({required this.hero});
 
@@ -178,11 +194,31 @@ class _Hero extends ConsumerWidget {
                     ),
                   ],
                   const SizedBox(height: 14),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        openDetail(context, hero.kind, hero.detailId),
-                    icon: const Icon(Icons.info_outline, size: 18),
-                    label: const Text('Details'),
+                  Row(
+                    children: [
+                      if (hero.playableId != null) ...[
+                        FilledButton.icon(
+                          style: brassButtonStyle(context,
+                              minimumSize: _heroButtonSize),
+                          onPressed: () => openPlayer(
+                            context,
+                            hero.playableId!,
+                            resume: hero.percent != null,
+                          ),
+                          icon: const Icon(Icons.play_arrow, size: 20),
+                          label: Text(hero.percent != null ? 'Resume' : 'Play'),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      FilledButton.icon(
+                        style: ghostButtonStyle(context,
+                            minimumSize: _heroButtonSize),
+                        onPressed: () =>
+                            openDetail(context, hero.kind, hero.detailId),
+                        icon: const Icon(Icons.info_outline, size: 18),
+                        label: const Text('Details'),
+                      ),
+                    ],
                   ),
                 ],
               ),
