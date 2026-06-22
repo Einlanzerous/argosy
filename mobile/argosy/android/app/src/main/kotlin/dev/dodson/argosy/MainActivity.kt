@@ -1,5 +1,6 @@
 package dev.dodson.argosy
 
+import android.Manifest
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
@@ -93,6 +94,16 @@ class MainActivity : FlutterActivity() {
         val filter = IntentFilter(ACTION_PIP_TOGGLE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(pipReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            // Android 13+ gates the media-playback foreground-service notification
+            // (lock-screen / shade transport controls) behind this runtime grant.
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    REQUEST_NOTIFICATIONS,
+                )
+            }
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(pipReceiver, filter)
@@ -189,5 +200,6 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val ACTION_PIP_TOGGLE = "dev.dodson.argosy.PIP_TOGGLE"
         private const val REQUEST_PIP_TOGGLE = 1001
+        private const val REQUEST_NOTIFICATIONS = 1002
     }
 }

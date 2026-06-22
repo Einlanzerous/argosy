@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Streaming playback + API access (transcode HLS, direct play, Beacon). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+: required for the media-playback foreground-service
+         notification (lock-screen / shade transport controls) to be shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="argosy"
         android:name="${applicationName}"
