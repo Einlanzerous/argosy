@@ -234,6 +234,17 @@ func inputArgs(spec Spec, enc videoEncoder) []string {
 	args = append(args, enc.globalArgs()...)
 	if spec.StartAt > 0 {
 		args = append(args, "-ss", strconv.FormatFloat(spec.StartAt, 'f', 3, 64))
+		// Remux copies the video, so a seek lands on the keyframe at/before
+		// StartAt either way — accurate seek can't trim a copied GOP. But with
+		// accurate seek ffmpeg still drops the audio packets between that
+		// keyframe and the exact StartAt while keeping the video from the
+		// keyframe, so the re-encoded audio starts ~1 GOP late and trails the
+		// video (ARGY-84). -noaccurate_seek keeps both streams entering at the
+		// same keyframe, restoring A/V sync. The transcode path re-encodes the
+		// video and can seek to the exact frame, so it keeps accurate seek.
+		if spec.Method == MethodRemux {
+			args = append(args, "-noaccurate_seek")
+		}
 	}
 	return append(args, "-i", spec.Source)
 }
