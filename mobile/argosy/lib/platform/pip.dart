@@ -20,6 +20,7 @@ class PiP {
   static bool? _supported;
   static bool _handlerInstalled = false;
   static void Function(bool inPip)? _onChanged;
+  static void Function()? _onToggle;
 
   /// Whether this device exposes a system PiP feature. Cached after the first
   /// call. Always false off-Android.
@@ -61,19 +62,42 @@ class PiP {
     }
   }
 
-  /// Registers [callback], invoked with the current PiP mode whenever it changes
-  /// (so the player can hide its overlay chrome in PiP). Pass null to clear.
-  static void onChanged(void Function(bool inPip)? callback) {
-    _onChanged = callback;
-    if (callback != null && !_handlerInstalled && Platform.isAndroid) {
+  /// Reports the current play/pause state so the PiP window's play/pause action
+  /// shows the right icon. Safe to call when PiP is unsupported.
+  static Future<void> setPlaying(bool playing) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<void>('setPlaying', playing);
+    } on PlatformException {
+      /* ignore */
+    } on MissingPluginException {
+      /* ignore */
+    }
+  }
+
+  /// Registers handlers: [onChanged] fires with the current PiP mode whenever it
+  /// changes (so the player can hide its overlay chrome in PiP); [onToggle]
+  /// fires when the PiP window's play/pause action is tapped. Pass nulls to
+  /// clear both.
+  static void register({
+    void Function(bool inPip)? onChanged,
+    void Function()? onToggle,
+  }) {
+    _onChanged = onChanged;
+    _onToggle = onToggle;
+    final active = onChanged != null || onToggle != null;
+    if (active && !_handlerInstalled && Platform.isAndroid) {
       _handlerInstalled = true;
       _channel.setMethodCallHandler(_handle);
     }
   }
 
   static Future<void> _handle(MethodCall call) async {
-    if (call.method == 'pipChanged') {
-      _onChanged?.call(call.arguments == true);
+    switch (call.method) {
+      case 'pipChanged':
+        _onChanged?.call(call.arguments == true);
+      case 'pipAction':
+        if (call.arguments == 'toggle') _onToggle?.call();
     }
   }
 }

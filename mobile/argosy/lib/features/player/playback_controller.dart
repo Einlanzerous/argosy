@@ -77,6 +77,12 @@ class PlaybackController extends ChangeNotifier {
   /// overlay. Null until the first data source is set up.
   VideoPlayerValue? get videoValue => _player?.videoPlayerController?.value;
 
+  /// True once the player has a data source whose first frame is ready to
+  /// render. Deliberately avoids better_player's `isVideoInitialized()`, which
+  /// *throws* StateError while the data source is still being set up — the
+  /// source of a transient red error frame during the loading spinner.
+  bool get isReady => videoValue?.initialized ?? false;
+
   String? _sessionId;
 
   /// The transcode StartAt for the current session (0 for direct play). Added
@@ -111,6 +117,16 @@ class PlaybackController extends ChangeNotifier {
         imageUrl: artworkUrl,
         activityName: 'MainActivity',
       );
+
+  /// Friendly quality stamp derived from the decoded video height, mirroring
+  /// the web player's `updateQuality`: "4K" at ≥2160p, otherwise `{height}p`.
+  /// Null until the first frame reports a size.
+  String? get qualityLabel {
+    final h = videoValue?.size?.height;
+    if (h == null || h <= 0) return null;
+    final hi = h.round();
+    return hi >= 2160 ? '4K' : '${hi}p';
+  }
 
   /// Absolute media position in seconds (`baseOffset + player.position`).
   double get position {

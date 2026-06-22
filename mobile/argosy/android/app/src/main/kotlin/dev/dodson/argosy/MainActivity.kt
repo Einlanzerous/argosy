@@ -1,11 +1,19 @@
 package dev.dodson.argosy
 
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
+import android.os.Bundle
 import android.util.Rational
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -18,7 +26,20 @@ class MainActivity : FlutterActivity() {
     // Set by Dart while a player screen is foregrounded with active playback;
     // gates auto-enter-PiP on leave so we never shrink the browse UI.
     private var playbackActive = false
+
+    // Mirrors the player's play/pause state so the PiP action shows the right
+    // icon. Pushed from Dart via `setPlaying`.
+    private var isPlaying = true
     private var pip: MethodChannel? = null
+
+    // Receives taps on the PiP play/pause RemoteAction and forwards them to Dart.
+    private val pipReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_PIP_TOGGLE) {
+                pip?.invokeMethod("pipAction", "toggle")
+            }
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -42,6 +63,16 @@ class MainActivity : FlutterActivity() {
                     playbackActive = call.arguments == true
                     result.success(null)
                 }
+                "setPlaying" -> {
+                    isPlaying = call.arguments == true
+                    // Refresh the PiP action icon (play <-> pause) live while floating.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                        isInPictureInPictureMode
+                    ) {
+                        runCatching { setPictureInPictureParams(buildPipParams()) }
+                    }
+                    result.success(null)
+                }
                 "enter" -> {
                     enterPip()
                     result.success(null)
@@ -51,6 +82,22 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val filter = IntentFilter(ACTION_PIP_TOGGLE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(pipReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(pipReceiver, filter)
+        }
+    }
+
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(pipReceiver) }
+        super.onDestroy()
+    }
+
     private fun isPipSupported(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
@@ -58,13 +105,36 @@ class MainActivity : FlutterActivity() {
     private fun enterPip() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         try {
-            val params = PictureInPictureParams.Builder()
-                .setAspectRatio(Rational(16, 9))
-                .build()
-            enterPictureInPictureMode(params)
+            enterPictureInPictureMode(buildPipParams())
         } catch (_: Exception) {
             // Some OEMs reject PiP (e.g. disabled by user/policy); ignore.
         }
+    }
+
+    // 16:9 window with a single play/pause RemoteAction. The system PiP UI adds
+    // the expand-to-fullscreen and close affordances itself, giving the expected
+    // three controls (ARGY-50).
+    private fun buildPipParams(): PictureInPictureParams {
+        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setActions(listOf(playPauseAction()))
+        }
+        return builder.build()
+    }
+
+    private fun playPauseAction(): RemoteAction {
+        val iconRes =
+            if (isPlaying) android.R.drawable.ic_media_pause
+            else android.R.drawable.ic_media_play
+        val label = if (isPlaying) "Pause" else "Play"
+        val intent = Intent(ACTION_PIP_TOGGLE).setPackage(packageName)
+        val pending = PendingIntent.getBroadcast(
+            this,
+            REQUEST_PIP_TOGGLE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return RemoteAction(Icon.createWithResource(this, iconRes), label, label, pending)
     }
 
     // Press-home / recents while playing → float the video instead of pausing.
@@ -98,5 +168,10 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
             false
         }
+    }
+
+    companion object {
+        private const val ACTION_PIP_TOGGLE = "dev.dodson.argosy.PIP_TOGGLE"
+        private const val REQUEST_PIP_TOGGLE = 1001
     }
 }

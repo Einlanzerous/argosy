@@ -100,10 +100,25 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     if (!mounted) return;
     setState(() => _pipSupported = supported);
     if (!supported) return;
-    PiP.onChanged((inPip) {
-      if (mounted) setState(() => _inPip = inPip);
-    });
+    PiP.register(
+      onChanged: (inPip) {
+        if (mounted) setState(() => _inPip = inPip);
+      },
+      onToggle: () => _controller.togglePlay(),
+    );
+    // Keep the PiP play/pause action icon in sync with playback.
+    _controller.addListener(_syncPipPlaying);
     await PiP.setActive(true);
+  }
+
+  bool? _lastPipPlaying;
+
+  void _syncPipPlaying() {
+    final playing = _controller.videoValue?.isPlaying ?? false;
+    if (playing != _lastPipPlaying) {
+      _lastPipPlaying = playing;
+      PiP.setPlaying(playing);
+    }
   }
 
   /// Enters PiP: native on Android, AVKit (via better_player_plus) on iOS.
@@ -125,7 +140,8 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
 
   @override
   void dispose() {
-    PiP.onChanged(null);
+    _controller.removeListener(_syncPipPlaying);
+    PiP.register();
     PiP.setActive(false);
     _controller.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -144,7 +160,7 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
             animation: _controller,
             builder: (context, _) {
               final player = _controller.player;
-              if (player == null || !(player.isVideoInitialized() ?? false)) {
+              if (player == null || !_controller.isReady) {
                 return const ColoredBox(color: Colors.black);
               }
               return Center(child: BetterPlayer(key: _playerKey, controller: player));
