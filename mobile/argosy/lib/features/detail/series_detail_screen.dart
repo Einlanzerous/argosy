@@ -232,83 +232,97 @@ class _EpisodeTile extends StatelessWidget {
     final lengthLabel =
         playable ? formatRuntime(episode.durationSeconds) : 'No file linked';
 
+    // Fixed row height so a column of episodes stays uniform whether or not an
+    // episode has an in-progress bar — the second line is laid out inside this
+    // height, and single-line rows centre within it rather than growing.
     return Opacity(
       opacity: playable ? 1 : 0.5,
-      child: ListTile(
+      child: InkWell(
         onTap: playable ? () => openPlayer(context, episode.mediaItemId!) : null,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        minLeadingWidth: 32,
-        horizontalTitleGap: 16,
-        leading: SizedBox(
-          width: 32,
-          child: Text(
-            '${episode.episodeNumber}',
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(color: ArgosyColors.faint),
+        child: SizedBox(
+          height: 60,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                // The play / watched icon takes the slot the number used to.
+                SizedBox(
+                  width: 36,
+                  child: Icon(
+                    watched ? Icons.check_circle : Icons.play_arrow,
+                    size: watched ? 20 : 24,
+                    color:
+                        watched ? ArgosyColors.green : ArgosyColors.soft2,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Line 1: episode name with the runtime inline beside it.
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              epTitle.isEmpty
+                                  ? 'Episode ${episode.episodeNumber}'
+                                  : epTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (lengthLabel.isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            Text(
+                              '· $lengthLabel',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(color: ArgosyColors.dim),
+                            ),
+                          ],
+                        ],
+                      ),
+                      // Line 2 (in progress only): a wide progress bar with
+                      // "<pct>% · <remaining> left" beside it.
+                      if (inProgress) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(3),
+                                child: LinearProgressIndicator(
+                                  value: _percent,
+                                  minHeight: 4,
+                                  backgroundColor: tokens.line2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation(tokens.progress),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Text(
+                              '${(_percent * 100).round()}% · ${formatRuntime(_remainingSeconds)} left',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(color: ArgosyColors.soft2),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        // Line 1: episode name with the runtime inline next to it (web parity).
-        title: Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Flexible(
-              child: Text(
-                epTitle.isEmpty ? 'Episode ${episode.episodeNumber}' : epTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (lengthLabel.isNotEmpty) ...[
-              const SizedBox(width: 10),
-              Text(
-                '· $lengthLabel',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelMedium
-                    ?.copyWith(color: ArgosyColors.dim),
-              ),
-            ],
-          ],
-        ),
-        // Line 2 (in progress only): a wide progress bar with "<pct>% · <left>
-        // left" beside it — mirrors the web episode row's second line.
-        subtitle: inProgress
-            ? Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: LinearProgressIndicator(
-                          value: _percent,
-                          minHeight: 4,
-                          backgroundColor: tokens.line2,
-                          valueColor: AlwaysStoppedAnimation(tokens.progress),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Text(
-                      '${(_percent * 100).round()}% · ${formatRuntime(_remainingSeconds)} left',
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelMedium
-                          ?.copyWith(color: ArgosyColors.soft2),
-                    ),
-                  ],
-                ),
-              )
-            : null,
-        trailing: watched
-            ? const Icon(Icons.check_circle, size: 20, color: ArgosyColors.green)
-            : playable
-                ? const Icon(Icons.play_arrow, color: ArgosyColors.soft2)
-                : null,
       ),
     );
   }
