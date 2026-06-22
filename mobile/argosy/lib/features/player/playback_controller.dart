@@ -444,10 +444,14 @@ class PlaybackController extends ChangeNotifier {
         // is window-scoped, so it lifts automatically once the app backgrounds
         // for audio-only / PiP — no need to react to lifecycle here.
         _setWakelock(true);
+        // Notify so listeners tracking play/pause (the PiP action icon sync)
+        // update — better_player drives these transitions, not togglePlay.
+        _safeNotify();
       case BetterPlayerEventType.finished:
       case BetterPlayerEventType.pause:
         _setWakelock(false);
         _flush();
+        _safeNotify();
       case BetterPlayerEventType.seekTo:
         _flush();
       default:
