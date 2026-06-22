@@ -61,6 +61,12 @@ class MainActivity : FlutterActivity() {
                 "isSupported" -> result.success(isPipSupported())
                 "setActive" -> {
                     playbackActive = call.arguments == true
+                    // Arm (or disarm) auto-enter PiP now, so the system floats the
+                    // video when the user leaves — including the swipe-up-to-home
+                    // gesture, which doesn't reliably fire onUserLeaveHint.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        runCatching { setPictureInPictureParams(buildPipParams()) }
+                    }
                     result.success(null)
                 }
                 "setPlaying" -> {
@@ -113,11 +119,16 @@ class MainActivity : FlutterActivity() {
 
     // 16:9 window with a single play/pause RemoteAction. The system PiP UI adds
     // the expand-to-fullscreen and close affordances itself, giving the expected
-    // three controls (ARGY-50).
+    // three controls (ARGY-50). On Android 12+ auto-enter floats the video when
+    // the app is backgrounded (reliable under gesture nav, unlike onUserLeaveHint).
     private fun buildPipParams(): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             builder.setActions(listOf(playPauseAction()))
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(playbackActive)
+            builder.setSeamlessResizeEnabled(true)
         }
         return builder.build()
     }
@@ -137,10 +148,15 @@ class MainActivity : FlutterActivity() {
         return RemoteAction(Icon.createWithResource(this, iconRes), label, label, pending)
     }
 
-    // Press-home / recents while playing → float the video instead of pausing.
+    // Pre-Android-12 fallback: float the video on home/recents. On 12+ the
+    // auto-enter param handles this (and covers the swipe-up-to-home gesture).
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (playbackActive && isPipSupported()) enterPip()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+            playbackActive && isPipSupported()
+        ) {
+            enterPip()
+        }
     }
 
     override fun onPictureInPictureModeChanged(

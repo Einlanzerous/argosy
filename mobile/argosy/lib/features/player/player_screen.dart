@@ -118,15 +118,23 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
   void _beginPlayback() {
     final resumePos = _resumablePosition();
     if (resumePos != null && widget.resume) {
-      _controller.start(resumePos);
+      _startAt(resumePos);
     } else if (resumePos != null && !widget.startOver) {
       setState(() {
         _resumePosition = resumePos;
         _showResumePrompt = true;
       });
     } else {
-      _controller.start(0);
+      _startAt(0);
     }
+  }
+
+  /// Starts playback and arms auto-enter PiP. Deferred until real playback (not
+  /// during the resume prompt) so backgrounding the chooser doesn't float a
+  /// black window.
+  void _startAt(double offset) {
+    _controller.start(offset);
+    PiP.setActive(true);
   }
 
   /// Enables auto-enter-on-leave PiP (Android) and tracks PiP mode so the
@@ -148,9 +156,9 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       },
       onToggle: () => _controller.togglePlay(),
     );
-    // Keep the PiP play/pause action icon in sync with playback.
+    // Keep the PiP play/pause action icon in sync with playback. (Auto-enter is
+    // armed by _startAt once real playback begins, not here.)
     _controller.addListener(_syncPipPlaying);
-    await PiP.setActive(true);
   }
 
   bool? _lastPipPlaying;
@@ -183,12 +191,12 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
   void _onResume() {
     final pos = _resumePosition;
     setState(() => _showResumePrompt = false);
-    _controller.start(pos);
+    _startAt(pos);
   }
 
   void _onStartOver() {
     setState(() => _showResumePrompt = false);
-    _controller.start(0);
+    _startAt(0);
   }
 
   @override
