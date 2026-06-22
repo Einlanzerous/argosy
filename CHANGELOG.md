@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0](https://github.com/Einlanzerous/argosy/compare/v0.4.0...v0.5.0) (2026-06-22)
+
+
+### Features
+
+* **mobile:** Beacon SSE live sync for Continue-Watching (ARGY-48) ([#82](https://github.com/Einlanzerous/argosy/issues/82)) ([6d04d01](https://github.com/Einlanzerous/argosy/commit/6d04d0122907cd71d16ef0fc4025b23b1a252f13))
+* **mobile:** browse surfaces — Bridge, Library, Search, Detail (ARGY-47) ([#79](https://github.com/Einlanzerous/argosy/issues/79)) ([6a6f6c5](https://github.com/Einlanzerous/argosy/commit/6a6f6c5fe69ec11de38c0fa278a172e0bddbaaea))
+* **mobile:** Dart API client from OpenAPI + token storage (ARGY-78) ([#77](https://github.com/Einlanzerous/argosy/issues/77)) ([f6eb01d](https://github.com/Einlanzerous/argosy/commit/f6eb01d05040f36d1dd72ae2ff9120d4c09ca359))
+* **mobile:** device auth / pairing flow (ARGY-46) ([#78](https://github.com/Einlanzerous/argosy/issues/78)) ([3771c5f](https://github.com/Einlanzerous/argosy/commit/3771c5f17153de3f1a657483418b3daabdc49bdf))
+* **mobile:** Flutter app scaffold + Argosy theme + nav/state (ARGY-45) ([#75](https://github.com/Einlanzerous/argosy/issues/75)) ([0ada177](https://github.com/Einlanzerous/argosy/commit/0ada17766756232d81d00b923e11abc27579d37b))
+* **mobile:** PiP, background audio + keep-screen-awake (ARGY-50) ([#84](https://github.com/Einlanzerous/argosy/issues/84)) ([b8c1226](https://github.com/Einlanzerous/argosy/commit/b8c12267536cdb452e086ae81c2e2f5797fbbbb5))
+* **mobile:** player screen — transcode, controls, track selection, resume (ARGY-79) ([#80](https://github.com/Einlanzerous/argosy/issues/80)) ([a5dc30e](https://github.com/Einlanzerous/argosy/commit/a5dc30e952f24c725e67ddf16b94de567aa8f531))
+* **mobile:** Settings screen — device/user prefs, profile switch (ARGY-80) ([#83](https://github.com/Einlanzerous/argosy/issues/83)) ([0a95b6b](https://github.com/Einlanzerous/argosy/commit/0a95b6b8dcbef3791f2b8e226eac9b09cc81900d))
+
+
+### Bug Fixes
+
+* **transcode:** keep A/V in sync on resumed remux path (ARGY-84) ([#81](https://github.com/Einlanzerous/argosy/issues/81)) ([e091835](https://github.com/Einlanzerous/argosy/commit/e091835ebf0d9866f1f9a4d79626953a6268b2d8))
+
 ## [0.4.0](https://github.com/Einlanzerous/argosy/compare/v0.3.1...v0.4.0) (2026-06-21)
 
 
