@@ -1,0 +1,56 @@
+name: mobile
+
+# Flutter app validation. Scoped to the app dir so server-only PRs don't pay for
+# it (mirrors the per-area job split in ci.yml). The iOS job only runs on main —
+# macOS runners bill ~10x ubuntu minutes and iOS is otherwise unverified (ARGY-82).
+on:
+  pull_request:
+    paths: ["mobile/argosy/**", ".github/workflows/mobile.yml"]
+  push:
+    branches: [main]
+    paths: ["mobile/argosy/**", ".github/workflows/mobile.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: mobile/argosy
+
+env:
+  FLUTTER_VERSION: "3.44.2"
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # analyze is the gate (the project's lint rules intentionally diverge from
+      # `dart format`'s default style, so no format check here).
+      - run: flutter analyze
+      - run: flutter test
+      # Debug build (not release) — proves the native Kotlin (PiP MethodChannel)
+      # and plugin foreground-service permission merge compile. Signing is
+      # exercised by mobile-release.yml on tags.
+      - run: flutter build apk --debug
+
+  ios:
+    # Compile-check only, no signing. main-only to keep macOS minutes down;
+    # promote to pull_request if iOS regressions start slipping through.
+    if: github.event_name == 'push'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build ios --no-codesign

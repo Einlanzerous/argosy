@@ -1,0 +1,132 @@
+name: mobile-release
+
+# Builds + ships the Flutter app on the v* tags that release-please cuts.
+# - Android: signed APK attached to the GitHub Release; AAB to Play internal
+#   track (skipped until PLAY_SERVICE_ACCOUNT_JSON is set).
+# - iOS: TestFlight upload, skipped until the Apple secrets are set (ARGY-82).
+# See mobile/argosy/android/RELEASE.md for the secret/runbook details.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # upload assets onto the release-please GitHub Release
+
+defaults:
+  run:
+    working-directory: mobile/argosy
+
+env:
+  FLUTTER_VERSION: "3.44.2"
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # versionName from the tag (v0.4.0 -> 0.4.0); versionCode from the run
+      # number so it monotonically increases (Play requires it).
+      - name: derive version
+        id: ver
+        run: |
+          name="${GITHUB_REF_NAME#v}"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: decode upload keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set — see android/RELEASE.md"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - run: flutter pub get
+
+      - name: build signed APK + AAB
+        run: |
+          flutter build apk --release \
+            --build-name="${{ steps.ver.outputs.name }}" \
+            --build-number="${{ steps.ver.outputs.code }}"
+          flutter build appbundle --release \
+            --build-name="${{ steps.ver.outputs.name }}" \
+            --build-number="${{ steps.ver.outputs.code }}"
+
+      - name: attach APK to the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             "argosy-${{ steps.ver.outputs.name }}.apk"
+          gh release upload "$GITHUB_REF_NAME" \
+            "argosy-${{ steps.ver.outputs.name }}.apk" --clobber
+
+      # --- Play internal track: only when the service account secret exists ---
+      - name: gate on Play secret
+        id: play
+        run: |
+          if [ -n "$PLAY_JSON" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; fi
+      - name: write Play service account
+        if: steps.play.outputs.enabled == 'true'
+        run: printf '%s' "$PLAY_JSON" > play-service-account.json
+      - name: upload to Play internal track
+        if: steps.play.outputs.enabled == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: mobile/argosy/play-service-account.json
+          packageName: dev.dodson.argosy
+          releaseFiles: mobile/argosy/build/app/outputs/bundle/release/app-release.aab
+          track: internal
+      - name: note when Play is skipped
+        if: steps.play.outputs.enabled != 'true'
+        run: echo "::notice::Play upload skipped — PLAY_SERVICE_ACCOUNT_JSON not set (see android/RELEASE.md)."
+
+  ios:
+    # Stub: builds + uploads to TestFlight only once the Apple secrets exist.
+    # Until then the whole job no-ops (no macOS minutes spent). See ios runbook.
+    runs-on: macos-latest
+    env:
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+    steps:
+      - name: gate on Apple secrets
+        id: apple
+        run: |
+          if [ -n "$ASC_KEY_ID" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; fi
+      - name: skipped notice
+        if: steps.apple.outputs.enabled != 'true'
+        run: echo "::notice::TestFlight upload skipped — Apple secrets not set (ARGY-82; see ios/RELEASE.md)."
+      - uses: actions/checkout@v4
+        if: steps.apple.outputs.enabled == 'true'
+      - uses: subosito/flutter-action@v2
+        if: steps.apple.outputs.enabled == 'true'
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      # Real signing + `flutter build ipa` + upload (fastlane pilot /
+      # apple-actions/upload-testflight-build) wired in once certs exist —
+      # the portal steps are framework-independent. See ios/RELEASE.md.
+      - name: build + upload (pending Apple account)
+        if: steps.apple.outputs.enabled == 'true'
+        run: |
+          echo "Wire flutter build ipa + TestFlight upload here — see ios/RELEASE.md"
+          exit 1
