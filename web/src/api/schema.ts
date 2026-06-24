@@ -1297,7 +1297,14 @@ export interface components {
             id: string;
             episodeNumber: number;
             title?: string | null;
-            /** Format: uuid */
+            /** @description Per-episode synopsis from the metadata provider. */
+            overview?: string | null;
+            /** @description Episode still (16:9 landscape) image URL, or null when none. */
+            stillUrl?: string | null;
+            /**
+             * Format: uuid
+             * @description Backing file. Several episodes sharing one mediaItemId are a single combined rip.
+             */
             mediaItemId?: string | null;
             durationSeconds?: number | null;
             /** @description Current profile's resume position. */

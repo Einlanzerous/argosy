@@ -2,6 +2,7 @@ import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../api/artwork.dart';
 import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
@@ -43,6 +44,23 @@ class SeriesDetailScreen extends ConsumerWidget {
 
 /// A playable episode flattened with its season number, for resume targeting.
 typedef _Playable = ({EpisodeSummary ep, int seasonNumber});
+
+/// Folds consecutive episodes backed by the same file into one group. A combined
+/// rip (e.g. The Good Place "E1" = EP1+EP2) yields several episode rows sharing a
+/// mediaItemId; grouping them renders "E1–2" instead of a false missing-episode
+/// gap. Episodes with no linked file each stand alone.
+List<List<EpisodeSummary>> _groupEpisodes(List<EpisodeSummary> episodes) {
+  final groups = <List<EpisodeSummary>>[];
+  for (final e in episodes) {
+    final prev = groups.isNotEmpty ? groups.last : null;
+    if (e.mediaItemId != null && prev != null && prev.first.mediaItemId == e.mediaItemId) {
+      prev.add(e);
+    } else {
+      groups.add([e]);
+    }
+  }
+  return groups;
+}
 
 class _Body extends StatefulWidget {
   const _Body({required this.series});
@@ -159,8 +177,8 @@ class _BodyState extends State<_Body> {
           ),
         const SizedBox(height: 8),
         if (season != null)
-          for (final ep in season.episodes)
-            _EpisodeTile(episode: ep, seasonNumber: season.seasonNumber),
+          for (final group in _groupEpisodes(season.episodes))
+            _EpisodeTile(episodes: group, seasonNumber: season.seasonNumber),
         const SizedBox(height: 24),
       ],
     );
@@ -210,33 +228,65 @@ class _SeriesActions extends StatelessWidget {
   }
 }
 
-class _EpisodeTile extends StatelessWidget {
-  const _EpisodeTile({required this.episode, required this.seasonNumber});
+class _EpisodeTile extends ConsumerWidget {
+  const _EpisodeTile({required this.episodes, required this.seasonNumber});
 
-  final EpisodeSummary episode;
+  /// One or more episode rows backed by a single file. Length > 1 is a combined
+  /// rip; the first is the representative for runtime/progress/play.
+  final List<EpisodeSummary> episodes;
   final int seasonNumber;
 
+  EpisodeSummary get _rep => episodes.first;
+  bool get _combined => episodes.length > 1;
+
   double get _percent {
-    final dur = episode.durationSeconds;
-    final pos = episode.positionSeconds;
+    final dur = _rep.durationSeconds;
+    final pos = _rep.positionSeconds;
     if (dur == null || dur == 0 || pos == null) return 0;
     return (pos / dur).clamp(0.0, 1.0).toDouble();
   }
 
   num get _remainingSeconds {
-    final dur = episode.durationSeconds ?? 0;
-    final pos = episode.positionSeconds ?? 0;
+    final dur = _rep.durationSeconds ?? 0;
+    final pos = _rep.positionSeconds ?? 0;
     return (dur - pos).clamp(0, dur);
   }
 
+  // "E5" for a single episode, "E1–2" for a combined span.
+  String get _episodeLabel => _combined
+      ? 'E${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
+      : 'E${_rep.episodeNumber}';
+
+  // Real episode name(s) joined, or a plain "Episode N" / "Episodes N–M" fallback
+  // until TMDB per-episode metadata lands.
+  String get _displayTitle {
+    final names = episodes
+        .map((e) => episodeName(e.title))
+        .whereType<String>()
+        .toList();
+    if (names.isNotEmpty) return names.join(' / ');
+    return _combined
+        ? 'Episodes ${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
+        : 'Episode ${_rep.episodeNumber}';
+  }
+
+  String? get _overview => episodes
+      .map((e) => e.overview)
+      .firstWhere((o) => o != null && o.isNotEmpty, orElse: () => null);
+
+  String? get _stillPath => episodes
+      .map((e) => e.stillUrl)
+      .firstWhere((u) => u != null && u.isNotEmpty, orElse: () => null);
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.argosy;
-    final playable = episode.mediaItemId != null;
-    final watched = episode.watched ?? false;
+    final playable = _rep.mediaItemId != null;
+    final watched = _rep.watched ?? false;
     final inProgress = _percent > 0 && !watched;
-    final epTitle = formatTitle(episode.title);
-    final runtime = formatRuntime(episode.durationSeconds);
+    final runtime = formatRuntime(_rep.durationSeconds);
+    final overview = _overview;
+    final still = ref.watch(artworkResolverProvider)(_stillPath);
 
     final status = !playable
         ? 'No file linked'
@@ -252,17 +302,14 @@ class _EpisodeTile extends StatelessWidget {
     return Opacity(
       opacity: playable ? 1 : 0.5,
       child: InkWell(
-        onTap: playable
-            ? () => openPlayer(context, episode.mediaItemId!)
-            : null,
+        onTap: playable ? () => openPlayer(context, _rep.mediaItemId!) : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 16:9 episode thumbnail. Episodes carry no per-episode artwork,
-              // so it's a branded hatch tile with a play/check glyph and the
-              // resume bar — honest about what we have, but with real rhythm.
+              // 16:9 episode thumbnail: the TMDB still when we have one, else a
+              // branded hatch tile. The play/check glyph + resume bar sit on top.
               SizedBox(
                 width: 124,
                 child: AspectRatio(
@@ -277,7 +324,15 @@ class _EpisodeTile extends StatelessWidget {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          const HatchPlaceholder(),
+                          if (still != null)
+                            Image.network(
+                              still,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  const HatchPlaceholder(),
+                            )
+                          else
+                            const HatchPlaceholder(),
                           Center(
                             child: Icon(
                               watched ? Icons.check_circle : Icons.play_arrow,
@@ -317,7 +372,7 @@ class _EpisodeTile extends StatelessWidget {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            'S$seasonNumber · E${episode.episodeNumber}',
+                            'S$seasonNumber · $_episodeLabel',
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: ArgosyColors.accent,
@@ -325,17 +380,29 @@ class _EpisodeTile extends StatelessWidget {
                                   letterSpacing: 0.4,
                                 ),
                           ),
+                          if (_combined) ...[
+                            const SizedBox(width: 8),
+                            _CombinedBadge(tokens: tokens),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        epTitle.isEmpty
-                            ? 'Episode ${episode.episodeNumber}'
-                            : epTitle,
+                        _displayTitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
+                      if (overview != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          overview,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: ArgosyColors.dim),
+                        ),
+                      ],
                       const SizedBox(height: 5),
                       Text(
                         statusLine,
@@ -352,6 +419,32 @@ class _EpisodeTile extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small "Combined" pill marking an episode row backed by one shared file.
+class _CombinedBadge extends StatelessWidget {
+  const _CombinedBadge({required this.tokens});
+
+  final ArgosyTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: tokens.line2),
+      ),
+      child: Text(
+        'Combined',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: ArgosyColors.soft2,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
         ),
       ),
     );

@@ -23,6 +23,9 @@ const (
 	// stretched across a desktop without pulling the multi-MB "original").
 	posterSize   = "w780"
 	backdropSize = "w1280"
+	// stillSize is the per-episode 16:9 thumbnail; w300 is sharp at the small
+	// sizes the episode rows render without pulling a multi-hundred-KB still.
+	stillSize = "w300"
 )
 
 // TMDB is a Provider backed by themoviedb.org. Auth uses the v4 read access
@@ -108,13 +111,52 @@ func (t *TMDB) toMatch(r tmdbResult, title, date string) *Match {
 	return m
 }
 
+// SeasonEpisodes fetches per-episode metadata for one season via
+// GET /tv/{id}/season/{n}. A missing season is reported by TMDB as 404, which
+// surfaces here as an error; callers log and move on.
+func (t *TMDB) SeasonEpisodes(ctx context.Context, tmdbID int64, seasonNumber int) ([]EpisodeMeta, error) {
+	var body struct {
+		Episodes []struct {
+			EpisodeNumber int    `json:"episode_number"`
+			Name          string `json:"name"`
+			Overview      string `json:"overview"`
+			StillPath     string `json:"still_path"`
+		} `json:"episodes"`
+	}
+	path := fmt.Sprintf("/tv/%d/season/%d", tmdbID, seasonNumber)
+	if err := t.get(ctx, path, url.Values{}, &body); err != nil {
+		return nil, err
+	}
+	out := make([]EpisodeMeta, 0, len(body.Episodes))
+	for _, e := range body.Episodes {
+		em := EpisodeMeta{Number: e.EpisodeNumber, Name: e.Name, Overview: e.Overview}
+		if e.StillPath != "" {
+			em.StillURL = t.imageBase + "/" + stillSize + e.StillPath
+		}
+		out = append(out, em)
+	}
+	return out, nil
+}
+
 func (t *TMDB) search(ctx context.Context, path string, q url.Values) ([]tmdbResult, error) {
+	var body struct {
+		Results []tmdbResult `json:"results"`
+	}
+	if err := t.get(ctx, path, q, &body); err != nil {
+		return nil, err
+	}
+	return body.Results, nil
+}
+
+// get performs an authenticated GET against the TMDB API and decodes the JSON
+// body into out.
+func (t *TMDB) get(ctx context.Context, path string, q url.Values, out any) error {
 	if t.readToken == "" && t.apiKey != "" {
 		q.Set("api_key", t.apiKey)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+path+"?"+q.Encode(), nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Accept", "application/json")
 	if t.readToken != "" {
@@ -122,19 +164,16 @@ func (t *TMDB) search(ctx context.Context, path string, q url.Values) ([]tmdbRes
 	}
 	resp, err := t.http.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("tmdb %s: status %d", path, resp.StatusCode)
+		return fmt.Errorf("tmdb %s: status %d", path, resp.StatusCode)
 	}
-	var body struct {
-		Results []tmdbResult `json:"results"`
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode tmdb response: %w", err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("decode tmdb response: %w", err)
-	}
-	return body.Results, nil
+	return nil
 }
 
 func yearOf(date string) int {

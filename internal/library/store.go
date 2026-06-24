@@ -278,6 +278,7 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 	rows, err := s.pool.Query(ctx,
 		`SELECT se.id::text, se.season_number, se.title,
 		        e.id::text, e.episode_number, e.title, e.media_item_id::text,
+		        e.provider_metadata, e.metadata,
 		        mi.duration_seconds, ps.position_seconds, ps.watched
 		 FROM seasons se
 		 LEFT JOIN episodes e ON e.season_id = se.id
@@ -297,10 +298,11 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 		var seasonTitle *string
 		var epID, epTitle, epMediaItem *string
 		var epNum *int
+		var epProv, epOver []byte
 		var epDuration, epPosition *float64
 		var epWatched *bool
 		if err := rows.Scan(&seasonID, &seasonNum, &seasonTitle, &epID, &epNum, &epTitle, &epMediaItem,
-			&epDuration, &epPosition, &epWatched); err != nil {
+			&epProv, &epOver, &epDuration, &epPosition, &epWatched); err != nil {
 			return nil, err
 		}
 		i, ok := idx[seasonID]
@@ -313,6 +315,9 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 		}
 		if epID != nil && epNum != nil {
 			ep := api.EpisodeSummary{Id: parseUUID(*epID), EpisodeNumber: *epNum, Title: epTitle}
+			epP, epO := decodeMap(epProv), decodeMap(epOver)
+			ep.Overview = effectiveOverview(epO, epP)
+			ep.StillUrl = stillURL(s.artworkBase, epO, epP)
 			if epMediaItem != nil {
 				u := parseUUID(*epMediaItem)
 				ep.MediaItemId = &u

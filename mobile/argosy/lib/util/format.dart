@@ -37,6 +37,17 @@ String formatTitle(String? title) {
   return replaced.replaceFirst(RegExp(r'^\s*·\s*'), '').trim();
 }
 
+final _hasEpisodeCode = RegExp(r'S\d{1,2}E\d{1,2}', caseSensitive: false);
+
+/// A real episode name, or null when the title is still the `<Show> S01E01`
+/// filename fallback (carries an SxxExx code). Mirrors the web client so both
+/// only show a name once TMDB per-episode metadata (ARGY-58) has landed.
+String? episodeName(String? title) {
+  if (title == null || title.isEmpty) return null;
+  if (_hasEpisodeCode.hasMatch(title)) return null;
+  return title;
+}
+
 /// A coarse "last seen" label like `just now`, `5m ago`, `3h ago`, `2d ago`,
 /// or a date for anything older than a week. [now] is injectable for tests.
 String formatRelativeTime(DateTime? when, {DateTime? now}) {

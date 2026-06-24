@@ -23,6 +23,12 @@ func (fakeProvider) SearchMovie(_ context.Context, title string, _ int) (*metada
 func (fakeProvider) SearchSeries(_ context.Context, title string) (*metadata.Match, error) {
 	return &metadata.Match{TMDBID: 222, Title: "Matched " + title, Year: 2020, Overview: "sv"}, nil
 }
+func (fakeProvider) SeasonEpisodes(_ context.Context, _ int64, season int) ([]metadata.EpisodeMeta, error) {
+	return []metadata.EpisodeMeta{
+		{Number: 1, Name: "Pilot", Overview: "the first one", StillURL: "http://x/s" + strconv.Itoa(season) + "e1.jpg"},
+		{Number: 2, Name: "The Second", Overview: "the next one"},
+	}, nil
+}
 
 func TestMatchLibrary(t *testing.T) {
 	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
@@ -52,8 +58,25 @@ func TestMatchLibrary(t *testing.T) {
 		libID, "bbb-"+suffix+".mkv"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO series (library_id, title, sort_title) VALUES ($1,'My Show','my show')`, libID); err != nil {
+	var seriesID string
+	if err := pool.QueryRow(ctx, `INSERT INTO series (library_id, title, sort_title) VALUES ($1,'My Show','my show') RETURNING id::text`, libID).Scan(&seriesID); err != nil {
 		t.Fatal(err)
+	}
+	// A season with two episodes, both backed by one combined file (shared
+	// media_item) — each number should still get its own TMDB metadata.
+	var seasonID, comboItem string
+	if err := pool.QueryRow(ctx, `INSERT INTO seasons (series_id, season_number) VALUES ($1,1) RETURNING id::text`, seriesID).Scan(&seasonID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'episode','My Show S01E01-E02',$2) RETURNING id::text`,
+		libID, "combo-"+suffix+".mkv").Scan(&comboItem); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{1, 2} {
+		if _, err := pool.Exec(ctx, `INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1,$2,$3,$4)`,
+			seasonID, n, comboItem, "My Show S01E0"+strconv.Itoa(n)); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	m := NewMatcher(pool, fakeProvider{}, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -91,12 +114,37 @@ func TestMatchLibrary(t *testing.T) {
 		t.Fatalf("series tmdb_id = %v, want 222", seriesTMDB)
 	}
 
-	// idempotent (no force): already matched, so nothing re-matched.
+	// Per-episode metadata: both numbers of the combined file enriched, each
+	// with its own name + provider_metadata overview.
+	if res.Episodes != 2 {
+		t.Fatalf("res.Episodes = %d, want 2", res.Episodes)
+	}
+	for n, wantTitle := range map[int]string{1: "Pilot", 2: "The Second"} {
+		var title string
+		var epm []byte
+		if err := pool.QueryRow(ctx, `SELECT e.title, e.provider_metadata FROM episodes e JOIN seasons se ON se.id=e.season_id WHERE se.series_id=$1 AND e.episode_number=$2`,
+			seriesID, n).Scan(&title, &epm); err != nil {
+			t.Fatal(err)
+		}
+		if title != wantTitle {
+			t.Fatalf("episode %d title = %q, want %q", n, title, wantTitle)
+		}
+		var em map[string]any
+		if err := json.Unmarshal(epm, &em); err != nil {
+			t.Fatalf("episode %d provider_metadata not json: %v", n, err)
+		}
+		if em["source"] != "tmdb" || em["overview"] == nil {
+			t.Fatalf("episode %d provider_metadata = %v", n, em)
+		}
+	}
+
+	// idempotent (no force): already matched, so nothing re-matched and no
+	// episodes re-enriched (provider_metadata already populated).
 	res2, err := m.MatchLibrary(ctx, libID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res2.Movies != 0 || res2.Series != 0 {
-		t.Fatalf("second run matched %+v, want 0/0 (already matched)", res2)
+	if res2.Movies != 0 || res2.Series != 0 || res2.Episodes != 0 {
+		t.Fatalf("second run matched %+v, want 0/0/0 (already matched)", res2)
 	}
 }

@@ -44,6 +44,39 @@ func TestTMDBSearchMovie(t *testing.T) {
 	}
 }
 
+func TestTMDBSeasonEpisodes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/tv/222/season/1" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"episodes":[
+			{"episode_number":1,"name":"Everything Is Fine","overview":"Eleanor arrives.","still_path":"/e1.jpg"},
+			{"episode_number":2,"name":"Flying","overview":"She tries to be good.","still_path":""}
+		]}`))
+	}))
+	defer srv.Close()
+
+	tm := NewTMDB("test-token", "")
+	tm.baseURL = srv.URL
+	tm.imageBase = "https://img"
+
+	eps, err := tm.SeasonEpisodes(context.Background(), 222, 1)
+	if err != nil {
+		t.Fatalf("season episodes: %v", err)
+	}
+	if len(eps) != 2 {
+		t.Fatalf("got %d episodes, want 2", len(eps))
+	}
+	if eps[0].Number != 1 || eps[0].Name != "Everything Is Fine" || eps[0].StillURL != "https://img/w300/e1.jpg" {
+		t.Errorf("ep1 = %+v", eps[0])
+	}
+	if eps[1].Name != "Flying" || eps[1].StillURL != "" { // no still_path → no URL
+		t.Errorf("ep2 = %+v", eps[1])
+	}
+}
+
 func TestTMDBNoResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"results":[]}`))

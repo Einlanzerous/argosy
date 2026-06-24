@@ -19,8 +19,20 @@ type Match struct {
 	VoteCount   int      // number of votes behind VoteAverage
 }
 
+// EpisodeMeta is a normalized per-episode result for a single season, used to
+// fill in episode names/overviews/stills after a series matches.
+type EpisodeMeta struct {
+	Number   int
+	Name     string
+	Overview string
+	StillURL string // full still (16:9 landscape) image URL, or "" when none
+}
+
 // Provider looks up metadata for films and series.
 type Provider interface {
 	SearchMovie(ctx context.Context, title string, year int) (*Match, error)
 	SearchSeries(ctx context.Context, title string) (*Match, error)
+	// SeasonEpisodes returns per-episode metadata for one season of a matched
+	// series. Returns an empty slice (not an error) when the season is unknown.
+	SeasonEpisodes(ctx context.Context, tmdbID int64, seasonNumber int) ([]EpisodeMeta, error)
 }

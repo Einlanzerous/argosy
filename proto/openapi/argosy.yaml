@@ -1745,7 +1745,9 @@ components:
         id: { type: string, format: uuid }
         episodeNumber: { type: integer }
         title: { type: string, nullable: true }
-        mediaItemId: { type: string, format: uuid, nullable: true }
+        overview: { type: string, nullable: true, description: "Per-episode synopsis from the metadata provider." }
+        stillUrl: { type: string, nullable: true, description: "Episode still (16:9 landscape) image URL, or null when none." }
+        mediaItemId: { type: string, format: uuid, nullable: true, description: "Backing file. Several episodes sharing one mediaItemId are a single combined rip." }
         durationSeconds: { type: number, nullable: true }
         positionSeconds: { type: number, nullable: true, description: "Current profile's resume position." }
         watched: { type: boolean, nullable: true }

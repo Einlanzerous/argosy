@@ -55,6 +55,48 @@ function epInProgress(ep: Episode): boolean {
   return !ep.durationSeconds || (ep.positionSeconds ?? 0) < ep.durationSeconds * 0.95
 }
 
+// A combined rip backs several episode numbers in one file (e.g. The Good Place
+// "E1" is really EP1+EP2). Such episodes share a mediaItemId; we fold consecutive
+// ones into a single row so the season reads "E1–2" instead of a false gap.
+interface EpisodeRow {
+  key: string
+  episodes: Episode[]
+  rep: Episode // representative — runtime/progress/play target (they share a file)
+  mediaItemId: string | null | undefined
+}
+
+const seasonRows = computed<EpisodeRow[]>(() => {
+  const rows: EpisodeRow[] = []
+  for (const ep of season.value?.episodes ?? []) {
+    const prev = rows[rows.length - 1]
+    if (ep.mediaItemId && prev && prev.mediaItemId === ep.mediaItemId) {
+      prev.episodes.push(ep)
+    } else {
+      rows.push({ key: ep.id, episodes: [ep], rep: ep, mediaItemId: ep.mediaItemId })
+    }
+  }
+  return rows
+})
+
+function rowLabel(row: EpisodeRow): string {
+  const nums = row.episodes.map((e) => e.episodeNumber)
+  return nums.length > 1 ? `E${nums[0]}–${nums[nums.length - 1]}` : `E${nums[0]}`
+}
+
+function rowName(row: EpisodeRow): string | null {
+  const names = row.episodes.map(episodeName).filter((n): n is string => !!n)
+  return names.length ? names.join(' / ') : null
+}
+
+function rowStill(row: EpisodeRow): string | null {
+  return row.episodes.find((e) => e.stillUrl)?.stillUrl ?? null
+}
+
+// First episode's synopsis represents the row; combined names already convey the span.
+function rowOverview(row: EpisodeRow): string | null {
+  return row.episodes.find((e) => e.overview)?.overview ?? null
+}
+
 // Playable episodes flattened in season/episode order, with their season number.
 const playableEpisodes = computed(() =>
   (series.value?.seasons ?? []).flatMap((s) =>
@@ -173,28 +215,30 @@ watch(
 
     <div v-if="season" class="episodes">
       <button
-        v-for="ep in season.episodes"
-        :key="ep.id"
+        v-for="row in seasonRows"
+        :key="row.key"
         class="episode"
         type="button"
-        :disabled="!ep.mediaItemId"
-        @click="playEpisode(ep.mediaItemId)"
+        :disabled="!row.mediaItemId"
+        @click="playEpisode(row.mediaItemId)"
       >
-        <div class="thumb" :style="posterStyle(null, `${series.title}-${ep.id}`)">
-          <div class="arg-hatch thumb-hatch" />
+        <div class="thumb" :style="posterStyle(rowStill(row), `${series.title}-${row.key}`)">
+          <div v-if="!rowStill(row)" class="arg-hatch thumb-hatch" />
           <span class="glyph">▶</span>
         </div>
         <div class="ep-info">
           <div class="ep-line1">
-            <span class="ep-tag">E{{ ep.episodeNumber }}</span>
-            <span v-if="episodeName(ep)" class="ep-name">{{ episodeName(ep) }}</span>
+            <span class="ep-tag">{{ rowLabel(row) }}</span>
+            <span v-if="rowName(row)" class="ep-name">{{ rowName(row) }}</span>
             <span class="ep-dot">·</span>
-            <span class="ep-len">{{ ep.mediaItemId ? formatRuntime(ep.durationSeconds) : 'No file linked' }}</span>
-            <span v-if="ep.watched" class="ep-flag">✓ Watched</span>
+            <span class="ep-len">{{ row.mediaItemId ? formatRuntime(row.rep.durationSeconds) : 'No file linked' }}</span>
+            <span v-if="row.episodes.length > 1" class="ep-combined">Combined</span>
+            <span v-if="row.rep.watched" class="ep-flag">✓ Watched</span>
           </div>
-          <div v-if="epInProgress(ep)" class="ep-line2">
-            <div class="ep-bar"><div class="ep-fill" :style="{ width: `${epPercent(ep)}%` }" /></div>
-            <span class="ep-prog">{{ Math.round(epPercent(ep)) }}% · {{ formatRuntime(epTimeLeft(ep)) }} left</span>
+          <p v-if="rowOverview(row)" class="ep-synopsis">{{ rowOverview(row) }}</p>
+          <div v-if="epInProgress(row.rep)" class="ep-line2">
+            <div class="ep-bar"><div class="ep-fill" :style="{ width: `${epPercent(row.rep)}%` }" /></div>
+            <span class="ep-prog">{{ Math.round(epPercent(row.rep)) }}% · {{ formatRuntime(epTimeLeft(row.rep)) }} left</span>
           </div>
         </div>
       </button>
@@ -402,6 +446,24 @@ h1 {
 .ep-flag {
   font: 700 12px var(--arg-display);
   color: var(--arg-accent);
+}
+.ep-combined {
+  font: 700 11px var(--arg-display);
+  letter-spacing: 0.04em;
+  color: var(--arg-soft-2);
+  border: 1px solid var(--arg-line-2);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.ep-synopsis {
+  margin: 7px 0 0;
+  font: 400 13px/1.5 var(--arg-body);
+  color: var(--arg-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .ep-line2 {
   margin-top: 11px;

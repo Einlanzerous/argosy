@@ -10,8 +10,14 @@ import (
 )
 
 var (
-	reSxxEyy    = regexp.MustCompile(`(?i)s(\d{1,2})[ ._-]?e(\d{1,3})`)
-	reNxNN      = regexp.MustCompile(`(?i)\b(\d{1,2})x(\d{1,3})\b`)
+	// reSxxEyy / reNxNN capture a season + episode and an OPTIONAL second
+	// episode number for combined rips (one file backing several episodes):
+	//   S01E01-E02, S01E01E02, S01E01-03  → episodes 1 and 2
+	//   1x01-02                           → episodes 1 and 2
+	// The second number must adjoin via `E`/`e` or a hyphen so a trailing
+	// resolution tag (`S01E01 1080p`) is never mistaken for a range end.
+	reSxxEyy    = regexp.MustCompile(`(?i)s(\d{1,2})[ ._-]?e(\d{1,3})(?:[ ._-]?(?:-e?|e)(\d{1,3}))?`)
+	reNxNN      = regexp.MustCompile(`(?i)\b(\d{1,2})x(\d{1,3})(?:-(\d{1,3}))?\b`)
 	reSeasonDir = regexp.MustCompile(`(?i)^season[ ._-]*(\d+)$`)
 	reYear      = regexp.MustCompile(`\b(?:19|20)\d{2}\b`)
 )
@@ -24,9 +30,25 @@ var categoryDirs = map[string]bool{
 }
 
 type episodeInfo struct {
-	show    string
-	season  int
-	episode int
+	show   string
+	season int
+	// episodes is the set of episode numbers this file backs — usually one, but
+	// a combined rip (S01E01-E02) yields several, all sharing the one file.
+	episodes []int
+}
+
+// episodeRange expands a parsed first/second marker into an inclusive list of
+// episode numbers. A missing or non-increasing second number means a single
+// episode. S01E01-E03 → [1,2,3]; S01E01 → [1].
+func episodeRange(first, second int) []int {
+	if second <= first {
+		return []int{first}
+	}
+	out := make([]int, 0, second-first+1)
+	for n := first; n <= second; n++ {
+		out = append(out, n)
+	}
+	return out
 }
 
 // parseEpisode extracts show/season/episode from a relative media path using
@@ -37,13 +59,14 @@ func parseEpisode(filePath string) (episodeInfo, bool) {
 	name := strings.TrimSuffix(base, path.Ext(base))
 	dirs := parts[:len(parts)-1]
 
-	var season, episode int
+	var season int
+	var episodes []int
 	var markerIdx []int
 	if m := reSxxEyy.FindStringSubmatch(name); m != nil {
-		season, episode = atoi(m[1]), atoi(m[2])
+		season, episodes = atoi(m[1]), episodeRange(atoi(m[2]), atoi(m[3]))
 		markerIdx = reSxxEyy.FindStringIndex(name)
 	} else if m := reNxNN.FindStringSubmatch(name); m != nil {
-		season, episode = atoi(m[1]), atoi(m[2])
+		season, episodes = atoi(m[1]), episodeRange(atoi(m[2]), atoi(m[3]))
 		markerIdx = reNxNN.FindStringIndex(name)
 	} else {
 		return episodeInfo{}, false
@@ -78,7 +101,7 @@ func parseEpisode(filePath string) (episodeInfo, bool) {
 	if show == "" {
 		return episodeInfo{}, false
 	}
-	return episodeInfo{show: show, season: season, episode: episode}, true
+	return episodeInfo{show: show, season: season, episodes: episodes}, true
 }
 
 // parseMovie returns a cleaned title and the release year if present.
@@ -170,11 +193,17 @@ func (s *Scanner) linkEpisode(ctx context.Context, libraryID string, info episod
 		seriesID, info.season).Scan(&seasonID); err != nil {
 		return err
 	}
-	if _, err := s.pool.Exec(ctx,
-		`INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (season_id, episode_number) DO UPDATE SET media_item_id = EXCLUDED.media_item_id, title = EXCLUDED.title, updated_at = now()`,
-		seasonID, info.episode, mediaItemID, fallbackTitle); err != nil {
-		return err
+	// A combined rip backs several episode numbers — insert one row per number,
+	// all pointing at the same media_item. UNIQUE(season_id, episode_number)
+	// still holds (each number is its own row); playing any of them plays the
+	// shared file.
+	for _, epNum := range info.episodes {
+		if _, err := s.pool.Exec(ctx,
+			`INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (season_id, episode_number) DO UPDATE SET media_item_id = EXCLUDED.media_item_id, title = EXCLUDED.title, updated_at = now()`,
+			seasonID, epNum, mediaItemID, fallbackTitle); err != nil {
+			return err
+		}
 	}
 	_, err := s.pool.Exec(ctx, `UPDATE media_items SET review_required = false WHERE id = $1`, mediaItemID)
 	return err
