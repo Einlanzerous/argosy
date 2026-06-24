@@ -70,6 +70,27 @@ class PlaybackController extends ChangeNotifier {
 
   DevicePreferences? prefs;
 
+  /// Series auto-advance (ARGY-93, mirrors web ARGY-89): the episode to roll into
+  /// when this one finishes, loaded lazily once playback starts (only when
+  /// [autoAdvance] is on). Null for films or the last episode of a series.
+  OnDeckItem? nextEpisode;
+
+  /// Set when the viewer dismisses the Up Next card: suppresses the card and the
+  /// end-of-file roll-over for the rest of this episode.
+  bool upNextCancelled = false;
+
+  /// Invoked when playback should roll into [nextEpisode] — on end-of-file or
+  /// "Play now". The screen owns navigation, so it wires this up.
+  VoidCallback? onAdvance;
+
+  bool _advancing = false;
+
+  /// Whether series auto-advance is enabled for this device (default on).
+  bool get autoAdvance => prefs?.seriesAutoAdvance ?? true;
+
+  /// Seconds before the end at which the Up Next card surfaces.
+  static const upNextLeadSeconds = 20;
+
   BetterPlayerController? _player;
   BetterPlayerController? get player => _player;
 
@@ -157,6 +178,37 @@ class PlaybackController extends ChangeNotifier {
     }
     _startHeartbeat();
     _applyPreferredSubtitle();
+    if (autoAdvance) unawaited(_loadNextEpisode());
+  }
+
+  /// Fetches the next episode for auto-advance. A 404 (last episode, or not a
+  /// series episode) just leaves [nextEpisode] null — no card, no roll-over.
+  Future<void> _loadNextEpisode() async {
+    try {
+      final n = await libraryApi.getNextEpisode(itemId);
+      if (_disposed) return;
+      nextEpisode = n;
+      _safeNotify();
+    } catch (_) {
+      /* no next episode */
+    }
+  }
+
+  /// Rolls into the next episode now (the Up Next "Play now" action).
+  void playNext() => _requestAdvance();
+
+  /// Dismisses the Up Next card and stops the end-of-file roll-over for this
+  /// episode, leaving the player on the finished episode.
+  void cancelUpNext() {
+    upNextCancelled = true;
+    _safeNotify();
+  }
+
+  void _requestAdvance() {
+    if (_advancing || nextEpisode == null) return;
+    _advancing = true;
+    _flush();
+    onAdvance?.call();
   }
 
   Future<void> _startDirect(double offset) async {
@@ -385,6 +437,8 @@ class PlaybackController extends ChangeNotifier {
       captionScale: prefs?.captionScale,
       captionColor: prefs?.captionColor,
       captionBackground: prefs?.captionBackground,
+      // Preserve auto-advance so changing subtitles mid-playback doesn't reset it.
+      seriesAutoAdvance: prefs?.seriesAutoAdvance,
     );
     prefs = next;
     try {
@@ -431,6 +485,16 @@ class PlaybackController extends ChangeNotifier {
     );
   }
 
+  /// Marks the episode watched on finish so it leaves Continue Watching and the
+  /// series' On-Deck advances. Fire-and-forget, mirroring the web player.
+  void _markWatched() {
+    unawaited(
+      libraryApi
+          .setWatched(itemId, WatchedUpdate(watched: true))
+          .catchError((_) => null),
+    );
+  }
+
   // --- events / helpers ----------------------------------------------------
 
   void _onEvent(BetterPlayerEvent e) {
@@ -448,6 +512,15 @@ class PlaybackController extends ChangeNotifier {
         // update — better_player drives these transitions, not togglePlay.
         _safeNotify();
       case BetterPlayerEventType.finished:
+        _setWakelock(false);
+        _flush();
+        _markWatched();
+        // Roll into the next episode unless the viewer opted out (pref off or
+        // card dismissed). Otherwise we leave the player on the finished episode.
+        if (autoAdvance && nextEpisode != null && !upNextCancelled) {
+          _requestAdvance();
+        }
+        _safeNotify();
       case BetterPlayerEventType.pause:
         _setWakelock(false);
         _flush();

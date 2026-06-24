@@ -4,10 +4,12 @@ import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/api_providers.dart';
 import '../../api/artwork.dart';
 import '../../platform/pip.dart';
+import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/button_styles.dart';
 import '../../util/format.dart';
@@ -108,8 +110,18 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       subtitles: setup.subtitles,
       prefs: setup.prefs,
     );
+    _controller.onAdvance = _advanceToNext;
     _beginPlayback();
     _setupPip();
+  }
+
+  /// Series auto-advance (ARGY-93): roll into the next episode, resuming from its
+  /// own saved position (or the top). pushReplacement so Back doesn't return to
+  /// the finished episode — the new player fully remounts (clean teardown).
+  void _advanceToNext() {
+    final next = _controller.nextEpisode;
+    if (!mounted || next == null) return;
+    context.pushReplacement('${Routes.player(next.id)}?resume=1');
   }
 
   /// Mirrors the web entry-point logic: `resume` jumps straight to the saved

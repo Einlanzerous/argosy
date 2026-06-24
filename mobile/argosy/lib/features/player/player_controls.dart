@@ -129,7 +129,103 @@ class _PlayerControlsState extends State<PlayerControls> {
               ),
             ),
           ),
+          // Up Next sits outside the fade so it stays put (and tappable) once the
+          // controls hide near the end of an episode.
+          _upNextCard(context),
         ],
+      ),
+    );
+  }
+
+  /// The Up Next card (ARGY-93): appears in the last [PlaybackController
+  /// .upNextLeadSeconds] of a series episode when auto-advance is on and a next
+  /// episode exists. The 300ms ticker keeps the countdown live; the roll-over
+  /// itself happens on end-of-file (or "Play now").
+  Widget _upNextCard(BuildContext context) {
+    final next = _c.nextEpisode;
+    final duration = _c.catalogDuration;
+    if (next == null || !_c.autoAdvance || _c.upNextCancelled || duration <= 0) {
+      return const SizedBox.shrink();
+    }
+    final remaining = duration - _c.position;
+    if (remaining > PlaybackController.upNextLeadSeconds || remaining <= 0) {
+      return const SizedBox.shrink();
+    }
+    final countdown =
+        remaining.ceil().clamp(1, PlaybackController.upNextLeadSeconds);
+    final code = 'S${next.seasonNumber} E${next.episodeNumber}';
+    final label = (next.title != null && next.title!.isNotEmpty)
+        ? '$code · ${formatTitle(next.title!)}'
+        : code;
+
+    return Positioned(
+      right: 16,
+      bottom: 16,
+      child: SafeArea(
+        child: Container(
+          width: 300,
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          decoration: BoxDecoration(
+            color: const Color(0xF21A1A1A),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: ArgosyColors.accent.withValues(alpha: 0.32)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('UP NEXT',
+                      style: TextStyle(
+                        color: ArgosyColors.accent,
+                        fontSize: 11,
+                        letterSpacing: 1.6,
+                        fontWeight: FontWeight.w700,
+                      )),
+                  Text('in ${countdown}s',
+                      style: const TextStyle(
+                          color: ArgosyColors.dim, fontSize: 12)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: ArgosyColors.cream,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _c.playNext,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: ArgosyColors.accent,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play now'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  TextButton(
+                    onPressed: () {
+                      _c.cancelUpNext();
+                      _scheduleHide();
+                    },
+                    child: const Text('Cancel',
+                        style: TextStyle(color: ArgosyColors.soft)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
