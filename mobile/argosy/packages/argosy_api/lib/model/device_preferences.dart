@@ -19,6 +19,7 @@ class DevicePreferences {
     this.captionScale,
     this.captionColor,
     this.captionBackground,
+    this.seriesAutoAdvance,
   });
 
   /// Preferred subtitle language (ISO code); the player auto-selects a matching track.
@@ -39,6 +40,9 @@ class DevicePreferences {
   /// Caption background box style.
   DevicePreferencesCaptionBackgroundEnum? captionBackground;
 
+  /// Whether finishing a series episode auto-plays the next one. Defaults to true (on) when unset.
+  bool? seriesAutoAdvance;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is DevicePreferences &&
     other.subtitleLanguage == subtitleLanguage &&
@@ -46,7 +50,8 @@ class DevicePreferences {
     other.audioLanguage == audioLanguage &&
     other.captionScale == captionScale &&
     other.captionColor == captionColor &&
-    other.captionBackground == captionBackground;
+    other.captionBackground == captionBackground &&
+    other.seriesAutoAdvance == seriesAutoAdvance;
 
   @override
   int get hashCode =>
@@ -56,10 +61,11 @@ class DevicePreferences {
     (audioLanguage == null ? 0 : audioLanguage!.hashCode) +
     (captionScale == null ? 0 : captionScale!.hashCode) +
     (captionColor == null ? 0 : captionColor!.hashCode) +
-    (captionBackground == null ? 0 : captionBackground!.hashCode);
+    (captionBackground == null ? 0 : captionBackground!.hashCode) +
+    (seriesAutoAdvance == null ? 0 : seriesAutoAdvance!.hashCode);
 
   @override
-  String toString() => 'DevicePreferences[subtitleLanguage=$subtitleLanguage, subtitleEnabled=$subtitleEnabled, audioLanguage=$audioLanguage, captionScale=$captionScale, captionColor=$captionColor, captionBackground=$captionBackground]';
+  String toString() => 'DevicePreferences[subtitleLanguage=$subtitleLanguage, subtitleEnabled=$subtitleEnabled, audioLanguage=$audioLanguage, captionScale=$captionScale, captionColor=$captionColor, captionBackground=$captionBackground, seriesAutoAdvance=$seriesAutoAdvance]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -89,6 +95,11 @@ class DevicePreferences {
     } else {
       json[r'captionBackground'] = null;
     }
+    if (this.seriesAutoAdvance != null) {
+      json[r'seriesAutoAdvance'] = this.seriesAutoAdvance;
+    } else {
+      json[r'seriesAutoAdvance'] = null;
+    }
     return json;
   }
 
@@ -117,6 +128,7 @@ class DevicePreferences {
             : num.parse('${json[r'captionScale']}'),
         captionColor: mapValueOfType<String>(json, r'captionColor'),
         captionBackground: DevicePreferencesCaptionBackgroundEnum.fromJson(json[r'captionBackground']),
+        seriesAutoAdvance: mapValueOfType<bool>(json, r'seriesAutoAdvance'),
       );
     }
     return null;
