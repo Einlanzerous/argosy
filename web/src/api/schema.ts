@@ -584,6 +584,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/items/{itemId}/next-episode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The next episode after this one in its series
+         * @description Given a series episode, returns the next playable episode in season/
+         *     episode order — rolling across season boundaries to the next season's
+         *     first episode. Returns 404 when the item is the last episode of the
+         *     series, has no following playable episode, or isn't a series episode at
+         *     all (e.g. a film). Powers the player's auto-advance "Up Next" overlay.
+         */
+        get: operations["getNextEpisode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{itemId}/progress": {
         parameters: {
             query?: never;
@@ -993,6 +1017,8 @@ export interface components {
              * @enum {string|null}
              */
             captionBackground?: "translucent" | "solid" | "none" | null;
+            /** @description Whether finishing a series episode auto-plays the next one. Defaults to true (on) when unset. */
+            seriesAutoAdvance?: boolean | null;
         };
         DeviceRegistrationResponse: {
             device: components["schemas"]["Device"];
@@ -2457,6 +2483,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlaybackInfo"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getNextEpisode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnDeckItem"];
                 };
             };
             401: components["responses"]["Unauthorized"];

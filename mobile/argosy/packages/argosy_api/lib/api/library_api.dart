@@ -511,6 +511,64 @@ class LibraryApi {
     return null;
   }
 
+  /// The next episode after this one in its series
+  ///
+  /// Given a series episode, returns the next playable episode in season/ episode order — rolling across season boundaries to the next season's first episode. Returns 404 when the item is the last episode of the series, has no following playable episode, or isn't a series episode at all (e.g. a film). Powers the player's auto-advance \"Up Next\" overlay. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] itemId (required):
+  Future<Response> getNextEpisodeWithHttpInfo(String itemId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/items/{itemId}/next-episode'
+      .replaceAll('{itemId}', itemId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// The next episode after this one in its series
+  ///
+  /// Given a series episode, returns the next playable episode in season/ episode order — rolling across season boundaries to the next season's first episode. Returns 404 when the item is the last episode of the series, has no following playable episode, or isn't a series episode at all (e.g. a film). Powers the player's auto-advance \"Up Next\" overlay. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] itemId (required):
+  Future<OnDeckItem?> getNextEpisode(String itemId, { Future<void>? abortTrigger, }) async {
+    final response = await getNextEpisodeWithHttpInfo(itemId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'OnDeckItem',) as OnDeckItem;
+    
+    }
+    return null;
+  }
+
   /// Direct-play capability decision for the item
   ///
   /// Note: This method returns the HTTP [Response].

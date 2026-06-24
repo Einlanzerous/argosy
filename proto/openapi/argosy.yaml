@@ -803,6 +803,31 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/items/{itemId}/next-episode:
+    get:
+      tags: [library]
+      operationId: getNextEpisode
+      summary: The next episode after this one in its series
+      description: |
+        Given a series episode, returns the next playable episode in season/
+        episode order — rolling across season boundaries to the next season's
+        first episode. Returns 404 when the item is the last episode of the
+        series, has no following playable episode, or isn't a series episode at
+        all (e.g. a film). Powers the player's auto-advance "Up Next" overlay.
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnDeckItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/items/{itemId}/progress:
     get:
       tags: [library]
@@ -1415,6 +1440,12 @@ components:
           nullable: true
           enum: [translucent, solid, none]
           description: Caption background box style.
+        seriesAutoAdvance:
+          type: boolean
+          nullable: true
+          description: >-
+            Whether finishing a series episode auto-plays the next one. Defaults
+            to true (on) when unset.
 
     DeviceRegistrationResponse:
       type: object

@@ -316,6 +316,22 @@ func (h *handlers) listOnDeck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+// getNextEpisode powers the player's auto-advance: it returns the episode that
+// follows the requested one in its series, or 404 when there's nothing after it
+// (last episode, or the item isn't a series episode).
+func (h *handlers) getNextEpisode(w http.ResponseWriter, r *http.Request) {
+	next, err := h.store.NextEpisode(r.Context(), accountOf(r), r.PathValue("itemId"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if next == nil {
+		writeJSON(w, http.StatusNotFound, errorBody("no next episode"))
+		return
+	}
+	writeJSON(w, http.StatusOK, next)
+}
+
 func userOf(r *http.Request) string {
 	sess, _ := auth.SessionFromContext(r.Context())
 	return sess.UserId.String()

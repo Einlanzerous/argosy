@@ -68,6 +68,17 @@ class SettingsScreen extends ConsumerWidget {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               activeThumbColor: ArgosyColors.accentHi,
+              title: const Text('Auto-play next episode',
+                  style: TextStyle(color: ArgosyColors.cream)),
+              subtitle: const Text(
+                  'When a series episode ends, roll into the next one with an Up Next countdown.',
+                  style: TextStyle(color: ArgosyColors.dim, fontSize: 12)),
+              value: data.device.seriesAutoAdvance ?? true,
+              onChanged: (v) => _guard(context, () => ctrl.setSeriesAutoAdvance(v)),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              activeThumbColor: ArgosyColors.accentHi,
               title: const Text('Subtitles on by default',
                   style: TextStyle(color: ArgosyColors.cream)),
               subtitle: const Text('Show a subtitle track automatically when one matches.',

@@ -51,6 +51,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: _device.captionColor,
         captionBackground: _device.captionBackground,
+        seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
   Future<void> setSubtitleLanguage(String? language) => _saveDevice(DevicePreferences(
@@ -60,6 +61,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: _device.captionColor,
         captionBackground: _device.captionBackground,
+        seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
   Future<void> setCaptionScale(double scale) => _saveDevice(DevicePreferences(
@@ -69,6 +71,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: scale,
         captionColor: _device.captionColor,
         captionBackground: _device.captionBackground,
+        seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
   Future<void> setCaptionColor(String hex) => _saveDevice(DevicePreferences(
@@ -78,6 +81,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: hex,
         captionBackground: _device.captionBackground,
+        seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
   Future<void> setCaptionBackground(DevicePreferencesCaptionBackgroundEnum bg) =>
@@ -88,6 +92,17 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: _device.captionColor,
         captionBackground: bg,
+        seriesAutoAdvance: _device.seriesAutoAdvance,
+      ));
+
+  Future<void> setSeriesAutoAdvance(bool enabled) => _saveDevice(DevicePreferences(
+        subtitleEnabled: _device.subtitleEnabled,
+        subtitleLanguage: _device.subtitleLanguage,
+        audioLanguage: _device.audioLanguage,
+        captionScale: _device.captionScale,
+        captionColor: _device.captionColor,
+        captionBackground: _device.captionBackground,
+        seriesAutoAdvance: enabled,
       ));
 
   Future<void> setHomeLayout(UserPreferencesHomeLayoutEnum layout) async {

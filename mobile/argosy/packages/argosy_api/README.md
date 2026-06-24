@@ -86,6 +86,7 @@ Class | Method | HTTP request | Description
 *LibraryApi* | [**deleteLibrary**](doc//LibraryApi.md#deletelibrary) | **DELETE** /api/v1/libraries/{libraryId} | Remove a library and its items (admin only)
 *LibraryApi* | [**deleteVault**](doc//LibraryApi.md#deletevault) | **DELETE** /api/v1/vaults/{vaultId} | Delete a vault (owner or admin)
 *LibraryApi* | [**getMediaItem**](doc//LibraryApi.md#getmediaitem) | **GET** /api/v1/items/{itemId} | Media item detail with effective metadata
+*LibraryApi* | [**getNextEpisode**](doc//LibraryApi.md#getnextepisode) | **GET** /api/v1/items/{itemId}/next-episode | The next episode after this one in its series
 *LibraryApi* | [**getPlaybackInfo**](doc//LibraryApi.md#getplaybackinfo) | **GET** /api/v1/items/{itemId}/playback | Direct-play capability decision for the item
 *LibraryApi* | [**getProgress**](doc//LibraryApi.md#getprogress) | **GET** /api/v1/items/{itemId}/progress | Current play-state (resume position) for the item
 *LibraryApi* | [**getScanStatus**](doc//LibraryApi.md#getscanstatus) | **GET** /api/v1/scan/status | Current/last scan sweep status

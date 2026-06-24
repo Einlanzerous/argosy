@@ -6,6 +6,7 @@ import { api, getToken } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
 import { formatClock, formatTitle } from '@/lib/format'
 import {
+  getNextEpisode,
   getPlaybackInfo,
   getPreferences,
   getProgress,
@@ -18,6 +19,7 @@ import {
   streamUrl,
   subtitleUrl,
   type DevicePreferences,
+  type OnDeckItem,
   type SubtitleTrack,
 } from '@/lib/playback'
 import { parseVttCues, shiftVtt } from '@/lib/vtt'
@@ -47,6 +49,29 @@ const subMenuOpen = ref(false)
 // This device's saved playback preferences (subtitle language/on-off), applied
 // when tracks load and updated when the viewer changes the subtitle (ARGY-37).
 const prefs = ref<DevicePreferences | null>(null)
+
+// Series auto-advance (ARGY-89): when this item is a series episode and the
+// device pref is on, an "Up Next" card surfaces near the end and we roll into the
+// next episode on end-of-file. nextEpisode is null for films or the last episode.
+// The countdown is driven by real remaining time, so it stays accurate and
+// retracts if the viewer seeks back out of the lead-in window.
+const UP_NEXT_LEAD_SECONDS = 20
+const autoAdvance = ref(true)
+const nextEpisode = ref<OnDeckItem | null>(null)
+const upNextOpen = ref(false)
+const upNextCountdown = ref(0)
+// Set when the viewer dismisses the card (or auto-advance is off): suppresses the
+// card and the end-of-file roll-over for the rest of this episode.
+const upNextCancelled = ref(false)
+// Guards against firing the navigation twice (countdown end + ended event).
+let advancing = false
+
+const nextEpisodeLabel = computed(() => {
+  const n = nextEpisode.value
+  if (!n) return ''
+  const code = `S${n.seasonNumber} E${n.episodeNumber}`
+  return n.title ? `${code} · ${formatTitle(n.title)}` : code
+})
 
 // Caption styling (ARGY-43), persisted per-device, applied via ::cue.
 type CaptionBg = 'translucent' | 'solid' | 'none'
@@ -113,6 +138,14 @@ onMounted(async () => {
     captionScale.value = devicePrefs.captionScale ?? CAPTION_DEFAULTS.scale
     captionColor.value = devicePrefs.captionColor ?? CAPTION_DEFAULTS.color
     captionBackground.value = (devicePrefs.captionBackground as CaptionBg) ?? CAPTION_DEFAULTS.background
+  }
+  // Default ON: only an explicit false disables auto-advance. If it's off there's
+  // no point asking the server for the next episode.
+  autoAdvance.value = devicePrefs?.seriesAutoAdvance ?? true
+  if (autoAdvance.value) {
+    void getNextEpisode(itemId)
+      .then((n) => (nextEpisode.value = n))
+      .catch(() => {})
   }
 
   // Subtitle tracks load in the background; an OpenSubtitles search can take a
@@ -268,6 +301,7 @@ function bindVideo(el: HTMLVideoElement): void {
   el.addEventListener('resize', () => updateQuality(el))
   el.addEventListener('timeupdate', () => {
     position.value = baseOffset.value + el.currentTime
+    maybeUpNext()
   })
   el.addEventListener('play', () => {
     playing.value = true
@@ -283,6 +317,9 @@ function bindVideo(el: HTMLVideoElement): void {
   el.addEventListener('seeked', flush)
   el.addEventListener('ended', () => {
     void setWatched(itemId, true).catch(() => {})
+    // Roll into the next episode unless the viewer opted out (pref off or card
+    // dismissed). Otherwise we leave the player on the finished episode.
+    if (autoAdvance.value && nextEpisode.value && !upNextCancelled.value) advance()
   })
   el.addEventListener('error', () => {
     // hls.js surfaces its own errors; only flag native-element failures.
@@ -307,6 +344,45 @@ function flush(): void {
   if (pos > 0) {
     void reportProgress(itemId, pos, duration.value || undefined).catch(() => {})
   }
+}
+
+// maybeUpNext drives the "Up Next" card from the live remaining time: it appears
+// inside the lead-in window and retracts if the viewer seeks back out of it. The
+// countdown is informational — the actual roll-over happens on end-of-file (or
+// when the viewer hits "Play now"), which keeps it aligned with the real media
+// length whether we direct-play or transcode.
+function maybeUpNext(): void {
+  if (!autoAdvance.value || !nextEpisode.value || upNextCancelled.value || advancing) return
+  if (!duration.value) return
+  const rem = duration.value - position.value
+  if (rem <= UP_NEXT_LEAD_SECONDS && rem > 0) {
+    upNextOpen.value = true
+    upNextCountdown.value = Math.max(1, Math.ceil(rem))
+  } else if (rem > UP_NEXT_LEAD_SECONDS && upNextOpen.value) {
+    upNextOpen.value = false
+  }
+}
+
+// advance rolls into the next episode, resuming from its own saved position (or
+// the top). Guarded so the countdown and the ended event can't double-fire it.
+function advance(): void {
+  const next = nextEpisode.value
+  if (advancing || !next) return
+  advancing = true
+  flush()
+  void router.push({ name: 'player', params: { id: next.id }, query: { resume: '1' } })
+}
+
+// playNow skips the rest of the countdown and jumps straight to the next episode.
+function playNow(): void {
+  advance()
+}
+
+// cancelUpNext dismisses the card and suppresses auto-advance for the remainder
+// of this episode, leaving the player on the finished episode at the end.
+function cancelUpNext(): void {
+  upNextOpen.value = false
+  upNextCancelled.value = true
 }
 
 // poke reveals the controls and schedules them to hide again after an idle
@@ -381,6 +457,7 @@ function buildPrefs(over: Partial<DevicePreferences>): DevicePreferences {
     captionScale: captionScale.value,
     captionColor: captionColor.value,
     captionBackground: captionBackground.value,
+    seriesAutoAdvance: prefs.value?.seriesAutoAdvance ?? true,
     ...over,
   }
 }
@@ -517,6 +594,10 @@ function onKey(e: KeyboardEvent): void {
   if (resumeOpen.value) return
   if (e.key === 'Escape' && subMenuOpen.value) {
     subMenuOpen.value = false
+    return
+  }
+  if (e.key === 'Escape' && upNextOpen.value) {
+    cancelUpNext()
     return
   }
   if (e.key === ' ') {
@@ -709,6 +790,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
             </div>
           </div>
         </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Up Next: auto-advance to the next episode (ARGY-89). Surfaces near the
+         end; the countdown mirrors the real time left, and end-of-file (or
+         "Play now") rolls into the next episode. -->
+    <div v-if="upNextOpen && nextEpisode" class="up-next">
+      <div class="up-next-card">
+        <div class="up-next-head">
+          <span class="up-next-eyebrow">Up Next</span>
+          <span class="up-next-count">in {{ upNextCountdown }}s</span>
+        </div>
+        <div class="up-next-title">{{ nextEpisodeLabel }}</div>
+        <div v-if="nextEpisode.seriesTitle" class="up-next-series">{{ nextEpisode.seriesTitle }}</div>
+        <div class="up-next-actions">
+          <button class="up-next-play" type="button" @click="playNow">▶ Play now</button>
+          <button class="up-next-cancel" type="button" @click="cancelUpNext">Cancel</button>
         </div>
       </div>
     </div>
@@ -1218,6 +1317,80 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .cc-check {
   color: var(--arg-accent);
   font-size: 13px;
+}
+/* Up Next card: a compact, non-modal overlay in the bottom-right so the tail of
+   the episode stays visible behind it. Sits above the controls' fade zone. */
+.up-next {
+  position: absolute;
+  right: 30px;
+  bottom: 130px;
+  z-index: 4;
+  animation: argFade 0.25s ease;
+}
+.up-next-card {
+  width: 320px;
+  padding: 18px 20px;
+  border-radius: var(--arg-r-lg);
+  background: rgba(18, 17, 15, 0.86);
+  backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid rgba(201, 154, 78, 0.32);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+}
+.up-next-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.up-next-eyebrow {
+  font: 700 11px var(--arg-display);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--arg-accent);
+}
+.up-next-count {
+  font: 600 12px var(--arg-body);
+  color: var(--arg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.up-next-title {
+  margin-top: 12px;
+  font: 700 17px/1.3 var(--arg-display);
+  color: var(--arg-cream);
+}
+.up-next-series {
+  margin-top: 4px;
+  font: 500 12.5px var(--arg-body);
+  color: var(--arg-dim);
+}
+.up-next-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+.up-next-play {
+  flex: 1;
+  padding: 11px;
+  border: none;
+  border-radius: var(--arg-r);
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+  font: 700 14px var(--arg-display);
+  cursor: pointer;
+}
+.up-next-play:hover {
+  background: var(--arg-accent-hi);
+}
+.up-next-cancel {
+  padding: 11px 18px;
+  border: 1px solid var(--arg-line-2);
+  border-radius: var(--arg-r);
+  background: transparent;
+  color: var(--arg-soft-2);
+  font: 600 13px var(--arg-body);
+  cursor: pointer;
+}
+.up-next-cancel:hover {
+  border-color: var(--arg-cream);
 }
 .resume-scrim {
   position: absolute;

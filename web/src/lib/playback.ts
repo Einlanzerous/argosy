@@ -128,3 +128,13 @@ export async function getOnDeck(): Promise<OnDeckItem[]> {
   const { data } = await api.GET('/api/v1/ondeck')
   return data ?? []
 }
+
+// getNextEpisode returns the episode that follows itemId in its series (across
+// season boundaries), or null when there's nothing after it — the item is the
+// last episode, or isn't a series episode at all. Powers player auto-advance.
+export async function getNextEpisode(itemId: string): Promise<OnDeckItem | null> {
+  const { data } = await api.GET('/api/v1/items/{itemId}/next-episode', {
+    params: { path: { itemId } },
+  })
+  return data ?? null
+}

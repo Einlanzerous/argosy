@@ -5,7 +5,13 @@ import { formatRelative } from '@/lib/format'
 import { setPage } from '@/lib/page'
 import { useSessionStore } from '@/stores/session'
 import { getLibraries, createLibrary, deleteLibraryById, type Library } from '@/lib/manifest'
-import { getUserPreferences, putUserPreferences } from '@/lib/playback'
+import {
+  getPreferences,
+  getUserPreferences,
+  putPreferences,
+  putUserPreferences,
+  type DevicePreferences,
+} from '@/lib/playback'
 import type { components } from '@/api/schema'
 
 type ScanStatus = components['schemas']['ScanStatus']
@@ -40,6 +46,25 @@ async function setHomeLayout(v: HomeLayout): Promise<void> {
   if (homeLayout.value === v) return
   homeLayout.value = v
   await putUserPreferences({ homeLayout: v }).catch(() => {})
+}
+
+// Series auto-advance is a per-device playback preference (ARGY-89), default ON.
+// We keep the full DevicePreferences around so toggling it writes back the whole
+// object and never clobbers this device's subtitle/caption settings.
+const devicePrefs = ref<DevicePreferences | null>(null)
+const autoAdvance = ref(true)
+async function loadDevicePrefs(): Promise<void> {
+  const p = await getPreferences().catch(() => null)
+  devicePrefs.value = p
+  autoAdvance.value = p?.seriesAutoAdvance ?? true
+}
+async function setAutoAdvance(v: boolean): Promise<void> {
+  if (autoAdvance.value === v) return
+  autoAdvance.value = v
+  const base: DevicePreferences = devicePrefs.value ?? { subtitleEnabled: false }
+  const next: DevicePreferences = { ...base, seriesAutoAdvance: v }
+  devicePrefs.value = next
+  await putPreferences(next).catch(() => {})
 }
 
 async function addLibrary(): Promise<void> {
@@ -96,6 +121,7 @@ onMounted(() => {
   void refresh()
   void loadLibraries()
   void loadUserPrefs()
+  void loadDevicePrefs()
 })
 onUnmounted(() => {
   if (poll) clearInterval(poll)
@@ -129,6 +155,33 @@ onUnmounted(() => {
         >
           <span class="layout-name">Discovery</span>
           <span class="layout-desc">Everything, plus your Vaults and genre rows for browsing.</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Playback</h2>
+          <p>How episodes behave on this device.</p>
+        </div>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <span class="toggle-name">Auto-play next episode</span>
+          <span class="toggle-desc">
+            When a series episode ends, roll into the next one with an Up Next countdown you can cancel.
+          </span>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: autoAdvance }"
+          type="button"
+          role="switch"
+          :aria-checked="autoAdvance"
+          @click="setAutoAdvance(!autoAdvance)"
+        >
+          <span class="knob" />
         </button>
       </div>
     </section>
@@ -448,5 +501,56 @@ h2 {
 .layout-desc {
   font: 400 13px/1.5 var(--arg-body);
   color: var(--arg-dim);
+}
+.toggle-row {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.toggle-name {
+  font: 700 15px var(--arg-display);
+  color: var(--arg-cream);
+}
+.toggle-desc {
+  max-width: 520px;
+  font: 400 13px/1.5 var(--arg-body);
+  color: var(--arg-dim);
+}
+.switch {
+  flex: none;
+  position: relative;
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--arg-line-2);
+  background: var(--arg-bg-2);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.switch.on {
+  background: var(--arg-accent);
+  border-color: var(--arg-accent);
+}
+.switch .knob {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--arg-cream);
+  transform: translateY(-50%);
+  transition: left 0.18s ease;
+}
+.switch.on .knob {
+  left: 23px;
+  background: var(--arg-bg);
 }
 </style>
