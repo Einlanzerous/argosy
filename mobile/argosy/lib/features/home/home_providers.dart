@@ -19,12 +19,16 @@ class HomeHero {
     this.posterUrl,
     this.backdropUrl,
     this.percent,
+    this.remainingLabel,
   });
 
   final String eyebrow;
   final String title;
   final String? subtitle;
   final MediaKind kind;
+
+  /// "13m left" style label beside the resume progress bar, when known.
+  final String? remainingLabel;
 
   /// The id the hero's "Details" tap opens (series id for a resumed episode).
   final String detailId;
@@ -38,6 +42,35 @@ class HomeHero {
 
   /// 0..1 resume progress, when the hero is a continue-watching item.
   final double? percent;
+}
+
+/// A Continue Watching entry — a landscape resume tile on the Bridge. Carries
+/// the remaining-time label the wide cards (and the hero) show, which the plain
+/// [MediaCard] poster model has no slot for.
+class ContinueEntry {
+  const ContinueEntry({
+    required this.id,
+    required this.kind,
+    required this.title,
+    this.subtitle,
+    this.posterUrl,
+    this.backdropUrl,
+    required this.progress,
+    this.remainingLabel,
+  });
+
+  final String id;
+  final MediaKind kind;
+  final String title;
+  final String? subtitle;
+  final String? posterUrl;
+  final String? backdropUrl;
+
+  /// 0..1 watch progress.
+  final double progress;
+
+  /// "13m left" when the duration is known, else null.
+  final String? remainingLabel;
 }
 
 /// A titled row of cards (vault or genre row).
@@ -63,7 +96,7 @@ class HomeData {
   });
 
   final HomeHero? hero;
-  final List<MediaCard> continueRow;
+  final List<ContinueEntry> continueRow;
   final List<MediaCard> onDeck;
   final List<MediaCard> recent;
   final List<HomeRow> vaultRows;
@@ -73,38 +106,47 @@ class HomeData {
       hero == null && continueRow.isEmpty && onDeck.isEmpty && recent.isEmpty;
 }
 
-MediaCard _continueCard(ContinueItem c) => MediaCard(
-      id: c.id,
-      kind: c.kind == 'series' ? MediaKind.series : MediaKind.movie,
-      title: c.seriesTitle ?? c.title,
-      subtitleOverride: c.seriesTitle != null
-          ? formatTitle(c.title)
-          : (c.year != null ? '${c.year}' : null),
-      posterUrl: c.posterUrl,
-      backdropUrl: c.backdropUrl,
-      progress: (c.percent / 100).clamp(0.0, 1.0).toDouble(),
-    );
+/// "13m left"-style label from a position/duration, or null when unknown.
+String? _remainingLabel(num? durationSeconds, num positionSeconds) {
+  if (durationSeconds == null || durationSeconds <= 0) return null;
+  final remaining = durationSeconds - positionSeconds;
+  if (remaining <= 0) return null;
+  return '${formatRuntime(remaining)} left';
+}
+
+ContinueEntry _continueEntry(ContinueItem c) => ContinueEntry(
+  id: c.id,
+  kind: c.kind == 'series' ? MediaKind.series : MediaKind.movie,
+  title: c.seriesTitle ?? formatTitle(c.title),
+  subtitle: c.seriesTitle != null
+      ? formatTitle(c.title)
+      : (c.year != null ? '${c.year}' : null),
+  posterUrl: c.posterUrl,
+  backdropUrl: c.backdropUrl,
+  progress: (c.percent / 100).clamp(0.0, 1.0).toDouble(),
+  remainingLabel: _remainingLabel(c.durationSeconds, c.positionSeconds),
+);
 
 MediaCard _onDeckCard(OnDeckItem o) => MediaCard(
-      id: o.seriesId,
-      kind: MediaKind.series,
-      title: o.seriesTitle,
-      subtitleOverride: 'S${o.seasonNumber} · E${o.episodeNumber}',
-      posterUrl: o.posterUrl,
-      backdropUrl: o.backdropUrl,
-    );
+  id: o.seriesId,
+  kind: MediaKind.series,
+  title: o.seriesTitle,
+  subtitleOverride: 'S${o.seasonNumber} · E${o.episodeNumber}',
+  posterUrl: o.posterUrl,
+  backdropUrl: o.backdropUrl,
+);
 
 MediaCard _vaultEntryCard(VaultEntry e) => MediaCard(
-      id: e.id,
-      kind: e.kind == VaultEntryKindEnum.series
-          ? MediaKind.series
-          : MediaKind.movie,
-      title: e.title,
-      year: e.year,
-      rating: e.rating,
-      posterUrl: e.posterUrl,
-      backdropUrl: e.backdropUrl,
-    );
+  id: e.id,
+  kind: e.kind == VaultEntryKindEnum.series
+      ? MediaKind.series
+      : MediaKind.movie,
+  title: e.title,
+  year: e.year,
+  rating: e.rating,
+  posterUrl: e.posterUrl,
+  backdropUrl: e.backdropUrl,
+);
 
 HomeHero? _heroFrom(List<ContinueItem> cont, List<MediaItemSummary> recent) {
   if (cont.isNotEmpty) {
@@ -122,6 +164,7 @@ HomeHero? _heroFrom(List<ContinueItem> cont, List<MediaItemSummary> recent) {
       posterUrl: r.posterUrl,
       backdropUrl: r.backdropUrl,
       percent: (r.percent / 100).clamp(0.0, 1.0).toDouble(),
+      remainingLabel: _remainingLabel(r.durationSeconds, r.positionSeconds),
     );
   }
   // No resume: spotlight the newest film (a series id isn't directly playable).
@@ -154,7 +197,10 @@ final homeDataProvider = FutureProvider.autoDispose<HomeData>((ref) async {
     library.listContinue().then((v) => v ?? const <ContinueItem>[]),
     library.listOnDeck(limit: 12).then((v) => v ?? const <OnDeckItem>[]),
     library.listRecent(limit: 12).then((v) => v ?? const <MediaItemSummary>[]),
-    auth.getUserPreferences().then<UserPreferences?>((v) => v).catchError((_) => null),
+    auth
+        .getUserPreferences()
+        .then<UserPreferences?>((v) => v)
+        .catchError((_) => null),
   ]);
 
   final cont = results[0] as List<ContinueItem>;
@@ -177,7 +223,7 @@ final homeDataProvider = FutureProvider.autoDispose<HomeData>((ref) async {
 
   return HomeData(
     hero: _heroFrom(cont, recent),
-    continueRow: cont.map(_continueCard).toList(),
+    continueRow: cont.map(_continueEntry).toList(),
     onDeck: onDeck.map(_onDeckCard).toList(),
     recent: recent.map(MediaCard.fromSummary).toList(),
     vaultRows: vaultRows,
@@ -192,7 +238,12 @@ Future<List<HomeRow>> _buildVaultRows(LibraryApi api) async {
       .take(3)
       .toList();
   final details = await Future.wait(
-    vaults.map((v) => api.getVault(v.id).then<VaultDetail?>((d) => d).catchError((_) => null)),
+    vaults.map(
+      (v) => api
+          .getVault(v.id)
+          .then<VaultDetail?>((d) => d)
+          .catchError((_) => null),
+    ),
   );
   return [
     for (final d in details)
@@ -207,22 +258,26 @@ Future<List<HomeRow>> _buildVaultRows(LibraryApi api) async {
 /// "Because it's in the hold" rows from the two most common genres,
 /// highest-rated first.
 Future<List<HomeRow>> _buildGenreRows(
-    LibraryApi api, BrowseRepository repo) async {
-  final facets = await api.listFacets(limit: 8).catchError((_) => <Facet>[]) ?? [];
+  LibraryApi api,
+  BrowseRepository repo,
+) async {
+  final facets =
+      await api.listFacets(limit: 8).catchError((_) => <Facet>[]) ?? [];
   final top = facets
       .where((f) => f.type == FacetTypeEnum.genre)
       .take(2)
       .toList();
-  final rows = await Future.wait(top.map((f) async {
-    final cards = await repo.browse(BrowseFilter(
-      genres: [f.value],
-      sort: BrowseSort.rating,
-    ));
-    return HomeRow(
-      title: f.value,
-      cards: cards.take(12).toList(),
-      seeAllTag: f.value,
-    );
-  }));
+  final rows = await Future.wait(
+    top.map((f) async {
+      final cards = await repo.browse(
+        BrowseFilter(genres: [f.value], sort: BrowseSort.rating),
+      );
+      return HomeRow(
+        title: f.value,
+        cards: cards.take(12).toList(),
+        seeAllTag: f.value,
+      );
+    }),
+  );
   return rows.where((r) => r.cards.isNotEmpty).toList();
 }

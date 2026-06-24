@@ -60,47 +60,52 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
     } on ApiFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = 'Something went wrong. Please try again.');
+      if (mounted) {
+        setState(() => _error = 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   void _submitServer() => _run(() async {
-        await ref.read(authControllerProvider.notifier).setServer(_server.text);
-        if (mounted) setState(() => _step = _Step.signIn);
-      });
+    await ref.read(authControllerProvider.notifier).setServer(_server.text);
+    if (mounted) setState(() => _step = _Step.signIn);
+  });
 
   void _submitSignIn() => _run(() async {
-        final profiles = await ref
-            .read(authControllerProvider.notifier)
-            .login(_username.text.trim(), _password.text);
-        if (profiles.isEmpty) {
-          throw const ApiFailure('This account has no profiles yet.');
-        }
-        if (!mounted) return;
-        setState(() {
-          _profiles = profiles;
-          _selectedProfileId = profiles.first.id;
-          if (_deviceName.text.isEmpty) _deviceName.text = _defaultDeviceName();
-          _step = _Step.pair;
-        });
-      });
+    final profiles = await ref
+        .read(authControllerProvider.notifier)
+        .login(_username.text.trim(), _password.text);
+    if (profiles.isEmpty) {
+      throw const ApiFailure('This account has no profiles yet.');
+    }
+    if (!mounted) return;
+    setState(() {
+      _profiles = profiles;
+      _selectedProfileId = profiles.first.id;
+      if (_deviceName.text.isEmpty) _deviceName.text = _defaultDeviceName();
+      _step = _Step.pair;
+    });
+  });
 
   void _submitPair() => _run(() async {
-        // On success the gate flips to authenticated and the router redirects
-        // away from this screen automatically.
-        await ref.read(authControllerProvider.notifier).pairDevice(
-              username: _username.text.trim(),
-              password: _password.text,
-              userId: _selectedProfileId!,
-              deviceName: _deviceName.text.trim().isEmpty
-                  ? _defaultDeviceName()
-                  : _deviceName.text.trim(),
-            );
-      });
+    // On success the gate flips to authenticated and the router redirects
+    // away from this screen automatically.
+    await ref
+        .read(authControllerProvider.notifier)
+        .pairDevice(
+          username: _username.text.trim(),
+          password: _password.text,
+          userId: _selectedProfileId!,
+          deviceName: _deviceName.text.trim().isEmpty
+              ? _defaultDeviceName()
+              : _deviceName.text.trim(),
+        );
+  });
 
-  static String _defaultDeviceName() => Platform.isIOS ? 'iPhone' : 'Android phone';
+  static String _defaultDeviceName() =>
+      Platform.isIOS ? 'iPhone' : 'Android phone';
 
   @override
   Widget build(BuildContext context) {
@@ -128,10 +133,9 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
                     Text(
                       _error!,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: ArgosyColors.danger),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: ArgosyColors.danger,
+                      ),
                     ),
                   ],
                 ],
@@ -147,107 +151,139 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
     final text = Theme.of(context).textTheme;
     return switch (_step) {
       _Step.server => Column(
-          key: const ValueKey('server'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Connect to your server',
-                textAlign: TextAlign.center, style: text.displaySmall),
-            const SizedBox(height: 8),
-            Text('Enter your household Argosy server address.',
-                textAlign: TextAlign.center, style: text.bodyMedium),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _server,
-              autocorrect: false,
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.go,
-              onSubmitted: (_) => _submitServer(),
-              decoration: const InputDecoration(
-                labelText: 'Server address',
-                hintText: 'http://10.0.0.20:8097',
-              ),
+        key: const ValueKey('server'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'OWNED MEDIA · SELF-HOSTED',
+            textAlign: TextAlign.center,
+            style: text.labelMedium?.copyWith(
+              color: ArgosyColors.accent,
+              letterSpacing: 1.8,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 20),
-            _PrimaryButton(
-              label: 'Continue',
-              busy: _busy,
-              onPressed: _submitServer,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Connect to your server',
+            textAlign: TextAlign.center,
+            style: text.displaySmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Enter your household Argosy server address.',
+            textAlign: TextAlign.center,
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _server,
+            autocorrect: false,
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.go,
+            onSubmitted: (_) => _submitServer(),
+            decoration: const InputDecoration(
+              labelText: 'Server address',
+              hintText: 'http://10.0.0.20:8097',
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 20),
+          _PrimaryButton(
+            label: 'Continue',
+            busy: _busy,
+            onPressed: _submitServer,
+          ),
+        ],
+      ),
       _Step.signIn => Column(
-          key: const ValueKey('signin'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Welcome aboard',
-                textAlign: TextAlign.center, style: text.displaySmall),
-            const SizedBox(height: 8),
-            Text('Sign in to reach your library.',
-                textAlign: TextAlign.center, style: text.bodyMedium),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _username,
-              autocorrect: false,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Email'),
+        key: const ValueKey('signin'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Welcome aboard',
+            textAlign: TextAlign.center,
+            style: text.displaySmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Sign in to reach your library.',
+            textAlign: TextAlign.center,
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _username,
+            autocorrect: false,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: 'Email'),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _password,
+            obscureText: true,
+            textInputAction: TextInputAction.go,
+            onSubmitted: (_) => _submitSignIn(),
+            decoration: const InputDecoration(labelText: 'Password'),
+          ),
+          const SizedBox(height: 20),
+          _PrimaryButton(
+            label: 'Sign in',
+            busy: _busy,
+            onPressed: _submitSignIn,
+          ),
+          _BackLink(
+            label: 'Change server',
+            onPressed: _busy
+                ? null
+                : () => setState(() => _step = _Step.server),
+          ),
+        ],
+      ),
+      _Step.pair => Column(
+        key: const ValueKey('pair'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Name this device',
+            textAlign: TextAlign.center,
+            style: text.displaySmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "It'll join your Fleet so you can resume across screens.",
+            textAlign: TextAlign.center,
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 24),
+          if (_profiles.length > 1) ...[
+            _ProfilePicker(
+              profiles: _profiles,
+              selectedId: _selectedProfileId,
+              onChanged: (id) => setState(() => _selectedProfileId = id),
             ),
             const SizedBox(height: 14),
-            TextField(
-              controller: _password,
-              obscureText: true,
-              textInputAction: TextInputAction.go,
-              onSubmitted: (_) => _submitSignIn(),
-              decoration: const InputDecoration(labelText: 'Password'),
-            ),
-            const SizedBox(height: 20),
-            _PrimaryButton(
-              label: 'Sign in',
-              busy: _busy,
-              onPressed: _submitSignIn,
-            ),
-            _BackLink(
-              label: 'Change server',
-              onPressed: _busy ? null : () => setState(() => _step = _Step.server),
-            ),
           ],
-        ),
-      _Step.pair => Column(
-          key: const ValueKey('pair'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Name this device',
-                textAlign: TextAlign.center, style: text.displaySmall),
-            const SizedBox(height: 8),
-            Text("It'll join your Fleet so you can resume across screens.",
-                textAlign: TextAlign.center, style: text.bodyMedium),
-            const SizedBox(height: 24),
-            if (_profiles.length > 1) ...[
-              _ProfilePicker(
-                profiles: _profiles,
-                selectedId: _selectedProfileId,
-                onChanged: (id) => setState(() => _selectedProfileId = id),
-              ),
-              const SizedBox(height: 14),
-            ],
-            TextField(
-              controller: _deviceName,
-              textInputAction: TextInputAction.go,
-              onSubmitted: (_) => _submitPair(),
-              decoration: const InputDecoration(labelText: 'Device name'),
-            ),
-            const SizedBox(height: 20),
-            _PrimaryButton(
-              label: 'Join the Fleet',
-              busy: _busy,
-              onPressed: _submitPair,
-            ),
-            _BackLink(
-              label: 'Back',
-              onPressed: _busy ? null : () => setState(() => _step = _Step.signIn),
-            ),
-          ],
-        ),
+          TextField(
+            controller: _deviceName,
+            textInputAction: TextInputAction.go,
+            onSubmitted: (_) => _submitPair(),
+            decoration: const InputDecoration(labelText: 'Device name'),
+          ),
+          const SizedBox(height: 20),
+          _PrimaryButton(
+            label: 'Join the Fleet',
+            busy: _busy,
+            onPressed: _submitPair,
+          ),
+          _BackLink(
+            label: 'Back',
+            onPressed: _busy
+                ? null
+                : () => setState(() => _step = _Step.signIn),
+          ),
+        ],
+      ),
     };
   }
 }
@@ -268,7 +304,9 @@ class _StepRail extends StatelessWidget {
             Expanded(
               child: Container(
                 height: 1,
-                color: i <= index ? ArgosyColors.accentLine : ArgosyColors.line2,
+                color: i <= index
+                    ? ArgosyColors.accentLine
+                    : ArgosyColors.line2,
               ),
             ),
           _StepDot(n: i + 1, label: labels[i], active: i <= index),
@@ -314,9 +352,9 @@ class _StepDot extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: active ? ArgosyColors.cream : ArgosyColors.mute,
-                fontWeight: FontWeight.w600,
-              ),
+            color: active ? ArgosyColors.cream : ArgosyColors.mute,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );

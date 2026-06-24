@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../widgets/arg_chip.dart';
 import '../../widgets/async_view.dart';
 import '../browse/media_card.dart';
 import '../browse/media_poster_card.dart';
@@ -11,7 +13,8 @@ import 'library_controller.dart';
 import 'library_filter_sheet.dart';
 
 /// The Manifest — a poster grid across every library with the kind toggle,
-/// sort row, and the faceted filter sheet.
+/// sort cycle, and the faceted filter sheet, under a framed header that doubles
+/// as the entry point to Search.
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
@@ -26,36 +29,107 @@ class LibraryScreen extends ConsumerWidget {
     final filter = ref.watch(libraryFilterProvider);
     final controller = ref.read(libraryFilterProvider.notifier);
     final results = ref.watch(libraryResultsProvider);
+    final count = results.value?.length;
 
     return Scaffold(
       backgroundColor: ArgosyColors.bg,
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: Column(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'THE MANIFEST',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: ArgosyColors.accent,
-                    letterSpacing: 1.6,
-                    fontWeight: FontWeight.w700,
-                  ),
+            _Header(count: count),
+            _Controls(filter: filter, controller: controller, count: count),
+            Expanded(
+              child: AsyncView(
+                value: results,
+                onRetry: () => ref.invalidate(libraryResultsProvider),
+                builder: (cards) => _Grid(cards: cards),
+              ),
             ),
-            Text('Library', style: Theme.of(context).textTheme.titleLarge),
           ],
         ),
       ),
-      body: Column(
+    );
+  }
+}
+
+/// Eyebrow + big title + titles count, then a tappable search bar that hands off
+/// to the Search tab.
+class _Header extends StatelessWidget {
+  const _Header({required this.count});
+
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.argosy;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Controls(filter: filter, controller: controller),
-          const Divider(height: 1, color: ArgosyColors.line),
-          Expanded(
-            child: AsyncView(
-              value: results,
-              onRetry: () => ref.invalidate(libraryResultsProvider),
-              builder: (cards) => _Grid(cards: cards),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'THE MANIFEST',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: ArgosyColors.accent,
+                        letterSpacing: 1.8,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Manifest',
+                      style: Theme.of(context).textTheme.displaySmall,
+                    ),
+                  ],
+                ),
+              ),
+              if (count != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '$count\ntitles',
+                    textAlign: TextAlign.right,
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () => openSearch(context),
+            borderRadius: BorderRadius.circular(tokens.radiusLg),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xB3141413),
+                borderRadius: BorderRadius.circular(tokens.radiusLg),
+                border: Border.all(color: tokens.line2),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.search,
+                    size: 19,
+                    color: ArgosyColors.accent,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Search the Manifest…',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: ArgosyColors.dim),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -65,41 +139,37 @@ class LibraryScreen extends ConsumerWidget {
 }
 
 class _Controls extends StatelessWidget {
-  const _Controls({required this.filter, required this.controller});
+  const _Controls({
+    required this.filter,
+    required this.controller,
+    required this.count,
+  });
 
   final BrowseFilter filter;
   final LibraryFilterController controller;
+  final int? count;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Kind segmented toggle.
-          SegmentedButton<BrowseScope>(
-            segments: [
-              for (final entry in LibraryScreen._scopeLabels.entries)
-                ButtonSegment(value: entry.key, label: Text(entry.value)),
-            ],
-            selected: {filter.scope},
-            showSelectedIcon: false,
-            onSelectionChanged: (s) => controller.setScope(s.first),
-          ),
-          const SizedBox(height: 12),
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Kind toggle as a chip row, with the faceted filter button trailing.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+          child: Row(
             children: [
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      for (final sort in BrowseSort.values) ...[
-                        _SortChip(
-                          sort: sort,
-                          selected: filter.sort == sort,
-                          onTap: () => controller.setSort(sort),
+                      for (final entry
+                          in LibraryScreen._scopeLabels.entries) ...[
+                        ArgChip(
+                          label: entry.value,
+                          selected: filter.scope == entry.key,
+                          onTap: () => controller.setScope(entry.key),
                         ),
                         const SizedBox(width: 8),
                       ],
@@ -114,44 +184,70 @@ class _Controls extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
+        ),
+        // "Showing N titles" + the sort cycle pill.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
+          child: Row(
+            children: [
+              if (count != null)
+                Text(
+                  'Showing $count ${count == 1 ? 'title' : 'titles'}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: ArgosyColors.mute),
+                ),
+              const Spacer(),
+              _SortButton(
+                sort: filter.sort,
+                onCycle: () {
+                  const values = BrowseSort.values;
+                  final next = values[(filter.sort.index + 1) % values.length];
+                  controller.setSort(next);
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _SortChip extends StatelessWidget {
-  const _SortChip({
-    required this.sort,
-    required this.selected,
-    required this.onTap,
-  });
+/// A compact pill that shows the active sort and cycles to the next on tap.
+class _SortButton extends StatelessWidget {
+  const _SortButton({required this.sort, required this.onCycle});
 
   final BrowseSort sort;
-  final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback onCycle;
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.argosy;
     return Material(
-      color: selected ? tokens.accentWash : Colors.transparent,
+      color: ArgosyColors.panel,
       borderRadius: BorderRadius.circular(tokens.radiusSm),
       child: InkWell(
-        onTap: onTap,
+        onTap: onCycle,
         borderRadius: BorderRadius.circular(tokens.radiusSm),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(tokens.radiusSm),
-            border: Border.all(
-                color: selected ? tokens.accentLine : tokens.line2),
+            border: Border.all(color: tokens.line2),
           ),
-          child: Text(
-            sort.label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: selected ? ArgosyColors.accentHi : ArgosyColors.soft2,
-                ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.swap_vert, size: 16, color: ArgosyColors.accent),
+              const SizedBox(width: 6),
+              Text(
+                sort.label,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: ArgosyColors.soft),
+              ),
+            ],
           ),
         ),
       ),
@@ -173,7 +269,8 @@ class _FilterButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         foregroundColor: active ? ArgosyColors.accentHi : ArgosyColors.soft2,
         side: BorderSide(
-            color: active ? ArgosyColors.accentLine : ArgosyColors.line2),
+          color: active ? ArgosyColors.accentLine : ArgosyColors.line2,
+        ),
       ),
       icon: const Icon(Icons.tune, size: 18),
       label: Text(active ? 'Filters ($count)' : 'Filters'),
@@ -195,11 +292,16 @@ class _Grid extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.inventory_2_outlined,
-                  size: 56, color: ArgosyColors.faint),
+              const Icon(
+                Icons.inventory_2_outlined,
+                size: 56,
+                color: ArgosyColors.faint,
+              ),
               const SizedBox(height: 16),
-              Text('The hold is empty',
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'The hold is empty',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 8),
               Text(
                 'No cargo matches this filter. Try clearing a facet.',
@@ -213,12 +315,12 @@ class _Grid extends StatelessWidget {
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 160,
         childAspectRatio: 0.52,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 18,
+        crossAxisSpacing: 11,
+        mainAxisSpacing: 16,
       ),
       itemCount: cards.length,
       itemBuilder: (_, i) => MediaPosterCard(card: cards[i], width: 160),

@@ -130,22 +130,31 @@ class _Hint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.travel_explore_outlined,
-                size: 56, color: ArgosyColors.faint),
-            const SizedBox(height: 16),
-            Text(
-              'Search the Manifest for any film or series in the hold.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'THE MANIFEST',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: ArgosyColors.accent,
+              letterSpacing: 1.8,
+              fontWeight: FontWeight.w700,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'What are we\nwatching?',
+            style: Theme.of(context).textTheme.displayMedium,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Search the Manifest for any film or series in the hold — by title, '
+            'genre, or tag.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
       ),
     );
   }

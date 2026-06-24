@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../theme/argosy_colors.dart';
 
-/// The persistent bottom-nav shell wrapping the Bridge / Library / Search
+/// The persistent bottom-nav shell wrapping the Bridge / Manifest / Search
 /// branches. Each branch keeps its own navigation stack (an indexed stack), so
 /// switching tabs preserves scroll position and any pushed detail screens.
 class ScaffoldWithNav extends StatelessWidget {
@@ -12,10 +12,10 @@ class ScaffoldWithNav extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
   void _goBranch(int index) => navigationShell.goBranch(
-        index,
-        // Tapping the active tab again pops it to its initial route.
-        initialLocation: index == navigationShell.currentIndex,
-      );
+    index,
+    // Tapping the active tab again pops it to its initial route.
+    initialLocation: index == navigationShell.currentIndex,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +45,7 @@ class ScaffoldWithNav extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.grid_view_outlined),
             selectedIcon: Icon(Icons.grid_view, color: ArgosyColors.accentHi),
-            label: 'Library',
+            label: 'Manifest',
           ),
           NavigationDestination(
             icon: Icon(Icons.search_outlined),

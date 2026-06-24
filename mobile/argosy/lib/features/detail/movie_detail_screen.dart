@@ -81,18 +81,17 @@ class _Body extends StatelessWidget {
               _MetaRow(movie: movie),
               if (movie.overview != null && movie.overview!.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Text(movie.overview!,
-                    style: Theme.of(context).textTheme.bodyMedium),
+                Text(
+                  movie.overview!,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ],
               const SizedBox(height: 16),
               GenreTagChips(genres: movie.genres, tags: movie.tags),
               const SizedBox(height: 20),
               LabelEditor(movieId: movie.id, initial: movie.labels),
               const SizedBox(height: 20),
-              _Actions(
-                itemId: movie.id,
-                resumable: _resumable,
-              ),
+              _Actions(itemId: movie.id, resumable: _resumable),
               if (_resumable && data.progress != null) ...[
                 const SizedBox(height: 14),
                 _ResumeBar(percent: _percent, progress: data.progress!),
@@ -117,18 +116,42 @@ class _MetaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parts = <String>[
-      if (movie.year != null) '${movie.year}',
-      formatRuntime(movie.durationSeconds),
-      if (movie.container != null) movie.container!.toUpperCase(),
-      movie.kind == 'movie' ? 'Film' : movie.kind,
+    final runtime = formatRuntime(movie.durationSeconds);
+    final rating = movie.rating;
+    // (text, brass?) parts — score and kind read in brass, the rest dim. Built
+    // as spans so the accents sit inline with the dot separators.
+    final parts = <(String, bool)>[
+      if (movie.year != null) ('${movie.year}', false),
+      if (runtime.isNotEmpty && runtime != '—') (runtime, false),
+      if (movie.container != null) (movie.container!.toUpperCase(), false),
+      if (rating != null && rating > 0)
+        ('★ ${rating.toStringAsFixed(1)}', true),
+      (movie.kind == 'movie' ? 'Film' : movie.kind, true),
     ];
-    return Text(
-      parts.where((p) => p.isNotEmpty).join('  •  '),
-      style: Theme.of(context)
-          .textTheme
-          .labelLarge
-          ?.copyWith(color: ArgosyColors.dim),
+
+    final base = Theme.of(
+      context,
+    ).textTheme.labelLarge?.copyWith(color: ArgosyColors.dim);
+    final spans = <TextSpan>[];
+    for (var i = 0; i < parts.length; i++) {
+      if (i > 0) {
+        spans.add(
+          const TextSpan(
+            text: '   •   ',
+            style: TextStyle(color: ArgosyColors.faint),
+          ),
+        );
+      }
+      final (text, brass) = parts[i];
+      spans.add(
+        TextSpan(
+          text: text,
+          style: brass ? const TextStyle(color: ArgosyColors.accent) : null,
+        ),
+      );
+    }
+    return RichText(
+      text: TextSpan(style: base, children: spans),
     );
   }
 }
