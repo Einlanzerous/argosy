@@ -197,11 +197,16 @@ type Manager struct {
 }
 
 // NewManager builds a Manager. workDir is where per-session HLS output lives;
-// idleTTL is how long a session may go without a playlist/segment request
+// idleTTL is how long a session may go without a liveness signal (a
+// playlist/segment request, or a playback progress heartbeat via TouchItem)
 // before it's reaped; maxSess caps concurrent sessions.
 func NewManager(backend Backend, workDir string, idleTTL time.Duration, maxSess int, logger *slog.Logger) *Manager {
 	if idleTTL <= 0 {
-		idleTTL = 60 * time.Second
+		// A client buffered far ahead can go a while without fetching a
+		// segment; keep the default generous so an actively-watched session
+		// isn't reaped out from under a full buffer (ARGY-94). The progress
+		// heartbeat (TouchItem) is the primary keep-alive; this is a backstop.
+		idleTTL = 5 * time.Minute
 	}
 	if maxSess <= 0 {
 		maxSess = 4
@@ -344,6 +349,28 @@ func (m *Manager) Touch(id string) bool {
 	}
 	s.touch(m.clock())
 	return true
+}
+
+// TouchItem marks every live session for the given account+item as recently
+// accessed and returns how many it touched. The playback progress heartbeat
+// (PUT /progress) calls this: a client that has buffered far ahead stops
+// fetching segments but keeps reporting progress, so without this the idle
+// reaper would kill an actively-watched transcode and the next segment 404s
+// once the buffer drains (ARGY-94).
+func (m *Manager) TouchItem(accountID, itemID string) int {
+	now := m.clock()
+	m.mu.Lock()
+	var live []*session
+	for _, s := range m.sessions {
+		if s.itemID == itemID && s.accountID == accountID {
+			live = append(live, s)
+		}
+	}
+	m.mu.Unlock()
+	for _, s := range live {
+		s.touch(now)
+	}
+	return len(live)
 }
 
 // Stop cancels a session's ffmpeg process, waits for it to exit (no zombies),

@@ -221,6 +221,13 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errorBody("not found"))
 		return
 	}
+	// The heartbeat is also a transcode liveness signal (ARGY-94): a client
+	// buffered far ahead stops fetching segments but keeps reporting progress,
+	// so keep its session alive while it's actually playing — otherwise the
+	// idle reaper kills the transcode and the next segment 404s on drain.
+	if h.tc != nil {
+		h.tc.TouchItem(accountOf(r), itemID)
+	}
 	// The heartbeat doubles as a presence beat (ARGY-34) + a Beacon publish
 	// (ARGY-36): refresh this device's live session, and broadcast the new
 	// position to the user's other devices for cross-device resume.
