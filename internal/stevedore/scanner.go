@@ -49,10 +49,14 @@ func NewScanner(pool *pgxpool.Pool, logger *slog.Logger, artworkDir string) *Sca
 type Result struct {
 	Scanned int
 	Errors  int
+	// Removed counts media_items pruned because their file vanished from disk
+	// (e.g. renamed or deleted) since the previous sweep.
+	Removed int
 }
 
-// Scan enumerates src, ingesting every media file into the library. It is
-// idempotent: re-scanning updates existing rows (keyed on library_id+file_path).
+// Scan enumerates src, ingesting every media file into the library, then prunes
+// any rows whose file no longer exists. It is idempotent: re-scanning updates
+// existing rows (keyed on library_id+file_path) and reconciles deletions.
 func (s *Scanner) Scan(ctx context.Context, libraryID string, src mediasource.Source) (Result, error) {
 	var entries []mediasource.Entry
 	if err := src.Walk(ctx, func(e mediasource.Entry) error {
@@ -108,7 +112,73 @@ func (s *Scanner) Scan(ctx context.Context, libraryID string, src mediasource.So
 	if err := s.ApplyOverrides(ctx, libraryID, src); err != nil {
 		return res, err
 	}
+	// Reconcile deletions: drop rows for files that vanished since last sweep.
+	seen := make([]string, len(entries))
+	for i, e := range entries {
+		seen[i] = e.Path
+	}
+	removed, err := s.prune(ctx, libraryID, seen)
+	if err != nil {
+		return res, err
+	}
+	res.Removed = removed
+	if removed > 0 {
+		s.logger.Info("pruned missing media", "library", libraryID, "removed", removed)
+	}
 	return res, nil
+}
+
+// prune reconciles the library against what's currently on disk: it removes
+// media_items whose file_path wasn't seen this sweep (renamed or deleted files),
+// then the episodes/seasons/series those deletions leave empty. Deleting a
+// media_item cascades its play_state / vault / label rows and NULLs the owning
+// episode's media_item_id (FK ON DELETE SET NULL), so the orphan sweep that
+// follows clears those now-fileless episodes.
+//
+// It is a deliberate no-op when nothing was seen: the media root is an SMB mount,
+// and a transient unmount makes Walk yield zero entries — pruning then would wipe
+// the entire library. (Walk errors already abort the scan before we reach here;
+// this guards the "mounted but empty" case.)
+func (s *Scanner) prune(ctx context.Context, libraryID string, seen []string) (int, error) {
+	if len(seen) == 0 {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM media_items WHERE library_id = $1 AND file_path <> ALL($2)`,
+		libraryID, seen)
+	if err != nil {
+		return 0, err
+	}
+	removed := int(tag.RowsAffected())
+
+	// Episodes orphaned by the deletes above (media_item_id NULLed), scoped to
+	// this library via their season → series chain.
+	if _, err := s.pool.Exec(ctx,
+		`DELETE FROM episodes e
+		  WHERE e.media_item_id IS NULL
+		    AND e.season_id IN (
+		      SELECT se.id FROM seasons se
+		      JOIN series sr ON sr.id = se.series_id
+		      WHERE sr.library_id = $1
+		    )`, libraryID); err != nil {
+		return removed, err
+	}
+	// Seasons, then series, left with no children.
+	if _, err := s.pool.Exec(ctx,
+		`DELETE FROM seasons se
+		  WHERE se.series_id IN (SELECT id FROM series WHERE library_id = $1)
+		    AND NOT EXISTS (SELECT 1 FROM episodes e WHERE e.season_id = se.id)`,
+		libraryID); err != nil {
+		return removed, err
+	}
+	if _, err := s.pool.Exec(ctx,
+		`DELETE FROM series sr
+		  WHERE sr.library_id = $1
+		    AND NOT EXISTS (SELECT 1 FROM seasons se WHERE se.series_id = sr.id)`,
+		libraryID); err != nil {
+		return removed, err
+	}
+	return removed, nil
 }
 
 func (s *Scanner) ingest(ctx context.Context, libraryID string, src mediasource.Source, e mediasource.Entry) error {
