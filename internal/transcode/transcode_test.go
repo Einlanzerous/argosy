@@ -142,6 +142,50 @@ func TestTouchKeepsSessionAlive(t *testing.T) {
 	}
 }
 
+// TestTouchItemKeepsBufferedSessionAlive covers ARGY-94: a client buffered far
+// ahead stops fetching segments (no Touch) but keeps sending progress, which
+// calls TouchItem(account, item). That must keep the transcode alive across a
+// reap that would otherwise kill it.
+func TestTouchItemKeepsBufferedSessionAlive(t *testing.T) {
+	m := NewManager(&blockingBackend{}, t.TempDir(), 10*time.Second, 4, discardLogger())
+	base := time.Now()
+	m.clock = func() time.Time { return base }
+	s, _ := m.Start(newReq("item-1")) // newReq uses AccountID "acct-1"
+
+	// No segment Touch — only a progress heartbeat just before the cutoff.
+	m.clock = func() time.Time { return base.Add(9 * time.Second) }
+	if n := m.TouchItem("acct-1", "item-1"); n != 1 {
+		t.Fatalf("TouchItem matched %d sessions, want 1", n)
+	}
+	m.clock = func() time.Time { return base.Add(11 * time.Second) }
+	m.reap()
+	if _, ok := m.Get(s.ID); !ok {
+		t.Fatal("session reaped despite a progress heartbeat keeping it alive")
+	}
+}
+
+// TestTouchItemIgnoresOtherAccountsAndItems guards the match: a heartbeat for a
+// different account or item must not keep this session alive (no cross-talk).
+func TestTouchItemIgnoresOtherAccountsAndItems(t *testing.T) {
+	m := NewManager(&blockingBackend{}, t.TempDir(), 10*time.Second, 4, discardLogger())
+	base := time.Now()
+	m.clock = func() time.Time { return base }
+	s, _ := m.Start(newReq("item-1")) // acct-1 / item-1
+
+	m.clock = func() time.Time { return base.Add(9 * time.Second) }
+	if n := m.TouchItem("acct-2", "item-1"); n != 0 {
+		t.Fatalf("TouchItem matched a foreign account: %d", n)
+	}
+	if n := m.TouchItem("acct-1", "item-2"); n != 0 {
+		t.Fatalf("TouchItem matched a foreign item: %d", n)
+	}
+	m.clock = func() time.Time { return base.Add(11 * time.Second) }
+	m.reap()
+	if _, ok := m.Get(s.ID); ok {
+		t.Fatal("session survived despite no matching heartbeat")
+	}
+}
+
 func TestCompletedSessionRemains(t *testing.T) {
 	m := NewManager(instantBackend{}, t.TempDir(), 10*time.Second, 4, discardLogger())
 	s, err := m.Start(newReq("item-1"))
