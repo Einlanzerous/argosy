@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/Einlanzerous/argosy/compare/v0.5.0...v0.6.0) (2026-06-24)
+
+
+### Features
+
+* series auto-advance — auto-play next episode (web + Android) [ARGY-89 / ARGY-93] ([#86](https://github.com/Einlanzerous/argosy/issues/86)) ([f5c013a](https://github.com/Einlanzerous/argosy/commit/f5c013a0ecca416dabedde0930608bb408a31de0))
+
+
+### Bug Fixes
+
+* **scanner:** prune media for files that vanished on rescan (ARGY-96) ([#89](https://github.com/Einlanzerous/argosy/issues/89)) ([baf163c](https://github.com/Einlanzerous/argosy/commit/baf163c3af6d08095e4ab8b736e2fdb7da0c9314))
+* **transcode:** keep session alive on progress heartbeat (ARGY-94) ([#87](https://github.com/Einlanzerous/argosy/issues/87)) ([4b3cbca](https://github.com/Einlanzerous/argosy/commit/4b3cbca94a26c08ca562f0d21ac839d6d16a2d59))
+
 ## [0.5.0](https://github.com/Einlanzerous/argosy/compare/v0.4.0...v0.5.0) (2026-06-22)
 
 
