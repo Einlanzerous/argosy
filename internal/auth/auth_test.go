@@ -150,6 +150,10 @@ func TestAuthFlow(t *testing.T) {
 	if defPrefs.SubtitleEnabled {
 		t.Error("default preferences should have subtitles off")
 	}
+	// Series auto-advance defaults ON (ARGY-89) even before any row is written.
+	if defPrefs.SeriesAutoAdvance == nil || !*defPrefs.SeriesAutoAdvance {
+		t.Errorf("default series auto-advance = %v, want on", defPrefs.SeriesAutoAdvance)
+	}
 	lang := "en"
 	saved, err := store.SetDevicePreferences(ctx, reg.Device.Id.String(),
 		api.DevicePreferences{SubtitleEnabled: true, SubtitleLanguage: &lang})
@@ -158,6 +162,23 @@ func TestAuthFlow(t *testing.T) {
 	}
 	if !saved.SubtitleEnabled || saved.SubtitleLanguage == nil || *saved.SubtitleLanguage != "en" {
 		t.Errorf("saved prefs = %+v, want subtitles on / en", saved)
+	}
+	// A save that omits seriesAutoAdvance keeps it on (no accidental disable).
+	if saved.SeriesAutoAdvance == nil || !*saved.SeriesAutoAdvance {
+		t.Errorf("after save omitting auto-advance = %v, want still on", saved.SeriesAutoAdvance)
+	}
+	// Explicitly turning it off round-trips and leaves the subtitle choice intact.
+	off := false
+	saved, err = store.SetDevicePreferences(ctx, reg.Device.Id.String(),
+		api.DevicePreferences{SubtitleEnabled: true, SubtitleLanguage: &lang, SeriesAutoAdvance: &off})
+	if err != nil {
+		t.Fatalf("set prefs (auto-advance off): %v", err)
+	}
+	if saved.SeriesAutoAdvance == nil || *saved.SeriesAutoAdvance {
+		t.Errorf("after disabling = %v, want off", saved.SeriesAutoAdvance)
+	}
+	if !saved.SubtitleEnabled {
+		t.Error("disabling auto-advance should not clobber the subtitle setting")
 	}
 
 	if err := store.RevokeDevice(ctx, sess, reg.Device.Id); err != nil {

@@ -75,6 +75,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 		mux.Handle("GET /api/v1/beacon", beaconHandler(authStore, hub))
 	}
 	mux.Handle("GET /api/v1/items/{itemId}/playback", mw(http.HandlerFunc(h.getPlayback)))
+	mux.Handle("GET /api/v1/items/{itemId}/next-episode", mw(http.HandlerFunc(h.getNextEpisode)))
 	mux.Handle("GET /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.getProgress)))
 	mux.Handle("PUT /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.reportProgress)))
 	mux.Handle("POST /api/v1/items/{itemId}/watched", mw(http.HandlerFunc(h.setWatched)))
