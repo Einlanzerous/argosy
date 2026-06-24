@@ -8,6 +8,7 @@ import '../../theme/argosy_tokens.dart';
 import '../../util/format.dart';
 import '../../widgets/arg_chip.dart';
 import '../../widgets/async_view.dart';
+import '../../widgets/hatch_pattern.dart';
 import 'add_to_vault.dart';
 import 'detail_providers.dart';
 import 'detail_widgets.dart';
@@ -56,10 +57,10 @@ class _BodyState extends State<_Body> {
   int _activeSeason = 0;
 
   List<_Playable> get _playable => [
-        for (final s in widget.series.seasons)
-          for (final e in s.episodes)
-            if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
-      ];
+    for (final s in widget.series.seasons)
+      for (final e in s.episodes)
+        if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
+  ];
 
   static bool _touched(EpisodeSummary e) =>
       (e.watched ?? false) || (e.positionSeconds ?? 0) > 5;
@@ -86,7 +87,9 @@ class _BodyState extends State<_Body> {
   Widget build(BuildContext context) {
     final series = widget.series;
     final resume = _resumeTarget;
-    final season = series.seasons.isEmpty ? null : series.seasons[_activeSeason];
+    final season = series.seasons.isEmpty
+        ? null
+        : series.seasons[_activeSeason];
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -98,16 +101,17 @@ class _BodyState extends State<_Body> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(series.title,
-                  style: Theme.of(context).textTheme.displaySmall),
+              Text(
+                series.title,
+                style: Theme.of(context).textTheme.displaySmall,
+              ),
               const SizedBox(height: 4),
               Text(
                 '${series.seasons.length} season${series.seasons.length == 1 ? '' : 's'}'
                 '${series.year != null ? '  •  ${series.year}' : ''}',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(color: ArgosyColors.dim),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: ArgosyColors.dim),
               ),
             ],
           ),
@@ -118,8 +122,10 @@ class _BodyState extends State<_Body> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (series.overview != null && series.overview!.isNotEmpty) ...[
-                Text(series.overview!,
-                    style: Theme.of(context).textTheme.bodyMedium),
+                Text(
+                  series.overview!,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
                 const SizedBox(height: 16),
               ],
               GenreTagChips(tags: series.tags),
@@ -143,7 +149,8 @@ class _BodyState extends State<_Body> {
               itemCount: series.seasons.length,
               separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (_, i) => ArgChip(
-                label: series.seasons[i].title ??
+                label:
+                    series.seasons[i].title ??
                     'Season ${series.seasons[i].seasonNumber}',
                 selected: i == _activeSeason,
                 onTap: () => setState(() => _activeSeason = i),
@@ -185,7 +192,8 @@ class _SeriesActions extends StatelessWidget {
                 openPlayer(context, resume!.ep.mediaItemId!, resume: true),
             icon: const Icon(Icons.play_arrow, size: 20),
             label: Text(
-                'Resume S${resume!.seasonNumber} Ep ${resume!.ep.episodeNumber}'),
+              'Resume S${resume!.seasonNumber} Ep ${resume!.ep.episodeNumber}',
+            ),
           )
         else
           FilledButton.icon(
@@ -228,99 +236,121 @@ class _EpisodeTile extends StatelessWidget {
     final watched = episode.watched ?? false;
     final inProgress = _percent > 0 && !watched;
     final epTitle = formatTitle(episode.title);
+    final runtime = formatRuntime(episode.durationSeconds);
 
-    final lengthLabel =
-        playable ? formatRuntime(episode.durationSeconds) : 'No file linked';
+    final status = !playable
+        ? 'No file linked'
+        : watched
+        ? 'Watched'
+        : inProgress
+        ? '${(_percent * 100).round()}% · ${formatRuntime(_remainingSeconds)} left'
+        : 'Not started';
+    final statusLine = runtime.isNotEmpty && runtime != '—'
+        ? '$status · $runtime'
+        : status;
 
-    // Fixed row height so a column of episodes stays uniform whether or not an
-    // episode has an in-progress bar — the second line is laid out inside this
-    // height, and single-line rows centre within it rather than growing.
     return Opacity(
       opacity: playable ? 1 : 0.5,
       child: InkWell(
-        onTap: playable ? () => openPlayer(context, episode.mediaItemId!) : null,
-        child: SizedBox(
-          height: 60,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                // The play / watched icon takes the slot the number used to.
-                SizedBox(
-                  width: 36,
-                  child: Icon(
-                    watched ? Icons.check_circle : Icons.play_arrow,
-                    size: watched ? 20 : 24,
-                    color:
-                        watched ? ArgosyColors.green : ArgosyColors.soft2,
+        onTap: playable
+            ? () => openPlayer(context, episode.mediaItemId!)
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 16:9 episode thumbnail. Episodes carry no per-episode artwork,
+              // so it's a branded hatch tile with a play/check glyph and the
+              // resume bar — honest about what we have, but with real rhythm.
+              SizedBox(
+                width: 124,
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(tokens.radius),
+                      border: Border.all(color: tokens.line),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(tokens.radius),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          const HatchPlaceholder(),
+                          Center(
+                            child: Icon(
+                              watched ? Icons.check_circle : Icons.play_arrow,
+                              size: watched ? 22 : 26,
+                              color: watched
+                                  ? ArgosyColors.green
+                                  : ArgosyColors.soft2,
+                            ),
+                          ),
+                          if (inProgress)
+                            Align(
+                              alignment: Alignment.bottomCenter,
+                              child: LinearProgressIndicator(
+                                value: _percent,
+                                minHeight: 3,
+                                backgroundColor: tokens.line2,
+                                valueColor: AlwaysStoppedAnimation(
+                                  tokens.progress,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Line 1: episode name with the runtime inline beside it.
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
-                          Flexible(
-                            child: Text(
-                              epTitle.isEmpty
-                                  ? 'Episode ${episode.episodeNumber}'
-                                  : epTitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                          Text(
+                            'S$seasonNumber · E${episode.episodeNumber}',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: ArgosyColors.accent,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                ),
                           ),
-                          if (lengthLabel.isNotEmpty) ...[
-                            const SizedBox(width: 10),
-                            Text(
-                              '· $lengthLabel',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelMedium
-                                  ?.copyWith(color: ArgosyColors.dim),
-                            ),
-                          ],
                         ],
                       ),
-                      // Line 2 (in progress only): a wide progress bar with
-                      // "<pct>% · <remaining> left" beside it.
-                      if (inProgress) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: LinearProgressIndicator(
-                                  value: _percent,
-                                  minHeight: 4,
-                                  backgroundColor: tokens.line2,
-                                  valueColor:
-                                      AlwaysStoppedAnimation(tokens.progress),
-                                ),
-                              ),
+                      const SizedBox(height: 3),
+                      Text(
+                        epTitle.isEmpty
+                            ? 'Episode ${episode.episodeNumber}'
+                            : epTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        statusLine,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: inProgress
+                                  ? ArgosyColors.soft2
+                                  : ArgosyColors.faint,
                             ),
-                            const SizedBox(width: 14),
-                            Text(
-                              '${(_percent * 100).round()}% · ${formatRuntime(_remainingSeconds)} left',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelMedium
-                                  ?.copyWith(color: ArgosyColors.soft2),
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

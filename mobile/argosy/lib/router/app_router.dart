@@ -46,13 +46,16 @@ void openPlayer(
   final query = resume
       ? '?resume=1'
       : startOver
-          ? '?start=1'
-          : '';
+      ? '?start=1'
+      : '';
   context.push('${Routes.player(itemId)}$query');
 }
 
 /// Pushes the Settings screen over the nav shell.
 void openSettings(BuildContext context) => context.push(Routes.settings);
+
+/// Switches to the Search tab (its own nav-shell branch).
+void openSearch(BuildContext context) => context.go(Routes.search);
 
 final _rootKey = GlobalKey<NavigatorState>();
 
@@ -91,25 +94,31 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.splash, builder: (_, _) => const SplashScreen()),
       GoRoute(path: Routes.login, builder: (_, _) => const PairingScreen()),
 
-      // The bottom-nav shell: Bridge / Library / Search, each its own branch.
+      // The bottom-nav shell: Bridge / Manifest / Search, each its own branch.
       StatefulShellRoute.indexedStack(
         builder: (_, _, shell) => ScaffoldWithNav(navigationShell: shell),
         branches: [
-          StatefulShellBranch(routes: [
-            GoRoute(path: Routes.home, builder: (_, _) => const HomeScreen()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: Routes.library,
-              builder: (_, _) => const LibraryScreen(),
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: Routes.search,
-              builder: (_, _) => const SearchScreen(),
-            ),
-          ]),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: Routes.home, builder: (_, _) => const HomeScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: Routes.library,
+                builder: (_, _) => const LibraryScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: Routes.search,
+                builder: (_, _) => const SearchScreen(),
+              ),
+            ],
+          ),
         ],
       ),
 

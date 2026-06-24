@@ -20,7 +20,10 @@ String formatClock(num seconds) {
   return '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
 }
 
-final _episodeCode = RegExp(r'\s*[·\-—]?\s*S(\d{1,2})E(\d{1,2})\b', caseSensitive: false);
+final _episodeCode = RegExp(
+  r'\s*[·\-—]?\s*S(\d{1,2})E(\d{1,2})\b',
+  caseSensitive: false,
+);
 
 /// Humanizes an episode-code title: replaces an `S01E02` token with
 /// `Season 1 Ep 2` so cryptic codes don't leak into the UI. Titles without a
@@ -32,6 +35,20 @@ String formatTitle(String? title) {
   final human = 'Season ${int.parse(m.group(1)!)} Ep ${int.parse(m.group(2)!)}';
   final replaced = title.replaceFirst(_episodeCode, ' · $human');
   return replaced.replaceFirst(RegExp(r'^\s*·\s*'), '').trim();
+}
+
+/// A coarse "last seen" label like `just now`, `5m ago`, `3h ago`, `2d ago`,
+/// or a date for anything older than a week. [now] is injectable for tests.
+String formatRelativeTime(DateTime? when, {DateTime? now}) {
+  if (when == null) return 'never';
+  final ref = now ?? DateTime.now();
+  final diff = ref.difference(when);
+  if (diff.isNegative || diff.inSeconds < 45) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  final w = when.toLocal();
+  return '${w.year}-${w.month.toString().padLeft(2, '0')}-${w.day.toString().padLeft(2, '0')}';
 }
 
 /// A poster's secondary line: `2024  ·  ★ 8.1` from a year + rating.
