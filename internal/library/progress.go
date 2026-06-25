@@ -117,19 +117,43 @@ func (s *Store) SetWatched(ctx context.Context, accountID, userID, itemID string
 
 // ContinueWatching returns the profile's in-progress items (not watched, started),
 // most-recent first — the home "Continue Watching" rail.
+//
+// Collapsed to at most one entry per series (ARGY-97): a show with several
+// in-progress episodes shows up once, as its most-recently-active episode.
+// Movies are keyed by their own item id, so each stays a standalone row. The
+// LATERAL pins one series per item, so a combined multi-episode file (one
+// media_item linked to several episodes, ARGY-69) can't fan out into duplicates.
 func (s *Store) ContinueWatching(ctx context.Context, accountID, userID string, limit int) ([]api.ContinueItem, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.provider_metadata, mi.metadata,
-		        ps.position_seconds, ps.duration_seconds,
+		`WITH in_progress AS (
+		     SELECT ps.media_item_id, ps.position_seconds, ps.duration_seconds, ps.updated_at,
+		            ep.series_id
+		     FROM play_state ps
+		     JOIN media_items mi ON mi.id = ps.media_item_id
+		     JOIN libraries l ON l.id = mi.library_id
+		     LEFT JOIN LATERAL (
+		         SELECT sea.series_id
+		         FROM episodes e
+		         JOIN seasons sea ON sea.id = e.season_id
+		         WHERE e.media_item_id = ps.media_item_id
+		         LIMIT 1
+		     ) ep ON true
+		     WHERE l.account_id = $1 AND ps.user_id = $2
+		       AND ps.watched = false AND ps.position_seconds > 0
+		 ),
+		 picked AS (
+		     SELECT DISTINCT ON (COALESCE(series_id, media_item_id))
+		            media_item_id, position_seconds, duration_seconds, updated_at, series_id
+		     FROM in_progress
+		     ORDER BY COALESCE(series_id, media_item_id), updated_at DESC
+		 )
+		 SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.provider_metadata, mi.metadata,
+		        p.position_seconds, p.duration_seconds,
 		        sr.id::text, sr.title, sr.provider_metadata, sr.metadata
-		 FROM play_state ps
-		 JOIN media_items mi ON mi.id = ps.media_item_id
-		 JOIN libraries l ON l.id = mi.library_id
-		 LEFT JOIN episodes e ON e.media_item_id = mi.id
-		 LEFT JOIN seasons sea ON sea.id = e.season_id
-		 LEFT JOIN series sr ON sr.id = sea.series_id
-		 WHERE l.account_id = $1 AND ps.user_id = $2 AND ps.watched = false AND ps.position_seconds > 0
-		 ORDER BY ps.updated_at DESC LIMIT $3`,
+		 FROM picked p
+		 JOIN media_items mi ON mi.id = p.media_item_id
+		 LEFT JOIN series sr ON sr.id = p.series_id
+		 ORDER BY p.updated_at DESC LIMIT $3`,
 		accountID, userID, limit)
 	if err != nil {
 		return nil, err
