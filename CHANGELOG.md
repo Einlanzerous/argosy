@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/Einlanzerous/argosy/compare/v0.7.0...v0.8.0) (2026-06-25)
+
+
+### Features
+
+* **player:** credits-triggered auto-advance + Play Next (web + mobile) (ARGY-90/101) ([#93](https://github.com/Einlanzerous/argosy/issues/93)) ([b5c58d7](https://github.com/Einlanzerous/argosy/commit/b5c58d7901b0096023c8acbd99ee2144aed0bd5e))
+
+
+### Bug Fixes
+
+* **home:** don't repeat the hero item in the Continue Watching rail (ARGY-97) ([#96](https://github.com/Einlanzerous/argosy/issues/96)) ([f0286c4](https://github.com/Einlanzerous/argosy/commit/f0286c4c8ed2432f709c2894d251be4a56115539))
+* **library:** collapse Continue Watching to one entry per series (ARGY-97) ([#95](https://github.com/Einlanzerous/argosy/issues/95)) ([6471f61](https://github.com/Einlanzerous/argosy/commit/6471f611e14f74c4b3123f201320c509a8adb7c9))
+* **player:** start fresh playback at position 0, not the live edge (ARGY-103) ([#97](https://github.com/Einlanzerous/argosy/issues/97)) ([21df274](https://github.com/Einlanzerous/argosy/commit/21df274517d03fc89ab9ea04ebc4f529ce0c5496))
+* **transcode:** serve HLS playlists uncacheable to prevent stale-304 wedge (ARGY-106) ([#98](https://github.com/Einlanzerous/argosy/issues/98)) ([0810cae](https://github.com/Einlanzerous/argosy/commit/0810cae51505a77fb80b3906876b6304cd980e20))
+
 ## [0.7.0](https://github.com/Einlanzerous/argosy/compare/v0.6.0...v0.7.0) (2026-06-25)
 
 
