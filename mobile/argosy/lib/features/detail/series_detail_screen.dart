@@ -7,6 +7,7 @@ import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
 import '../../util/format.dart';
+import '../../util/poster_gradient.dart';
 import '../../widgets/arg_chip.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
@@ -329,10 +330,10 @@ class _EpisodeTile extends ConsumerWidget {
                               still,
                               fit: BoxFit.cover,
                               errorBuilder: (_, _, _) =>
-                                  const HatchPlaceholder(),
+                                  _StillPlaceholder(seed: _rep.id),
                             )
                           else
-                            const HatchPlaceholder(),
+                            _StillPlaceholder(seed: _rep.id),
                           Center(
                             child: Icon(
                               watched ? Icons.check_circle : Icons.play_arrow,
@@ -421,6 +422,23 @@ class _EpisodeTile extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The episode-thumbnail fallback when there's no TMDB still: a seeded gradient
+/// under the hatch texture, mirroring the web's placeholder (a flat tile looked
+/// barren next to real stills). The play/check glyph is drawn over it by caller.
+class _StillPlaceholder extends StatelessWidget {
+  const _StillPlaceholder({required this.seed});
+
+  final String seed;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(gradient: posterGradient(seed)),
+      child: const HatchPattern(),
     );
   }
 }
