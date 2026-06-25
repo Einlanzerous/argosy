@@ -254,6 +254,13 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
     }
     if (Hls.isSupported()) {
       hls = new Hls({
+        // Each transcode is encoded *from* the requested offset (HLS-timeline 0 ==
+        // baseOffset in the media), so playback must always begin at position 0.
+        // The transcoder emits an `event` playlist (no ENDLIST while encoding), which
+        // hls.js otherwise treats as live and joins at the live edge — and a fast
+        // remux-copy races so far ahead that the edge can be minutes in, dropping a
+        // fresh play deep into the episode (ARGY-103). Pin the start explicitly.
+        startPosition: 0,
         xhrSetup: (xhr) => {
           const t = getToken()
           if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
