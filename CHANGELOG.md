@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/Einlanzerous/argosy/compare/v0.6.0...v0.7.0) (2026-06-25)
+
+
+### Features
+
+* **mobile:** UI polish from Claude Design — account/Fleet sheet, framed hero, Manifest header (ARGY-92) ([#90](https://github.com/Einlanzerous/argosy/issues/90)) ([037f9e9](https://github.com/Einlanzerous/argosy/commit/037f9e97e363bc57b71da1ccdc8a6ca814a5d5d5))
+* **series:** combined-episode files + per-episode TMDB metadata (ARGY-69 / ARGY-58) ([#92](https://github.com/Einlanzerous/argosy/issues/92)) ([28e105e](https://github.com/Einlanzerous/argosy/commit/28e105e5e1ac845a469f21781e8ebfd683ae9428))
+
 ## [0.6.0](https://github.com/Einlanzerous/argosy/compare/v0.5.0...v0.6.0) (2026-06-24)
 
 
