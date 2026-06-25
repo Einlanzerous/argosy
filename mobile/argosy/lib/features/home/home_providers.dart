@@ -223,7 +223,11 @@ final homeDataProvider = FutureProvider.autoDispose<HomeData>((ref) async {
 
   return HomeData(
     hero: _heroFrom(cont, recent),
-    continueRow: cont.map(_continueEntry).toList(),
+    // The hero already surfaces the most recent continue-watching item
+    // (cont.first), so drop it from the rail to avoid showing the same resume
+    // twice (ARGY-97). When cont is empty the hero is the fallback film and this
+    // is an empty list anyway.
+    continueRow: cont.skip(1).map(_continueEntry).toList(),
     onDeck: onDeck.map(_onDeckCard).toList(),
     recent: recent.map(MediaCard.fromSummary).toList(),
     vaultRows: vaultRows,
