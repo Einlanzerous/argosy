@@ -176,6 +176,24 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", transcodeContentType(name))
+	// HLS playlists grow while ffmpeg encodes, so they must never be cached or
+	// conditionally 304'd. http.ServeFile answers If-Modified-Since from the
+	// file's ModTime at 1-second granularity; a fast remux writes the partial
+	// and the final (ENDLIST) playlist within the same second, so a client that
+	// fetched a partial playlist gets a stale 304 on reload and never sees the
+	// segments appended afterward — wedging playback at that boundary (ARGY-106).
+	// Serve playlists with no validators and no-store; segments/init are
+	// immutable, so they stay cacheable via ServeFile.
+	if filepath.Ext(name) == ".m3u8" {
+		w.Header().Set("Cache-Control", "no-store")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, errorBody("not found"))
+			return
+		}
+		_, _ = w.Write(data)
+		return
+	}
 	http.ServeFile(w, r, path)
 }
 
