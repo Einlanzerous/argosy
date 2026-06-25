@@ -144,6 +144,10 @@ const hero = computed(() => {
   return null
 })
 
+// The hero already surfaces the most recent continue-watching item (continueItems[0]),
+// so drop it from the rail to avoid showing the same resume twice (ARGY-97).
+const continueRail = computed(() => continueItems.value.slice(1))
+
 // Heroes are full-screen + landscape, so prefer the backdrop; fall back to the
 // poster when an item has no backdrop yet.
 const heroStyle = computed(() =>
@@ -233,12 +237,12 @@ onUnmounted(() => {
 
     <div class="rails" :class="{ 'no-hero': !hero }">
       <PosterRail
-        v-if="continueItems.length"
+        v-if="continueRail.length"
         label="Continue Watching"
         hint="pick up on any deck in your Fleet"
       >
         <RouterLink
-          v-for="c in continueItems"
+          v-for="c in continueRail"
           :key="c.id"
           class="cw"
           :to="{ name: 'player', params: { id: c.id }, query: { resume: '1' } }"
