@@ -198,9 +198,14 @@ func (s *Scanner) linkEpisode(ctx context.Context, libraryID string, info episod
 	// still holds (each number is its own row); playing any of them plays the
 	// shared file.
 	for _, epNum := range info.episodes {
+		// On conflict, refresh only the file link — NOT the title. The matcher
+		// owns the title once it writes the real TMDB episode name (ARGY-58);
+		// re-stamping the filename fallback here on every rescan would clobber it
+		// (and a non-force re-match won't fix it, since provider_metadata is
+		// already populated). New rows still get the fallback via the INSERT.
 		if _, err := s.pool.Exec(ctx,
 			`INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1, $2, $3, $4)
-			 ON CONFLICT (season_id, episode_number) DO UPDATE SET media_item_id = EXCLUDED.media_item_id, title = EXCLUDED.title, updated_at = now()`,
+			 ON CONFLICT (season_id, episode_number) DO UPDATE SET media_item_id = EXCLUDED.media_item_id, updated_at = now()`,
 			seasonID, epNum, mediaItemID, fallbackTitle); err != nil {
 			return err
 		}
