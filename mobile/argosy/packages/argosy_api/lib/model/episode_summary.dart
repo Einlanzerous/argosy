@@ -16,6 +16,8 @@ class EpisodeSummary {
     required this.id,
     required this.episodeNumber,
     this.title,
+    this.overview,
+    this.stillUrl,
     this.mediaItemId,
     this.durationSeconds,
     this.positionSeconds,
@@ -28,6 +30,13 @@ class EpisodeSummary {
 
   String? title;
 
+  /// Per-episode synopsis from the metadata provider.
+  String? overview;
+
+  /// Episode still (16:9 landscape) image URL, or null when none.
+  String? stillUrl;
+
+  /// Backing file. Several episodes sharing one mediaItemId are a single combined rip.
   String? mediaItemId;
 
   num? durationSeconds;
@@ -42,6 +51,8 @@ class EpisodeSummary {
     other.id == id &&
     other.episodeNumber == episodeNumber &&
     other.title == title &&
+    other.overview == overview &&
+    other.stillUrl == stillUrl &&
     other.mediaItemId == mediaItemId &&
     other.durationSeconds == durationSeconds &&
     other.positionSeconds == positionSeconds &&
@@ -53,13 +64,15 @@ class EpisodeSummary {
     (id.hashCode) +
     (episodeNumber.hashCode) +
     (title == null ? 0 : title!.hashCode) +
+    (overview == null ? 0 : overview!.hashCode) +
+    (stillUrl == null ? 0 : stillUrl!.hashCode) +
     (mediaItemId == null ? 0 : mediaItemId!.hashCode) +
     (durationSeconds == null ? 0 : durationSeconds!.hashCode) +
     (positionSeconds == null ? 0 : positionSeconds!.hashCode) +
     (watched == null ? 0 : watched!.hashCode);
 
   @override
-  String toString() => 'EpisodeSummary[id=$id, episodeNumber=$episodeNumber, title=$title, mediaItemId=$mediaItemId, durationSeconds=$durationSeconds, positionSeconds=$positionSeconds, watched=$watched]';
+  String toString() => 'EpisodeSummary[id=$id, episodeNumber=$episodeNumber, title=$title, overview=$overview, stillUrl=$stillUrl, mediaItemId=$mediaItemId, durationSeconds=$durationSeconds, positionSeconds=$positionSeconds, watched=$watched]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -69,6 +82,16 @@ class EpisodeSummary {
       json[r'title'] = this.title;
     } else {
       json[r'title'] = null;
+    }
+    if (this.overview != null) {
+      json[r'overview'] = this.overview;
+    } else {
+      json[r'overview'] = null;
+    }
+    if (this.stillUrl != null) {
+      json[r'stillUrl'] = this.stillUrl;
+    } else {
+      json[r'stillUrl'] = null;
     }
     if (this.mediaItemId != null) {
       json[r'mediaItemId'] = this.mediaItemId;
@@ -115,6 +138,8 @@ class EpisodeSummary {
         id: mapValueOfType<String>(json, r'id')!,
         episodeNumber: mapValueOfType<int>(json, r'episodeNumber')!,
         title: mapValueOfType<String>(json, r'title'),
+        overview: mapValueOfType<String>(json, r'overview'),
+        stillUrl: mapValueOfType<String>(json, r'stillUrl'),
         mediaItemId: mapValueOfType<String>(json, r'mediaItemId'),
         durationSeconds: json[r'durationSeconds'] == null
             ? null

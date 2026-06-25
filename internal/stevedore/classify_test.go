@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -15,18 +16,25 @@ import (
 
 func TestParseEpisode(t *testing.T) {
 	cases := []struct {
-		path       string
-		show       string
-		season, ep int
-		ok         bool
+		path     string
+		show     string
+		season   int
+		episodes []int
+		ok       bool
 	}{
-		{"Show Name/Season 1/Show Name S01E02 Title.mkv", "Show Name", 1, 2, true},
-		{"shows/Sword Art Online/Season 1/Sword Art Online S01E01.mkv", "Sword Art Online", 1, 1, true}, // category dir skipped
-		{"anime/Cowboy Bebop/Season 1/Cowboy Bebop S01E02.mkv", "Cowboy Bebop", 1, 2, true},
-		{"Show.Name.S03E10.1080p.mkv", "Show Name", 3, 10, true},
-		{"Show Name/Show Name 1x05.mkv", "Show Name", 1, 5, true},
-		{"Specials/Show Name S00E01.mkv", "Show Name", 0, 1, true},
-		{"Movies/Random Movie (2020).mkv", "", 0, 0, false},
+		{"Show Name/Season 1/Show Name S01E02 Title.mkv", "Show Name", 1, []int{2}, true},
+		{"shows/Sword Art Online/Season 1/Sword Art Online S01E01.mkv", "Sword Art Online", 1, []int{1}, true}, // category dir skipped
+		{"anime/Cowboy Bebop/Season 1/Cowboy Bebop S01E02.mkv", "Cowboy Bebop", 1, []int{2}, true},
+		{"Show.Name.S03E10.1080p.mkv", "Show Name", 3, []int{10}, true}, // resolution tag not a range end
+		{"Show Name/Show Name 1x05.mkv", "Show Name", 1, []int{5}, true},
+		{"Specials/Show Name S00E01.mkv", "Show Name", 0, []int{1}, true},
+		// Combined rips: one file backing several episodes.
+		{"The Good Place/Season 1/The Good Place S01E01-E02.mkv", "The Good Place", 1, []int{1, 2}, true},
+		{"The Office/Season 2/The Office S02E01E02.mkv", "The Office", 2, []int{1, 2}, true},
+		{"Show Name/Season 1/Show Name S01E01-E03.mkv", "Show Name", 1, []int{1, 2, 3}, true},
+		{"Show Name/Show Name 1x01-02.mkv", "Show Name", 1, []int{1, 2}, true},
+		{"Show Name/Season 1/Show Name S01E04-03.mkv", "Show Name", 1, []int{4}, true}, // non-increasing → single
+		{"Movies/Random Movie (2020).mkv", "", 0, nil, false},
 	}
 	for _, c := range cases {
 		info, ok := parseEpisode(c.path)
@@ -37,9 +45,9 @@ func TestParseEpisode(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if info.show != c.show || info.season != c.season || info.episode != c.ep {
-			t.Errorf("%q: got {%q s%d e%d}, want {%q s%d e%d}",
-				c.path, info.show, info.season, info.episode, c.show, c.season, c.ep)
+		if info.show != c.show || info.season != c.season || !slices.Equal(info.episodes, c.episodes) {
+			t.Errorf("%q: got {%q s%d e%v}, want {%q s%d e%v}",
+				c.path, info.show, info.season, info.episodes, c.show, c.season, c.episodes)
 		}
 	}
 }

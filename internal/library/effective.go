@@ -131,6 +131,17 @@ func backdropURL(base string, over, prov map[string]any) *string {
 	return &u
 }
 
+// stillURL resolves an episode's cached still (16:9 landscape thumbnail), or nil
+// when none was fetched — callers fall back to the hatch placeholder.
+func stillURL(base string, over, prov map[string]any) *string {
+	rel := firstNonEmpty(mstr(over, "still"), mstr(prov, "still"))
+	if rel == "" {
+		return nil
+	}
+	u := base + "/" + rel
+	return &u
+}
+
 func parseUUID(s string) openapi_types.UUID {
 	u, _ := uuid.Parse(s)
 	return u

@@ -69,15 +69,21 @@ func TestNextEpisode(t *testing.T) {
 		}
 	}
 
-	// Season 1: E1, E2, E3 (E3 has no linked file). Season 2: E1.
+	// Season 1: E1, E2, E3 (E3 has no linked file).
+	// Season 2: E1, then a COMBINED file backing E2+E3, then E4.
 	s1 := mkSeason(1)
 	s1e1, s1e2 := mkItem("S1E1"), mkItem("S1E2")
 	s2 := mkSeason(2)
 	s2e1 := mkItem("S2E1")
+	s2combo := mkItem("S2E2-E3") // one file backs E2 and E3
+	s2e4 := mkItem("S2E4")
 	mkEp(s1, 1, &s1e1)
 	mkEp(s1, 2, &s1e2)
 	mkEp(s1, 3, nil) // unlinked: must be skipped, not returned
 	mkEp(s2, 1, &s2e1)
+	mkEp(s2, 2, &s2combo)
+	mkEp(s2, 3, &s2combo) // same file as E2 — combined rip
+	mkEp(s2, 4, &s2e4)
 
 	store := NewStore(pool, "/artwork")
 
@@ -105,8 +111,30 @@ func TestNextEpisode(t *testing.T) {
 		t.Errorf("after S1E2 got S%dE%d, want S2E1", next.SeasonNumber, next.EpisodeNumber)
 	}
 
-	// Last episode of the series: nothing after S2E1.
+	// Into a combined rip: S2E1 → S2E2 (the combined file's first number).
 	next, err = store.NextEpisode(ctx, accID, s2e1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next == nil || next.Id.String() != s2combo {
+		t.Fatalf("after S2E1 = %+v, want combined S2E2 %s", next, s2combo)
+	}
+
+	// Out of a combined rip: finishing S2E2-E3 advances to S2E4, NOT back to E3
+	// (the same file — that would replay-loop). Regression for ARGY-69 auto-advance.
+	next, err = store.NextEpisode(ctx, accID, s2combo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next == nil || next.Id.String() != s2e4 {
+		t.Fatalf("after combined S2E2-E3 = %+v, want S2E4 %s (not a replay of the combined file)", next, s2e4)
+	}
+	if next.SeasonNumber != 2 || next.EpisodeNumber != 4 {
+		t.Errorf("after combined got S%dE%d, want S2E4", next.SeasonNumber, next.EpisodeNumber)
+	}
+
+	// Last episode of the series: nothing after S2E4.
+	next, err = store.NextEpisode(ctx, accID, s2e4)
 	if err != nil {
 		t.Fatal(err)
 	}

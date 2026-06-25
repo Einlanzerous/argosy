@@ -118,13 +118,17 @@ LIMIT $3`
 func (s *Store) NextEpisode(ctx context.Context, accountID, itemID string) (*api.OnDeckItem, error) {
 	const q = `
 WITH cur AS (
-	-- The current episode's series and its ordinal (season*1000 + episode).
-	SELECT sea.series_id, (sea.season_number * 1000 + e.episode_number) AS pos
+	-- The current file's series and its FURTHEST ordinal (season*1000 + episode).
+	-- A combined rip backs several episode rows that share this media_item; taking
+	-- the max means "next" skips the whole combined span (E1–2 → E3) instead of
+	-- advancing to E2, which is the very same file (would replay-loop).
+	SELECT sea.series_id, MAX(sea.season_number * 1000 + e.episode_number) AS pos
 	FROM episodes e
 	JOIN seasons sea ON sea.id = e.season_id
 	JOIN media_items mi ON mi.id = e.media_item_id
 	JOIN libraries l ON l.id = mi.library_id
 	WHERE l.account_id = $1 AND e.media_item_id = $2
+	GROUP BY sea.series_id
 )
 SELECT mi.id::text, sr.id::text, sr.title, sr.provider_metadata, sr.metadata,
        sea.season_number, e.episode_number, e.title, mi.duration_seconds

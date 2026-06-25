@@ -39,9 +39,10 @@ func NewMatcher(pool *pgxpool.Pool, provider metadata.Provider, artworkDir strin
 
 // MatchResult summarizes a match run.
 type MatchResult struct {
-	Movies int
-	Series int
-	Misses int
+	Movies   int
+	Series   int
+	Episodes int // episode rows enriched with per-episode TMDB metadata
+	Misses   int
 }
 
 type matchItem struct {
@@ -102,7 +103,174 @@ func (m *Matcher) MatchLibrary(ctx context.Context, libraryID string, force bool
 		}
 		res.Series++
 	}
+
+	// Per-episode metadata: now that series carry a tmdb_id, fill in each
+	// episode's name/overview/still. Runs over every matched series (not just
+	// the ones matched this pass) so episode files added after the series was
+	// first matched get enriched too; cheap because it only touches episodes
+	// still missing provider metadata unless force is set.
+	n, err := m.matchEpisodes(ctx, libraryID, force)
+	if err != nil {
+		return res, err
+	}
+	res.Episodes = n
 	return res, nil
+}
+
+// matchEpisodes fetches per-season episode lists from the provider for every
+// matched series in the library and writes each episode's name + overview +
+// still. Returns the number of episode rows enriched.
+func (m *Matcher) matchEpisodes(ctx context.Context, libraryID string, force bool) (int, error) {
+	rows, err := m.pool.Query(ctx,
+		`SELECT id::text, tmdb_id FROM series WHERE library_id = $1 AND tmdb_id IS NOT NULL`, libraryID)
+	if err != nil {
+		return 0, err
+	}
+	type ser struct {
+		id   string
+		tmdb int64
+	}
+	var seriesList []ser
+	for rows.Next() {
+		var s ser
+		if err := rows.Scan(&s.id, &s.tmdb); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		seriesList = append(seriesList, s)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	total := 0
+	for _, s := range seriesList {
+		n, err := m.matchSeriesEpisodes(ctx, s.id, s.tmdb, force)
+		if err != nil {
+			return total, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+func (m *Matcher) matchSeriesEpisodes(ctx context.Context, seriesID string, tmdbID int64, force bool) (int, error) {
+	// Only the seasons with episodes still missing metadata (all of them when
+	// force) — avoids re-hitting TMDB for already-enriched seasons on rescans.
+	seasonQ := `SELECT DISTINCT se.season_number FROM seasons se JOIN episodes e ON e.season_id = se.id WHERE se.series_id = $1`
+	if !force {
+		seasonQ += ` AND e.provider_metadata = '{}'::jsonb`
+	}
+	rows, err := m.pool.Query(ctx, seasonQ, seriesID)
+	if err != nil {
+		return 0, err
+	}
+	var seasons []int
+	for rows.Next() {
+		var n int
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		seasons = append(seasons, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, seasonNum := range seasons {
+		eps, err := m.provider.SeasonEpisodes(ctx, tmdbID, seasonNum)
+		if err != nil {
+			m.logger.Warn("tmdb season fetch failed", "tmdb_id", tmdbID, "season", seasonNum, "err", err)
+			continue
+		}
+		byNum := make(map[int]metadata.EpisodeMeta, len(eps))
+		for _, e := range eps {
+			byNum[e.Number] = e
+		}
+		n, err := m.storeSeasonEpisodes(ctx, seriesID, tmdbID, seasonNum, byNum, force)
+		if err != nil {
+			return count, err
+		}
+		count += n
+	}
+	return count, nil
+}
+
+// storeSeasonEpisodes writes provider metadata onto the episode rows of one
+// season, matching on episode_number. Each combined-file row (several numbers
+// sharing one media_item) is matched independently, so E01 and E02 of a merged
+// rip each get their own name/overview/still.
+func (m *Matcher) storeSeasonEpisodes(ctx context.Context, seriesID string, tmdbID int64, seasonNum int, byNum map[int]metadata.EpisodeMeta, force bool) (int, error) {
+	epQ := `SELECT e.id::text, e.episode_number FROM episodes e JOIN seasons se ON se.id = e.season_id
+	        WHERE se.series_id = $1 AND se.season_number = $2`
+	if !force {
+		epQ += ` AND e.provider_metadata = '{}'::jsonb`
+	}
+	rows, err := m.pool.Query(ctx, epQ, seriesID, seasonNum)
+	if err != nil {
+		return 0, err
+	}
+	type epRow struct {
+		id  string
+		num int
+	}
+	var epRows []epRow
+	for rows.Next() {
+		var e epRow
+		if err := rows.Scan(&e.id, &e.num); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		epRows = append(epRows, e)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, e := range epRows {
+		meta, ok := byNum[e.num]
+		if !ok {
+			continue
+		}
+
+		stillRel := ""
+		if meta.StillURL != "" {
+			stillRel = path.Join("episodes", fmt.Sprintf("%d-s%de%d.jpg", tmdbID, seasonNum, e.num))
+			dest := filepath.Join(m.artworkDir, filepath.FromSlash(stillRel))
+			if err := m.download(ctx, meta.StillURL, dest); err != nil {
+				m.logger.Warn("episode still download failed", "url", meta.StillURL, "err", err)
+				stillRel = ""
+			}
+		}
+
+		pm := map[string]any{"source": "tmdb"}
+		if meta.Overview != "" {
+			pm["overview"] = meta.Overview
+		}
+		if stillRel != "" {
+			pm["still"] = stillRel
+		}
+		raw, err := json.Marshal(pm)
+		if err != nil {
+			return count, err
+		}
+
+		// Replace the SxxExx filename fallback with the real episode name; keep
+		// the existing title when TMDB has no name so we never blank it out.
+		if _, err := m.pool.Exec(ctx,
+			`UPDATE episodes SET title = COALESCE(NULLIF($2, ''), title), provider_metadata = $3, updated_at = now() WHERE id = $1`,
+			e.id, meta.Name, raw); err != nil {
+			return count, err
+		}
+		count++
+	}
+	return count, nil
 }
 
 func (m *Matcher) collect(ctx context.Context, query, libraryID string) ([]matchItem, error) {
