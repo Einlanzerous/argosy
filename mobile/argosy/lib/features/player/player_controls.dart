@@ -47,7 +47,11 @@ class _PlayerControlsState extends State<PlayerControls> {
     // Cheap repaint loop so the scrub bar + clock track playback smoothly and
     // the buffering spinner stays live even while the controls are hidden.
     _ticker = Timer.periodic(const Duration(milliseconds: 300), (_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      // Credits-triggered roll-over (ARGY-90): the controller has no progress
+      // event, so the repaint loop is also where we check for the early advance.
+      _c.maybeAdvance();
+      setState(() {});
     });
     _scheduleHide();
   }
@@ -151,8 +155,15 @@ class _PlayerControlsState extends State<PlayerControls> {
     if (remaining > PlaybackController.upNextLeadSeconds || remaining <= 0) {
       return const SizedBox.shrink();
     }
-    final countdown =
-        remaining.ceil().clamp(1, PlaybackController.upNextLeadSeconds);
+    // Counts down to the early roll-over (upNextTailSeconds before the end), not
+    // to the file's end — so it ticks 10 → 0 and then advances (ARGY-90).
+    final countdown = (remaining - PlaybackController.upNextTailSeconds)
+        .ceil()
+        .clamp(
+          1,
+          PlaybackController.upNextLeadSeconds -
+              PlaybackController.upNextTailSeconds,
+        );
     final code = 'S${next.seasonNumber} E${next.episodeNumber}';
     final label = (next.title != null && next.title!.isNotEmpty)
         ? '$code · ${formatTitle(next.title!)}'
@@ -208,8 +219,8 @@ class _PlayerControlsState extends State<PlayerControls> {
                         foregroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      label: const Text('Play now'),
+                      icon: const Icon(Icons.skip_next, size: 18),
+                      label: const Text('Play Next'),
                     ),
                   ),
                   const SizedBox(width: 10),

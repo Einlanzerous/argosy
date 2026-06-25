@@ -88,8 +88,15 @@ class PlaybackController extends ChangeNotifier {
   /// Whether series auto-advance is enabled for this device (default on).
   bool get autoAdvance => prefs?.seriesAutoAdvance ?? true;
 
-  /// Seconds before the end at which the Up Next card surfaces.
-  static const upNextLeadSeconds = 20;
+  /// Seconds before the end at which the Up Next / Play Next card surfaces.
+  static const upNextLeadSeconds = 40;
+
+  /// Seconds before the end at which we auto-roll into the next episode. Short of
+  /// the literal end (mirrors web ARGY-90) so the card shows a
+  /// [upNextLeadSeconds] − [upNextTailSeconds] = 15s countdown that actually
+  /// triggers the advance, rather than a timer that just mirrors the time left to
+  /// the finished event. Manual Play Next jumps immediately.
+  static const upNextTailSeconds = 25;
 
   BetterPlayerController? _player;
   BetterPlayerController? get player => _player;
@@ -194,8 +201,22 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
-  /// Rolls into the next episode now (the Up Next "Play now" action).
+  /// Rolls into the next episode now (the Up Next "Play Next" action).
   void playNext() => _requestAdvance();
+
+  /// Credits-triggered roll-over (mirrors web ARGY-90): once playback is within
+  /// [upNextTailSeconds] of the end, advance instead of waiting for the finished
+  /// event, so the countdown actually does something. Driven by the overlay's
+  /// repaint ticker; safe to call repeatedly — [_requestAdvance] guards against
+  /// double-firing, and a dismissed card or disabled pref opts out.
+  void maybeAdvance() {
+    if (!autoAdvance || nextEpisode == null || upNextCancelled || _advancing) {
+      return;
+    }
+    if (catalogDuration <= 0) return;
+    final remaining = catalogDuration - position;
+    if (remaining > 0 && remaining <= upNextTailSeconds) _requestAdvance();
+  }
 
   /// Dismisses the Up Next card and stops the end-of-file roll-over for this
   /// episode, leaving the player on the finished episode.
