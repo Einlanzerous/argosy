@@ -50,12 +50,24 @@ const subMenuOpen = ref(false)
 // when tracks load and updated when the viewer changes the subtitle (ARGY-37).
 const prefs = ref<DevicePreferences | null>(null)
 
-// Series auto-advance (ARGY-89): when this item is a series episode and the
-// device pref is on, an "Up Next" card surfaces near the end and we roll into the
-// next episode on end-of-file. nextEpisode is null for films or the last episode.
-// The countdown is driven by real remaining time, so it stays accurate and
-// retracts if the viewer seeks back out of the lead-in window.
-const UP_NEXT_LEAD_SECONDS = 20
+// Series auto-advance (ARGY-89) + credits-triggered roll-over (ARGY-90): when this
+// item is a series episode and the device pref is on, an "Up Next / Play Next"
+// card surfaces once the credits window begins and we roll into the next episode a
+// few seconds before the file ends — rather than waiting for the hard end-of-file —
+// so we don't sit on a black frame. nextEpisode is null for films or the last
+// episode. The countdown tracks real remaining time, so it stays accurate and the
+// card retracts if the viewer seeks back out of the window.
+//
+// We don't have real per-file credits markers yet (that needs embedded chapters —
+// ARGY-100), so the credits window is heuristic: the last CREDITS_LEAD_SECONDS of
+// runtime. creditsStart is the single seam where the chapter-marker follow-up can
+// swap this heuristic for a real marker. Manual "Play Next" jumps immediately.
+const CREDITS_LEAD_SECONDS = 40
+// Auto roll-over fires this many seconds before the literal end, so the card shows
+// a CREDITS_LEAD_SECONDS − AUTO_ADVANCE_TAIL_SECONDS = 15s countdown and then rolls
+// into the next episode with ~25s of file left, instead of sitting through the
+// tail. Viewers who want to cut even that hit Play Next.
+const AUTO_ADVANCE_TAIL_SECONDS = 25
 const autoAdvance = ref(true)
 const nextEpisode = ref<OnDeckItem | null>(null)
 const upNextOpen = ref(false)
@@ -121,6 +133,13 @@ let transcodeSessionId = ''
 
 const pct = computed(() => (duration.value ? (position.value / duration.value) * 100 : 0))
 const remaining = computed(() => Math.max(0, duration.value - position.value))
+// Start of the credits window (ARGY-90). Heuristic for now — the last
+// CREDITS_LEAD_SECONDS of runtime — but isolated here so ARGY-100 can replace it
+// with a real chapter marker without touching the roll-over logic below.
+const creditsStart = computed(() =>
+  duration.value ? Math.max(0, duration.value - CREDITS_LEAD_SECONDS) : 0,
+)
+const inCredits = computed(() => duration.value > 0 && position.value >= creditsStart.value)
 const backdrop = computed(() =>
   posterStyle(item.value?.backdropUrl ?? item.value?.posterUrl, item.value?.title ?? ''),
 )
@@ -346,19 +365,21 @@ function flush(): void {
   }
 }
 
-// maybeUpNext drives the "Up Next" card from the live remaining time: it appears
-// inside the lead-in window and retracts if the viewer seeks back out of it. The
-// countdown is informational — the actual roll-over happens on end-of-file (or
-// when the viewer hits "Play now"), which keeps it aligned with the real media
-// length whether we direct-play or transcode.
+// maybeUpNext drives the "Up Next / Play Next" card from the live remaining
+// time: it appears once playback enters the credits window and retracts if the
+// viewer seeks back out of it. The countdown tracks the time left until the
+// automatic roll-over, which fires AUTO_ADVANCE_TAIL_SECONDS before the file ends
+// — credits-triggered rather than waiting for the 'ended' event (ARGY-90). The
+// viewer can jump immediately with Play Next or opt out with Cancel.
 function maybeUpNext(): void {
   if (!autoAdvance.value || !nextEpisode.value || upNextCancelled.value || advancing) return
   if (!duration.value) return
   const rem = duration.value - position.value
-  if (rem <= UP_NEXT_LEAD_SECONDS && rem > 0) {
+  if (inCredits.value && rem > 0) {
     upNextOpen.value = true
-    upNextCountdown.value = Math.max(1, Math.ceil(rem))
-  } else if (rem > UP_NEXT_LEAD_SECONDS && upNextOpen.value) {
+    upNextCountdown.value = Math.max(1, Math.ceil(rem - AUTO_ADVANCE_TAIL_SECONDS))
+    if (rem <= AUTO_ADVANCE_TAIL_SECONDS) advance()
+  } else if (!inCredits.value && upNextOpen.value) {
     upNextOpen.value = false
   }
 }
@@ -373,8 +394,9 @@ function advance(): void {
   void router.push({ name: 'player', params: { id: next.id }, query: { resume: '1' } })
 }
 
-// playNow skips the rest of the countdown and jumps straight to the next episode.
-function playNow(): void {
+// playNext skips the rest of the credits/countdown and jumps straight to the
+// next episode (ARGY-90).
+function playNext(): void {
   advance()
 }
 
@@ -600,6 +622,11 @@ function onKey(e: KeyboardEvent): void {
     cancelUpNext()
     return
   }
+  // 'n' jumps to the next episode while the card is up (ARGY-90).
+  if (e.key === 'n' && upNextOpen.value && nextEpisode.value) {
+    playNext()
+    return
+  }
   if (e.key === ' ') {
     e.preventDefault()
     togglePlay()
@@ -794,9 +821,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </div>
     </div>
 
-    <!-- Up Next: auto-advance to the next episode (ARGY-89). Surfaces near the
-         end; the countdown mirrors the real time left, and end-of-file (or
-         "Play now") rolls into the next episode. -->
+    <!-- Up Next / Play Next: auto-advance to the next episode (ARGY-89/90).
+         Surfaces once the credits window begins; the countdown mirrors the time
+         left until the automatic roll-over (which fires shortly before the file
+         ends), and "Play Next" jumps straight into the next episode. -->
     <div v-if="upNextOpen && nextEpisode" class="up-next">
       <div class="up-next-card">
         <div class="up-next-head">
@@ -806,7 +834,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <div class="up-next-title">{{ nextEpisodeLabel }}</div>
         <div v-if="nextEpisode.seriesTitle" class="up-next-series">{{ nextEpisode.seriesTitle }}</div>
         <div class="up-next-actions">
-          <button class="up-next-play" type="button" @click="playNow">▶ Play now</button>
+          <button class="up-next-play" type="button" @click="playNext">⏭ Play Next</button>
           <button class="up-next-cancel" type="button" @click="cancelUpNext">Cancel</button>
         </div>
       </div>

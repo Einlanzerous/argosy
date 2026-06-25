@@ -77,6 +77,13 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
   bool _pipSupported = false;
   bool _inPip = false;
 
+  // Set just before we pushReplacement one player with the next episode's player
+  // (auto-advance). The outgoing screen's dispose runs *after* the incoming
+  // screen's initState, so without this guard dispose would reset orientation /
+  // UI mode and clobber the new player's landscape + immersive lock — leaving the
+  // next episode stuck in portrait. Static because it bridges two State objects.
+  static bool _replacingWithPlayer = false;
+
   // Resume-vs-start-over prompt (web parity): shown when there's saved progress
   // and the entry point didn't explicitly choose. Playback is deferred until
   // the user picks.
@@ -121,6 +128,7 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
   void _advanceToNext() {
     final next = _controller.nextEpisode;
     if (!mounted || next == null) return;
+    _replacingWithPlayer = true;
     context.pushReplacement('${Routes.player(next.id)}?resume=1');
   }
 
@@ -217,8 +225,16 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     PiP.register();
     PiP.setActive(false);
     _controller.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    // When replacing this player with the next episode's player, the incoming
+    // screen has already locked landscape + immersive in its initState; resetting
+    // here (dispose runs afterwards) would knock the next episode into portrait.
+    // Only restore the app's default chrome when truly leaving the player.
+    if (_replacingWithPlayer) {
+      _replacingWithPlayer = false;
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    }
     super.dispose();
   }
 
