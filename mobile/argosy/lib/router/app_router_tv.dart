@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_controller.dart';
-import '../features/auth/pairing_screen.dart';
+import '../features/auth/tv/tv_pairing_screen.dart';
 import '../features/detail/movie_detail_screen.dart';
 import '../features/detail/series_detail_screen.dart';
 import '../features/home/tv/tv_home_screen.dart';
@@ -51,7 +51,7 @@ final routerTvProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: Routes.splash, builder: (_, _) => const SplashScreen()),
-      GoRoute(path: Routes.login, builder: (_, _) => const PairingScreen()),
+      GoRoute(path: Routes.login, builder: (_, _) => const TvPairingScreen()),
 
       GoRoute(path: Routes.home, builder: (_, _) => const TvHomeScreen()),
       GoRoute(
