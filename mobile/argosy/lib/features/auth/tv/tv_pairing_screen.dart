@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +12,9 @@ import '../../../tv/tv_stage.dart';
 import '../../../widgets/argosy_mark.dart';
 import '../auth_controller.dart';
 
-enum _Step { server, signIn, pair }
+// `code` is the primary path (pair from a phone — no TV typing); the typed
+// `signIn`/`pair` steps are the fallback.
+enum _Step { server, code, signIn, pair }
 
 /// The TV pairing flow (ARGY-51): server → sign in → pick a profile, driven
 /// entirely by the D-pad via the in-app [TvOnScreenKeyboard]. Reuses the same
@@ -39,6 +43,11 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
   bool _busy = false;
   String? _error;
 
+  // Code-pairing state.
+  Timer? _pollTimer;
+  String? _linkCode;
+  String? _linkBaseUrl;
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +58,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _server.dispose();
     _username.dispose();
     _password.dispose();
@@ -94,13 +104,60 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
 
   void _submitServer() => _run(() async {
     await ref.read(authControllerProvider.notifier).setServer(_server.text);
-    if (mounted) {
-      setState(() {
-        _step = _Step.signIn;
-        _active = _username;
-      });
-    }
+    if (!mounted) return;
+    setState(() => _step = _Step.code);
+    await _startLink();
   });
+
+  /// Mint a pairing code and begin polling for approval (the primary path).
+  Future<void> _startLink() async {
+    _pollTimer?.cancel();
+    setState(() {
+      _linkCode = null;
+      _error = null;
+      _linkBaseUrl = ref.read(baseUrlProvider);
+    });
+    try {
+      final res = await ref.read(authApiProvider).startLink();
+      if (!mounted) return;
+      setState(() => _linkCode = res?.code);
+      _pollTimer =
+          Timer.periodic(const Duration(seconds: 2), (_) => _pollLink());
+    } catch (_) {
+      if (mounted) {
+        setState(() =>
+            _error = "Couldn't start pairing. Check the server and try again.");
+      }
+    }
+  }
+
+  Future<void> _pollLink() async {
+    final code = _linkCode;
+    if (code == null) return;
+    try {
+      final res = await ref.read(authApiProvider).getLinkStatus(code);
+      if (!mounted) return;
+      if (res?.status == LinkStatusResponseStatusEnum.approved &&
+          res?.token != null) {
+        _pollTimer?.cancel();
+        // Auth gate flips → the router leaves this screen.
+        await ref.read(authControllerProvider.notifier).adoptToken(res!.token!);
+      }
+    } on ApiException catch (e) {
+      // The code expired or was consumed — mint a fresh one.
+      if (e.code == 404) await _startLink();
+    } catch (_) {
+      // Transient network blip — keep polling.
+    }
+  }
+
+  void _useTypedSignIn() {
+    _pollTimer?.cancel();
+    setState(() {
+      _step = _Step.signIn;
+      _active = _username;
+    });
+  }
 
   void _submitSignIn() => _run(() async {
     final profiles = await ref
@@ -137,7 +194,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
       body: TvStage(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1120),
+            constraints: const BoxConstraints(maxWidth: 1240),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -168,6 +225,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
     final t = Theme.of(context).textTheme;
     final (label, sub) = switch (_step) {
       _Step.server => ('Connect to your server', 'Enter your household Argosy server address.'),
+      _Step.code => ('Pair from your phone', 'Open the link below on any signed-in device.'),
       _Step.signIn => ('Welcome aboard', 'Sign in to reach your library.'),
       _Step.pair => ('Who’s aboard?', 'Pick a profile — this TV joins your Fleet.'),
     };
@@ -198,6 +256,11 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
           _keyboard(),
           const SizedBox(height: 18),
           _action('Continue', _submitServer),
+        ],
+      _Step.code => [
+          _CodeCard(code: _linkCode, baseUrl: _linkBaseUrl),
+          const SizedBox(height: 26),
+          _secondary('Sign in with email instead', _useTypedSignIn),
         ],
       _Step.signIn => [
           _TvField(
@@ -278,6 +341,127 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
                 ),
               ),
       ),
+    );
+  }
+
+  Widget _secondary(String label, VoidCallback onPressed) {
+    return TvFocusable(
+      scale: 1.04,
+      autofocus: true,
+      onSelect: onPressed,
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: ArgosyColors.panel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: ArgosyColors.line2),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'HankenGrotesk',
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: ArgosyColors.soft,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The pairing code + instructions the TV shows while it polls for approval.
+class _CodeCard extends StatelessWidget {
+  const _CodeCard({required this.code, required this.baseUrl});
+
+  final String? code;
+  final String? baseUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (code == null) {
+      return const SizedBox(
+        height: 220,
+        child: Center(
+          child: CircularProgressIndicator(color: ArgosyColors.accent),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: ArgosyColors.panel,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: ArgosyColors.line2),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.smartphone,
+                size: 22,
+                color: ArgosyColors.accent,
+              ),
+              const SizedBox(width: 12),
+              Text.rich(
+                TextSpan(
+                  style: const TextStyle(
+                    fontFamily: 'HankenGrotesk',
+                    fontSize: 19,
+                    color: ArgosyColors.dim,
+                  ),
+                  children: [
+                    const TextSpan(text: 'Open  '),
+                    TextSpan(
+                      text: '${baseUrl ?? ''}/link',
+                      style: const TextStyle(color: ArgosyColors.cream),
+                    ),
+                    const TextSpan(text: '  and enter this code'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 30),
+        Text(
+          code!,
+          style: const TextStyle(
+            fontFamily: 'Archivo',
+            fontSize: 88,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 16,
+            color: ArgosyColors.accent,
+          ),
+        ),
+        const SizedBox(height: 26),
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: ArgosyColors.accent,
+              ),
+            ),
+            SizedBox(width: 12),
+            Text(
+              'Waiting for approval…',
+              style: TextStyle(
+                fontFamily: 'HankenGrotesk',
+                fontSize: 17,
+                color: ArgosyColors.dim,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

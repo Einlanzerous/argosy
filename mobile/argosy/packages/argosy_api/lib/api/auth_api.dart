@@ -16,6 +16,60 @@ class AuthApi {
 
   final ApiClient apiClient;
 
+  /// Approve a TV pairing code from a signed-in session
+  ///
+  /// Called from an authenticated web session. Links the TV to the caller's account and profile by creating a device; the TV claims its token on the next poll. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] code (required):
+  ///
+  /// * [LinkApproveRequest] linkApproveRequest:
+  Future<Response> approveLinkWithHttpInfo(String code, { LinkApproveRequest? linkApproveRequest, Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/link/{code}/approve'
+      .replaceAll('{code}', code);
+
+    // ignore: prefer_final_locals
+    Object? postBody = linkApproveRequest;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Approve a TV pairing code from a signed-in session
+  ///
+  /// Called from an authenticated web session. Links the TV to the caller's account and profile by creating a device; the TV claims its token on the next poll. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] code (required):
+  ///
+  /// * [LinkApproveRequest] linkApproveRequest:
+  Future<void> approveLink(String code, { LinkApproveRequest? linkApproveRequest, Future<void>? abortTrigger, }) async {
+    final response = await approveLinkWithHttpInfo(code, linkApproveRequest: linkApproveRequest, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Resolve the current (account, profile, device) from the token
   ///
   /// Note: This method returns the HTTP [Response].
@@ -101,6 +155,64 @@ class AuthApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'DevicePreferences',) as DevicePreferences;
+    
+    }
+    return null;
+  }
+
+  /// Poll a pairing code; returns the device token once approved
+  ///
+  /// The TV polls this. While pending, `status` is `pending`. Once approved, it returns `status: approved` plus the one-time device `token`, and the code is consumed (single use). 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] code (required):
+  Future<Response> getLinkStatusWithHttpInfo(String code, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/link/{code}'
+      .replaceAll('{code}', code);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Poll a pairing code; returns the device token once approved
+  ///
+  /// The TV polls this. While pending, `status` is `pending`. Once approved, it returns `status: approved` plus the one-time device `token`, and the code is consumed (single use). 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] code (required):
+  Future<LinkStatusResponse?> getLinkStatus(String code, { Future<void>? abortTrigger, }) async {
+    final response = await getLinkStatusWithHttpInfo(code, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'LinkStatusResponse',) as LinkStatusResponse;
     
     }
     return null;
@@ -518,6 +630,55 @@ class AuthApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'UserPreferences',) as UserPreferences;
+    
+    }
+    return null;
+  }
+
+  /// Begin TV code-pairing — mint a short code for the TV to display
+  ///
+  /// A TV (which can't comfortably type credentials) calls this to get a short pairing code. It displays the code, then polls `GET /auth/link/{code}` until an authenticated user approves it and a device token is handed back. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> startLinkWithHttpInfo({ Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/link/start';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Begin TV code-pairing — mint a short code for the TV to display
+  ///
+  /// A TV (which can't comfortably type credentials) calls this to get a short pairing code. It displays the code, then polls `GET /auth/link/{code}` until an authenticated user approves it and a device token is handed back. 
+  Future<LinkStartResponse?> startLink({ Future<void>? abortTrigger, }) async {
+    final response = await startLinkWithHttpInfo(abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'LinkStartResponse',) as LinkStartResponse;
     
     }
     return null;

@@ -264,3 +264,79 @@ func TestDeviceInstallIdDedup(t *testing.T) {
 		t.Errorf("nil install id should not dedup, got same row %v", noInstallA.Device.Id)
 	}
 }
+
+// TestLinkPairing covers ARGY-112: a TV starts a code, an authenticated session
+// approves it, and the TV claims a working device token exactly once.
+func TestLinkPairing(t *testing.T) {
+	store, ctx := testStore(t)
+	username := uniqueUsername()
+	password := "pw-" + uniqueUsername()
+	if _, err := store.CreateAccount(ctx, username, password, "Link Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	login, err := store.Login(ctx, username, password)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	profile := login.Profiles[0].Id
+	sess := api.Session{AccountId: login.Account.Id, UserId: profile, Role: api.Admin}
+
+	start, err := store.StartLink(ctx)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if len(start.Code) != 6 {
+		t.Fatalf("code = %q, want 6 chars", start.Code)
+	}
+
+	// Pending before approval.
+	if st, err := store.LinkStatus(ctx, start.Code); err != nil || st.Status != api.Pending || st.Token != nil {
+		t.Fatalf("pending poll = %+v (err %v)", st, err)
+	}
+
+	// The signed-in user approves the code.
+	if err := store.ApproveLink(ctx, sess, start.Code, "Den TV"); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	// A second approval is rejected.
+	if err := store.ApproveLink(ctx, sess, start.Code, "x"); !errors.Is(err, ErrLinkAlreadyClaimed) {
+		t.Fatalf("double approve = %v, want ErrLinkAlreadyClaimed", err)
+	}
+
+	// Approved poll returns a token bound to the approving account + profile.
+	st, err := store.LinkStatus(ctx, start.Code)
+	if err != nil || st.Status != api.Approved || st.Token == nil || *st.Token == "" {
+		t.Fatalf("approved poll = %+v (err %v)", st, err)
+	}
+	tvSess, err := store.AuthenticateDevice(ctx, *st.Token)
+	if err != nil {
+		t.Fatalf("authenticate paired token: %v", err)
+	}
+	if tvSess.AccountId != login.Account.Id || tvSess.UserId != profile {
+		t.Errorf("paired session = %+v, want account/profile match", tvSess)
+	}
+
+	// The code is single-use: consumed by the approved poll.
+	if _, err := store.LinkStatus(ctx, start.Code); !errors.Is(err, ErrLinkNotFound) {
+		t.Fatalf("post-claim poll = %v, want ErrLinkNotFound", err)
+	}
+	// Unknown codes are not found.
+	if _, err := store.LinkStatus(ctx, "ZZZZZZ"); !errors.Is(err, ErrLinkNotFound) {
+		t.Fatalf("unknown code = %v, want ErrLinkNotFound", err)
+	}
+
+	// The TV joined the Fleet with its name + platform.
+	devices, _ := store.ListDevices(ctx, sess)
+	var paired *api.Device
+	for i := range devices {
+		if devices[i].Name == "Den TV" {
+			paired = &devices[i]
+		}
+	}
+	if paired == nil {
+		t.Fatal("paired TV not found in Fleet")
+	}
+	if paired.Platform == nil || *paired.Platform != "androidtv" {
+		t.Errorf("platform = %v, want androidtv", paired.Platform)
+	}
+}

@@ -43,6 +43,9 @@ export const router = createRouter({
           component: () => import('@/views/VaultDetailView.vue'),
         },
         { path: 'fleet', name: 'fleet', component: () => import('@/views/FleetView.vue') },
+        // Approve a TV pairing code (ARGY-112). Auth-gated like the rest of the
+        // shell, so the household member is signed in when they approve.
+        { path: 'link', name: 'link', component: () => import('@/views/LinkView.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue') },
       ],
     },

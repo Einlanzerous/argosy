@@ -28,6 +28,9 @@ lib/model/device_rename_request.dart
 lib/model/episode_summary.dart
 lib/model/error.dart
 lib/model/facet.dart
+lib/model/link_approve_request.dart
+lib/model/link_start_response.dart
+lib/model/link_status_response.dart
 lib/model/login_request.dart
 lib/model/login_response.dart
 lib/model/media_item_detail.dart

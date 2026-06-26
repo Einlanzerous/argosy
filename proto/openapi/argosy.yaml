@@ -191,6 +191,81 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/auth/link/start:
+    post:
+      tags: [auth]
+      operationId: startLink
+      summary: Begin TV code-pairing — mint a short code for the TV to display
+      description: |
+        A TV (which can't comfortably type credentials) calls this to get a short
+        pairing code. It displays the code, then polls `GET /auth/link/{code}`
+        until an authenticated user approves it and a device token is handed back.
+      security: []
+      responses:
+        "201":
+          description: Pairing code created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkStartResponse"
+
+  /api/v1/auth/link/{code}:
+    get:
+      tags: [auth]
+      operationId: getLinkStatus
+      summary: Poll a pairing code; returns the device token once approved
+      description: |
+        The TV polls this. While pending, `status` is `pending`. Once approved,
+        it returns `status: approved` plus the one-time device `token`, and the
+        code is consumed (single use).
+      security: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current status (the token is present once approved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkStatusResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/auth/link/{code}/approve:
+    post:
+      tags: [auth]
+      operationId: approveLink
+      summary: Approve a TV pairing code from a signed-in session
+      description: >
+        Called from an authenticated web session. Links the TV to the caller's
+        account and profile by creating a device; the TV claims its token on the
+        next poll.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkApproveRequest"
+      responses:
+        "204":
+          description: Approved; the TV will claim its token on its next poll
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The code was already approved
+
   /api/v1/preferences:
     get:
       tags: [auth]
@@ -1463,6 +1538,38 @@ components:
         token:
           type: string
           description: Bearer token for this device.
+
+    LinkStartResponse:
+      type: object
+      required: [code, expiresAt]
+      properties:
+        code:
+          type: string
+          description: Short, unambiguous pairing code the TV displays.
+        expiresAt:
+          type: string
+          format: date-time
+
+    LinkStatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, approved]
+        token:
+          type: string
+          nullable: true
+          description: >-
+            The device bearer token, present once the code is approved. Returned
+            exactly once — the code is consumed on the poll that returns it.
+
+    LinkApproveRequest:
+      type: object
+      properties:
+        deviceName:
+          type: string
+          description: Friendly name for the TV in the Fleet (defaults to "Living Room TV").
 
     Session:
       type: object
