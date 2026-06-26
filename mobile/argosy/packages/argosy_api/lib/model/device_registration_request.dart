@@ -18,6 +18,7 @@ class DeviceRegistrationRequest {
     required this.userId,
     required this.deviceName,
     this.platform,
+    this.installId,
   });
 
   String username;
@@ -38,13 +39,23 @@ class DeviceRegistrationRequest {
   ///
   String? platform;
 
+  /// Stable per-install identifier the client persists across re-pairs. When present, a re-pair from the same physical device updates its existing Fleet row instead of creating a duplicate (ARGY-99). Omit to get a fresh device row each time.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? installId;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is DeviceRegistrationRequest &&
     other.username == username &&
     other.password == password &&
     other.userId == userId &&
     other.deviceName == deviceName &&
-    other.platform == platform;
+    other.platform == platform &&
+    other.installId == installId;
 
   @override
   int get hashCode =>
@@ -53,10 +64,11 @@ class DeviceRegistrationRequest {
     (password.hashCode) +
     (userId.hashCode) +
     (deviceName.hashCode) +
-    (platform == null ? 0 : platform!.hashCode);
+    (platform == null ? 0 : platform!.hashCode) +
+    (installId == null ? 0 : installId!.hashCode);
 
   @override
-  String toString() => 'DeviceRegistrationRequest[username=$username, password=$password, userId=$userId, deviceName=$deviceName, platform=$platform]';
+  String toString() => 'DeviceRegistrationRequest[username=$username, password=$password, userId=$userId, deviceName=$deviceName, platform=$platform, installId=$installId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -68,6 +80,11 @@ class DeviceRegistrationRequest {
       json[r'platform'] = this.platform;
     } else {
       json[r'platform'] = null;
+    }
+    if (this.installId != null) {
+      json[r'installId'] = this.installId;
+    } else {
+      json[r'installId'] = null;
     }
     return json;
   }
@@ -100,6 +117,7 @@ class DeviceRegistrationRequest {
         userId: mapValueOfType<String>(json, r'userId')!,
         deviceName: mapValueOfType<String>(json, r'deviceName')!,
         platform: mapValueOfType<String>(json, r'platform'),
+        installId: mapValueOfType<String>(json, r'installId'),
       );
     }
     return null;

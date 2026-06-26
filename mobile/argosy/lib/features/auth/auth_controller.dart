@@ -66,7 +66,9 @@ class AuthController extends Notifier<AuthStatus> {
   Future<void> setServer(String rawUrl) async {
     final url = _normalizeServerUrl(rawUrl);
     if (url == null) {
-      throw const ApiFailure('Enter a valid server address, e.g. http://10.0.0.20:8097');
+      throw const ApiFailure(
+        'Enter a valid server address, e.g. http://10.0.0.20:8097',
+      );
     }
     await ref.read(tokenStoreProvider).setBaseUrl(url);
     ref.read(baseUrlProvider.notifier).set(url);
@@ -98,13 +100,17 @@ class AuthController extends Notifier<AuthStatus> {
     required String deviceName,
   }) async {
     try {
-      final res = await ref.read(authApiProvider).registerDevice(
+      final installId = await ref.read(tokenStoreProvider).ensureInstallId();
+      final res = await ref
+          .read(authApiProvider)
+          .registerDevice(
             DeviceRegistrationRequest(
               username: username,
               password: password,
               userId: userId,
               deviceName: deviceName,
               platform: platform,
+              installId: installId,
             ),
           );
       final token = res?.token;
@@ -136,5 +142,6 @@ class AuthController extends Notifier<AuthStatus> {
   }
 }
 
-final authControllerProvider =
-    NotifierProvider<AuthController, AuthStatus>(AuthController.new);
+final authControllerProvider = NotifierProvider<AuthController, AuthStatus>(
+  AuthController.new,
+);

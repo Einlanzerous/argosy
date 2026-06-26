@@ -7,6 +7,7 @@ import type { paths } from './schema'
 // session survives reloads.
 
 const TOKEN_KEY = 'argosy.deviceToken'
+const INSTALL_KEY = 'argosy.installId'
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -15,6 +16,18 @@ export function getToken(): string | null {
 export function setToken(token: string | null): void {
   if (token) localStorage.setItem(TOKEN_KEY, token)
   else localStorage.removeItem(TOKEN_KEY)
+}
+
+// A stable per-browser install id, minted once and persisted across sign-outs so
+// re-pairing this browser updates its existing Fleet row instead of spawning a
+// duplicate (ARGY-99). Deliberately NOT cleared on logout.
+export function getInstallId(): string {
+  let id = localStorage.getItem(INSTALL_KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem(INSTALL_KEY, id)
+  }
+  return id
 }
 
 let onUnauthorized: (() => void) | null = null

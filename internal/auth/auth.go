@@ -102,11 +102,26 @@ func (s *Store) RegisterDevice(ctx context.Context, req api.DeviceRegistrationRe
 	if req.Platform != nil && *req.Platform != "" {
 		platform = req.Platform
 	}
+	var installID *string
+	if req.InstallId != nil && *req.InstallId != "" {
+		installID = req.InstallId
+	}
+	// Upsert on (account_id, install_id): a re-pair from the same physical device
+	// reuses (and un-revokes) its row with a fresh token instead of piling up a
+	// new one. A nil install_id has no partial-index entry, so it falls through to
+	// a plain insert — the legacy insert-every-time behavior.
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO devices (account_id, user_id, name, token_hash, platform)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO devices (account_id, user_id, name, token_hash, platform, install_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (account_id, install_id) WHERE install_id IS NOT NULL
+		 DO UPDATE SET
+		   user_id = EXCLUDED.user_id,
+		   name = EXCLUDED.name,
+		   token_hash = EXCLUDED.token_hash,
+		   platform = EXCLUDED.platform,
+		   revoked_at = NULL
 		 RETURNING id::text, name, platform, user_id::text, last_seen_at, revoked_at, created_at`,
-		accID, userID, req.DeviceName, hashToken(token), platform)
+		accID, userID, req.DeviceName, hashToken(token), platform, installID)
 	dev, err := scanDevice(row)
 	if err != nil {
 		return api.DeviceRegistrationResponse{}, err
