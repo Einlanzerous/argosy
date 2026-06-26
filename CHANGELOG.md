@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.1](https://github.com/Einlanzerous/argosy/compare/v0.8.0...v0.8.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* **player:** Back to details goes to the title page, not a previous episode (ARGY-108) ([#101](https://github.com/Einlanzerous/argosy/issues/101)) ([4613ad2](https://github.com/Einlanzerous/argosy/commit/4613ad2b6e6fad22b436a841ef7974c5580dd816))
+* **player:** recover from reaped transcode session; keepalive while paused (ARGY-107) ([#99](https://github.com/Einlanzerous/argosy/issues/99)) ([0da36f9](https://github.com/Einlanzerous/argosy/commit/0da36f92d4f62106e57443fca06f7bdd5ba3d2da))
+
 ## [0.8.0](https://github.com/Einlanzerous/argosy/compare/v0.7.0...v0.8.0) (2026-06-25)
 
 
