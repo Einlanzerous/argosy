@@ -77,7 +77,8 @@ async function toggleShared(): Promise<void> {
 }
 
 async function destroy(): Promise<void> {
-  if (!vault.value || !confirm(`Delete the vault “${vault.value.name}”? This can't be undone.`)) return
+  if (!vault.value || !confirm(`Delete the vault “${vault.value.name}”? This can't be undone.`))
+    return
   await deleteVault(vaultId.value).catch(() => {})
   void router.push({ name: 'vaults' })
 }
@@ -105,8 +106,8 @@ watch(vaultId, load)
           <span v-if="vault.shared" class="badge">Shared</span>
         </div>
         <div class="sub">
-          {{ vault.isOwner ? 'Yours' : `by ${vault.ownerName}` }} ·
-          {{ items.length }} {{ items.length === 1 ? 'item' : 'items' }}
+          {{ vault.isOwner ? 'Yours' : `by ${vault.ownerName}` }} · {{ items.length }}
+          {{ items.length === 1 ? 'item' : 'items' }}
         </div>
         <div v-if="vault.isOwner" class="manage">
           <button type="button" @click="startRename">Rename</button>
@@ -128,7 +129,9 @@ watch(vaultId, load)
             :to="entryTo(e)"
           />
           <div v-if="vault.canEdit" class="controls">
-            <button type="button" :disabled="i === 0" title="Move up" @click="move(i, -1)">↑</button>
+            <button type="button" :disabled="i === 0" title="Move up" @click="move(i, -1)">
+              ↑
+            </button>
             <button
               type="button"
               :disabled="i === items.length - 1"

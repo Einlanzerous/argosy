@@ -76,8 +76,8 @@ function defaultDeviceName(): string {
           <div class="eyebrow">Owned media · self-hosted</div>
           <div class="pitch">Your library. Your hardware.<br />Every screen in sync.</div>
           <div class="blurb">
-            Start a film on the train, finish it on the big screen. Argosy keeps your whole fleet
-            at the same frame.
+            Start a film on the train, finish it on the big screen. Argosy keeps your whole fleet at
+            the same frame.
           </div>
         </div>
         <div class="footnote">Stevedore is standing by to load the hold.</div>
@@ -101,9 +101,19 @@ function defaultDeviceName(): string {
           <h1>Welcome aboard</h1>
           <p class="lede">Sign in to reach your library.</p>
           <label>Email</label>
-          <input v-model="username" type="text" autocomplete="username" placeholder="you@argosy.local" />
+          <input
+            v-model="username"
+            type="text"
+            autocomplete="username"
+            placeholder="you@argosy.local"
+          />
           <label>Password</label>
-          <input v-model="password" type="password" autocomplete="current-password" placeholder="••••••••" />
+          <input
+            v-model="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+          />
           <p v-if="error" class="error">{{ error }}</p>
           <button class="primary" type="submit" :disabled="busy">
             {{ busy ? 'Signing in…' : 'Sign in' }}

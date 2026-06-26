@@ -57,7 +57,10 @@ export function parseVttCues(text: string): VttCue[] {
     const start = parseTs(left.trim())
     const end = parseTs(right.trim().split(/\s+/)[0])
     if (!(end > start)) continue
-    const body = lines.slice(tIdx + 1).join('\n').trim()
+    const body = lines
+      .slice(tIdx + 1)
+      .join('\n')
+      .trim()
     if (body) cues.push({ start, end, text: body })
   }
   return cues

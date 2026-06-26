@@ -146,4 +146,3 @@ export async function getFacets(limit = 6): Promise<Facet[]> {
   const { data } = await api.GET('/api/v1/facets', { params: { query: { limit } } })
   return data ?? []
 }
-

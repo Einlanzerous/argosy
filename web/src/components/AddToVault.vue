@@ -87,7 +87,9 @@ async function createAndAdd(): Promise<void> {
           <input v-model="newName" type="text" placeholder="New vault name…" autofocus />
           <button type="submit">Create</button>
         </form>
-        <button v-else class="row create" type="button" @click="creating = true">＋ New vault…</button>
+        <button v-else class="row create" type="button" @click="creating = true">
+          ＋ New vault…
+        </button>
       </div>
     </template>
   </Teleport>

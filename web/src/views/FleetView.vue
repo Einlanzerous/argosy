@@ -105,7 +105,8 @@ onMounted(() => {
             <span v-if="isCurrent(d)" class="tag current">THIS DEVICE</span>
           </div>
           <div class="seen">
-            <span v-if="d.userName">{{ d.userName }} · </span>last seen {{ formatRelative(d.lastSeenAt) }}
+            <span v-if="d.userName">{{ d.userName }} · </span>last seen
+            {{ formatRelative(d.lastSeenAt) }}
           </div>
         </div>
         <div class="actions">
@@ -131,7 +132,9 @@ onMounted(() => {
         />
         <div class="modal-actions">
           <button class="btn" type="button" @click="renameTarget = null">Cancel</button>
-          <button class="btn primary" type="button" :disabled="busy" @click="confirmRename">Save</button>
+          <button class="btn primary" type="button" :disabled="busy" @click="confirmRename">
+            Save
+          </button>
         </div>
       </div>
     </div>
@@ -148,7 +151,9 @@ onMounted(() => {
         </p>
         <div class="modal-actions">
           <button class="btn" type="button" @click="retireTarget = null">Cancel</button>
-          <button class="btn danger" type="button" :disabled="busy" @click="confirmRetire">Retire</button>
+          <button class="btn danger" type="button" :disabled="busy" @click="confirmRetire">
+            Retire
+          </button>
         </div>
       </div>
     </div>

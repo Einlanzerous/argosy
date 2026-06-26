@@ -124,7 +124,8 @@ function patch(next: Record<string, unknown>): void {
   const q: Record<string, unknown> = { ...route.query, ...next }
   for (const k of Object.keys(q)) {
     const v = q[k]
-    if (v === undefined || v === '' || v === null || (Array.isArray(v) && v.length === 0)) delete q[k]
+    if (v === undefined || v === '' || v === null || (Array.isArray(v) && v.length === 0))
+      delete q[k]
   }
   void router.replace({ name: 'library', query: q as LocationQueryRaw })
 }
@@ -156,7 +157,10 @@ function setYear(which: 'year_from' | 'year_to', e: Event): void {
   patch({ [which]: (e.target as HTMLInputElement).value || undefined })
 }
 function clearFilters(): void {
-  void router.replace({ name: 'library', query: scope.value === 'all' ? {} : { kind: scope.value } })
+  void router.replace({
+    name: 'library',
+    query: scope.value === 'all' ? {} : { kind: scope.value },
+  })
 }
 
 const libTitle = computed(() =>
@@ -203,7 +207,8 @@ async function load(): Promise<void> {
   }
   if (scope.value !== 'movies') {
     // Series have no "added" sort; fall back to title for it.
-    const seriesSort: SeriesSort = sort.value === 'year' || sort.value === 'rating' ? sort.value : 'title'
+    const seriesSort: SeriesSort =
+      sort.value === 'year' || sort.value === 'rating' ? sort.value : 'title'
     const series = await getSeries({ sort: seriesSort, ...f }, libs)
     out.push(
       ...series.map((s) => ({
@@ -377,7 +382,9 @@ watch(
                 @input="ratingLabel = +($event.target as HTMLInputElement).value"
                 @change="setRating(+($event.target as HTMLInputElement).value)"
               />
-              <span class="rating-val">{{ ratingLabel ? `★ ${ratingLabel.toFixed(1)}+` : 'Any' }}</span>
+              <span class="rating-val">{{
+                ratingLabel ? `★ ${ratingLabel.toFixed(1)}+` : 'Any'
+              }}</span>
             </div>
           </div>
 

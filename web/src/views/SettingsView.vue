@@ -87,7 +87,8 @@ async function addLibrary(): Promise<void> {
 }
 
 async function removeLibrary(l: Library): Promise<void> {
-  if (!confirm(`Remove “${l.name}” and its items from the Manifest? Files on disk are untouched.`)) return
+  if (!confirm(`Remove “${l.name}” and its items from the Manifest? Files on disk are untouched.`))
+    return
   await deleteLibraryById(l.id).catch(() => {})
   await loadLibraries()
   await refresh()
@@ -109,7 +110,8 @@ async function rebuild(): Promise<void> {
   triggering.value = true
   message.value = ''
   const { response } = await api.POST('/api/v1/scan')
-  if (response.status === 202) message.value = 'Stevedore is loading the hold — rebuilding the Manifest.'
+  if (response.status === 202)
+    message.value = 'Stevedore is loading the hold — rebuilding the Manifest.'
   else if (response.status === 409) message.value = 'A sweep is already running.'
   else message.value = 'Could not start a scan.'
   triggering.value = false
@@ -145,7 +147,9 @@ onUnmounted(() => {
           @click="setHomeLayout('focused')"
         >
           <span class="layout-name">Focused</span>
-          <span class="layout-desc">Just the essentials — Continue Watching, On Deck, Newly Arrived.</span>
+          <span class="layout-desc"
+            >Just the essentials — Continue Watching, On Deck, Newly Arrived.</span
+          >
         </button>
         <button
           class="layout-opt"
@@ -170,7 +174,8 @@ onUnmounted(() => {
         <div class="toggle-text">
           <span class="toggle-name">Auto-play next episode</span>
           <span class="toggle-desc">
-            When a series episode ends, roll into the next one with an Up Next countdown you can cancel.
+            When a series episode ends, roll into the next one with an Up Next countdown you can
+            cancel.
           </span>
         </div>
         <button
@@ -208,7 +213,9 @@ onUnmounted(() => {
         <span class="badge" :class="{ live: status?.running }">
           <span class="dot" /> {{ status?.running ? 'Sweeping' : 'Idle' }}
         </span>
-        <span v-if="status?.finishedAt" class="when">last swept {{ formatRelative(status.finishedAt) }}</span>
+        <span v-if="status?.finishedAt" class="when"
+          >last swept {{ formatRelative(status.finishedAt) }}</span
+        >
       </div>
 
       <p v-if="message" class="message">{{ message }}</p>
@@ -532,7 +539,9 @@ h2 {
   border: 1px solid var(--arg-line-2);
   background: var(--arg-bg-2);
   cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
 }
 .switch.on {
   background: var(--arg-accent);
