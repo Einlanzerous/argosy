@@ -974,6 +974,8 @@ export interface components {
             deviceName: string;
             /** @description Client platform/type label (e.g. "web", "tv", "phone"); shown in the Fleet. */
             platform?: string;
+            /** @description Stable per-install identifier the client persists across re-pairs. When present, a re-pair from the same physical device updates its existing Fleet row instead of creating a duplicate (ARGY-99). Omit to get a fresh device row each time. */
+            installId?: string;
         };
         Device: {
             /** Format: uuid */

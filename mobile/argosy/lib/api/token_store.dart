@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Persists the device bearer token + the household server base URL, with an
@@ -14,9 +16,11 @@ class TokenStore {
 
   static const _kToken = 'argosy.deviceToken';
   static const _kBaseUrl = 'argosy.baseUrl';
+  static const _kInstallId = 'argosy.installId';
 
   String? _token;
   String? _baseUrl;
+  String? _installId;
 
   /// Current device token, or null when signed out. Synchronous (cached).
   String? get token => _token;
@@ -30,6 +34,19 @@ class TokenStore {
   Future<void> load() async {
     _token = await _storage.read(key: _kToken);
     _baseUrl = await _storage.read(key: _kBaseUrl);
+    _installId = await _storage.read(key: _kInstallId);
+  }
+
+  /// A stable per-install id, minted once and persisted across re-pairs (and
+  /// sign-outs — [clearToken] never touches it) so re-registering this device
+  /// updates its existing Fleet row instead of spawning a duplicate (ARGY-99).
+  Future<String> ensureInstallId() async {
+    final existing = _installId;
+    if (existing != null && existing.isNotEmpty) return existing;
+    final id = _randomUuidV4();
+    _installId = id;
+    await _storage.write(key: _kInstallId, value: id);
+    return id;
   }
 
   Future<void> setToken(String? token) async {
@@ -50,7 +67,19 @@ class TokenStore {
     }
   }
 
-  /// Clear the token (sign-out). The server base URL is intentionally kept —
-  /// the household server address outlives a single session.
+  /// Clear the token (sign-out). The server base URL and install id are
+  /// intentionally kept — both outlive a single session.
   Future<void> clearToken() => setToken(null);
+}
+
+/// A random RFC-4122 v4 UUID built from [Random.secure]; avoids pulling in a
+/// uuid package just for an opaque install id.
+String _randomUuidV4() {
+  final rng = Random.secure();
+  final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10
+  final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
 }

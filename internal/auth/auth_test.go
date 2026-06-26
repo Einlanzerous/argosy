@@ -188,3 +188,79 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatalf("after revoke: got %v, want ErrInvalidCredentials", err)
 	}
 }
+
+// TestDeviceInstallIdDedup covers ARGY-99: a re-pair carrying the same install
+// id reuses (and un-revokes) the existing device row with a fresh token instead
+// of piling up duplicates; a missing install id still gets its own row.
+func TestDeviceInstallIdDedup(t *testing.T) {
+	store, ctx := testStore(t)
+	username := uniqueUsername()
+	password := "pw-" + uniqueUsername()
+	if _, err := store.CreateAccount(ctx, username, password, "Dedup Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	login, err := store.Login(ctx, username, password)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	profile := login.Profiles[0].Id
+
+	install := "install-" + uniqueUsername()
+	reg := func(name string, installID *string) api.DeviceRegistrationResponse {
+		t.Helper()
+		r, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+			Username: username, Password: password, UserId: profile,
+			DeviceName: name, InstallId: installID,
+		})
+		if err != nil {
+			t.Fatalf("register %q: %v", name, err)
+		}
+		return r
+	}
+	adminSess := api.Session{AccountId: login.Account.Id, UserId: profile, Role: api.Admin}
+
+	// First pair, then a re-pair with the same install id.
+	first := reg("Phone", &install)
+	second := reg("Phone (re-paired)", &install)
+
+	// Same physical install ⇒ same device row, not a new one.
+	if first.Device.Id != second.Device.Id {
+		t.Fatalf("re-pair created a new row: %v != %v", first.Device.Id, second.Device.Id)
+	}
+	// The re-pair rotates the token: the old one stops working, the new one works.
+	if _, err := store.AuthenticateDevice(ctx, first.Token); !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("stale token after re-pair: got %v, want ErrInvalidCredentials", err)
+	}
+	if _, err := store.AuthenticateDevice(ctx, second.Token); err != nil {
+		t.Errorf("fresh token after re-pair: %v", err)
+	}
+	// Fleet shows exactly one (active) device for this install.
+	if devices, err := store.ListDevices(ctx, adminSess); err != nil {
+		t.Fatalf("list: %v", err)
+	} else if len(devices) != 1 || devices[0].Revoked {
+		t.Fatalf("expected one active device after re-pair, got %+v", devices)
+	}
+	// The latest name wins (the upsert updates it).
+	if devices, _ := store.ListDevices(ctx, adminSess); devices[0].Name != "Phone (re-paired)" {
+		t.Errorf("device name = %q, want the re-paired name", devices[0].Name)
+	}
+
+	// Revoke, then re-pair the same install: the row is reused and un-revoked.
+	if err := store.RevokeDevice(ctx, adminSess, second.Device.Id); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	third := reg("Phone (back)", &install)
+	if third.Device.Id != second.Device.Id {
+		t.Errorf("re-pair after revoke made a new row: %v != %v", third.Device.Id, second.Device.Id)
+	}
+	if _, err := store.AuthenticateDevice(ctx, third.Token); err != nil {
+		t.Errorf("token after un-revoke: %v", err)
+	}
+
+	// A registration with no install id keeps the legacy insert-every-time path.
+	noInstallA := reg("Browser A", nil)
+	noInstallB := reg("Browser B", nil)
+	if noInstallA.Device.Id == noInstallB.Device.Id {
+		t.Errorf("nil install id should not dedup, got same row %v", noInstallA.Device.Id)
+	}
+}

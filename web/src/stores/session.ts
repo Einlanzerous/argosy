@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { api, getToken, setToken } from '@/api/client'
+import { api, getInstallId, getToken, setToken } from '@/api/client'
 import type { components } from '@/api/schema'
 
 type Session = components['schemas']['Session']
@@ -69,7 +69,14 @@ export const useSessionStore = defineStore('session', () => {
     name: string,
   ): Promise<void> {
     const { data, error } = await api.POST('/api/v1/auth/devices', {
-      body: { username, password, userId, deviceName: name, platform: 'web' },
+      body: {
+        username,
+        password,
+        userId,
+        deviceName: name,
+        platform: 'web',
+        installId: getInstallId(),
+      },
     })
     if (error || !data) throw new Error('Could not pair this device.')
     setToken(data.token)

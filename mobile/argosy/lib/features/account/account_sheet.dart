@@ -36,6 +36,69 @@ class AccountSheet extends ConsumerWidget {
     final name = self?.userName?.trim();
     final accountName = (name == null || name.isEmpty) ? 'Your account' : name;
 
+    return _buildSheet(
+      context,
+      ref,
+      tokens,
+      devices,
+      selfId,
+      accountName,
+      name,
+    );
+  }
+
+  /// Confirm, then retire (revoke) another device from the Fleet, refreshing the
+  /// list on success. Self is retired by signing out, not from here.
+  Future<void> _confirmRetire(
+    BuildContext context,
+    WidgetRef ref,
+    Device device,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ArgosyColors.panel,
+        title: const Text('Retire device?'),
+        content: Text(
+          '"${device.name}" will be signed out and removed from your Fleet. '
+          'That device has to pair again to come back.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: ArgosyColors.danger),
+            child: const Text('Retire'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(authApiProvider).revokeDevice(device.id);
+      ref.invalidate(fleetDevicesProvider);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't retire that device.")),
+        );
+      }
+    }
+  }
+
+  Widget _buildSheet(
+    BuildContext context,
+    WidgetRef ref,
+    ArgosyTokens tokens,
+    AsyncValue<List<Device>> devices,
+    String? selfId,
+    String accountName,
+    String? name,
+  ) {
+    final fleet = devices.value ?? const <Device>[];
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -136,6 +199,11 @@ class AccountSheet extends ConsumerWidget {
                     itemBuilder: (_, i) => _DeviceRow(
                       device: list[i],
                       isSelf: list[i].id == selfId,
+                      // Long-press any other device to retire it; you sign out
+                      // to drop your own. (ARGY-99 manual escape hatch.)
+                      onRetire: list[i].id == selfId
+                          ? null
+                          : () => _confirmRetire(context, ref, list[i]),
                     ),
                   ),
                 ),
@@ -258,10 +326,14 @@ class _FleetBanner extends StatelessWidget {
 }
 
 class _DeviceRow extends StatelessWidget {
-  const _DeviceRow({required this.device, required this.isSelf});
+  const _DeviceRow({required this.device, required this.isSelf, this.onRetire});
 
   final Device device;
   final bool isSelf;
+
+  /// Long-press action to retire this device, or null when it can't be retired
+  /// from here (your own device — sign out instead).
+  final VoidCallback? onRetire;
 
   IconData get _icon => switch (device.platform?.toLowerCase()) {
     'android' => Icons.phone_android,
@@ -280,62 +352,65 @@ class _DeviceRow extends StatelessWidget {
         : device.platform![0].toUpperCase() + device.platform!.substring(1);
     final seen = isSelf ? 'this device' : formatRelativeTime(device.lastSeenAt);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 9),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-      decoration: BoxDecoration(
-        color: ArgosyColors.bg2,
-        borderRadius: BorderRadius.circular(tokens.radiusLg),
-        border: Border.all(color: isSelf ? tokens.accentLine : tokens.line),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: tokens.accentWash,
-              borderRadius: BorderRadius.circular(tokens.radiusSm),
+    return GestureDetector(
+      onLongPress: onRetire,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: ArgosyColors.bg2,
+          borderRadius: BorderRadius.circular(tokens.radiusLg),
+          border: Border.all(color: isSelf ? tokens.accentLine : tokens.line),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: tokens.accentWash,
+                borderRadius: BorderRadius.circular(tokens.radiusSm),
+              ),
+              child: Icon(_icon, size: 18, color: ArgosyColors.accent),
             ),
-            child: Icon(_icon, size: 18, color: ArgosyColors.accent),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        device.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    if (isSelf) ...[
-                      const SizedBox(width: 7),
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: ArgosyColors.green,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          device.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
+                      if (isSelf) ...[
+                        const SizedBox(width: 7),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: ArgosyColors.green,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$type · $seen',
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$type · $seen',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
