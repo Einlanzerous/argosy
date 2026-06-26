@@ -10,6 +10,7 @@
     "type-check": "vue-tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write src/",
+    "format:check": "prettier --check src/",
     "gen:api": "openapi-typescript ../proto/openapi/argosy.yaml -o src/api/schema.ts"
   },
   "dependencies": {
