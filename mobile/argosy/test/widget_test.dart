@@ -4,6 +4,7 @@
 import 'package:argosy/api/api_providers.dart';
 import 'package:argosy/api/token_store.dart';
 import 'package:argosy/app.dart';
+import 'package:argosy/platform/device_type.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +21,11 @@ void main() {
   testWidgets('boots on splash then redirects to login', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [tokenStoreProvider.overrideWithValue(_FakeTokenStore())],
+        overrides: [
+          tokenStoreProvider.overrideWithValue(_FakeTokenStore()),
+          // Pin the touch shell; `main()` injects this in the real app (ARGY-51).
+          isTelevisionProvider.overrideWithValue(false),
+        ],
         child: const ArgosyApp(),
       ),
     );

@@ -51,12 +51,13 @@ import 'package:argosy_api/api.dart';
 //defaultApiClient.getAuthentication<HttpBearerAuth>('bearerAuth').setAccessToken(yourTokenGeneratorFunction);
 
 final api_instance = AuthApi();
+final code = code_example; // String | 
+final linkApproveRequest = LinkApproveRequest(); // LinkApproveRequest | 
 
 try {
-    final result = api_instance.getCurrentSession();
-    print(result);
+    api_instance.approveLink(code, linkApproveRequest);
 } catch (e) {
-    print('Exception when calling AuthApi->getCurrentSession: $e\n');
+    print('Exception when calling AuthApi->approveLink: $e\n');
 }
 
 ```
@@ -67,8 +68,10 @@ All URIs are relative to *http://localhost*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*AuthApi* | [**approveLink**](doc//AuthApi.md#approvelink) | **POST** /api/v1/auth/link/{code}/approve | Approve a TV pairing code from a signed-in session
 *AuthApi* | [**getCurrentSession**](doc//AuthApi.md#getcurrentsession) | **GET** /api/v1/auth/me | Resolve the current (account, profile, device) from the token
 *AuthApi* | [**getDevicePreferences**](doc//AuthApi.md#getdevicepreferences) | **GET** /api/v1/preferences | Get the calling device's playback preferences
+*AuthApi* | [**getLinkStatus**](doc//AuthApi.md#getlinkstatus) | **GET** /api/v1/auth/link/{code} | Poll a pairing code; returns the device token once approved
 *AuthApi* | [**getUserPreferences**](doc//AuthApi.md#getuserpreferences) | **GET** /api/v1/user/preferences | Get the calling profile's account-wide preferences
 *AuthApi* | [**listDevices**](doc//AuthApi.md#listdevices) | **GET** /api/v1/auth/devices | List devices in the current account (the Fleet)
 *AuthApi* | [**login**](doc//AuthApi.md#login) | **POST** /api/v1/auth/login | Authenticate an account and list its profiles
@@ -77,6 +80,7 @@ Class | Method | HTTP request | Description
 *AuthApi* | [**revokeDevice**](doc//AuthApi.md#revokedevice) | **DELETE** /api/v1/auth/devices/{deviceId} | Revoke a device token (\"retire from the Fleet\")
 *AuthApi* | [**setDevicePreferences**](doc//AuthApi.md#setdevicepreferences) | **PUT** /api/v1/preferences | Update the calling device's playback preferences
 *AuthApi* | [**setUserPreferences**](doc//AuthApi.md#setuserpreferences) | **PUT** /api/v1/user/preferences | Update the calling profile's account-wide preferences
+*AuthApi* | [**startLink**](doc//AuthApi.md#startlink) | **POST** /api/v1/auth/link/start | Begin TV code-pairing — mint a short code for the TV to display
 *LibraryApi* | [**addItemLabel**](doc//LibraryApi.md#additemlabel) | **POST** /api/v1/items/{itemId}/labels | Add one of the profile's custom labels to a film
 *LibraryApi* | [**addSeriesLabel**](doc//LibraryApi.md#addserieslabel) | **POST** /api/v1/series/{seriesId}/labels | Add one of the profile's custom labels to a series
 *LibraryApi* | [**addVaultItem**](doc//LibraryApi.md#addvaultitem) | **POST** /api/v1/vaults/{vaultId}/items | Add a film or series to a vault
@@ -140,6 +144,9 @@ Class | Method | HTTP request | Description
  - [EpisodeSummary](doc//EpisodeSummary.md)
  - [Error](doc//Error.md)
  - [Facet](doc//Facet.md)
+ - [LinkApproveRequest](doc//LinkApproveRequest.md)
+ - [LinkStartResponse](doc//LinkStartResponse.md)
+ - [LinkStatusResponse](doc//LinkStatusResponse.md)
  - [LoginRequest](doc//LoginRequest.md)
  - [LoginResponse](doc//LoginResponse.md)
  - [MediaItemDetail](doc//MediaItemDetail.md)

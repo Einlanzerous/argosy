@@ -124,6 +124,14 @@ class AuthController extends Notifier<AuthStatus> {
     }
   }
 
+  /// Adopt a device token obtained out-of-band — e.g. TV code-pairing, where the
+  /// token is minted server-side once a web user approves the code (ARGY-112).
+  /// The token is already valid, so we just persist it and open the gate.
+  Future<void> adoptToken(String token) async {
+    await ref.read(tokenStoreProvider).setToken(token);
+    state = AuthStatus.authenticated;
+  }
+
   /// Sign out / re-pair. Keeps the server address (only the token is cleared).
   Future<void> signOut() async {
     await ref.read(tokenStoreProvider).clearToken();

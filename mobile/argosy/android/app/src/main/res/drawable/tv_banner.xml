@@ -1,0 +1,25 @@
+<!-- Android TV launcher banner (320x180), ARGY-51. Placeholder brand mark:
+     charcoal field + a brass porthole ring and wordmark bars. A finished logo
+     banner can replace this later. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- background -->
+    <path
+        android:fillColor="#171717"
+        android:pathData="M0,0 h320 v180 h-320 z" />
+    <!-- brass porthole ring (outer minus inner, even-odd) -->
+    <path
+        android:fillColor="#C99A4E"
+        android:fillType="evenOdd"
+        android:pathData="M64,42 a48,48 0 1,0 0.1,0 z M64,58 a32,32 0 1,1 -0.1,0 z" />
+    <!-- inner dot -->
+    <path
+        android:fillColor="#C99A4E"
+        android:pathData="M64,78 a12,12 0 1,0 0.1,0 z" />
+    <!-- wordmark bars -->
+    <path android:fillColor="#EAEAE5" android:pathData="M148,74 h128 v12 h-128 z" />
+    <path android:fillColor="#9A9A92" android:pathData="M148,96 h92 v8 h-92 z" />
+</vector>

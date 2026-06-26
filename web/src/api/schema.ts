@@ -132,6 +132,70 @@ export interface paths {
         patch: operations["renameDevice"];
         trace?: never;
     };
+    "/api/v1/auth/link/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin TV code-pairing — mint a short code for the TV to display
+         * @description A TV (which can't comfortably type credentials) calls this to get a short
+         *     pairing code. It displays the code, then polls `GET /auth/link/{code}`
+         *     until an authenticated user approves it and a device token is handed back.
+         */
+        post: operations["startLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/link/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Poll a pairing code; returns the device token once approved
+         * @description The TV polls this. While pending, `status` is `pending`. Once approved,
+         *     it returns `status: approved` plus the one-time device `token`, and the
+         *     code is consumed (single use).
+         */
+        get: operations["getLinkStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/link/{code}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a TV pairing code from a signed-in session
+         * @description Called from an authenticated web session. Links the TV to the caller's account and profile by creating a device; the TV claims its token on the next poll.
+         */
+        post: operations["approveLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/preferences": {
         parameters: {
             query?: never;
@@ -1027,6 +1091,22 @@ export interface components {
             /** @description Bearer token for this device. */
             token: string;
         };
+        LinkStartResponse: {
+            /** @description Short, unambiguous pairing code the TV displays. */
+            code: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        LinkStatusResponse: {
+            /** @enum {string} */
+            status: "pending" | "approved";
+            /** @description The device bearer token, present once the code is approved. Returned exactly once — the code is consumed on the poll that returns it. */
+            token?: string | null;
+        };
+        LinkApproveRequest: {
+            /** @description Friendly name for the TV in the Fleet (defaults to "Living Room TV"). */
+            deviceName?: string;
+        };
         Session: {
             /** Format: uuid */
             accountId: string;
@@ -1589,6 +1669,82 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    startLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pairing code created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkStartResponse"];
+                };
+            };
+        };
+    };
+    getLinkStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current status (the token is present once approved) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkStatusResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    approveLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LinkApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved; the TV will claim its token on its next poll */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The code was already approved */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getDevicePreferences: {

@@ -24,6 +24,11 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("DELETE /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRevokeDevice(store)))
 	mux.Handle("PATCH /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRenameDevice(store)))
 	mux.Handle("GET /api/v1/auth/me", requireAuth(store, handleMe()))
+	// TV code-pairing (ARGY-112): start + poll are unauthenticated (a TV with no
+	// session yet); approve is the authenticated web user blessing the code.
+	mux.HandleFunc("POST /api/v1/auth/link/start", handleStartLink(store))
+	mux.HandleFunc("GET /api/v1/auth/link/{code}", handleLinkStatus(store))
+	mux.Handle("POST /api/v1/auth/link/{code}/approve", requireAuth(store, handleApproveLink(store)))
 	mux.Handle("GET /api/v1/preferences", requireAuth(store, handleGetPreferences(store)))
 	mux.Handle("PUT /api/v1/preferences", requireAuth(store, handleSetPreferences(store)))
 	mux.Handle("GET /api/v1/user/preferences", requireAuth(store, handleGetUserPreferences(store)))
@@ -177,6 +182,56 @@ func handleMe() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := SessionFromContext(r.Context())
 		httpx.JSON(w, http.StatusOK, sess)
+	}
+}
+
+func handleStartLink(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp, err := store.StartLink(r.Context())
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		httpx.JSON(w, http.StatusCreated, resp)
+	}
+}
+
+func handleLinkStatus(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp, err := store.LinkStatus(r.Context(), r.PathValue("code"))
+		if errors.Is(err, ErrLinkNotFound) {
+			httpx.Error(w, http.StatusNotFound, "not found")
+			return
+		}
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		httpx.JSON(w, http.StatusOK, resp)
+	}
+}
+
+func handleApproveLink(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		// The body (a device name) is optional; ignore a decode miss.
+		var req api.LinkApproveRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		name := ""
+		if req.DeviceName != nil {
+			name = *req.DeviceName
+		}
+		err := store.ApproveLink(r.Context(), sess, r.PathValue("code"), name)
+		switch {
+		case errors.Is(err, ErrLinkNotFound):
+			httpx.Error(w, http.StatusNotFound, "not found")
+		case errors.Is(err, ErrLinkAlreadyClaimed):
+			httpx.Error(w, http.StatusConflict, "already approved")
+		case err != nil:
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
 	}
 }
 
