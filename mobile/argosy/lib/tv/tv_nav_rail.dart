@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../router/app_router.dart';
 import '../theme/argosy_colors.dart';
+import '../widgets/argosy_mark.dart';
 import 'tv_focusable.dart';
 
 /// The primary sections reachable from the TV nav rail.
@@ -43,7 +44,7 @@ class TvNavRail extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 46),
-          const Icon(Icons.anchor, color: ArgosyColors.accent, size: 34),
+          const ArgosyMark(size: 44),
           const SizedBox(height: 50),
           _NavItem(
             icon: Icons.home_outlined,

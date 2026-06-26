@@ -25,13 +25,15 @@ class TvOnScreenKeyboard extends StatelessWidget {
   final VoidCallback onBackspace;
   final VoidCallback onClear;
 
+  // Four letter/number rows; the symbols + Space/Delete/Clear share one wide
+  // bottom row, so the keyboard stays short and wide for a 10-foot layout.
   static const _rows = <String>[
     '1234567890',
     'qwertyuiop',
     'asdfghjkl',
     'zxcvbnm',
-    '.:/-_@',
   ];
+  static const _symbols = '.:/-_@';
 
   @override
   Widget build(BuildContext context) {
@@ -40,37 +42,38 @@ class TvOnScreenKeyboard extends StatelessWidget {
       children: [
         for (final row in _rows)
           Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.only(bottom: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 for (final ch in row.split(''))
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: _Key(label: ch, onSelect: () => onChar(ch)),
                   ),
               ],
             ),
           ),
-        // Control row.
+        // Symbols + controls, one wide row.
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: _Key(
-                label: 'Space',
-                width: 220,
-                onSelect: () => onChar(' '),
+            for (final ch in _symbols.split(''))
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: _Key(label: ch, onSelect: () => onChar(ch)),
               ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: _Key(label: 'Space', width: 200, onSelect: () => onChar(' ')),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               child: _Key(label: 'Delete', width: 150, onSelect: onBackspace),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: _Key(label: 'Clear', width: 120, onSelect: onClear),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: _Key(label: 'Clear', width: 130, onSelect: onClear),
             ),
           ],
         ),
@@ -80,7 +83,7 @@ class TvOnScreenKeyboard extends StatelessWidget {
 }
 
 class _Key extends StatefulWidget {
-  const _Key({required this.label, required this.onSelect, this.width = 64});
+  const _Key({required this.label, required this.onSelect, this.width = 92});
 
   final String label;
   final VoidCallback onSelect;

@@ -137,7 +137,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
       body: TvStage(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 980),
+            constraints: const BoxConstraints(maxWidth: 1120),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
