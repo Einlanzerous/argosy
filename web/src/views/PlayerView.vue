@@ -159,7 +159,8 @@ onMounted(async () => {
   if (devicePrefs) {
     captionScale.value = devicePrefs.captionScale ?? CAPTION_DEFAULTS.scale
     captionColor.value = devicePrefs.captionColor ?? CAPTION_DEFAULTS.color
-    captionBackground.value = (devicePrefs.captionBackground as CaptionBg) ?? CAPTION_DEFAULTS.background
+    captionBackground.value =
+      (devicePrefs.captionBackground as CaptionBg) ?? CAPTION_DEFAULTS.background
   }
   // Default ON: only an explicit false disables auto-advance. If it's off there's
   // no point asking the server for the next episode.
@@ -756,112 +757,119 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           </div>
         </div>
         <div class="btn-mid">
-        <button class="ctrl" type="button" title="Back 10s" @click="skip(-10)">
-          <span class="ic">↺</span><span class="lbl">10s</span>
-        </button>
-        <button
-          class="ctrl primary"
-          :class="{ glow: !playing }"
-          type="button"
-          :title="playing ? 'Pause' : 'Play'"
-          @click="togglePlay"
-        >
-          <span class="ic">{{ playing ? '❚❚' : '▶' }}</span>
-          <span class="lbl">{{ playing ? 'Pause' : 'Play' }}</span>
-        </button>
-        <button class="ctrl" type="button" title="Forward 10s" @click="skip(10)">
-          <span class="ic">↻</span><span class="lbl">10s</span>
-        </button>
+          <button class="ctrl" type="button" title="Back 10s" @click="skip(-10)">
+            <span class="ic">↺</span><span class="lbl">10s</span>
+          </button>
+          <button
+            class="ctrl primary"
+            :class="{ glow: !playing }"
+            type="button"
+            :title="playing ? 'Pause' : 'Play'"
+            @click="togglePlay"
+          >
+            <span class="ic">{{ playing ? '❚❚' : '▶' }}</span>
+            <span class="lbl">{{ playing ? 'Pause' : 'Play' }}</span>
+          </button>
+          <button class="ctrl" type="button" title="Forward 10s" @click="skip(10)">
+            <span class="ic">↻</span><span class="lbl">10s</span>
+          </button>
         </div>
         <div class="btn-right">
-        <div v-if="subtitleTracks.length" class="cc-wrap">
-          <button
-            class="ctrl icon-only"
-            :class="{ on: activeSubtitle }"
-            type="button"
-            title="Subtitles"
-            @click="subMenuOpen = !subMenuOpen"
-          >
-            <span class="ic cc">CC</span>
-          </button>
-          <div v-if="subMenuOpen" class="cc-menu">
-            <div class="cc-head">Subtitles</div>
-            <button class="cc-item" :class="{ sel: !activeSubtitle }" type="button" @click="selectSubtitle(null)">
-              <span class="cc-label">Off</span>
-              <span v-if="!activeSubtitle" class="cc-check">✓</span>
-            </button>
+          <div v-if="subtitleTracks.length" class="cc-wrap">
             <button
-              v-for="t in subtitleTracks"
-              :key="t.id"
-              class="cc-item"
-              :class="{ sel: activeSubtitle === t.id }"
+              class="ctrl icon-only"
+              :class="{ on: activeSubtitle }"
               type="button"
-              @click="selectSubtitle(t.id)"
+              title="Subtitles"
+              @click="subMenuOpen = !subMenuOpen"
             >
-              <span class="cc-label">
-                {{ t.label }}
-                <span class="cc-src">{{ t.source === 'opensubtitles' ? 'OpenSubtitles' : 'Embedded' }}</span>
-              </span>
-              <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
+              <span class="ic cc">CC</span>
             </button>
+            <div v-if="subMenuOpen" class="cc-menu">
+              <div class="cc-head">Subtitles</div>
+              <button
+                class="cc-item"
+                :class="{ sel: !activeSubtitle }"
+                type="button"
+                @click="selectSubtitle(null)"
+              >
+                <span class="cc-label">Off</span>
+                <span v-if="!activeSubtitle" class="cc-check">✓</span>
+              </button>
+              <button
+                v-for="t in subtitleTracks"
+                :key="t.id"
+                class="cc-item"
+                :class="{ sel: activeSubtitle === t.id }"
+                type="button"
+                @click="selectSubtitle(t.id)"
+              >
+                <span class="cc-label">
+                  {{ t.label }}
+                  <span class="cc-src">{{
+                    t.source === 'opensubtitles' ? 'OpenSubtitles' : 'Embedded'
+                  }}</span>
+                </span>
+                <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
+              </button>
 
-            <div class="cc-head cc-style-head">Caption style</div>
-            <div class="cc-style-row">
-              <span class="cc-style-label">Size</span>
-              <div class="cc-seg">
-                <button
-                  v-for="s in CAPTION_SCALES"
-                  :key="s.v"
-                  type="button"
-                  :class="{ on: captionScale === s.v }"
-                  @click="setCaptionScale(s.v)"
-                >
-                  {{ s.label }}
-                </button>
+              <div class="cc-head cc-style-head">Caption style</div>
+              <div class="cc-style-row">
+                <span class="cc-style-label">Size</span>
+                <div class="cc-seg">
+                  <button
+                    v-for="s in CAPTION_SCALES"
+                    :key="s.v"
+                    type="button"
+                    :class="{ on: captionScale === s.v }"
+                    @click="setCaptionScale(s.v)"
+                  >
+                    {{ s.label }}
+                  </button>
+                </div>
               </div>
-            </div>
-            <div class="cc-style-row">
-              <span class="cc-style-label">Color</span>
-              <div class="cc-swatches">
-                <button
-                  v-for="c in CAPTION_COLORS"
-                  :key="c"
-                  type="button"
-                  class="cc-swatch"
-                  :class="{ on: captionColor === c }"
-                  :style="{ background: c }"
-                  @click="setCaptionColor(c)"
-                />
+              <div class="cc-style-row">
+                <span class="cc-style-label">Color</span>
+                <div class="cc-swatches">
+                  <button
+                    v-for="c in CAPTION_COLORS"
+                    :key="c"
+                    type="button"
+                    class="cc-swatch"
+                    :class="{ on: captionColor === c }"
+                    :style="{ background: c }"
+                    @click="setCaptionColor(c)"
+                  />
+                </div>
               </div>
-            </div>
-            <div class="cc-style-row">
-              <span class="cc-style-label">Background</span>
-              <div class="cc-seg">
-                <button
-                  type="button"
-                  :class="{ on: captionBackground === 'translucent' }"
-                  @click="setCaptionBackground('translucent')"
-                >
-                  Dim
-                </button>
-                <button
-                  type="button"
-                  :class="{ on: captionBackground === 'solid' }"
-                  @click="setCaptionBackground('solid')"
-                >
-                  Solid
-                </button>
-                <button
-                  type="button"
-                  :class="{ on: captionBackground === 'none' }"
-                  @click="setCaptionBackground('none')"
-                >
-                  None
-                </button>
+              <div class="cc-style-row">
+                <span class="cc-style-label">Background</span>
+                <div class="cc-seg">
+                  <button
+                    type="button"
+                    :class="{ on: captionBackground === 'translucent' }"
+                    @click="setCaptionBackground('translucent')"
+                  >
+                    Dim
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ on: captionBackground === 'solid' }"
+                    @click="setCaptionBackground('solid')"
+                  >
+                    Solid
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ on: captionBackground === 'none' }"
+                    @click="setCaptionBackground('none')"
+                  >
+                    None
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
         </div>
       </div>
     </div>
@@ -877,7 +885,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           <span class="up-next-count">in {{ upNextCountdown }}s</span>
         </div>
         <div class="up-next-title">{{ nextEpisodeLabel }}</div>
-        <div v-if="nextEpisode.seriesTitle" class="up-next-series">{{ nextEpisode.seriesTitle }}</div>
+        <div v-if="nextEpisode.seriesTitle" class="up-next-series">
+          {{ nextEpisode.seriesTitle }}
+        </div>
         <div class="up-next-actions">
           <button class="up-next-play" type="button" @click="playNext">⏭ Play Next</button>
           <button class="up-next-cancel" type="button" @click="cancelUpNext">Cancel</button>
@@ -905,7 +915,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <button class="resume-primary" type="button" @click="resume">
           Resume from {{ formatClock(resumeFrom) }}
         </button>
-        <button class="resume-ghost" type="button" @click="startOver">Start from the beginning</button>
+        <button class="resume-ghost" type="button" @click="startOver">
+          Start from the beginning
+        </button>
         <div class="resume-foot">Synced across your Fleet</div>
       </div>
     </div>
@@ -941,7 +953,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(80% 60% at 50% 42%, rgba(0, 0, 0, 0) 0%, rgba(8, 8, 7, 0.35) 75%, var(--arg-ink) 100%);
+  background: radial-gradient(
+    80% 60% at 50% 42%,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(8, 8, 7, 0.35) 75%,
+    var(--arg-ink) 100%
+  );
 }
 .top {
   position: absolute;

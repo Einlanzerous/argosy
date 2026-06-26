@@ -48,11 +48,11 @@ async function load(id: string): Promise<void> {
   const { data } = await api.GET('/api/v1/items/{itemId}', { params: { path: { itemId: id } } })
   if (!data) {
     notFound.value = true
-    setPage('Not found', 'That item is no longer in the Manifest.')
+    setPage('Not found')
     return
   }
   movie.value = data
-  setPage(data.title, `Film · ${data.year ?? '—'}`)
+  setPage(data.title)
   progress.value = await getProgress(id).catch(() => null)
   const all = await getMovies({ sort: 'title' })
   related.value = all.filter((m) => m.id !== id).slice(0, 8)
@@ -114,9 +114,14 @@ watch(
           </div>
           <div v-if="resumable && progress" class="resume-bar">
             <div class="track"><div class="fill" :style="{ width: `${percent}%` }" /></div>
-            <span>{{ Math.round(percent) }}% · resume at {{ formatClock(progress.positionSeconds) }}</span>
+            <span
+              >{{ Math.round(percent) }}% · resume at
+              {{ formatClock(progress.positionSeconds) }}</span
+            >
           </div>
-          <p v-if="movie.reviewRequired" class="review">⚑ Flagged for review — metadata may be incomplete.</p>
+          <p v-if="movie.reviewRequired" class="review">
+            ⚑ Flagged for review — metadata may be incomplete.
+          </p>
         </div>
       </div>
     </section>
@@ -154,7 +159,12 @@ watch(
 .shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, #171717 4%, rgba(23, 23, 23, 0.5) 50%, rgba(23, 23, 23, 0.15) 100%);
+  background: linear-gradient(
+    0deg,
+    #171717 4%,
+    rgba(23, 23, 23, 0.5) 50%,
+    rgba(23, 23, 23, 0.15) 100%
+  );
 }
 /* Quadrant 1: top-left of the hero, aligned with the poster's left edge (the
    hero body's 40px inset) so it sits above the art, left of the title. */

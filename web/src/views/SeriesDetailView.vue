@@ -144,11 +144,11 @@ async function load(id: string): Promise<void> {
   })
   if (!data) {
     notFound.value = true
-    setPage('Not found', 'That series is no longer in the Manifest.')
+    setPage('Not found')
     return
   }
   series.value = data
-  setPage(data.title, `Series · ${data.seasons.length} season${data.seasons.length === 1 ? '' : 's'}`)
+  setPage(data.title)
 }
 
 function playFirst(): void {
@@ -231,14 +231,21 @@ watch(
             <span class="ep-tag">{{ rowLabel(row) }}</span>
             <span v-if="rowName(row)" class="ep-name">{{ rowName(row) }}</span>
             <span class="ep-dot">·</span>
-            <span class="ep-len">{{ row.mediaItemId ? formatRuntime(row.rep.durationSeconds) : 'No file linked' }}</span>
+            <span class="ep-len">{{
+              row.mediaItemId ? formatRuntime(row.rep.durationSeconds) : 'No file linked'
+            }}</span>
             <span v-if="row.episodes.length > 1" class="ep-combined">Combined</span>
             <span v-if="row.rep.watched" class="ep-flag">✓ Watched</span>
           </div>
           <p v-if="rowOverview(row)" class="ep-synopsis">{{ rowOverview(row) }}</p>
           <div v-if="epInProgress(row.rep)" class="ep-line2">
-            <div class="ep-bar"><div class="ep-fill" :style="{ width: `${epPercent(row.rep)}%` }" /></div>
-            <span class="ep-prog">{{ Math.round(epPercent(row.rep)) }}% · {{ formatRuntime(epTimeLeft(row.rep)) }} left</span>
+            <div class="ep-bar">
+              <div class="ep-fill" :style="{ width: `${epPercent(row.rep)}%` }" />
+            </div>
+            <span class="ep-prog"
+              >{{ Math.round(epPercent(row.rep)) }}% ·
+              {{ formatRuntime(epTimeLeft(row.rep)) }} left</span
+            >
           </div>
         </div>
       </button>
@@ -263,7 +270,12 @@ watch(
 .shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, #171717 4%, rgba(23, 23, 23, 0.5) 55%, rgba(23, 23, 23, 0.15) 100%);
+  background: linear-gradient(
+    0deg,
+    #171717 4%,
+    rgba(23, 23, 23, 0.5) 55%,
+    rgba(23, 23, 23, 0.15) 100%
+  );
 }
 /* Quadrant 1: top-left of the hero, aligned with the body's 40px inset. */
 .hero-back {

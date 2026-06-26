@@ -3,12 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 import { closeSearch } from '@/lib/ui'
-import {
-  getFacets,
-  searchManifest,
-  type MovieSummary,
-  type SeriesSummary,
-} from '@/lib/manifest'
+import { getFacets, searchManifest, type MovieSummary, type SeriesSummary } from '@/lib/manifest'
 import { posterStyle } from '@/lib/poster'
 
 const router = useRouter()
@@ -140,7 +135,9 @@ onUnmounted(() => {
             <span class="thumb" :style="posterStyle(s.posterUrl, s.title)" />
             <span class="meta">
               <span class="title">{{ s.title }}</span>
-              <span class="sub">Series<template v-if="s.year"> · {{ s.year }}</template></span>
+              <span class="sub"
+                >Series<template v-if="s.year"> · {{ s.year }}</template></span
+              >
             </span>
           </button>
         </div>
@@ -156,7 +153,9 @@ onUnmounted(() => {
             <span class="thumb" :style="posterStyle(m.posterUrl, m.title)" />
             <span class="meta">
               <span class="title">{{ m.title }}</span>
-              <span class="sub">Film<template v-if="m.year"> · {{ m.year }}</template></span>
+              <span class="sub"
+                >Film<template v-if="m.year"> · {{ m.year }}</template></span
+              >
             </span>
           </button>
         </div>

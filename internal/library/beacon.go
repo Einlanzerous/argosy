@@ -7,6 +7,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/beacon"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 )
 
 // beaconHandler streams Server-Sent Events of the authenticated user's
@@ -18,17 +19,17 @@ func beaconHandler(authStore *auth.Store, hub *beacon.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := streamToken(r)
 		if token == "" {
-			writeJSON(w, http.StatusUnauthorized, errorBody("missing token"))
+			httpx.Error(w, http.StatusUnauthorized, "missing token")
 			return
 		}
 		sess, err := authStore.AuthenticateDevice(r.Context(), token)
 		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, errorBody("invalid or revoked token"))
+			httpx.Error(w, http.StatusUnauthorized, "invalid or revoked token")
 			return
 		}
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			writeJSON(w, http.StatusInternalServerError, errorBody("streaming unsupported"))
+			httpx.Error(w, http.StatusInternalServerError, "streaming unsupported")
 			return
 		}
 

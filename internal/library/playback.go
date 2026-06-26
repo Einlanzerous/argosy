@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/jackc/pgx/v5"
 )
@@ -172,8 +173,8 @@ func (h *handlers) getPlayback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if info == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, info)
+	httpx.JSON(w, http.StatusOK, info)
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 )
 
 // User-applied labels (ARGY-73): a profile's own custom tags on a film or series,
@@ -111,7 +112,7 @@ func (h *handlers) listLabels(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, labels)
+	httpx.JSON(w, http.StatusOK, labels)
 }
 
 // labelOf pulls and validates the label from the request body.
@@ -122,7 +123,7 @@ func labelOf(w http.ResponseWriter, r *http.Request) (string, bool) {
 	}
 	label := strings.TrimSpace(req.Label)
 	if label == "" {
-		writeJSON(w, http.StatusBadRequest, errorBody("label required"))
+		httpx.Error(w, http.StatusBadRequest, "label required")
 		return "", false
 	}
 	return label, true
@@ -139,10 +140,10 @@ func (h *handlers) addItemLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, labels)
+	httpx.JSON(w, http.StatusOK, labels)
 }
 
 func (h *handlers) addSeriesLabel(w http.ResponseWriter, r *http.Request) {
@@ -156,10 +157,10 @@ func (h *handlers) addSeriesLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, labels)
+	httpx.JSON(w, http.StatusOK, labels)
 }
 
 func (h *handlers) removeItemLabel(w http.ResponseWriter, r *http.Request) {

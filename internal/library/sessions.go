@@ -5,6 +5,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 )
@@ -53,5 +54,5 @@ func (h *handlers) listSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, ps)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.JSON(w, http.StatusOK, out)
 }

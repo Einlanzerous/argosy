@@ -50,7 +50,9 @@ onMounted(() => {
 
     <form v-if="creating" class="creator" @submit.prevent="create">
       <input v-model="newName" type="text" placeholder="Vault name…" autofocus />
-      <label class="shared"><input v-model="newShared" type="checkbox" /> Share with household</label>
+      <label class="shared"
+        ><input v-model="newShared" type="checkbox" /> Share with household</label
+      >
       <button class="go" type="submit" :disabled="busy || !newName.trim()">Create</button>
     </form>
 

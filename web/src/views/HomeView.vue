@@ -213,9 +213,11 @@ onUnmounted(() => {
         <div class="eyebrow"><span>⇄</span> {{ hero.eyebrow }}</div>
         <h1>{{ hero.title }}</h1>
         <div class="meta">
-          {{ [hero.sub, heroDetail ? formatRuntime(heroDetail.durationSeconds) : null]
-            .filter(Boolean)
-            .join(' · ') }}
+          {{
+            [hero.sub, heroDetail ? formatRuntime(heroDetail.durationSeconds) : null]
+              .filter(Boolean)
+              .join(' · ')
+          }}
         </div>
         <p v-if="heroDetail?.overview" class="synopsis">{{ heroDetail.overview }}</p>
         <div v-if="hero.percent != null" class="progress">
@@ -226,7 +228,11 @@ onUnmounted(() => {
         <div class="actions">
           <RouterLink
             class="play"
-            :to="{ name: 'player', params: { id: hero.id }, query: hero.percent != null ? { resume: '1' } : undefined }"
+            :to="{
+              name: 'player',
+              params: { id: hero.id },
+              query: hero.percent != null ? { resume: '1' } : undefined,
+            }"
           >
             <span>▶</span> {{ hero.percent != null ? 'Resume' : 'Play' }}
           </RouterLink>
@@ -283,9 +289,11 @@ onUnmounted(() => {
           :kind="m.kind"
           :anime="m.tags?.includes('anime')"
           :poster-url="m.posterUrl"
-          :to="m.kind === 'series'
-            ? { name: 'series', params: { id: m.id } }
-            : { name: 'movie', params: { id: m.id } }"
+          :to="
+            m.kind === 'series'
+              ? { name: 'series', params: { id: m.id } }
+              : { name: 'movie', params: { id: m.id } }
+          "
         />
       </PosterRail>
 
@@ -334,7 +342,9 @@ onUnmounted(() => {
           Stevedore hasn't loaded any cargo yet. Point Argosy at your media folders and rebuild the
           Manifest from Settings.
         </p>
-        <RouterLink class="play" :to="{ name: 'settings' }"><span>⟲</span> Go to Settings</RouterLink>
+        <RouterLink class="play" :to="{ name: 'settings' }"
+          ><span>⟲</span> Go to Settings</RouterLink
+        >
       </div>
     </div>
   </div>
@@ -357,7 +367,12 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(90deg, rgba(20, 20, 19, 0.95) 0%, rgba(20, 20, 19, 0.6) 44%, rgba(20, 20, 19, 0) 78%);
+  background: linear-gradient(
+    90deg,
+    rgba(20, 20, 19, 0.95) 0%,
+    rgba(20, 20, 19, 0.6) 44%,
+    rgba(20, 20, 19, 0) 78%
+  );
 }
 .shade-b {
   position: absolute;

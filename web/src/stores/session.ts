@@ -4,7 +4,6 @@ import { api, getInstallId, getToken, setToken } from '@/api/client'
 import type { components } from '@/api/schema'
 
 type Session = components['schemas']['Session']
-type Account = components['schemas']['Account']
 type UserProfile = components['schemas']['UserProfile']
 
 const PROFILE_KEY = 'argosy.profileName'
@@ -14,7 +13,8 @@ const DEVICE_KEY = 'argosy.deviceName'
 // the per-device token is what authorizes every later call.
 export const useSessionStore = defineStore('session', () => {
   const session = ref<Session | null>(null)
-  const account = ref<Account | null>(null)
+  // profiles is internal-only: pairDevice resolves the chosen profile's name
+  // from it. Consumers read the picked profileName, not the raw list.
   const profiles = ref<UserProfile[]>([])
   const profileName = ref(localStorage.getItem(PROFILE_KEY) ?? '')
   const deviceName = ref(localStorage.getItem(DEVICE_KEY) ?? '')
@@ -56,7 +56,6 @@ export const useSessionStore = defineStore('session', () => {
       body: { username, password },
     })
     if (error || !data) throw new Error('Invalid email or password.')
-    account.value = data.account
     profiles.value = data.profiles
     return data.profiles
   }
@@ -96,7 +95,6 @@ export const useSessionStore = defineStore('session', () => {
     localStorage.removeItem(PROFILE_KEY)
     localStorage.removeItem(DEVICE_KEY)
     session.value = null
-    account.value = null
     profiles.value = []
     profileName.value = ''
     deviceName.value = ''
@@ -104,8 +102,6 @@ export const useSessionStore = defineStore('session', () => {
 
   return {
     session,
-    account,
-    profiles,
     profileName,
     deviceName,
     ready,

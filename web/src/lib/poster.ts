@@ -26,10 +26,7 @@ export function gradientFor(seed: string): string {
 
 // Background style for a poster/backdrop surface: the real artwork when present,
 // otherwise a seeded gradient placeholder.
-export function posterStyle(
-  posterUrl: string | null | undefined,
-  seed: string,
-): CSSProperties {
+export function posterStyle(posterUrl: string | null | undefined, seed: string): CSSProperties {
   if (posterUrl) {
     return {
       backgroundImage: `url("${posterUrl}")`,
