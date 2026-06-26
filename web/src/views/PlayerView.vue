@@ -129,6 +129,9 @@ const baseOffset = ref(0)
 let directAttached = false
 let hls: Hls | null = null
 let heartbeat: ReturnType<typeof setInterval> | null = null
+// Guards a single transparent recovery after a reaped/expired transcode session
+// (ARGY-107); re-armed once playback resumes.
+let recovering = false
 let transcodeSessionId = ''
 
 const pct = computed(() => (duration.value ? (position.value / duration.value) * 100 : 0))
@@ -268,7 +271,20 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
       })
       hls.on(Hls.Events.MANIFEST_PARSED, () => void el.play().catch(() => {}))
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) error.value = 'This stream could not be played.'
+        if (!data.fatal) return
+        // The idle reaper purges a transcode session that went quiet (e.g. a long
+        // pause), so its next segment 404s. Rather than dying, restart the
+        // transcode from the current position and keep playing (ARGY-107). One
+        // attempt: if it fails again before playback resumes, surface the error.
+        const v = video.value
+        if (mode === 'transcode' && v && !recovering) {
+          recovering = true
+          const pos = baseOffset.value + v.currentTime
+          // Defer so we don't tear down hls inside its own error callback.
+          setTimeout(() => void startTranscodeAt(v, pos), 0)
+          return
+        }
+        error.value = 'This stream could not be played.'
       })
       hls.loadSource(sess.playlistUrl)
       hls.attachMedia(el)
@@ -331,6 +347,7 @@ function bindVideo(el: HTMLVideoElement): void {
   })
   el.addEventListener('play', () => {
     playing.value = true
+    recovering = false // playback resumed → re-arm recovery for a future reap
     poke()
   })
   el.addEventListener('pause', () => {
@@ -351,9 +368,12 @@ function bindVideo(el: HTMLVideoElement): void {
     // hls.js surfaces its own errors; only flag native-element failures.
     if (!hls) error.value = 'This stream could not be played.'
   })
-  // Throttled heartbeat while open.
+  // Throttled heartbeat while open. While playing, report progress; while paused,
+  // still send a keepalive if the tab is visible so the idle reaper doesn't purge
+  // the session out from under the viewer (ARGY-107). Hidden/closed tabs fall
+  // through to the reaper and rely on the on-resume recovery above.
   heartbeat = setInterval(() => {
-    if (!el.paused) flush()
+    if (!el.paused || document.visibilityState === 'visible') flush()
   }, 10000)
 }
 
@@ -695,7 +715,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     <!-- error overlay -->
     <div v-if="error" class="error">
       <div class="error-card">
-        <div class="error-eyebrow">Can't direct-play</div>
+        <div class="error-eyebrow">Playback interrupted</div>
         <p>{{ error }}</p>
         <button type="button" @click="goBack">Back to details</button>
       </div>
