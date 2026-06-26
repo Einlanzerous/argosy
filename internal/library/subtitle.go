@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/jackc/pgx/v5"
 )
@@ -65,7 +66,7 @@ func (s *Store) subtitleTarget(ctx context.Context, accountID, itemID string) (s
 func (h *handlers) listSubtitles(w http.ResponseWriter, r *http.Request) {
 	t, ok, err := h.store.subtitleTarget(r.Context(), accountOf(r), r.PathValue("itemId"))
 	if errors.Is(err, ErrPathTraversal) {
-		writeJSON(w, http.StatusForbidden, errorBody("forbidden"))
+		httpx.Error(w, http.StatusForbidden, "forbidden")
 		return
 	}
 	if err != nil {
@@ -73,10 +74,10 @@ func (h *handlers) listSubtitles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, h.subs.List(r.Context(), t))
+	httpx.JSON(w, http.StatusOK, h.subs.List(r.Context(), t))
 }
 
 // subtitleFileHandler serves a track's WebVTT file. Like the stream endpoint it
@@ -86,33 +87,33 @@ func subtitleFileHandler(store *Store, subs *subtitle.Service, authStore *auth.S
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := streamToken(r)
 		if token == "" {
-			writeJSON(w, http.StatusUnauthorized, errorBody("missing token"))
+			httpx.Error(w, http.StatusUnauthorized, "missing token")
 			return
 		}
 		sess, err := authStore.AuthenticateDevice(r.Context(), token)
 		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, errorBody("invalid or revoked token"))
+			httpx.Error(w, http.StatusUnauthorized, "invalid or revoked token")
 			return
 		}
 		t, ok, err := store.subtitleTarget(r.Context(), sess.AccountId.String(), r.PathValue("itemId"))
 		if errors.Is(err, ErrPathTraversal) {
-			writeJSON(w, http.StatusForbidden, errorBody("forbidden"))
+			httpx.Error(w, http.StatusForbidden, "forbidden")
 			return
 		}
 		if err != nil {
 			logger.Error("subtitle: resolve target failed", "err", err)
-			writeJSON(w, http.StatusInternalServerError, errorBody("internal error"))
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 		if !ok {
-			writeJSON(w, http.StatusNotFound, errorBody("not found"))
+			httpx.Error(w, http.StatusNotFound, "not found")
 			return
 		}
 
 		path, err := subs.VTT(r.Context(), t, r.PathValue("trackId"))
 		if err != nil {
 			logger.Error("subtitle: produce vtt failed", "item", t.ItemID, "track", r.PathValue("trackId"), "err", err)
-			writeJSON(w, http.StatusBadGateway, errorBody("subtitle unavailable"))
+			httpx.Error(w, http.StatusBadGateway, "subtitle unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "text/vtt; charset=utf-8")

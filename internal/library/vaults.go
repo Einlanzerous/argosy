@@ -7,6 +7,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -335,7 +336,7 @@ func (h *handlers) listVaults(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, vaults)
+	httpx.JSON(w, http.StatusOK, vaults)
 }
 
 func (h *handlers) createVault(w http.ResponseWriter, r *http.Request) {
@@ -344,7 +345,7 @@ func (h *handlers) createVault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name == "" {
-		writeJSON(w, http.StatusBadRequest, errorBody("name required"))
+		httpx.Error(w, http.StatusBadRequest, "name required")
 		return
 	}
 	shared := req.Shared != nil && *req.Shared
@@ -353,7 +354,7 @@ func (h *handlers) createVault(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, v)
+	httpx.JSON(w, http.StatusCreated, v)
 }
 
 func (h *handlers) getVault(w http.ResponseWriter, r *http.Request) {
@@ -363,22 +364,22 @@ func (h *handlers) getVault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	d.CanEdit = d.IsOwner || d.Shared
-	writeJSON(w, http.StatusOK, d)
+	httpx.JSON(w, http.StatusOK, d)
 }
 
 func (h *handlers) updateVault(w http.ResponseWriter, r *http.Request) {
 	vaultID := r.PathValue("vaultId")
 	_, canManage, found := h.vaultPerm(r, vaultID)
 	if !found {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	if !canManage {
-		writeJSON(w, http.StatusForbidden, errorBody("only the owner or an admin can manage this vault"))
+		httpx.Error(w, http.StatusForbidden, "only the owner or an admin can manage this vault")
 		return
 	}
 	var req api.UpdateVaultRequest
@@ -390,18 +391,18 @@ func (h *handlers) updateVault(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, v)
+	httpx.JSON(w, http.StatusOK, v)
 }
 
 func (h *handlers) deleteVault(w http.ResponseWriter, r *http.Request) {
 	vaultID := r.PathValue("vaultId")
 	_, canManage, found := h.vaultPerm(r, vaultID)
 	if !found {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	if !canManage {
-		writeJSON(w, http.StatusForbidden, errorBody("only the owner or an admin can delete this vault"))
+		httpx.Error(w, http.StatusForbidden, "only the owner or an admin can delete this vault")
 		return
 	}
 	if err := h.store.DeleteVault(r.Context(), vaultID); err != nil {
@@ -415,11 +416,11 @@ func (h *handlers) addVaultItem(w http.ResponseWriter, r *http.Request) {
 	vaultID := r.PathValue("vaultId")
 	canEdit, _, found := h.vaultPerm(r, vaultID)
 	if !found {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	if !canEdit {
-		writeJSON(w, http.StatusForbidden, errorBody("you can't curate this vault"))
+		httpx.Error(w, http.StatusForbidden, "you can't curate this vault")
 		return
 	}
 	var req api.AddVaultItemRequest
@@ -436,7 +437,7 @@ func (h *handlers) addVaultItem(w http.ResponseWriter, r *http.Request) {
 		seriesID = &s
 	}
 	if (movieID == nil) == (seriesID == nil) {
-		writeJSON(w, http.StatusBadRequest, errorBody("exactly one of movieId or seriesId is required"))
+		httpx.Error(w, http.StatusBadRequest, "exactly one of movieId or seriesId is required")
 		return
 	}
 	entry, err := h.store.AddVaultItem(r.Context(), accountOf(r), vaultID, movieID, seriesID)
@@ -445,21 +446,21 @@ func (h *handlers) addVaultItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if entry == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("item not found in this account"))
+		httpx.Error(w, http.StatusNotFound, "item not found in this account")
 		return
 	}
-	writeJSON(w, http.StatusCreated, entry)
+	httpx.JSON(w, http.StatusCreated, entry)
 }
 
 func (h *handlers) removeVaultItem(w http.ResponseWriter, r *http.Request) {
 	vaultID := r.PathValue("vaultId")
 	canEdit, _, found := h.vaultPerm(r, vaultID)
 	if !found {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	if !canEdit {
-		writeJSON(w, http.StatusForbidden, errorBody("you can't curate this vault"))
+		httpx.Error(w, http.StatusForbidden, "you can't curate this vault")
 		return
 	}
 	removed, err := h.store.RemoveVaultItem(r.Context(), vaultID, r.PathValue("entryId"))
@@ -468,7 +469,7 @@ func (h *handlers) removeVaultItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !removed {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -478,11 +479,11 @@ func (h *handlers) reorderVault(w http.ResponseWriter, r *http.Request) {
 	vaultID := r.PathValue("vaultId")
 	canEdit, _, found := h.vaultPerm(r, vaultID)
 	if !found {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	if !canEdit {
-		writeJSON(w, http.StatusForbidden, errorBody("you can't curate this vault"))
+		httpx.Error(w, http.StatusForbidden, "you can't curate this vault")
 		return
 	}
 	var req api.ReorderVaultRequest

@@ -18,7 +18,7 @@ export const router = createRouter({
       component: () => import('@/views/PlayerView.vue'),
     },
     {
-      // Everything else lives inside the sidebar/topbar chrome.
+      // Everything else lives inside the topbar chrome.
       path: '/',
       component: () => import('@/layouts/AppShell.vue'),
       children: [

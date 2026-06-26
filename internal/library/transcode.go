@@ -10,6 +10,7 @@ import (
 	"regexp"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -92,7 +93,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 
 	src, ok, err := h.store.itemSource(r.Context(), account, itemID)
 	if errors.Is(err, ErrPathTraversal) {
-		writeJSON(w, http.StatusForbidden, errorBody("forbidden"))
+		httpx.Error(w, http.StatusForbidden, "forbidden")
 		return
 	}
 	if err != nil {
@@ -100,7 +101,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 
@@ -142,14 +143,14 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		TranscodeAudio: plan.transcodeAudio,
 	})
 	if errors.Is(err, transcode.ErrAtCapacity) {
-		writeJSON(w, http.StatusServiceUnavailable, errorBody("server at transcode capacity, try again shortly"))
+		httpx.Error(w, http.StatusServiceUnavailable, "server at transcode capacity, try again shortly")
 		return
 	}
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusAccepted, toAPISession(sess))
+	httpx.JSON(w, http.StatusAccepted, toAPISession(sess))
 }
 
 // fileTranscode serves a session's HLS artifacts: the master playlist
@@ -157,7 +158,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("file")
 	if !transcodeFile.MatchString(name) {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	sess, ok := h.authedSession(w, r)
@@ -169,10 +170,10 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 	if _, err := os.Stat(path); err != nil {
 		// The master playlist may not be written yet — tell the client to retry.
 		if name == transcode.PlaylistName {
-			writeJSON(w, http.StatusServiceUnavailable, errorBody("transcode starting"))
+			httpx.Error(w, http.StatusServiceUnavailable, "transcode starting")
 			return
 		}
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	w.Header().Set("Content-Type", transcodeContentType(name))
@@ -188,7 +189,7 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		data, err := os.ReadFile(path)
 		if err != nil {
-			writeJSON(w, http.StatusNotFound, errorBody("not found"))
+			httpx.Error(w, http.StatusNotFound, "not found")
 			return
 		}
 		_, _ = w.Write(data)
@@ -217,13 +218,13 @@ func (h *handlers) listTranscodeSessions(w http.ResponseWriter, r *http.Request)
 			out = append(out, toAPISession(s))
 		}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.JSON(w, http.StatusOK, out)
 }
 
 // transcodeCache reports transcode cache usage (Ballast) for The Helm/Drydock.
 func (h *handlers) transcodeCache(w http.ResponseWriter, _ *http.Request) {
 	st := h.cache.Stats()
-	writeJSON(w, http.StatusOK, api.TranscodeCacheStats{
+	httpx.JSON(w, http.StatusOK, api.TranscodeCacheStats{
 		TotalBytes:  st.TotalBytes,
 		BudgetBytes: st.BudgetBytes,
 		SessionDirs: st.SessionDirs,
@@ -233,7 +234,7 @@ func (h *handlers) transcodeCache(w http.ResponseWriter, _ *http.Request) {
 
 // transcodeCapabilities reports the encoders available on this host.
 func (h *handlers) transcodeCapabilities(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, api.TranscodeCapabilities{
+	httpx.JSON(w, http.StatusOK, api.TranscodeCapabilities{
 		Available: h.caps.Available,
 		Selected:  h.caps.Selected,
 	})
@@ -245,7 +246,7 @@ func (h *handlers) transcodeCapabilities(w http.ResponseWriter, _ *http.Request)
 func (h *handlers) authedSession(w http.ResponseWriter, r *http.Request) (transcode.Session, bool) {
 	sess, ok := h.tc.Get(r.PathValue("sessionId"))
 	if !ok || sess.AccountID != accountOf(r) {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return transcode.Session{}, false
 	}
 	return sess, true

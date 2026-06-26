@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -86,38 +87,38 @@ func streamHandler(store *Store, authStore *auth.Store, logger *slog.Logger) htt
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := streamToken(r)
 		if token == "" {
-			writeJSON(w, http.StatusUnauthorized, errorBody("missing token"))
+			httpx.Error(w, http.StatusUnauthorized, "missing token")
 			return
 		}
 		sess, err := authStore.AuthenticateDevice(r.Context(), token)
 		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, errorBody("invalid or revoked token"))
+			httpx.Error(w, http.StatusUnauthorized, "invalid or revoked token")
 			return
 		}
 		fileAbs, ok, err := store.ItemFilePath(r.Context(), sess.AccountId.String(), r.PathValue("itemId"))
 		if errors.Is(err, ErrPathTraversal) {
-			writeJSON(w, http.StatusForbidden, errorBody("forbidden"))
+			httpx.Error(w, http.StatusForbidden, "forbidden")
 			return
 		}
 		if err != nil {
 			logger.Error("stream: resolve path failed", "err", err)
-			writeJSON(w, http.StatusInternalServerError, errorBody("internal error"))
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 		if !ok {
-			writeJSON(w, http.StatusNotFound, errorBody("not found"))
+			httpx.Error(w, http.StatusNotFound, "not found")
 			return
 		}
 
 		f, err := os.Open(fileAbs)
 		if err != nil {
-			writeJSON(w, http.StatusNotFound, errorBody("file unavailable"))
+			httpx.Error(w, http.StatusNotFound, "file unavailable")
 			return
 		}
 		defer func() { _ = f.Close() }()
 		fi, err := f.Stat()
 		if err != nil || fi.IsDir() {
-			writeJSON(w, http.StatusNotFound, errorBody("file unavailable"))
+			httpx.Error(w, http.StatusNotFound, "file unavailable")
 			return
 		}
 

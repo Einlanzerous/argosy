@@ -144,11 +144,11 @@ async function load(id: string): Promise<void> {
   })
   if (!data) {
     notFound.value = true
-    setPage('Not found', 'That series is no longer in the Manifest.')
+    setPage('Not found')
     return
   }
   series.value = data
-  setPage(data.title, `Series · ${data.seasons.length} season${data.seasons.length === 1 ? '' : 's'}`)
+  setPage(data.title)
 }
 
 function playFirst(): void {

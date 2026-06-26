@@ -48,11 +48,11 @@ async function load(id: string): Promise<void> {
   const { data } = await api.GET('/api/v1/items/{itemId}', { params: { path: { itemId: id } } })
   if (!data) {
     notFound.value = true
-    setPage('Not found', 'That item is no longer in the Manifest.')
+    setPage('Not found')
     return
   }
   movie.value = data
-  setPage(data.title, `Film · ${data.year ?? '—'}`)
+  setPage(data.title)
   progress.value = await getProgress(id).catch(() => null)
   const all = await getMovies({ sort: 'title' })
   related.value = all.filter((m) => m.id !== id).slice(0, 8)

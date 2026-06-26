@@ -1,7 +1,6 @@
 package library
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/ballast"
 	"github.com/Einlanzerous/argosy/internal/beacon"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
@@ -120,7 +120,7 @@ func (h *handlers) listLibraries(w http.ResponseWriter, r *http.Request) {
 			libs[i].RootPath = nil
 		}
 	}
-	writeJSON(w, http.StatusOK, libs)
+	httpx.JSON(w, http.StatusOK, libs)
 }
 
 func (h *handlers) createLibrary(w http.ResponseWriter, r *http.Request) {
@@ -129,11 +129,11 @@ func (h *handlers) createLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name == "" || req.Path == "" {
-		writeJSON(w, http.StatusBadRequest, errorBody("name and path are required"))
+		httpx.Error(w, http.StatusBadRequest, "name and path are required")
 		return
 	}
 	if info, err := os.Stat(req.Path); err != nil || !info.IsDir() {
-		writeJSON(w, http.StatusBadRequest, errorBody("path must be an existing directory on the server"))
+		httpx.Error(w, http.StatusBadRequest, "path must be an existing directory on the server")
 		return
 	}
 	kind := "mixed"
@@ -145,7 +145,7 @@ func (h *handlers) createLibrary(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, lib)
+	httpx.JSON(w, http.StatusCreated, lib)
 }
 
 func (h *handlers) deleteLibrary(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +155,7 @@ func (h *handlers) deleteLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !removed {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -168,7 +168,7 @@ func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, page)
+	httpx.JSON(w, http.StatusOK, page)
 }
 
 func (h *handlers) listSeries(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +178,7 @@ func (h *handlers) listSeries(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, page)
+	httpx.JSON(w, http.StatusOK, page)
 }
 
 func (h *handlers) listRecent(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +194,7 @@ func (h *handlers) listRecent(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	httpx.JSON(w, http.StatusOK, items)
 }
 
 func (h *handlers) search(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +207,7 @@ func (h *handlers) search(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+	httpx.JSON(w, http.StatusOK, res)
 }
 
 func (h *handlers) listFacets(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +220,7 @@ func (h *handlers) listFacets(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, facets)
+	httpx.JSON(w, http.StatusOK, facets)
 }
 
 func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {
@@ -230,13 +230,13 @@ func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	if labels, err := h.store.SeriesLabels(r.Context(), userOf(r), r.PathValue("seriesId")); err == nil {
 		d.Labels = &labels
 	}
-	writeJSON(w, http.StatusOK, d)
+	httpx.JSON(w, http.StatusOK, d)
 }
 
 func (h *handlers) getItem(w http.ResponseWriter, r *http.Request) {
@@ -246,13 +246,13 @@ func (h *handlers) getItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	if labels, err := h.store.ItemLabels(r.Context(), userOf(r), r.PathValue("itemId")); err == nil {
 		d.Labels = &labels
 	}
-	writeJSON(w, http.StatusOK, d)
+	httpx.JSON(w, http.StatusOK, d)
 }
 
 func accountOf(r *http.Request) string {
@@ -308,13 +308,5 @@ func parseFilter(r *http.Request) browseFilter {
 
 func (h *handlers) fail(w http.ResponseWriter, err error) {
 	h.logger.Error("browse query failed", "err", err)
-	writeJSON(w, http.StatusInternalServerError, errorBody("internal error"))
-}
-
-func errorBody(msg string) map[string]string { return map[string]string{"error": msg} }
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	httpx.Error(w, http.StatusInternalServerError, "internal error")
 }

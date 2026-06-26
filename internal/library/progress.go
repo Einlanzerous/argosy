@@ -11,6 +11,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/beacon"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/jackc/pgx/v5"
 )
@@ -219,10 +220,10 @@ func (h *handlers) getProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ps == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, ps)
+	httpx.JSON(w, http.StatusOK, ps)
 }
 
 func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
@@ -242,7 +243,7 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ps == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	// The heartbeat is also a transcode liveness signal (ARGY-94): a client
@@ -271,7 +272,7 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	h.publishBeacon(r, sess, itemID, float64(body.PositionSeconds), durf, ps.Watched)
-	writeJSON(w, http.StatusOK, ps)
+	httpx.JSON(w, http.StatusOK, ps)
 }
 
 // publishBeacon broadcasts a play-state change to the user's other devices.
@@ -305,7 +306,7 @@ func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ps == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("not found"))
+		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	// Broadcast the watched-state change so other devices update live.
@@ -315,7 +316,7 @@ func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
 		durf = float64(*ps.DurationSeconds)
 	}
 	h.publishBeacon(r, sess, itemID, float64(ps.PositionSeconds), durf, ps.Watched)
-	writeJSON(w, http.StatusOK, ps)
+	httpx.JSON(w, http.StatusOK, ps)
 }
 
 func (h *handlers) listContinue(w http.ResponseWriter, r *http.Request) {
@@ -324,7 +325,7 @@ func (h *handlers) listContinue(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	httpx.JSON(w, http.StatusOK, items)
 }
 
 func (h *handlers) listOnDeck(w http.ResponseWriter, r *http.Request) {
@@ -337,7 +338,7 @@ func (h *handlers) listOnDeck(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	httpx.JSON(w, http.StatusOK, items)
 }
 
 // getNextEpisode powers the player's auto-advance: it returns the episode that
@@ -350,10 +351,10 @@ func (h *handlers) getNextEpisode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if next == nil {
-		writeJSON(w, http.StatusNotFound, errorBody("no next episode"))
+		httpx.Error(w, http.StatusNotFound, "no next episode")
 		return
 	}
-	writeJSON(w, http.StatusOK, next)
+	httpx.JSON(w, http.StatusOK, next)
 }
 
 func userOf(r *http.Request) string {
@@ -363,7 +364,7 @@ func userOf(r *http.Request) string {
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorBody("invalid request body"))
+		httpx.Error(w, http.StatusBadRequest, "invalid request body")
 		return false
 	}
 	return true

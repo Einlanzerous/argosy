@@ -117,7 +117,7 @@ async function rebuild(): Promise<void> {
 }
 
 onMounted(() => {
-  setPage('Settings', 'The Helm · keep the Manifest current.')
+  setPage('Settings')
   void refresh()
   void loadLibraries()
   void loadUserPrefs()

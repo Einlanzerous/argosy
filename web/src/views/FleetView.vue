@@ -83,7 +83,7 @@ async function confirmRetire(): Promise<void> {
 }
 
 onMounted(() => {
-  setPage('Devices', 'Your Fleet · every screen that shares one playhead.')
+  setPage('Devices')
   void load()
 })
 </script>

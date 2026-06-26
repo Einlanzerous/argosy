@@ -4,7 +4,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/ballast"
 	"github.com/Einlanzerous/argosy/internal/beacon"
 	"github.com/Einlanzerous/argosy/internal/config"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/library"
 	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/Einlanzerous/argosy/internal/stevedore"
@@ -79,15 +79,9 @@ func healthHandler(pool *pgxpool.Pool) http.HandlerFunc {
 }
 
 func handlePing(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
+	httpx.JSON(w, http.StatusOK, map[string]string{
 		"service": "argosy",
 		"status":  "ok",
 		"version": version.Version,
 	})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }

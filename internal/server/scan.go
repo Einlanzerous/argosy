@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/stevedore"
 	"github.com/google/uuid"
 )
@@ -13,7 +14,7 @@ import (
 type scanHandlers struct{ sched *stevedore.Scheduler }
 
 func (h *scanHandlers) status(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, toAPIScanStatus(h.sched.Snapshot()))
+	httpx.JSON(w, http.StatusOK, toAPIScanStatus(h.sched.Snapshot()))
 }
 
 func (h *scanHandlers) trigger(w http.ResponseWriter, _ *http.Request) {

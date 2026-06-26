@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/google/uuid"
 )
 
@@ -34,10 +35,10 @@ func handleGetPreferences(store *Store) http.HandlerFunc {
 		sess, _ := SessionFromContext(r.Context())
 		p, err := store.GetDevicePreferences(r.Context(), sess.DeviceId.String())
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal error")
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		writeJSON(w, http.StatusOK, p)
+		httpx.JSON(w, http.StatusOK, p)
 	}
 }
 
@@ -50,10 +51,10 @@ func handleSetPreferences(store *Store) http.HandlerFunc {
 		}
 		out, err := store.SetDevicePreferences(r.Context(), sess.DeviceId.String(), p)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal error")
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpx.JSON(w, http.StatusOK, out)
 	}
 }
 
@@ -62,10 +63,10 @@ func handleGetUserPreferences(store *Store) http.HandlerFunc {
 		sess, _ := SessionFromContext(r.Context())
 		p, err := store.GetUserPreferences(r.Context(), sess.UserId.String())
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal error")
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		writeJSON(w, http.StatusOK, p)
+		httpx.JSON(w, http.StatusOK, p)
 	}
 }
 
@@ -78,10 +79,10 @@ func handleSetUserPreferences(store *Store) http.HandlerFunc {
 		}
 		out, err := store.SetUserPreferences(r.Context(), sess.UserId.String(), p)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal error")
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpx.JSON(w, http.StatusOK, out)
 	}
 }
 
@@ -96,7 +97,7 @@ func handleLogin(store *Store) http.HandlerFunc {
 			writeAuthError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, resp)
+		httpx.JSON(w, http.StatusOK, resp)
 	}
 }
 
@@ -111,7 +112,7 @@ func handleRegisterDevice(store *Store) http.HandlerFunc {
 			writeAuthError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, resp)
+		httpx.JSON(w, http.StatusCreated, resp)
 	}
 }
 
@@ -120,13 +121,13 @@ func handleListDevices(store *Store) http.HandlerFunc {
 		sess, _ := SessionFromContext(r.Context())
 		devices, err := store.ListDevices(r.Context(), sess)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal error")
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 		if devices == nil {
 			devices = []api.Device{}
 		}
-		writeJSON(w, http.StatusOK, devices)
+		httpx.JSON(w, http.StatusOK, devices)
 	}
 }
 
@@ -135,7 +136,7 @@ func handleRevokeDevice(store *Store) http.HandlerFunc {
 		sess, _ := SessionFromContext(r.Context())
 		id, err := uuid.Parse(r.PathValue("deviceId"))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid device id")
+			httpx.Error(w, http.StatusBadRequest, "invalid device id")
 			return
 		}
 		if err := store.RevokeDevice(r.Context(), sess, id); err != nil {
@@ -151,7 +152,7 @@ func handleRenameDevice(store *Store) http.HandlerFunc {
 		sess, _ := SessionFromContext(r.Context())
 		id, err := uuid.Parse(r.PathValue("deviceId"))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid device id")
+			httpx.Error(w, http.StatusBadRequest, "invalid device id")
 			return
 		}
 		var req api.DeviceRenameRequest
@@ -160,7 +161,7 @@ func handleRenameDevice(store *Store) http.HandlerFunc {
 		}
 		name := strings.TrimSpace(req.Name)
 		if name == "" {
-			writeError(w, http.StatusBadRequest, "name is required")
+			httpx.Error(w, http.StatusBadRequest, "name is required")
 			return
 		}
 		dev, err := store.RenameDevice(r.Context(), sess, id, name)
@@ -168,14 +169,14 @@ func handleRenameDevice(store *Store) http.HandlerFunc {
 			writeAuthError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, dev)
+		httpx.JSON(w, http.StatusOK, dev)
 	}
 }
 
 func handleMe() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := SessionFromContext(r.Context())
-		writeJSON(w, http.StatusOK, sess)
+		httpx.JSON(w, http.StatusOK, sess)
 	}
 }
 
@@ -186,12 +187,12 @@ func Middleware(store *Store) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := bearerToken(r)
 			if token == "" {
-				writeError(w, http.StatusUnauthorized, "missing bearer token")
+				httpx.Error(w, http.StatusUnauthorized, "missing bearer token")
 				return
 			}
 			sess, err := store.AuthenticateDevice(r.Context(), token)
 			if err != nil {
-				writeError(w, http.StatusUnauthorized, "invalid or revoked token")
+				httpx.Error(w, http.StatusUnauthorized, "invalid or revoked token")
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionKey, sess)))
@@ -210,11 +211,11 @@ func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := SessionFromContext(r.Context())
 		if !ok {
-			writeError(w, http.StatusUnauthorized, "missing session")
+			httpx.Error(w, http.StatusUnauthorized, "missing session")
 			return
 		}
 		if sess.Role != api.Admin {
-			writeError(w, http.StatusForbidden, "admin role required")
+			httpx.Error(w, http.StatusForbidden, "admin role required")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -237,7 +238,7 @@ func bearerToken(r *http.Request) string {
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		httpx.Error(w, http.StatusBadRequest, "invalid request body")
 		return false
 	}
 	return true
@@ -246,22 +247,12 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 func writeAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidCredentials):
-		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		httpx.Error(w, http.StatusUnauthorized, "invalid credentials")
 	case errors.Is(err, ErrForbidden):
-		writeError(w, http.StatusForbidden, "forbidden")
+		httpx.Error(w, http.StatusForbidden, "forbidden")
 	case errors.Is(err, ErrNotFound):
-		writeError(w, http.StatusNotFound, "not found")
+		httpx.Error(w, http.StatusNotFound, "not found")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal error")
+		httpx.Error(w, http.StatusInternalServerError, "internal error")
 	}
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, api.Error{Error: msg})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }
