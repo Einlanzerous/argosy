@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
+import android.app.UiModeManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -52,6 +53,11 @@ class MainActivity : FlutterActivity() {
                     // re-encode to H.264 1080p) when the client advertises this,
                     // so it gates the 4K remux-copy path (ARGY-79).
                     "hevc4k" -> result.success(hasHevc4kDecoder())
+                    // Is this a TV / leanback device? Drives the 10-foot UI +
+                    // D-pad shell (ARGY-51). Primary signal is the UI mode; the
+                    // leanback/television features are a belt-and-suspenders
+                    // fallback for boxes that under-report the mode.
+                    "isTelevision" -> result.success(isTelevision())
                     else -> result.notImplemented()
                 }
             }
@@ -176,6 +182,13 @@ class MainActivity : FlutterActivity() {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pip?.invokeMethod("pipChanged", isInPictureInPictureMode)
+    }
+
+    private fun isTelevision(): Boolean {
+        val uiMode = getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        if (uiMode?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION) return true
+        return packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+            packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
     }
 
     private fun hasHevc4kDecoder(): Boolean {

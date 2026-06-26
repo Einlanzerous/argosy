@@ -4,10 +4,19 @@
     <!-- Android 13+: required for the media-playback foreground-service
          notification (lock-screen / shade transport controls) to be shown. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Android TV support (ARGY-51): advertise leanback but don't require it, and
+         don't require a touchscreen, so the same APK installs on TVs and phones. -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false"/>
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false"/>
     <application
         android:label="argosy"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
@@ -30,6 +39,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+                <!-- Show in the Android TV / Google TV home row too (ARGY-51). -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

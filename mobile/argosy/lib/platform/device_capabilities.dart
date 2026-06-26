@@ -15,6 +15,23 @@ class DeviceCapabilities {
   static const _channel = MethodChannel('dev.dodson.argosy/capabilities');
 
   static bool? _hevc4k;
+  static bool? _isTv;
+
+  /// Whether this is a TV / leanback device (Android TV, Google TV), which
+  /// selects the 10-foot D-pad UI instead of the touch UI (ARGY-51). Cached
+  /// after the first call. Non-Android platforms are never TV here.
+  static Future<bool> isTelevision() async {
+    if (_isTv != null) return _isTv!;
+    if (!Platform.isAndroid) return _isTv = false;
+    try {
+      final tv = await _channel.invokeMethod<bool>('isTelevision');
+      return _isTv = tv ?? false;
+    } on PlatformException {
+      return _isTv = false;
+    } on MissingPluginException {
+      return _isTv = false;
+    }
+  }
 
   /// Whether the device has an HEVC decoder that supports 3840×2160. Cached
   /// after the first call. Falls back to `false` (the safe, always-playable
