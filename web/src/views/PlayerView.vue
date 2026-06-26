@@ -418,7 +418,9 @@ function advance(): void {
   if (advancing || !next) return
   advancing = true
   flush()
-  void router.push({ name: 'player', params: { id: next.id }, query: { resume: '1' } })
+  // Replace (not push) so chaining through episodes doesn't stack player routes
+  // on history — otherwise "back" walks into a previously-played episode (ARGY-108).
+  void router.replace({ name: 'player', params: { id: next.id }, query: { resume: '1' } })
 }
 
 // playNext skips the rest of the credits/countdown and jumps straight to the
@@ -635,6 +637,22 @@ function startOver(): void {
 }
 
 function goBack(): void {
+  // Go to the title's detail page deterministically. A plain router.back() lands
+  // on a previously-played episode, because auto-advance navigates between
+  // episodes (ARGY-108). Films route by their own id; episodes by their series
+  // (nextEpisode shares the current series).
+  const it = item.value
+  if (it?.kind === 'movie') {
+    void router.push({ name: 'movie', params: { id: itemId } })
+    return
+  }
+  const seriesId = nextEpisode.value?.seriesId
+  if (seriesId) {
+    void router.push({ name: 'series', params: { id: seriesId } })
+    return
+  }
+  // Last episode (no next) or unknown context: fall back to the entry point.
+  // advance() uses router.replace, so this won't resurface an earlier episode.
   if (window.history.length > 1) router.back()
   else void router.push({ name: 'home' })
 }
