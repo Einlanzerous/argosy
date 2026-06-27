@@ -99,16 +99,43 @@ class _Home extends ConsumerWidget {
   }
 }
 
-/// The vertical, D-pad-scrolling page: hero, then every rail. A single
-/// [ListView] inside the fixed [TvStage] canvas — focusing a rail/tile scrolls
-/// it into view (each tile sets [TvFocusable.ensureVisibleOnFocus]).
-class _Page extends StatelessWidget {
+/// The vertical, D-pad-scrolling page: a tall hero that fills most of the
+/// screen (so Continue Watching only peeks below), then every rail. A single
+/// [ListView] inside the fixed [TvStage] canvas — focusing a rail tile scrolls
+/// it into view (via [TvFocusable.ensureVisibleOnFocus]), leaving a sliver of
+/// hero above to return to; focusing a hero action snaps back to the top so the
+/// hero reads full-size instead of being pulled up tight against the rails.
+class _Page extends StatefulWidget {
   const _Page({required this.home});
 
   final HomeData home;
 
   @override
+  State<_Page> createState() => _PageState();
+}
+
+class _PageState extends State<_Page> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _toTop() {
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final home = widget.home;
     final rails = <Widget>[];
 
     void posterRail(String title, List<MediaCard> cards) {
@@ -141,9 +168,10 @@ class _Page extends StatelessWidget {
     }
 
     return ListView(
+      controller: _scroll,
       padding: const EdgeInsets.fromLTRB(56, 96, 64, 56),
       children: [
-        if (home.hero != null) _Hero(hero: home.hero!),
+        if (home.hero != null) _Hero(hero: home.hero!, onFocused: _toTop),
         for (final rail in rails) ...[
           const SizedBox(height: 40),
           rail,
@@ -157,18 +185,24 @@ class _Page extends StatelessWidget {
 /// Resume/Play + Details actions. The first action autofocuses so the remote
 /// lands somewhere sensible on entry.
 class _Hero extends StatelessWidget {
-  const _Hero({required this.hero});
+  const _Hero({required this.hero, required this.onFocused});
 
   final HomeHero hero;
+
+  /// Called when a hero action is focused, to snap the page back to the top.
+  final VoidCallback onFocused;
 
   @override
   Widget build(BuildContext context) {
     final isSeries = hero.kind == MediaKind.series;
+    // A tall block so the hero fills most of the screen and the first rail only
+    // peeks in below it; the copy + actions sit at the top, backdrop showing
+    // through the space beneath.
     return SizedBox(
       width: 780,
+      height: 620,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -256,6 +290,7 @@ class _Hero extends StatelessWidget {
                   label: hero.percent != null ? 'Resume' : 'Play',
                   icon: Icons.play_arrow,
                   primary: true,
+                  onFocused: onFocused,
                   onSelect: () => openPlayer(
                     context,
                     hero.playableId!,
@@ -266,6 +301,7 @@ class _Hero extends StatelessWidget {
               _HeroButton(
                 label: isSeries ? 'Episodes' : 'Details',
                 primary: false,
+                onFocused: onFocused,
                 onSelect: () => openDetail(context, hero.kind, hero.detailId),
               ),
             ],
@@ -281,12 +317,17 @@ class _HeroButton extends StatelessWidget {
     required this.label,
     required this.primary,
     required this.onSelect,
+    required this.onFocused,
     this.icon,
   });
 
   final String label;
   final bool primary;
   final VoidCallback onSelect;
+
+  /// Snap the page to the top when this action takes focus (instead of
+  /// ensure-visible, which pulled the hero up tight against the rails).
+  final VoidCallback onFocused;
   final IconData? icon;
 
   @override
@@ -294,7 +335,9 @@ class _HeroButton extends StatelessWidget {
     return TvFocusable(
       borderRadius: 13,
       scale: 1.05,
-      ensureVisibleOnFocus: true,
+      onFocusChange: (focused) {
+        if (focused) onFocused();
+      },
       onSelect: onSelect,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 18),
@@ -346,8 +389,10 @@ class _ContinueTile extends ConsumerWidget {
     return TvFocusable(
       borderRadius: 16,
       ensureVisibleOnFocus: true,
+      // Land lower in the viewport so a slice of the hero stays visible above
+      // the Continue Watching rail when it takes focus from the hero.
+      ensureVisibleAlignment: 0.32,
       onSelect: () => openPlayer(context, entry.id, resume: true),
-      onFocusChange: (_) {},
       child: SizedBox(
         width: 332,
         child: Column(
