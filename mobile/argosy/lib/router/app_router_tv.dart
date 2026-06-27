@@ -54,10 +54,23 @@ final routerTvProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.splash, builder: (_, _) => const SplashScreen()),
       GoRoute(path: Routes.login, builder: (_, _) => const TvPairingScreen()),
 
+      // Home is the back-stop: BACK here exits to the launcher (TV convention).
       GoRoute(path: Routes.home, builder: (_, _) => const TvHomeScreen()),
-      GoRoute(path: Routes.library, builder: (_, _) => const TvLibraryScreen()),
-      GoRoute(path: Routes.search, builder: (_, _) => const TvSearchScreen()),
-      GoRoute(path: Routes.settings, builder: (_, _) => const TvSettingsScreen()),
+      // The other sections are reached via `context.go` (which replaces, not
+      // pushes), so BACK would otherwise fall off the stack and exit the app.
+      // [_BackToHome] intercepts BACK and returns to the Bridge instead.
+      GoRoute(
+        path: Routes.library,
+        builder: (_, _) => const _BackToHome(child: TvLibraryScreen()),
+      ),
+      GoRoute(
+        path: Routes.search,
+        builder: (_, _) => const _BackToHome(child: TvSearchScreen()),
+      ),
+      GoRoute(
+        path: Routes.settings,
+        builder: (_, _) => const _BackToHome(child: TvSettingsScreen()),
+      ),
 
       // Detail + player: the TV (10-foot, D-pad) layouts (PR2).
       GoRoute(
@@ -84,3 +97,24 @@ final routerTvProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// Wraps a nav-rail section so the remote's BACK button returns to the Bridge
+/// (Home) instead of exiting the app. These sections are entered with
+/// `context.go`, which replaces the location, so there's nothing to pop —
+/// without this, BACK falls off the navigation stack and leaves Argosy.
+class _BackToHome extends StatelessWidget {
+  const _BackToHome({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go(Routes.home);
+      },
+      child: child,
+    );
+  }
+}
