@@ -196,11 +196,12 @@ class _Hero extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSeries = hero.kind == MediaKind.series;
     // A tall block so the hero fills most of the screen and the first rail only
-    // peeks in below it; the copy + actions sit at the top, backdrop showing
-    // through the space beneath.
+    // peeks in below it. The eyebrow + title sit at the top; a Spacer pushes the
+    // episode line, resume progress, and actions down to just above the Continue
+    // Watching rail, with the backdrop showing through the gap between.
     return SizedBox(
       width: 780,
-      height: 620,
+      height: 660,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -235,8 +236,8 @@ class _Hero extends StatelessWidget {
               color: ArgosyColors.cream,
             ),
           ),
+          const Spacer(),
           if (hero.subtitle != null && hero.subtitle!.isNotEmpty) ...[
-            const SizedBox(height: 14),
             Text(
               hero.subtitle!,
               style: const TextStyle(
@@ -246,9 +247,9 @@ class _Hero extends StatelessWidget {
                 color: ArgosyColors.soft2,
               ),
             ),
+            const SizedBox(height: 16),
           ],
           if (hero.percent != null) ...[
-            const SizedBox(height: 24),
             SizedBox(
               width: 560,
               child: Row(
@@ -280,8 +281,8 @@ class _Hero extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 22),
           ],
-          const SizedBox(height: 30),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
