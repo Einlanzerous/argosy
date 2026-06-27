@@ -17,6 +17,7 @@ type Match struct {
 	Genres      []string // GenreIDs resolved to names (TMDB's fixed list)
 	VoteAverage float64  // provider rating, 0–10 (0 when unrated/unknown)
 	VoteCount   int      // number of votes behind VoteAverage
+	Cast        []string // top-billed cast (+ key crew) names, for people search
 }
 
 // EpisodeMeta is a normalized per-episode result for a single season, used to
@@ -35,4 +36,8 @@ type Provider interface {
 	// SeasonEpisodes returns per-episode metadata for one season of a matched
 	// series. Returns an empty slice (not an error) when the season is unknown.
 	SeasonEpisodes(ctx context.Context, tmdbID int64, seasonNumber int) ([]EpisodeMeta, error)
+	// MovieCredits / SeriesCredits return top-billed cast (and, for movies, the
+	// director) names for a matched title, for people/cast search (ARGY-67).
+	MovieCredits(ctx context.Context, tmdbID int64) ([]string, error)
+	SeriesCredits(ctx context.Context, tmdbID int64) ([]string, error)
 }

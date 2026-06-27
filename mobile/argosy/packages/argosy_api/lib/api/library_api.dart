@@ -1945,7 +1945,7 @@ class LibraryApi {
 
   /// Full-text search across the account's films and series
   ///
-  /// Ranked full-text search over titles, tags, genres, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix. People/cast are not yet searchable.
+  /// Ranked full-text search over titles, tags, genres, cast/crew, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1989,7 +1989,7 @@ class LibraryApi {
 
   /// Full-text search across the account's films and series
   ///
-  /// Ranked full-text search over titles, tags, genres, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix. People/cast are not yet searchable.
+  /// Ranked full-text search over titles, tags, genres, cast/crew, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix.
   ///
   /// Parameters:
   ///

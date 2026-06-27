@@ -26,6 +26,10 @@ const (
 	// stillSize is the per-episode 16:9 thumbnail; w300 is sharp at the small
 	// sizes the episode rows render without pulling a multi-hundred-KB still.
 	stillSize = "w300"
+	// castLimit caps how many top-billed cast names we persist per title — enough
+	// to make a search land the right film without bloating provider_metadata or
+	// the search_vector with deep-bench extras.
+	castLimit = 15
 )
 
 // TMDB is a Provider backed by themoviedb.org. Auth uses the v4 read access
@@ -136,6 +140,61 @@ func (t *TMDB) SeasonEpisodes(ctx context.Context, tmdbID int64, seasonNumber in
 		out = append(out, em)
 	}
 	return out, nil
+}
+
+// tmdbCredits is the shape of /movie/{id}/credits and /tv/{id}/credits. Cast
+// arrives in billing order; crew carries job titles (we pluck "Director").
+type tmdbCredits struct {
+	Cast []struct {
+		Name string `json:"name"`
+	} `json:"cast"`
+	Crew []struct {
+		Name string `json:"name"`
+		Job  string `json:"job"`
+	} `json:"crew"`
+}
+
+// MovieCredits returns top-billed cast plus the director for a movie.
+func (t *TMDB) MovieCredits(ctx context.Context, tmdbID int64) ([]string, error) {
+	return t.credits(ctx, fmt.Sprintf("/movie/%d/credits", tmdbID), "Director")
+}
+
+// SeriesCredits returns top-billed cast for a series. TV "creators" live on the
+// details endpoint rather than credits, so crew is skipped here.
+func (t *TMDB) SeriesCredits(ctx context.Context, tmdbID int64) ([]string, error) {
+	return t.credits(ctx, fmt.Sprintf("/tv/%d/credits", tmdbID), "")
+}
+
+// credits fetches a credits document and returns up to castLimit top-billed cast
+// names, optionally followed by the named crew job (e.g. the director), deduped.
+func (t *TMDB) credits(ctx context.Context, path, crewJob string) ([]string, error) {
+	var body tmdbCredits
+	if err := t.get(ctx, path, url.Values{}, &body); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, castLimit+1)
+	seen := make(map[string]bool)
+	add := func(name string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	for _, c := range body.Cast {
+		if len(names) >= castLimit {
+			break
+		}
+		add(c.Name)
+	}
+	if crewJob != "" {
+		for _, c := range body.Crew {
+			if c.Job == crewJob {
+				add(c.Name)
+			}
+		}
+	}
+	return names, nil
 }
 
 func (t *TMDB) search(ctx context.Context, path string, q url.Values) ([]tmdbResult, error) {

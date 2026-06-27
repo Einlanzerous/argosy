@@ -42,6 +42,7 @@ type MatchResult struct {
 	Movies   int
 	Series   int
 	Episodes int // episode rows enriched with per-episode TMDB metadata
+	Credits  int // movies + series enriched with cast/people for search (ARGY-67)
 	Misses   int
 }
 
@@ -114,7 +115,86 @@ func (m *Matcher) MatchLibrary(ctx context.Context, libraryID string, force bool
 		return res, err
 	}
 	res.Episodes = n
+
+	// People/cast (ARGY-67): backfill top-billed cast onto every matched movie +
+	// series still missing it. Runs over all matched items (not just this pass),
+	// so a plain `match` enriches the existing library, and the STORED
+	// search_vector picks the names up on the write — no separate backfill job.
+	c, err := m.matchCredits(ctx, libraryID, force)
+	if err != nil {
+		return res, err
+	}
+	res.Credits = c
 	return res, nil
+}
+
+// matchCredits writes top-billed cast names into provider_metadata.cast for the
+// matched movies + series of a library, so people/cast become searchable. Without
+// force it only touches rows that don't yet carry a `cast` key, making it cheap
+// and idempotent across rescans; the credits key is always set (even to an empty
+// array) once fetched so a cast-less title isn't re-queried every run. Returns
+// the number of rows enriched.
+func (m *Matcher) matchCredits(ctx context.Context, libraryID string, force bool) (int, error) {
+	credits := func(table, kind string, fetch func(context.Context, int64) ([]string, error)) (int, error) {
+		q := `SELECT id::text, tmdb_id FROM ` + table + ` WHERE library_id = $1 AND tmdb_id IS NOT NULL`
+		if kind != "" {
+			q += ` AND kind = '` + kind + `'`
+		}
+		if !force {
+			q += ` AND NOT (provider_metadata ? 'cast')`
+		}
+		rows, err := m.pool.Query(ctx, q, libraryID)
+		if err != nil {
+			return 0, err
+		}
+		type row struct {
+			id   string
+			tmdb int64
+		}
+		var items []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.id, &r.tmdb); err != nil {
+				rows.Close()
+				return 0, err
+			}
+			items = append(items, r)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+
+		count := 0
+		for _, it := range items {
+			cast, err := fetch(ctx, it.tmdb)
+			if err != nil {
+				m.logger.Warn("tmdb credits fetch failed", "table", table, "tmdb_id", it.tmdb, "err", err)
+				continue
+			}
+			raw, err := json.Marshal(cast)
+			if err != nil {
+				return count, err
+			}
+			if _, err := m.pool.Exec(ctx,
+				`UPDATE `+table+` SET provider_metadata = jsonb_set(provider_metadata, '{cast}', $2::jsonb, true), updated_at = now() WHERE id = $1`,
+				it.id, raw); err != nil {
+				return count, err
+			}
+			count++
+		}
+		return count, nil
+	}
+
+	movies, err := credits("media_items", "movie", m.provider.MovieCredits)
+	if err != nil {
+		return 0, err
+	}
+	series, err := credits("series", "", m.provider.SeriesCredits)
+	if err != nil {
+		return movies, err
+	}
+	return movies + series, nil
 }
 
 // matchEpisodes fetches per-season episode lists from the provider for every
