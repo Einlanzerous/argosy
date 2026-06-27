@@ -1004,6 +1004,20 @@ const _captionBackgrounds = <(String, DevicePreferencesCaptionBackgroundEnum)>[
   ('None', DevicePreferencesCaptionBackgroundEnum.none),
 ];
 
+const _captionPositions = <(String, DevicePreferencesCaptionPositionEnum)>[
+  ('Bottom', DevicePreferencesCaptionPositionEnum.bottom),
+  ('Raised', DevicePreferencesCaptionPositionEnum.raised),
+  ('Higher', DevicePreferencesCaptionPositionEnum.higher),
+];
+
+/// Vertical alignment of the caption sample in the preview frame, matching the
+/// position presets (bottom near the edge → higher up the frame).
+double _previewAlignY(DevicePreferencesCaptionPositionEnum? pos) => switch (pos) {
+      DevicePreferencesCaptionPositionEnum.bottom => 0.86,
+      DevicePreferencesCaptionPositionEnum.higher => 0.30,
+      _ => 0.62, // raised (default)
+    };
+
 class _SubtitlesContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1025,6 +1039,8 @@ class _SubtitlesContent extends ConsumerWidget {
               colorHex: dev.captionColor ?? '#FFFFFF',
               background: dev.captionBackground ??
                   DevicePreferencesCaptionBackgroundEnum.translucent,
+              position: dev.captionPosition ??
+                  DevicePreferencesCaptionPositionEnum.raised,
             ),
             const SizedBox(height: 22),
             _ToggleRow(
@@ -1062,6 +1078,14 @@ class _SubtitlesContent extends ConsumerWidget {
               options: _captionBackgrounds,
               onSelect: (v) => _guard(context, () => ctrl.setCaptionBackground(v)),
             ),
+            const SizedBox(height: 18),
+            _SectionLabel('Caption position'),
+            _OptionPicker<DevicePreferencesCaptionPositionEnum>(
+              selected: dev.captionPosition ??
+                  DevicePreferencesCaptionPositionEnum.raised,
+              options: _captionPositions,
+              onSelect: (v) => _guard(context, () => ctrl.setCaptionPosition(v)),
+            ),
           ],
         );
       },
@@ -1076,11 +1100,13 @@ class _CaptionPreview extends StatelessWidget {
     required this.scale,
     required this.colorHex,
     required this.background,
+    required this.position,
   });
 
   final double scale;
   final String colorHex;
   final DevicePreferencesCaptionBackgroundEnum background;
+  final DevicePreferencesCaptionPositionEnum position;
 
   @override
   Widget build(BuildContext context) {
@@ -1132,7 +1158,7 @@ class _CaptionPreview extends StatelessWidget {
             ),
           ),
           Align(
-            alignment: const Alignment(0, 0.62),
+            alignment: Alignment(0, _previewAlignY(position)),
             child: hasBg
                 ? Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

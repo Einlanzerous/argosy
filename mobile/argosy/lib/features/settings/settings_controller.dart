@@ -51,6 +51,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: _device.captionColor,
         captionBackground: _device.captionBackground,
+        captionPosition: _device.captionPosition,
         seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
@@ -61,6 +62,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: _device.captionColor,
         captionBackground: _device.captionBackground,
+        captionPosition: _device.captionPosition,
         seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
@@ -71,6 +73,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: scale,
         captionColor: _device.captionColor,
         captionBackground: _device.captionBackground,
+        captionPosition: _device.captionPosition,
         seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
@@ -81,6 +84,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: hex,
         captionBackground: _device.captionBackground,
+        captionPosition: _device.captionPosition,
         seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
@@ -92,6 +96,19 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: _device.captionColor,
         captionBackground: bg,
+        captionPosition: _device.captionPosition,
+        seriesAutoAdvance: _device.seriesAutoAdvance,
+      ));
+
+  Future<void> setCaptionPosition(DevicePreferencesCaptionPositionEnum pos) =>
+      _saveDevice(DevicePreferences(
+        subtitleEnabled: _device.subtitleEnabled,
+        subtitleLanguage: _device.subtitleLanguage,
+        audioLanguage: _device.audioLanguage,
+        captionScale: _device.captionScale,
+        captionColor: _device.captionColor,
+        captionBackground: _device.captionBackground,
+        captionPosition: pos,
         seriesAutoAdvance: _device.seriesAutoAdvance,
       ));
 
@@ -102,6 +119,7 @@ class SettingsController extends AsyncNotifier<SettingsData> {
         captionScale: _device.captionScale,
         captionColor: _device.captionColor,
         captionBackground: _device.captionBackground,
+        captionPosition: _device.captionPosition,
         seriesAutoAdvance: enabled,
       ));
 

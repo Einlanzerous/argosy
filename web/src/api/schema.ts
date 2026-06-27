@@ -1083,6 +1083,11 @@ export interface components {
              * @enum {string|null}
              */
             captionBackground?: "translucent" | "solid" | "none" | null;
+            /**
+             * @description Vertical caption placement: bottom (near the edge), raised (default, lifted above the control bar), or higher (further up the frame).
+             * @enum {string|null}
+             */
+            captionPosition?: "bottom" | "raised" | "higher" | null;
             /** @description Whether finishing a series episode auto-plays the next one. Defaults to true (on) when unset. */
             seriesAutoAdvance?: boolean | null;
         };

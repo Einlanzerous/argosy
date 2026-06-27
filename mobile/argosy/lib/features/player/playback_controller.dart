@@ -615,6 +615,14 @@ BetterPlayerSubtitlesConfiguration _captionConfig(DevicePreferences? p) {
     DevicePreferencesCaptionBackgroundEnum.none => Colors.transparent,
     _ => Colors.black54, // translucent (default)
   };
+  // Vertical placement as bottom padding (better_player is bottom-anchored):
+  // bottom sits near the edge, raised (default) lifts above the controls, higher
+  // pushes further up the frame (ARGY-60).
+  final bottomPadding = switch (p?.captionPosition) {
+    DevicePreferencesCaptionPositionEnum.bottom => 12.0,
+    DevicePreferencesCaptionPositionEnum.higher => 88.0,
+    _ => 48.0, // raised (default)
+  };
   return BetterPlayerSubtitlesConfiguration(
     fontSize: 16 * scale,
     fontColor: color,
@@ -622,7 +630,7 @@ BetterPlayerSubtitlesConfiguration _captionConfig(DevicePreferences? p) {
     // Keep an outline when there's no box behind the text, for legibility.
     outlineEnabled: bg == Colors.transparent,
     fontFamily: 'HankenGrotesk',
-    bottomPadding: 48,
+    bottomPadding: bottomPadding,
   );
 }
 
