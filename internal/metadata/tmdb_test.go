@@ -77,6 +77,71 @@ func TestTMDBSeasonEpisodes(t *testing.T) {
 	}
 }
 
+func TestTMDBMovieCredits(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/movie/12345/credits" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"cast":[{"name":"Bruce Willis"},{"name":"Alan Rickman"},{"name":""},{"name":"Bruce Willis"}],
+			"crew":[{"name":"John McTiernan","job":"Director"},{"name":"Jan de Bont","job":"Director of Photography"}]
+		}`))
+	}))
+	defer srv.Close()
+
+	tm := NewTMDB("test-token", "")
+	tm.baseURL = srv.URL
+
+	cast, err := tm.MovieCredits(context.Background(), 12345)
+	if err != nil {
+		t.Fatalf("credits: %v", err)
+	}
+	// Top-billed cast in order, blanks + dupes dropped, director appended (the
+	// non-director crew member is excluded).
+	want := []string{"Bruce Willis", "Alan Rickman", "John McTiernan"}
+	if len(cast) != len(want) {
+		t.Fatalf("cast = %v, want %v", cast, want)
+	}
+	for i, n := range want {
+		if cast[i] != n {
+			t.Errorf("cast[%d] = %q, want %q", i, cast[i], n)
+		}
+	}
+}
+
+func TestTMDBSeriesCreditsCap(t *testing.T) {
+	// 20 cast members → capped at castLimit, no crew on series.
+	var cast string
+	for i := 0; i < 20; i++ {
+		if i > 0 {
+			cast += ","
+		}
+		cast += `{"name":"Actor ` + string(rune('A'+i)) + `"}`
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/tv/222/credits" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"cast":[` + cast + `],"crew":[{"name":"Showrunner X","job":"Director"}]}`))
+	}))
+	defer srv.Close()
+
+	tm := NewTMDB("test-token", "")
+	tm.baseURL = srv.URL
+
+	got, err := tm.SeriesCredits(context.Background(), 222)
+	if err != nil {
+		t.Fatalf("credits: %v", err)
+	}
+	if len(got) != castLimit {
+		t.Fatalf("series cast = %d names, want castLimit %d", len(got), castLimit)
+	}
+}
+
 func TestTMDBNoResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"results":[]}`))

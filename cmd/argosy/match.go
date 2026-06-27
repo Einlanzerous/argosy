@@ -79,6 +79,6 @@ func runMatch(cfg config.Config, logger *slog.Logger, args []string) {
 			logger.Error("match failed", "library", l.name, "err", err)
 			os.Exit(1)
 		}
-		logger.Info("match complete", "library", l.name, "movies", res.Movies, "series", res.Series, "misses", res.Misses)
+		logger.Info("match complete", "library", l.name, "movies", res.Movies, "series", res.Series, "episodes", res.Episodes, "credits", res.Credits, "misses", res.Misses)
 	}
 }

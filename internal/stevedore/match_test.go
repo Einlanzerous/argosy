@@ -29,6 +29,12 @@ func (fakeProvider) SeasonEpisodes(_ context.Context, _ int64, season int) ([]me
 		{Number: 2, Name: "The Second", Overview: "the next one"},
 	}, nil
 }
+func (fakeProvider) MovieCredits(_ context.Context, _ int64) ([]string, error) {
+	return []string{"Ada Lovelace", "Alan Turing"}, nil
+}
+func (fakeProvider) SeriesCredits(_ context.Context, _ int64) ([]string, error) {
+	return []string{"Grace Hopper"}, nil
+}
 
 func TestMatchLibrary(t *testing.T) {
 	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
@@ -105,6 +111,25 @@ func TestMatchLibrary(t *testing.T) {
 	if meta["source"] != "tmdb" || meta["title"] != "Matched Big Buck Bunny" || meta["poster"] != "movies/111.jpg" {
 		t.Fatalf("provider_metadata = %v", meta)
 	}
+	// Cast was backfilled for people search (ARGY-67).
+	if res.Credits != 2 {
+		t.Fatalf("res.Credits = %d, want 2 (movie + series)", res.Credits)
+	}
+	cast, _ := meta["cast"].([]any)
+	if len(cast) != 2 || cast[0] != "Ada Lovelace" {
+		t.Fatalf("movie cast = %v, want [Ada Lovelace Alan Turing]", meta["cast"])
+	}
+	// The cast names are searchable: the STORED search_vector matched on a query
+	// (weight B, like genres) and ranks below a title hit (weight A).
+	var hits int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM media_items WHERE library_id=$1 AND search_vector @@ to_tsquery('simple', 'lovelace:*')`,
+		libID).Scan(&hits); err != nil {
+		t.Fatal(err)
+	}
+	if hits != 1 {
+		t.Fatalf("cast search hits = %d, want 1", hits)
+	}
 
 	var seriesTMDB *int64
 	if err := pool.QueryRow(ctx, `SELECT tmdb_id FROM series WHERE library_id=$1`, libID).Scan(&seriesTMDB); err != nil {
@@ -144,7 +169,7 @@ func TestMatchLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res2.Movies != 0 || res2.Series != 0 || res2.Episodes != 0 {
-		t.Fatalf("second run matched %+v, want 0/0/0 (already matched)", res2)
+	if res2.Movies != 0 || res2.Series != 0 || res2.Episodes != 0 || res2.Credits != 0 {
+		t.Fatalf("second run matched %+v, want 0/0/0/0 (already matched + cast cached)", res2)
 	}
 }
