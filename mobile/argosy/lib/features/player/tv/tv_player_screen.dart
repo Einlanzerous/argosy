@@ -247,8 +247,6 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
   List<_Control> get _controls {
     final c = _controller;
     return [
-      if (c.nextEpisode != null)
-        _Control('Next Episode', Icons.skip_next, c.playNext),
       _Control('Subtitles', Icons.closed_caption_outlined,
           () => _openTracks()),
       if (c.audioTracks.length > 1)
@@ -257,6 +255,9 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
         c.cycleFit();
         _scheduleHide();
       }),
+      // Next Episode sits at the far right of the row.
+      if (c.nextEpisode != null)
+        _Control('Next Episode', Icons.skip_next, c.playNext, trailing: true),
     ];
   }
 
@@ -391,10 +392,14 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
 }
 
 class _Control {
-  const _Control(this.label, this.icon, this.onSelect);
+  const _Control(this.label, this.icon, this.onSelect, {this.trailing = false});
   final String label;
   final IconData icon;
   final VoidCallback onSelect;
+
+  /// Pinned to the far-right end of the control row (under the "Down for
+  /// controls" hint) rather than grouped with the left controls.
+  final bool trailing;
 }
 
 /// The full transport overlay, authored at 1920×1080 inside [TvStage]: top bar,
@@ -643,14 +648,21 @@ class _ControlRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (var i = 0; i < controls.length; i++) ...[
-          _ControlChip(control: controls[i], focused: i == activeIndex),
-          if (i != controls.length - 1) const SizedBox(width: 14),
-        ],
-      ],
-    );
+    // Left controls grouped at the start; trailing controls (Next Episode)
+    // pushed to the far-right end by a Spacer.
+    final children = <Widget>[];
+    var spacerPlaced = false;
+    for (var i = 0; i < controls.length; i++) {
+      final control = controls[i];
+      if (control.trailing && !spacerPlaced) {
+        children.add(const Spacer());
+        spacerPlaced = true;
+      } else if (children.isNotEmpty) {
+        children.add(const SizedBox(width: 14));
+      }
+      children.add(_ControlChip(control: control, focused: i == activeIndex));
+    }
+    return Row(children: children);
   }
 }
 
