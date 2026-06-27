@@ -199,6 +199,8 @@ class ApiClient {
           return Device.fromJson(value);
         case 'DevicePreferences':
           return DevicePreferences.fromJson(value);
+        case 'DeviceRef':
+          return DeviceRef.fromJson(value);
         case 'DeviceRegistrationRequest':
           return DeviceRegistrationRequest.fromJson(value);
         case 'DeviceRegistrationResponse':

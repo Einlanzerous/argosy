@@ -24,6 +24,7 @@ class ContinueItem {
     required this.percent,
     this.seriesId,
     this.seriesTitle,
+    this.lastPlayedDevice,
   });
 
   String id;
@@ -49,6 +50,9 @@ class ContinueItem {
 
   String? seriesTitle;
 
+  /// The deck that last owned this playhead, set only when it differs from the requesting device — drives the cross-device \"⇄ left off on\" pill (ARGY-98).
+  DeviceRef? lastPlayedDevice;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is ContinueItem &&
     other.id == id &&
@@ -61,7 +65,8 @@ class ContinueItem {
     other.durationSeconds == durationSeconds &&
     other.percent == percent &&
     other.seriesId == seriesId &&
-    other.seriesTitle == seriesTitle;
+    other.seriesTitle == seriesTitle &&
+    other.lastPlayedDevice == lastPlayedDevice;
 
   @override
   int get hashCode =>
@@ -76,10 +81,11 @@ class ContinueItem {
     (durationSeconds == null ? 0 : durationSeconds!.hashCode) +
     (percent.hashCode) +
     (seriesId == null ? 0 : seriesId!.hashCode) +
-    (seriesTitle == null ? 0 : seriesTitle!.hashCode);
+    (seriesTitle == null ? 0 : seriesTitle!.hashCode) +
+    (lastPlayedDevice == null ? 0 : lastPlayedDevice!.hashCode);
 
   @override
-  String toString() => 'ContinueItem[id=$id, kind=$kind, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, positionSeconds=$positionSeconds, durationSeconds=$durationSeconds, percent=$percent, seriesId=$seriesId, seriesTitle=$seriesTitle]';
+  String toString() => 'ContinueItem[id=$id, kind=$kind, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, positionSeconds=$positionSeconds, durationSeconds=$durationSeconds, percent=$percent, seriesId=$seriesId, seriesTitle=$seriesTitle, lastPlayedDevice=$lastPlayedDevice]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -117,6 +123,11 @@ class ContinueItem {
       json[r'seriesTitle'] = this.seriesTitle;
     } else {
       json[r'seriesTitle'] = null;
+    }
+    if (this.lastPlayedDevice != null) {
+      json[r'lastPlayedDevice'] = this.lastPlayedDevice;
+    } else {
+      json[r'lastPlayedDevice'] = null;
     }
     return json;
   }
@@ -159,6 +170,7 @@ class ContinueItem {
         percent: num.parse('${json[r'percent']}'),
         seriesId: mapValueOfType<String>(json, r'seriesId'),
         seriesTitle: mapValueOfType<String>(json, r'seriesTitle'),
+        lastPlayedDevice: DeviceRef.fromJson(json[r'lastPlayedDevice']),
       );
     }
     return null;

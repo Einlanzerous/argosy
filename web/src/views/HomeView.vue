@@ -123,6 +123,7 @@ const hero = computed(() => {
       posterUrl: r.posterUrl,
       backdropUrl: r.backdropUrl,
       percent: r.percent,
+      device: r.lastPlayedDevice ?? null,
       detailTo: (r.seriesId
         ? { name: 'series', params: { id: r.seriesId } }
         : { name: 'movie', params: { id: r.id } }) as RouteLocationRaw,
@@ -138,6 +139,7 @@ const hero = computed(() => {
       posterUrl: f.posterUrl,
       backdropUrl: f.backdropUrl,
       percent: null as number | null,
+      device: null as { name: string; platform?: string | null } | null,
       detailTo: { name: 'movie', params: { id: f.id } } as RouteLocationRaw,
     }
   }
@@ -211,6 +213,7 @@ onUnmounted(() => {
       <div class="shade-b" />
       <div class="hero-body">
         <div class="eyebrow"><span>⇄</span> {{ hero.eyebrow }}</div>
+        <div v-if="hero.device" class="dev-pill">⇄ Left off on {{ hero.device.name }}</div>
         <h1>{{ hero.title }}</h1>
         <div class="meta">
           {{
@@ -256,6 +259,9 @@ onUnmounted(() => {
           <div class="cw-art" :style="posterStyle(c.posterUrl, c.title)">
             <div class="arg-hatch cw-hatch" />
             <div class="cw-grad" />
+            <div v-if="c.lastPlayedDevice" class="cw-dev" :title="`Left off on ${c.lastPlayedDevice.name}`">
+              ⇄ {{ c.lastPlayedDevice.name }}
+            </div>
             <div class="cw-meta">
               <div class="cw-title">{{ c.seriesTitle || formatTitle(c.title) }}</div>
               <div class="cw-sub">{{ c.seriesTitle ? formatTitle(c.title) : c.year }}</div>
@@ -395,6 +401,18 @@ onUnmounted(() => {
   text-transform: uppercase;
   color: var(--arg-accent);
 }
+.dev-pill {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--arg-accent-bg);
+  border: 1px solid rgba(201, 154, 78, 0.26);
+  font: 600 11.5px var(--arg-body);
+  color: var(--arg-accent-soft);
+}
 h1 {
   margin: 16px 0 0;
   font: 800 clamp(46px, 6vw, 70px) / 0.97 var(--arg-display);
@@ -517,6 +535,22 @@ h1 {
   position: absolute;
   inset: 0;
   background: linear-gradient(transparent 45%, rgba(12, 12, 11, 0.85));
+}
+.cw-dev {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  max-width: 70%;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(12, 12, 11, 0.72);
+  border: 1px solid rgba(201, 154, 78, 0.3);
+  font: 600 10.5px var(--arg-body);
+  color: var(--arg-accent-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(3px);
 }
 .cw-meta {
   position: absolute;
