@@ -115,7 +115,9 @@ class _Page extends StatelessWidget {
       if (cards.isEmpty) return;
       rails.add(TvRail(
         title: title,
-        height: 330,
+        // Fits the 2:3 poster (172×258) plus its title/subtitle without
+        // overflowing the rail row.
+        height: 340,
         gap: 24,
         children: [for (final c in cards) _PosterTile(card: c)],
       ));
@@ -461,7 +463,7 @@ class _PosterTile extends ConsumerWidget {
       ensureVisibleOnFocus: true,
       onSelect: () => openDetail(context, card.kind, card.id),
       child: SizedBox(
-        width: 200,
+        width: 172,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,

@@ -127,15 +127,14 @@ class _TvFocusableState extends State<TvFocusable> {
                         borderRadius:
                             BorderRadius.circular(widget.borderRadius + off),
                         border: Border.all(color: ArgosyColors.accent, width: 3),
+                        // Just the brass glow. (A dark drop shadow used to sit
+                        // here too, but the ring overlays the content, so the
+                        // shadow darkened the focused item from the inside —
+                        // hard to read — rather than reading as depth.)
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0x29C99A4E), // brass glow, ~0.16
                             spreadRadius: 5,
-                          ),
-                          BoxShadow(
-                            color: Color(0x99000000),
-                            blurRadius: 40,
-                            offset: Offset(0, 20),
                           ),
                         ],
                       ),

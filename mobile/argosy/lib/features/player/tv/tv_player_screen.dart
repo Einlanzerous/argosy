@@ -74,6 +74,12 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
   late final PlaybackController _controller;
   final FocusNode _rootFocus = FocusNode(debugLabel: 'tv-player');
 
+  /// Stable key for the [BetterPlayer] so its platform view (the video texture)
+  /// persists across the frequent rebuilds driven by the controls ticker and
+  /// controller notifications — without it the texture churns, which showed up
+  /// on device as no video on first play and choppy playback after.
+  final GlobalKey _playerKey = GlobalKey();
+
   bool _overlayVisible = true;
   _Row _row = _Row.seek;
   int _controlIndex = 0;
@@ -225,10 +231,6 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
           () => _openTracks()),
       if (c.audioTracks.length > 1)
         _Control('Audio', Icons.graphic_eq, () => _openTracks()),
-      _Control('Speed · ${c.speedLabel}', Icons.speed, () {
-        c.cycleSpeed();
-        _scheduleHide();
-      }),
       _Control(c.fitLabel, Icons.aspect_ratio, () {
         c.cycleFit();
         _scheduleHide();
@@ -351,7 +353,9 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
                 if (player == null || !_controller.isReady) {
                   return const ColoredBox(color: Colors.black);
                 }
-                return Center(child: BetterPlayer(controller: player));
+                return Center(
+                  child: BetterPlayer(key: _playerKey, controller: player),
+                );
               },
             ),
             if (_controller.fatalError)
