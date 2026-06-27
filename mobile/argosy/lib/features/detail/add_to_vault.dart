@@ -17,6 +17,12 @@ class AddToVaultButton extends ConsumerWidget {
   final String? movieId;
   final String? seriesId;
 
+  /// Opens the add-to-vault sheet directly, without rendering the phone button —
+  /// the TV detail screens drive it from their own focusable `+` affordance.
+  static Future<void> showFor(BuildContext context,
+          {String? movieId, String? seriesId}) =>
+      _AddToVaultSheet.show(context, movieId: movieId, seriesId: seriesId);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return FilledButton.icon(

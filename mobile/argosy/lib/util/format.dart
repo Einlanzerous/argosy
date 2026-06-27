@@ -21,18 +21,22 @@ String formatClock(num seconds) {
 }
 
 final _episodeCode = RegExp(
-  r'\s*[·\-—]?\s*S(\d{1,2})E(\d{1,2})\b',
+  r'\s*[·\-—]?\s*S(\d{1,2})E(\d{1,2})(?:\s*[-–]\s*E?(\d{1,2}))?\b',
   caseSensitive: false,
 );
 
 /// Humanizes an episode-code title: replaces an `S01E02` token with
-/// `Season 1 Ep 2` so cryptic codes don't leak into the UI. Titles without a
-/// code are returned untouched.
+/// `Season 1 Ep 2` so cryptic codes don't leak into the UI. A combined-rip
+/// range (`S01E01-E02`) becomes `Season 1 Ep 1–2`. Titles without a code are
+/// returned untouched.
 String formatTitle(String? title) {
   if (title == null || title.isEmpty) return '';
   final m = _episodeCode.firstMatch(title);
   if (m == null) return title;
-  final human = 'Season ${int.parse(m.group(1)!)} Ep ${int.parse(m.group(2)!)}';
+  final ep = m.group(3) != null
+      ? 'Ep ${int.parse(m.group(2)!)}–${int.parse(m.group(3)!)}'
+      : 'Ep ${int.parse(m.group(2)!)}';
+  final human = 'Season ${int.parse(m.group(1)!)} $ep';
   final replaced = title.replaceFirst(_episodeCode, ' · $human');
   return replaced.replaceFirst(RegExp(r'^\s*·\s*'), '').trim();
 }

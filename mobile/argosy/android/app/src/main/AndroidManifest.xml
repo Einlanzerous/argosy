@@ -43,6 +43,14 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Render with Skia, not Impeller. Impeller's Vulkan backend mis-
+             composites the video player's platform-view texture on some GPUs
+             (notably the Google TV dongle's Mali): video drops out when an
+             overlay is layered over it and stutters. Skia handles the texture
+             layer reliably. (ARGY-51) -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

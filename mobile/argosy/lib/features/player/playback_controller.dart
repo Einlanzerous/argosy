@@ -479,6 +479,22 @@ class PlaybackController extends ChangeNotifier {
     _safeNotify();
   }
 
+  // --- fit (the TV transport's Fit control) ---------------------------------
+
+  /// How the video maps into the screen — letterboxed ([BoxFit.contain]) by
+  /// default, toggled to fill ([BoxFit.cover]) by [cycleFit].
+  BoxFit videoFit = BoxFit.contain;
+
+  /// Toggles between Fit (letterbox) and Fill (crop-to-fill).
+  void cycleFit() {
+    videoFit = videoFit == BoxFit.contain ? BoxFit.cover : BoxFit.contain;
+    _player?.setOverriddenFit(videoFit);
+    _safeNotify();
+  }
+
+  /// "Fit" / "Fill" for the Fit control's label.
+  String get fitLabel => videoFit == BoxFit.contain ? 'Fit' : 'Fill';
+
   // --- progress heartbeat --------------------------------------------------
 
   void _startHeartbeat() {
