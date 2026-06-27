@@ -1,3 +1,4 @@
+import 'package:argosy_api/api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
@@ -59,4 +60,12 @@ final libraryResultsProvider =
 /// The profile's custom labels, for the Labels facet (fetched once).
 final myLabelsProvider = FutureProvider<List<String>>(
   (ref) async => (await ref.watch(libraryApiProvider).listLabels()) ?? const [],
+);
+
+/// The account's most common genre/tag facets (with counts), for the TV
+/// library's facet side panel. Mirrors the home genre rows' source so the facet
+/// list is identical across surfaces.
+final libraryFacetsProvider = FutureProvider<List<Facet>>(
+  (ref) async =>
+      (await ref.watch(libraryApiProvider).listFacets(limit: 24)) ?? const [],
 );
