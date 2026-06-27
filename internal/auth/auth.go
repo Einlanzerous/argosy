@@ -246,14 +246,14 @@ func (s *Store) RenameDevice(ctx context.Context, sess api.Session, deviceID ope
 // GetDevicePreferences returns a device's playback preferences, or sensible
 // defaults (subtitles off) when none have been saved yet.
 func (s *Store) GetDevicePreferences(ctx context.Context, deviceID string) (api.DevicePreferences, error) {
-	var subLang, audLang, capColor, capBg *string
+	var subLang, audLang, capColor, capBg, capPos *string
 	var capScale *float64
 	var subEnabled, autoAdvance bool
 	err := s.pool.QueryRow(ctx,
 		`SELECT subtitle_language, subtitle_enabled, audio_language,
-		        caption_scale, caption_color, caption_background, series_auto_advance
+		        caption_scale, caption_color, caption_background, caption_position, series_auto_advance
 		 FROM device_preferences WHERE device_id = $1`, deviceID).
-		Scan(&subLang, &subEnabled, &audLang, &capScale, &capColor, &capBg, &autoAdvance)
+		Scan(&subLang, &subEnabled, &audLang, &capScale, &capColor, &capBg, &capPos, &autoAdvance)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No row yet: subtitles default off, series auto-advance default on.
 		on := true
@@ -271,6 +271,10 @@ func (s *Store) GetDevicePreferences(ctx context.Context, deviceID string) (api.
 		bg := api.DevicePreferencesCaptionBackground(*capBg)
 		out.CaptionBackground = &bg
 	}
+	if capPos != nil {
+		pos := api.DevicePreferencesCaptionPosition(*capPos)
+		out.CaptionPosition = &pos
+	}
 	return out, nil
 }
 
@@ -281,6 +285,11 @@ func (s *Store) SetDevicePreferences(ctx context.Context, deviceID string, p api
 		s := string(*p.CaptionBackground)
 		capBg = &s
 	}
+	var capPos *string
+	if p.CaptionPosition != nil {
+		s := string(*p.CaptionPosition)
+		capPos = &s
+	}
 	// Auto-advance defaults on; a client that omits the field shouldn't flip it off.
 	autoAdvance := true
 	if p.SeriesAutoAdvance != nil {
@@ -288,8 +297,8 @@ func (s *Store) SetDevicePreferences(ctx context.Context, deviceID string, p api
 	}
 	if _, err := s.pool.Exec(ctx,
 		`INSERT INTO device_preferences
-		   (device_id, subtitle_language, subtitle_enabled, audio_language, caption_scale, caption_color, caption_background, series_auto_advance, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+		   (device_id, subtitle_language, subtitle_enabled, audio_language, caption_scale, caption_color, caption_background, caption_position, series_auto_advance, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 		 ON CONFLICT (device_id) DO UPDATE SET
 		   subtitle_language = EXCLUDED.subtitle_language,
 		   subtitle_enabled = EXCLUDED.subtitle_enabled,
@@ -297,9 +306,10 @@ func (s *Store) SetDevicePreferences(ctx context.Context, deviceID string, p api
 		   caption_scale = EXCLUDED.caption_scale,
 		   caption_color = EXCLUDED.caption_color,
 		   caption_background = EXCLUDED.caption_background,
+		   caption_position = EXCLUDED.caption_position,
 		   series_auto_advance = EXCLUDED.series_auto_advance,
 		   updated_at = now()`,
-		deviceID, p.SubtitleLanguage, p.SubtitleEnabled, p.AudioLanguage, p.CaptionScale, p.CaptionColor, capBg, autoAdvance); err != nil {
+		deviceID, p.SubtitleLanguage, p.SubtitleEnabled, p.AudioLanguage, p.CaptionScale, p.CaptionColor, capBg, capPos, autoAdvance); err != nil {
 		return api.DevicePreferences{}, err
 	}
 	return s.GetDevicePreferences(ctx, deviceID)

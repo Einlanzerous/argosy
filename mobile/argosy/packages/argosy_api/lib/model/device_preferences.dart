@@ -19,6 +19,7 @@ class DevicePreferences {
     this.captionScale,
     this.captionColor,
     this.captionBackground,
+    this.captionPosition,
     this.seriesAutoAdvance,
   });
 
@@ -40,6 +41,9 @@ class DevicePreferences {
   /// Caption background box style.
   DevicePreferencesCaptionBackgroundEnum? captionBackground;
 
+  /// Vertical caption placement: bottom (near the edge), raised (default, lifted above the control bar), or higher (further up the frame).
+  DevicePreferencesCaptionPositionEnum? captionPosition;
+
   /// Whether finishing a series episode auto-plays the next one. Defaults to true (on) when unset.
   bool? seriesAutoAdvance;
 
@@ -51,6 +55,7 @@ class DevicePreferences {
     other.captionScale == captionScale &&
     other.captionColor == captionColor &&
     other.captionBackground == captionBackground &&
+    other.captionPosition == captionPosition &&
     other.seriesAutoAdvance == seriesAutoAdvance;
 
   @override
@@ -62,10 +67,11 @@ class DevicePreferences {
     (captionScale == null ? 0 : captionScale!.hashCode) +
     (captionColor == null ? 0 : captionColor!.hashCode) +
     (captionBackground == null ? 0 : captionBackground!.hashCode) +
+    (captionPosition == null ? 0 : captionPosition!.hashCode) +
     (seriesAutoAdvance == null ? 0 : seriesAutoAdvance!.hashCode);
 
   @override
-  String toString() => 'DevicePreferences[subtitleLanguage=$subtitleLanguage, subtitleEnabled=$subtitleEnabled, audioLanguage=$audioLanguage, captionScale=$captionScale, captionColor=$captionColor, captionBackground=$captionBackground, seriesAutoAdvance=$seriesAutoAdvance]';
+  String toString() => 'DevicePreferences[subtitleLanguage=$subtitleLanguage, subtitleEnabled=$subtitleEnabled, audioLanguage=$audioLanguage, captionScale=$captionScale, captionColor=$captionColor, captionBackground=$captionBackground, captionPosition=$captionPosition, seriesAutoAdvance=$seriesAutoAdvance]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -94,6 +100,11 @@ class DevicePreferences {
       json[r'captionBackground'] = this.captionBackground;
     } else {
       json[r'captionBackground'] = null;
+    }
+    if (this.captionPosition != null) {
+      json[r'captionPosition'] = this.captionPosition;
+    } else {
+      json[r'captionPosition'] = null;
     }
     if (this.seriesAutoAdvance != null) {
       json[r'seriesAutoAdvance'] = this.seriesAutoAdvance;
@@ -128,6 +139,7 @@ class DevicePreferences {
             : num.parse('${json[r'captionScale']}'),
         captionColor: mapValueOfType<String>(json, r'captionColor'),
         captionBackground: DevicePreferencesCaptionBackgroundEnum.fromJson(json[r'captionBackground']),
+        captionPosition: DevicePreferencesCaptionPositionEnum.fromJson(json[r'captionPosition']),
         seriesAutoAdvance: mapValueOfType<bool>(json, r'seriesAutoAdvance'),
       );
     }
@@ -254,6 +266,83 @@ class DevicePreferencesCaptionBackgroundEnumTypeTransformer {
 
   /// Singleton [DevicePreferencesCaptionBackgroundEnumTypeTransformer] instance.
   static DevicePreferencesCaptionBackgroundEnumTypeTransformer? _instance;
+}
+
+
+/// Vertical caption placement: bottom (near the edge), raised (default, lifted above the control bar), or higher (further up the frame).
+class DevicePreferencesCaptionPositionEnum {
+  /// Instantiate a new enum with the provided [value].
+  const DevicePreferencesCaptionPositionEnum._(this.value);
+
+  /// The underlying value of this enum member.
+  final String value;
+
+  @override
+  String toString() => value;
+
+  String toJson() => value;
+
+  static const bottom = DevicePreferencesCaptionPositionEnum._(r'bottom');
+  static const raised = DevicePreferencesCaptionPositionEnum._(r'raised');
+  static const higher = DevicePreferencesCaptionPositionEnum._(r'higher');
+
+  /// List of all possible values in this [enum][DevicePreferencesCaptionPositionEnum].
+  static const values = <DevicePreferencesCaptionPositionEnum>[
+    bottom,
+    raised,
+    higher,
+  ];
+
+  static DevicePreferencesCaptionPositionEnum? fromJson(dynamic value) => DevicePreferencesCaptionPositionEnumTypeTransformer().decode(value);
+
+  static List<DevicePreferencesCaptionPositionEnum> listFromJson(dynamic json, {bool growable = false,}) {
+    final result = <DevicePreferencesCaptionPositionEnum>[];
+    if (json is List && json.isNotEmpty) {
+      for (final row in json) {
+        final value = DevicePreferencesCaptionPositionEnum.fromJson(row);
+        if (value != null) {
+          result.add(value);
+        }
+      }
+    }
+    return result.toList(growable: growable);
+  }
+}
+
+/// Transformation class that can [encode] an instance of [DevicePreferencesCaptionPositionEnum] to String,
+/// and [decode] dynamic data back to [DevicePreferencesCaptionPositionEnum].
+class DevicePreferencesCaptionPositionEnumTypeTransformer {
+  factory DevicePreferencesCaptionPositionEnumTypeTransformer() => _instance ??= const DevicePreferencesCaptionPositionEnumTypeTransformer._();
+
+  const DevicePreferencesCaptionPositionEnumTypeTransformer._();
+
+  String encode(DevicePreferencesCaptionPositionEnum data) => data.value;
+
+  /// Decodes a [dynamic value][data] to a DevicePreferencesCaptionPositionEnum.
+  ///
+  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
+  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
+  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
+  ///
+  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
+  /// and users are still using an old app with the old code.
+  DevicePreferencesCaptionPositionEnum? decode(dynamic data, {bool allowNull = true}) {
+    if (data != null) {
+      switch (data) {
+        case r'bottom': return DevicePreferencesCaptionPositionEnum.bottom;
+        case r'raised': return DevicePreferencesCaptionPositionEnum.raised;
+        case r'higher': return DevicePreferencesCaptionPositionEnum.higher;
+        default:
+          if (!allowNull) {
+            throw ArgumentError('Unknown enum value to decode: $data');
+          }
+      }
+    }
+    return null;
+  }
+
+  /// Singleton [DevicePreferencesCaptionPositionEnumTypeTransformer] instance.
+  static DevicePreferencesCaptionPositionEnumTypeTransformer? _instance;
 }
 
 

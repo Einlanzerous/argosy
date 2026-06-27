@@ -85,9 +85,15 @@ const nextEpisodeLabel = computed(() => {
   return n.title ? `${code} · ${formatTitle(n.title)}` : code
 })
 
-// Caption styling (ARGY-43), persisted per-device, applied via ::cue.
+// Caption styling (ARGY-43, position ARGY-60), persisted per-device, applied via ::cue.
 type CaptionBg = 'translucent' | 'solid' | 'none'
-const CAPTION_DEFAULTS = { scale: 1, color: '#ffffff', background: 'translucent' as CaptionBg }
+type CaptionPos = 'bottom' | 'raised' | 'higher'
+const CAPTION_DEFAULTS = {
+  scale: 1,
+  color: '#ffffff',
+  background: 'translucent' as CaptionBg,
+  position: 'raised' as CaptionPos,
+}
 const CAPTION_SCALES = [
   { v: 0.8, label: 'S' },
   { v: 1, label: 'M' },
@@ -95,9 +101,21 @@ const CAPTION_SCALES = [
   { v: 1.6, label: 'XL' },
 ]
 const CAPTION_COLORS = ['#ffffff', '#ffe082', '#80d8ff', '#a5d6a7']
+// Vertical placement as a VTTCue.line percentage (0 = top, 100 = bottom). Raised
+// is the default — lifted above the control bar so cues stay visible.
+const CAPTION_POSITIONS: { v: CaptionPos; label: string; line: number }[] = [
+  { v: 'bottom', label: 'Bottom', line: 94 },
+  { v: 'raised', label: 'Raised', line: 84 },
+  { v: 'higher', label: 'Higher', line: 72 },
+]
 const captionScale = ref(CAPTION_DEFAULTS.scale)
 const captionColor = ref<string>(CAPTION_DEFAULTS.color)
 const captionBackground = ref<CaptionBg>(CAPTION_DEFAULTS.background)
+const captionPosition = ref<CaptionPos>(CAPTION_DEFAULTS.position)
+// The cue.line for the current position preset.
+const cueLine = computed(
+  () => CAPTION_POSITIONS.find((p) => p.v === captionPosition.value)?.line ?? 84,
+)
 
 // A global ::cue rule styled from the prefs above. font-size as a percentage of
 // the browser's default cue size keeps it scaling with the video.
@@ -161,6 +179,7 @@ onMounted(async () => {
     captionColor.value = devicePrefs.captionColor ?? CAPTION_DEFAULTS.color
     captionBackground.value =
       (devicePrefs.captionBackground as CaptionBg) ?? CAPTION_DEFAULTS.background
+    captionPosition.value = (devicePrefs.captionPosition as CaptionPos) ?? CAPTION_DEFAULTS.position
   }
   // Default ON: only an explicit false disables auto-advance. If it's off there's
   // no point asking the server for the next episode.
@@ -509,6 +528,7 @@ function buildPrefs(over: Partial<DevicePreferences>): DevicePreferences {
     captionScale: captionScale.value,
     captionColor: captionColor.value,
     captionBackground: captionBackground.value,
+    captionPosition: captionPosition.value,
     seriesAutoAdvance: prefs.value?.seriesAutoAdvance ?? true,
     ...over,
   }
@@ -539,6 +559,12 @@ function setCaptionColor(v: string): void {
 }
 function setCaptionBackground(v: CaptionBg): void {
   captionBackground.value = v
+  saveCaptionStyle()
+}
+function setCaptionPosition(v: CaptionPos): void {
+  captionPosition.value = v
+  // Re-place the cues already on the track so the move is live, no re-fetch.
+  for (const c of subCues) c.line = cueLine.value
   saveCaptionStyle()
 }
 
@@ -574,11 +600,11 @@ async function applySubtitle(trackId: string): Promise<void> {
     if (!subTrack) subTrack = el.addTextTrack('subtitles', 'Argosy', track.language || 'und')
     for (const c of cues) {
       const cue = new VTTCue(c.start, c.end, c.text)
-      // Position cues at 84% height (from the top) so they sit above the control
-      // bar and stay visible when controls are up; the default pins them to the
-      // very bottom, behind the controls.
+      // Place cues per the viewer's position preset (default "raised", 84% from
+      // the top) so they sit above the control bar; the browser default pins them
+      // to the very bottom, behind the controls.
       cue.snapToLines = false
-      cue.line = 84
+      cue.line = cueLine.value
       subTrack.addCue(cue)
       subCues.push(cue)
     }
@@ -865,6 +891,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                     @click="setCaptionBackground('none')"
                   >
                     None
+                  </button>
+                </div>
+              </div>
+              <div class="cc-style-row">
+                <span class="cc-style-label">Position</span>
+                <div class="cc-seg">
+                  <button
+                    v-for="p in CAPTION_POSITIONS"
+                    :key="p.v"
+                    type="button"
+                    :class="{ on: captionPosition === p.v }"
+                    @click="setCaptionPosition(p.v)"
+                  >
+                    {{ p.label }}
                   </button>
                 </div>
               </div>

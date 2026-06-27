@@ -1522,6 +1522,13 @@ components:
           nullable: true
           enum: [translucent, solid, none]
           description: Caption background box style.
+        captionPosition:
+          type: string
+          nullable: true
+          enum: [bottom, raised, higher]
+          description: >-
+            Vertical caption placement: bottom (near the edge), raised (default,
+            lifted above the control bar), or higher (further up the frame).
         seriesAutoAdvance:
           type: boolean
           nullable: true

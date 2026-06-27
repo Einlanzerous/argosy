@@ -180,6 +180,16 @@ func TestAuthFlow(t *testing.T) {
 	if !saved.SubtitleEnabled {
 		t.Error("disabling auto-advance should not clobber the subtitle setting")
 	}
+	// Caption position (ARGY-60) round-trips.
+	pos := api.DevicePreferencesCaptionPosition("higher")
+	saved, err = store.SetDevicePreferences(ctx, reg.Device.Id.String(),
+		api.DevicePreferences{SubtitleEnabled: true, CaptionPosition: &pos})
+	if err != nil {
+		t.Fatalf("set prefs (caption position): %v", err)
+	}
+	if saved.CaptionPosition == nil || *saved.CaptionPosition != pos {
+		t.Errorf("saved caption position = %v, want higher", saved.CaptionPosition)
+	}
 
 	if err := store.RevokeDevice(ctx, sess, reg.Device.Id); err != nil {
 		t.Fatalf("revoke: %v", err)

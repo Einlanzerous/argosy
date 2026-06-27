@@ -123,6 +123,19 @@ class SettingsScreen extends ConsumerWidget {
                   DevicePreferencesCaptionBackgroundEnum.translucent,
               onSelect: (v) => _guard(context, () => ctrl.setCaptionBackground(v)),
             ),
+            const SizedBox(height: 16),
+            _label('Caption position'),
+            _choices<DevicePreferencesCaptionPositionEnum>(
+              context,
+              options: const [
+                ('Bottom', DevicePreferencesCaptionPositionEnum.bottom),
+                ('Raised', DevicePreferencesCaptionPositionEnum.raised),
+                ('Higher', DevicePreferencesCaptionPositionEnum.higher),
+              ],
+              selected: data.device.captionPosition ??
+                  DevicePreferencesCaptionPositionEnum.raised,
+              onSelect: (v) => _guard(context, () => ctrl.setCaptionPosition(v)),
+            ),
             const SizedBox(height: 28),
 
             _section('Home'),
