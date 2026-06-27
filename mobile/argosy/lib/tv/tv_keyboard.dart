@@ -18,12 +18,26 @@ class TvOnScreenKeyboard extends StatelessWidget {
     required this.onChar,
     required this.onBackspace,
     required this.onClear,
+    this.autofocusFirst = false,
+    this.firstKeyFocusNode,
   });
 
   /// Append a single character to the active field.
   final ValueChanged<String> onChar;
   final VoidCallback onBackspace;
   final VoidCallback onClear;
+
+  /// Autofocus the first key on the first frame. Set by screens (e.g. TV
+  /// Search) whose body is the keyboard itself, so the remote lands on a key
+  /// immediately instead of needing a hop in from the nav rail. Safe only when
+  /// the keyboard is rendered from frame 1 (not behind an AsyncView).
+  final bool autofocusFirst;
+
+  /// Focus node for the first key. When the keyboard is swapped *into* an
+  /// existing route (e.g. the Settings rename flow), frame-1 autofocus loses the
+  /// race to the route's focus scope, so the caller drives focus onto this node
+  /// post-frame instead.
+  final FocusNode? firstKeyFocusNode;
 
   // Four letter/number rows; the symbols + Space/Delete/Clear share one wide
   // bottom row, so the keyboard stays short and wide for a 10-foot layout.
@@ -40,16 +54,21 @@ class TvOnScreenKeyboard extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final row in _rows)
+        for (final (r, row) in _rows.indexed)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                for (final ch in row.split(''))
+                for (final (c, ch) in row.split('').indexed)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: _Key(label: ch, onSelect: () => onChar(ch)),
+                    child: _Key(
+                      label: ch,
+                      autofocus: autofocusFirst && r == 0 && c == 0,
+                      focusNode: (r == 0 && c == 0) ? firstKeyFocusNode : null,
+                      onSelect: () => onChar(ch),
+                    ),
                   ),
               ],
             ),
@@ -83,11 +102,19 @@ class TvOnScreenKeyboard extends StatelessWidget {
 }
 
 class _Key extends StatefulWidget {
-  const _Key({required this.label, required this.onSelect, this.width = 92});
+  const _Key({
+    required this.label,
+    required this.onSelect,
+    this.width = 92,
+    this.autofocus = false,
+    this.focusNode,
+  });
 
   final String label;
   final VoidCallback onSelect;
   final double width;
+  final bool autofocus;
+  final FocusNode? focusNode;
 
   @override
   State<_Key> createState() => _KeyState();
@@ -102,6 +129,8 @@ class _KeyState extends State<_Key> {
       borderRadius: 12,
       scale: 1.12,
       focusOffset: 4,
+      autofocus: widget.autofocus,
+      focusNode: widget.focusNode,
       onSelect: widget.onSelect,
       onFocusChange: (f) => setState(() => _focused = f),
       child: Container(

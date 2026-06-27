@@ -7,10 +7,11 @@ import '../features/auth/tv/tv_pairing_screen.dart';
 import '../features/detail/tv/tv_movie_screen.dart';
 import '../features/detail/tv/tv_series_screen.dart';
 import '../features/home/tv/tv_home_screen.dart';
+import '../features/library/tv/tv_library_screen.dart';
 import '../features/player/tv/tv_player_screen.dart';
+import '../features/search/tv/tv_search_screen.dart';
+import '../features/settings/tv/tv_settings_screen.dart';
 import '../features/splash/splash_screen.dart';
-import '../tv/tv_nav_rail.dart';
-import '../tv/tv_placeholder_screen.dart';
 import 'app_router.dart';
 
 final _tvRootKey = GlobalKey<NavigatorState>();
@@ -20,9 +21,9 @@ final _tvRootKey = GlobalKey<NavigatorState>();
 /// bottom-nav. Selected over the phone router in `app.dart` when the device is a
 /// television (ARGY-51).
 ///
-/// PR2 lands the core loop: the real [TvHomeScreen] (hero + Continue-Watching
-/// rails), [TvMovieScreen]/[TvSeriesScreen] detail, and the D-pad
-/// [TvPlayerScreen]. Library/Search/Settings remain placeholders until PR3.
+/// PR2 landed the core loop ([TvHomeScreen], [TvMovieScreen]/[TvSeriesScreen]
+/// detail, the D-pad [TvPlayerScreen]); PR3 completes the shell with the real
+/// [TvLibraryScreen], [TvSearchScreen], and [TvSettingsScreen].
 final routerTvProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<AuthStatus>(AuthStatus.unknown);
   ref.onDispose(refresh.dispose);
@@ -54,30 +55,9 @@ final routerTvProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.login, builder: (_, _) => const TvPairingScreen()),
 
       GoRoute(path: Routes.home, builder: (_, _) => const TvHomeScreen()),
-      GoRoute(
-        path: Routes.library,
-        builder: (_, _) => const TvPlaceholderScreen(
-          section: TvSection.library,
-          title: 'Library',
-          note: 'The Manifest grid lands in PR3.',
-        ),
-      ),
-      GoRoute(
-        path: Routes.search,
-        builder: (_, _) => const TvPlaceholderScreen(
-          section: TvSection.search,
-          title: 'Search',
-          note: 'On-screen keyboard + live results land in PR3.',
-        ),
-      ),
-      GoRoute(
-        path: Routes.settings,
-        builder: (_, _) => const TvPlaceholderScreen(
-          section: TvSection.settings,
-          title: 'Bridge',
-          note: 'Fleet + preferences land in PR3.',
-        ),
-      ),
+      GoRoute(path: Routes.library, builder: (_, _) => const TvLibraryScreen()),
+      GoRoute(path: Routes.search, builder: (_, _) => const TvSearchScreen()),
+      GoRoute(path: Routes.settings, builder: (_, _) => const TvSettingsScreen()),
 
       // Detail + player: the TV (10-foot, D-pad) layouts (PR2).
       GoRoute(
