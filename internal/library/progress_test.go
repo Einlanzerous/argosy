@@ -51,13 +51,13 @@ func TestPlayStateLifecycle(t *testing.T) {
 	}
 
 	// Report 100s of 1000s → in progress.
-	ps, err := store.SetProgress(ctx, accID, userID, itemID, 100, &dur)
+	ps, err := store.SetProgress(ctx, accID, userID, "", itemID, 100, &dur)
 	if err != nil || ps == nil || ps.PositionSeconds != 100 || ps.Watched {
 		t.Fatalf("after 100s = %+v (err %v), want pos 100 / unwatched", ps, err)
 	}
 
 	// Shows up in Continue Watching with ~10%.
-	cont, err := store.ContinueWatching(ctx, accID, userID, 20)
+	cont, err := store.ContinueWatching(ctx, accID, userID, "", 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,10 +75,10 @@ func TestPlayStateLifecycle(t *testing.T) {
 	}
 
 	// Past the threshold → auto-watched, drops off the rail.
-	if ps, err := store.SetProgress(ctx, accID, userID, itemID, 980, &dur); err != nil || ps == nil || !ps.Watched {
+	if ps, err := store.SetProgress(ctx, accID, userID, "", itemID, 980, &dur); err != nil || ps == nil || !ps.Watched {
 		t.Fatalf("after 980s = %+v (err %v), want watched", ps, err)
 	}
-	cont, _ = store.ContinueWatching(ctx, accID, userID, 20)
+	cont, _ = store.ContinueWatching(ctx, accID, userID, "", 20)
 	for _, c := range cont {
 		if c.Id.String() == itemID {
 			t.Fatalf("watched item still in Continue Watching")
@@ -173,7 +173,7 @@ func TestContinueWatchingDedup(t *testing.T) {
 	ip(ep2ID, 60)
 	ip(movieID, 10)
 
-	cont, err := store.ContinueWatching(ctx, accID, userID, 20)
+	cont, err := store.ContinueWatching(ctx, accID, userID, "", 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,5 +203,88 @@ func TestContinueWatchingDedup(t *testing.T) {
 	}
 	if !sawMovie {
 		t.Errorf("standalone movie missing from Continue Watching")
+	}
+}
+
+// TestContinueWatchingLastDevice covers ARGY-98: the cross-device pill is set
+// only when a still-paired device owns the playhead AND it isn't the deck making
+// the request. Reporting from another device surfaces the pill; requesting from
+// that same device suppresses it; a revoked device drops the attribution.
+func TestContinueWatchingLastDevice(t *testing.T) {
+	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set ARGOSY_TEST_DATABASE_URL to run continue-watching tests")
+	}
+	ctx := context.Background()
+	if err := db.Migrate(ctx, dsn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	store := NewStore(pool, "/artwork")
+
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
+	var accID, userID, libID, itemID, tvID string
+	if err := pool.QueryRow(ctx, `INSERT INTO accounts (name) VALUES ($1) RETURNING id::text`, "dev_"+suffix).Scan(&accID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO users (account_id, name) VALUES ($1,$2) RETURNING id::text`, accID, "viewer").Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO libraries (account_id, name, kind, root_path) VALUES ($1,$2,'mixed',$3) RETURNING id::text`,
+		accID, "lib_"+suffix, "/tmp/"+suffix).Scan(&libID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'movie','Film',$2) RETURNING id::text`,
+		libID, "film-"+suffix+".mkv").Scan(&itemID); err != nil {
+		t.Fatal(err)
+	}
+	// The deck that owns the playhead — a TV in the living room.
+	if err := pool.QueryRow(ctx, `INSERT INTO devices (account_id, user_id, name, token_hash, platform) VALUES ($1,$2,'Living Room TV',$3,'tv') RETURNING id::text`,
+		accID, userID, "tok-"+suffix).Scan(&tvID); err != nil {
+		t.Fatal(err)
+	}
+
+	dur := 1000.0
+	if _, err := store.SetProgress(ctx, accID, userID, tvID, itemID, 100, &dur); err != nil {
+		t.Fatalf("SetProgress: %v", err)
+	}
+
+	pill := func(currentDevice string) *string {
+		t.Helper()
+		cont, err := store.ContinueWatching(ctx, accID, userID, currentDevice, 20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range cont {
+			if c.Id.String() == itemID {
+				if c.LastPlayedDevice == nil {
+					return nil
+				}
+				name := c.LastPlayedDevice.Name
+				return &name
+			}
+		}
+		t.Fatalf("item not in Continue Watching")
+		return nil
+	}
+
+	// From a phone (a different deck) the TV pill shows.
+	if got := pill("11111111-1111-1111-1111-111111111111"); got == nil || *got != "Living Room TV" {
+		t.Fatalf("pill from phone = %v, want \"Living Room TV\"", got)
+	}
+	// From the TV itself the pill is suppressed (you left off right here).
+	if got := pill(tvID); got != nil {
+		t.Fatalf("pill from owning deck = %v, want nil", *got)
+	}
+	// Revoking the device drops the attribution entirely.
+	if _, err := pool.Exec(ctx, `UPDATE devices SET revoked_at = now() WHERE id = $1`, tvID); err != nil {
+		t.Fatal(err)
+	}
+	if got := pill("11111111-1111-1111-1111-111111111111"); got != nil {
+		t.Fatalf("pill after revoke = %v, want nil", *got)
 	}
 }

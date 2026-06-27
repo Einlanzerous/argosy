@@ -41,6 +41,7 @@ part 'model/create_library_request.dart';
 part 'model/create_vault_request.dart';
 part 'model/device.dart';
 part 'model/device_preferences.dart';
+part 'model/device_ref.dart';
 part 'model/device_registration_request.dart';
 part 'model/device_registration_response.dart';
 part 'model/device_rename_request.dart';

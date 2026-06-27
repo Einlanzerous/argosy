@@ -20,6 +20,7 @@ class HomeHero {
     this.backdropUrl,
     this.percent,
     this.remainingLabel,
+    this.deviceLabel,
   });
 
   final String eyebrow;
@@ -29,6 +30,10 @@ class HomeHero {
 
   /// "13m left" style label beside the resume progress bar, when known.
   final String? remainingLabel;
+
+  /// Name of the deck this playhead was last on, when it differs from this
+  /// device — drives the cross-device `⇄ <device>` pill (ARGY-98). Null hides it.
+  final String? deviceLabel;
 
   /// The id the hero's "Details" tap opens (series id for a resumed episode).
   final String detailId;
@@ -57,6 +62,7 @@ class ContinueEntry {
     this.backdropUrl,
     required this.progress,
     this.remainingLabel,
+    this.deviceLabel,
   });
 
   final String id;
@@ -71,6 +77,10 @@ class ContinueEntry {
 
   /// "13m left" when the duration is known, else null.
   final String? remainingLabel;
+
+  /// Name of the deck this playhead was last on, when it differs from this
+  /// device — drives the cross-device `⇄ <device>` pill (ARGY-98). Null hides it.
+  final String? deviceLabel;
 }
 
 /// A titled row of cards (vault or genre row).
@@ -125,6 +135,7 @@ ContinueEntry _continueEntry(ContinueItem c) => ContinueEntry(
   backdropUrl: c.backdropUrl,
   progress: (c.percent / 100).clamp(0.0, 1.0).toDouble(),
   remainingLabel: _remainingLabel(c.durationSeconds, c.positionSeconds),
+  deviceLabel: c.lastPlayedDevice?.name,
 );
 
 MediaCard _onDeckCard(OnDeckItem o) => MediaCard(
@@ -165,6 +176,7 @@ HomeHero? _heroFrom(List<ContinueItem> cont, List<MediaItemSummary> recent) {
       backdropUrl: r.backdropUrl,
       percent: (r.percent / 100).clamp(0.0, 1.0).toDouble(),
       remainingLabel: _remainingLabel(r.durationSeconds, r.positionSeconds),
+      deviceLabel: r.lastPlayedDevice?.name,
     );
   }
   // No resume: spotlight the newest film (a series id isn't directly playable).

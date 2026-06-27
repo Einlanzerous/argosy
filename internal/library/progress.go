@@ -74,7 +74,7 @@ func (s *Store) GetProgress(ctx context.Context, accountID, userID, itemID strin
 // user's devices playing the same item at once is rare (it's one person), and
 // Beacon pushes every change to the other devices, so a write is never a silent
 // clobber — the other device sees it within seconds.
-func (s *Store) SetProgress(ctx context.Context, accountID, userID, itemID string, pos float64, dur *float64) (*api.PlayState, error) {
+func (s *Store) SetProgress(ctx context.Context, accountID, userID, deviceID, itemID string, pos float64, dur *float64) (*api.PlayState, error) {
 	ok, err := s.itemInAccount(ctx, accountID, itemID)
 	if err != nil {
 		return nil, err
@@ -83,15 +83,23 @@ func (s *Store) SetProgress(ctx context.Context, accountID, userID, itemID strin
 		return nil, nil
 	}
 	watched := dur != nil && *dur > 0 && pos >= *dur*watchedThreshold
+	// device_id records which deck owns this playhead (ARGY-98). COALESCE on
+	// conflict keeps the last known device when a write arrives without one
+	// (e.g. an unauthenticated/legacy heartbeat) rather than blanking the pill.
+	var devArg any
+	if deviceID != "" {
+		devArg = deviceID
+	}
 	if _, err := s.pool.Exec(ctx,
-		`INSERT INTO play_state (user_id, media_item_id, position_seconds, duration_seconds, watched, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, now())
+		`INSERT INTO play_state (user_id, media_item_id, position_seconds, duration_seconds, watched, device_id, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, now())
 		 ON CONFLICT (user_id, media_item_id) DO UPDATE SET
 		   position_seconds = EXCLUDED.position_seconds,
 		   duration_seconds = COALESCE(EXCLUDED.duration_seconds, play_state.duration_seconds),
 		   watched = EXCLUDED.watched,
+		   device_id = COALESCE(EXCLUDED.device_id, play_state.device_id),
 		   updated_at = now()`,
-		userID, itemID, pos, dur, watched); err != nil {
+		userID, itemID, pos, dur, watched, devArg); err != nil {
 		return nil, err
 	}
 	return s.GetProgress(ctx, accountID, userID, itemID)
@@ -124,11 +132,14 @@ func (s *Store) SetWatched(ctx context.Context, accountID, userID, itemID string
 // Movies are keyed by their own item id, so each stays a standalone row. The
 // LATERAL pins one series per item, so a combined multi-episode file (one
 // media_item linked to several episodes, ARGY-69) can't fan out into duplicates.
-func (s *Store) ContinueWatching(ctx context.Context, accountID, userID string, limit int) ([]api.ContinueItem, error) {
+// currentDeviceID is the requesting deck; the cross-device pill is suppressed for
+// any item whose last-played device is that same deck (showing "you left off here"
+// would be noise — ARGY-98).
+func (s *Store) ContinueWatching(ctx context.Context, accountID, userID, currentDeviceID string, limit int) ([]api.ContinueItem, error) {
 	rows, err := s.pool.Query(ctx,
 		`WITH in_progress AS (
 		     SELECT ps.media_item_id, ps.position_seconds, ps.duration_seconds, ps.updated_at,
-		            ep.series_id
+		            ps.device_id, ep.series_id
 		     FROM play_state ps
 		     JOIN media_items mi ON mi.id = ps.media_item_id
 		     JOIN libraries l ON l.id = mi.library_id
@@ -144,16 +155,18 @@ func (s *Store) ContinueWatching(ctx context.Context, accountID, userID string, 
 		 ),
 		 picked AS (
 		     SELECT DISTINCT ON (COALESCE(series_id, media_item_id))
-		            media_item_id, position_seconds, duration_seconds, updated_at, series_id
+		            media_item_id, position_seconds, duration_seconds, updated_at, series_id, device_id
 		     FROM in_progress
 		     ORDER BY COALESCE(series_id, media_item_id), updated_at DESC
 		 )
 		 SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.provider_metadata, mi.metadata,
 		        p.position_seconds, p.duration_seconds,
-		        sr.id::text, sr.title, sr.provider_metadata, sr.metadata
+		        sr.id::text, sr.title, sr.provider_metadata, sr.metadata,
+		        d.id::text, d.name, d.platform
 		 FROM picked p
 		 JOIN media_items mi ON mi.id = p.media_item_id
 		 LEFT JOIN series sr ON sr.id = p.series_id
+		 LEFT JOIN devices d ON d.id = p.device_id AND d.revoked_at IS NULL
 		 ORDER BY p.updated_at DESC LIMIT $3`,
 		accountID, userID, limit)
 	if err != nil {
@@ -170,7 +183,8 @@ func (s *Store) ContinueWatching(ctx context.Context, accountID, userID string, 
 		var dur *float64
 		var seriesID, seriesTitle *string
 		var sprov, sover []byte
-		if err := rows.Scan(&id, &kind, &title, &year, &prov, &over, &pos, &dur, &seriesID, &seriesTitle, &sprov, &sover); err != nil {
+		var devID, devName, devPlatform *string
+		if err := rows.Scan(&id, &kind, &title, &year, &prov, &over, &pos, &dur, &seriesID, &seriesTitle, &sprov, &sover, &devID, &devName, &devPlatform); err != nil {
 			return nil, err
 		}
 		p, o := decodeMap(prov), decodeMap(over)
@@ -206,6 +220,15 @@ func (s *Store) ContinueWatching(ctx context.Context, accountID, userID string, 
 			ci.SeriesId = &u
 		}
 		ci.SeriesTitle = seriesTitle
+		// Cross-device "left off on" pill: only when a known, still-paired device
+		// owns the playhead AND it isn't the deck making this request (ARGY-98).
+		if devID != nil && devName != nil && *devID != currentDeviceID {
+			ci.LastPlayedDevice = &api.DeviceRef{
+				Id:       parseUUID(*devID),
+				Name:     *devName,
+				Platform: devPlatform,
+			}
+		}
 		out = append(out, ci)
 	}
 	return out, rows.Err()
@@ -237,7 +260,8 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 		dur = &d
 	}
 	itemID := r.PathValue("itemId")
-	ps, err := h.store.SetProgress(r.Context(), accountOf(r), userOf(r), itemID, float64(body.PositionSeconds), dur)
+	sess, _ := auth.SessionFromContext(r.Context())
+	ps, err := h.store.SetProgress(r.Context(), accountOf(r), userOf(r), sess.DeviceId.String(), itemID, float64(body.PositionSeconds), dur)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -256,7 +280,6 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 	// The heartbeat doubles as a presence beat (ARGY-34) + a Beacon publish
 	// (ARGY-36): refresh this device's live session, and broadcast the new
 	// position to the user's other devices for cross-device resume.
-	sess, _ := auth.SessionFromContext(r.Context())
 	var durf float64
 	if dur != nil {
 		durf = *dur
@@ -320,7 +343,7 @@ func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) listContinue(w http.ResponseWriter, r *http.Request) {
-	items, err := h.store.ContinueWatching(r.Context(), accountOf(r), userOf(r), 20)
+	items, err := h.store.ContinueWatching(r.Context(), accountOf(r), userOf(r), deviceOf(r), 20)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -360,6 +383,11 @@ func (h *handlers) getNextEpisode(w http.ResponseWriter, r *http.Request) {
 func userOf(r *http.Request) string {
 	sess, _ := auth.SessionFromContext(r.Context())
 	return sess.UserId.String()
+}
+
+func deviceOf(r *http.Request) string {
+	sess, _ := auth.SessionFromContext(r.Context())
+	return sess.DeviceId.String()
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {

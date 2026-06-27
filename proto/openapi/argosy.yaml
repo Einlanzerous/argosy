@@ -1673,6 +1673,19 @@ components:
         percent: { type: number }
         seriesId: { type: string, format: uuid, nullable: true }
         seriesTitle: { type: string, nullable: true }
+        lastPlayedDevice:
+          allOf: [{ $ref: "#/components/schemas/DeviceRef" }]
+          nullable: true
+          description: "The deck that last owned this playhead, set only when it differs from the requesting device — drives the cross-device \"⇄ left off on\" pill (ARGY-98)."
+
+    DeviceRef:
+      type: object
+      description: "Slim device reference (id + display name + platform) for cross-device UI like the resume pill."
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        platform: { type: string, nullable: true, description: "web | phone | tv | ..." }
 
     OnDeckItem:
       type: object

@@ -22,6 +22,7 @@ lib/model/create_library_request.dart
 lib/model/create_vault_request.dart
 lib/model/device.dart
 lib/model/device_preferences.dart
+lib/model/device_ref.dart
 lib/model/device_registration_request.dart
 lib/model/device_registration_response.dart
 lib/model/device_rename_request.dart
