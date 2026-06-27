@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api/artwork.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../widgets/device_pill.dart';
 import '../../widgets/hatch_pattern.dart';
 import '../home/home_providers.dart';
 
@@ -97,6 +98,12 @@ class ContinueCard extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      if (entry.deviceLabel != null)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: DevicePill(label: entry.deviceLabel!),
+                        ),
                       if (entry.progress > 0)
                         Align(
                           alignment: Alignment.bottomCenter,

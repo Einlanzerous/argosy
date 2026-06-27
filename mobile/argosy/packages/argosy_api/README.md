@@ -138,6 +138,7 @@ Class | Method | HTTP request | Description
  - [CreateVaultRequest](doc//CreateVaultRequest.md)
  - [Device](doc//Device.md)
  - [DevicePreferences](doc//DevicePreferences.md)
+ - [DeviceRef](doc//DeviceRef.md)
  - [DeviceRegistrationRequest](doc//DeviceRegistrationRequest.md)
  - [DeviceRegistrationResponse](doc//DeviceRegistrationResponse.md)
  - [DeviceRenameRequest](doc//DeviceRenameRequest.md)

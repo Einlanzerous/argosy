@@ -1195,6 +1195,16 @@ export interface components {
             /** Format: uuid */
             seriesId?: string | null;
             seriesTitle?: string | null;
+            /** @description The deck that last owned this playhead, set only when it differs from the requesting device — drives the cross-device "⇄ left off on" pill (ARGY-98). */
+            lastPlayedDevice?: components["schemas"]["DeviceRef"] | null;
+        };
+        /** @description Slim device reference (id + display name + platform) for cross-device UI like the resume pill. */
+        DeviceRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description web | phone | tv | ... */
+            platform?: string | null;
         };
         OnDeckItem: {
             /**

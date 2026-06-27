@@ -8,6 +8,7 @@ import '../../theme/argosy_tokens.dart';
 import '../../theme/button_styles.dart';
 import '../../widgets/argosy_mark.dart';
 import '../../widgets/async_view.dart';
+import '../../widgets/device_pill.dart';
 import '../../widgets/hatch_pattern.dart';
 import '../../widgets/media_rail.dart';
 import '../account/account_sheet.dart';
@@ -237,6 +238,13 @@ class _Hero extends ConsumerWidget {
                         Text(
                           hero.subtitle!,
                           style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                      if (hero.deviceLabel != null) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: DevicePill(label: 'Left off on ${hero.deviceLabel!}'),
                         ),
                       ],
                       if (hero.percent != null) ...[
