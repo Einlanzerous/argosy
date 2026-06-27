@@ -51,6 +51,9 @@ dependencies:
   # only manages this inside its own fullscreen flow, which the Argosy overlay
   # bypasses, so we drive the (window-scoped) wakelock ourselves.
   wakelock_plus: ^1.6.1
+  # App version/build for the TV "About Argosy" screen. Already in the tree
+  # transitively (better_player); promoted to a direct dep so we can import it.
+  package_info_plus: ^10.1.0
 
 dev_dependencies:
   flutter_test:

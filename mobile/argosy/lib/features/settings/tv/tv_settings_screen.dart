@@ -1,6 +1,8 @@
 import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../api/api_providers.dart';
 import '../../../theme/argosy_colors.dart';
@@ -56,12 +58,37 @@ class _TvSettingsScreenState extends ConsumerState<TvSettingsScreen> {
   /// autofocus loses the race to the route scope — we drive focus here instead.
   final FocusNode _renameKeyFocus = FocusNode(debugLabel: 'rename-first-key');
 
+  /// One persistent focus node per category row. The active category autofocuses
+  /// on entry (so the remote lands in the list, not the device content), and
+  /// LEFT from the content column hops back to the active row — the category
+  /// column is short, so native LEFT from a low content item would otherwise
+  /// overshoot it and land on the nav rail.
+  late final Map<_Category, FocusNode> _catNodes = {
+    for (final c in _Category.values) c: FocusNode(debugLabel: 'cat-$c'),
+  };
+
   @override
   void dispose() {
     _menuButtonFocus.dispose();
     _menuActionFocus.dispose();
     _renameKeyFocus.dispose();
+    for (final n in _catNodes.values) {
+      n.dispose();
+    }
     super.dispose();
+  }
+
+  /// LEFT inside the content column: move within content if possible, else hop
+  /// back to the active category (never overshoot to the nav rail).
+  KeyEventResult _onContentKey(FocusNode _, KeyEvent e) {
+    if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      final moved = FocusManager.instance.primaryFocus
+              ?.focusInDirection(TraversalDirection.left) ??
+          false;
+      if (!moved) _catNodes[_category]?.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   /// Pull focus onto [node] after the next frame lays it out.
@@ -126,9 +153,26 @@ class _TvSettingsScreenState extends ConsumerState<TvSettingsScreen> {
       body: TvStage(
         child: Row(
           children: [
-            const TvNavRail(active: TvSection.settings, autofocusActive: true),
-            _CategoryColumn(active: _category, onSelect: _selectCategory),
-            Expanded(child: _content()),
+            // Nav rail does NOT autofocus here — the active category does, so the
+            // remote lands in the category list rather than the device content.
+            const TvNavRail(active: TvSection.settings),
+            _CategoryColumn(
+              active: _category,
+              nodes: _catNodes,
+              onSelect: _selectCategory,
+            ),
+            // Contain content traversal so LEFT redirects to the category column
+            // at the left edge (see _onContentKey).
+            Expanded(
+              child: FocusTraversalGroup(
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  onKeyEvent: _onContentKey,
+                  child: _content(),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -154,7 +198,7 @@ class _TvSettingsScreenState extends ConsumerState<TvSettingsScreen> {
       _Category.fleet => _fleetContent(),
       _Category.playback => _PlaybackContent(),
       _Category.subtitles => _SubtitlesContent(),
-      _Category.about => const _AboutContent(),
+      _Category.about => _AboutContent(),
     };
   }
 
@@ -217,9 +261,14 @@ class _TvSettingsScreenState extends ConsumerState<TvSettingsScreen> {
 // --- Category list -----------------------------------------------------------
 
 class _CategoryColumn extends StatelessWidget {
-  const _CategoryColumn({required this.active, required this.onSelect});
+  const _CategoryColumn({
+    required this.active,
+    required this.nodes,
+    required this.onSelect,
+  });
 
   final _Category active;
+  final Map<_Category, FocusNode> nodes;
   final ValueChanged<_Category> onSelect;
 
   static const _items = <(_Category, IconData, String)>[
@@ -269,6 +318,8 @@ class _CategoryColumn extends StatelessWidget {
               icon: icon,
               label: label,
               active: cat == active,
+              focusNode: nodes[cat],
+              autofocus: cat == active,
               onSelect: () => onSelect(cat),
             ),
             const SizedBox(height: 6),
@@ -285,12 +336,16 @@ class _CategoryRow extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onSelect,
+    this.focusNode,
+    this.autofocus = false,
   });
 
   final IconData icon;
   final String label;
   final bool active;
   final VoidCallback onSelect;
+  final FocusNode? focusNode;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -298,7 +353,14 @@ class _CategoryRow extends StatelessWidget {
       borderRadius: 11,
       scale: 1.03,
       focusOffset: 3,
+      focusNode: focusNode,
+      autofocus: autofocus,
       onSelect: onSelect,
+      // Switch the content as soon as the category is focused (focus-follows,
+      // the expected 10-foot pattern) — OK still works, it's just redundant.
+      onFocusChange: (focused) {
+        if (focused && !active) onSelect();
+      },
       child: Stack(
         alignment: Alignment.centerLeft,
         clipBehavior: Clip.none,
@@ -957,6 +1019,14 @@ class _SubtitlesContent extends ConsumerWidget {
           title: 'Subtitles & Audio',
           subtitle: 'Default tracks and how captions look on this TV.',
           children: [
+            // Live preview — reflects size/colour/background as they change.
+            _CaptionPreview(
+              scale: (dev.captionScale ?? 1.0).toDouble(),
+              colorHex: dev.captionColor ?? '#FFFFFF',
+              background: dev.captionBackground ??
+                  DevicePreferencesCaptionBackgroundEnum.translucent,
+            ),
+            const SizedBox(height: 22),
             _ToggleRow(
               label: 'Subtitles on by default',
               subtitle: 'Show a subtitle track automatically when one matches.',
@@ -980,11 +1050,8 @@ class _SubtitlesContent extends ConsumerWidget {
             ),
             const SizedBox(height: 18),
             _SectionLabel('Caption colour'),
-            _OptionPicker<String>(
+            _CaptionColourPicker(
               selected: (dev.captionColor ?? '#FFFFFF').toUpperCase(),
-              options: [
-                for (final (name, hex) in _captionColors) (name, hex.toUpperCase()),
-              ],
               onSelect: (v) => _guard(context, () => ctrl.setCaptionColor(v)),
             ),
             const SizedBox(height: 18),
@@ -998,6 +1065,151 @@ class _SubtitlesContent extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// A live caption sample that reflects the current size / colour / background,
+/// over a faux video frame, so the choices below read as what you'll see.
+class _CaptionPreview extends StatelessWidget {
+  const _CaptionPreview({
+    required this.scale,
+    required this.colorHex,
+    required this.background,
+  });
+
+  final double scale;
+  final String colorHex;
+  final DevicePreferencesCaptionBackgroundEnum background;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hex(colorHex);
+    final hasBg = background != DevicePreferencesCaptionBackgroundEnum.none;
+    final bgColor = background == DevicePreferencesCaptionBackgroundEnum.solid
+        ? Colors.black
+        : const Color(0xB3000000); // translucent
+
+    final caption = Text(
+      'She glanced back at the harbour lights.',
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontFamily: 'HankenGrotesk',
+        fontSize: 30 * scale,
+        height: 1.25,
+        fontWeight: FontWeight.w600,
+        color: color,
+      ),
+    );
+
+    return Container(
+      height: 200,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: ArgosyColors.line),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF223040), Color(0xFF12161B)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // A muted eyebrow so it reads as a preview, not real content.
+          const Positioned(
+            top: 16,
+            left: 20,
+            child: Text(
+              'PREVIEW',
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 2,
+                color: Color(0x66EAEAE5),
+              ),
+            ),
+          ),
+          Align(
+            alignment: const Alignment(0, 0.62),
+            child: hasBg
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: caption,
+                  )
+                : caption,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Caption-colour picker — focusable swatches of the actual colour (not the
+/// name), with a brass ring on the selected one.
+class _CaptionColourPicker extends StatelessWidget {
+  const _CaptionColourPicker({required this.selected, required this.onSelect});
+
+  /// Uppercase `#RRGGBB`.
+  final String selected;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 16,
+      runSpacing: 16,
+      children: [
+        for (final (_, hex) in _captionColors)
+          _ColourSwatch(
+            hex: hex,
+            selected: hex.toUpperCase() == selected,
+            onSelect: () => onSelect(hex.toUpperCase()),
+          ),
+      ],
+    );
+  }
+}
+
+class _ColourSwatch extends StatelessWidget {
+  const _ColourSwatch({
+    required this.hex,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final String hex;
+  final bool selected;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hex(hex);
+    return TvFocusable(
+      borderRadius: 30,
+      onSelect: onSelect,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            // Selected gets a brass ring; otherwise a hairline so light swatches
+            // still read against the panel.
+            color: selected ? ArgosyColors.accent : ArgosyColors.line2,
+            width: selected ? 3 : 1,
+          ),
+        ),
+        child: selected
+            ? Icon(Icons.check, size: 24, color: _onColor(color))
+            : null,
+      ),
     );
   }
 }
@@ -1089,11 +1301,16 @@ class _AccountContent extends ConsumerWidget {
 
 // --- About -------------------------------------------------------------------
 
-class _AboutContent extends StatelessWidget {
-  const _AboutContent();
+/// App version/build for the About screen. Loaded once from the platform.
+final _packageInfoProvider =
+    FutureProvider<PackageInfo>((ref) => PackageInfo.fromPlatform());
 
+class _AboutContent extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final info = ref.watch(_packageInfoProvider);
+    final version = info.value;
+
     return _ContentScroll(
       title: 'About Argosy',
       subtitle: 'Your household media, on the big screen.',
@@ -1105,10 +1322,10 @@ class _AboutContent extends StatelessWidget {
             borderRadius: BorderRadius.circular(13),
             border: Border.all(color: ArgosyColors.line),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Argosy for Android TV',
                 style: TextStyle(
                   fontFamily: 'Archivo',
@@ -1117,8 +1334,8 @@ class _AboutContent extends StatelessWidget {
                   color: ArgosyColors.cream,
                 ),
               ),
-              SizedBox(height: 10),
-              Text(
+              const SizedBox(height: 10),
+              const Text(
                 'Browse, search, and play everything in your household hold — '
                 'with one shared playhead across your whole Fleet.',
                 style: TextStyle(
@@ -1128,7 +1345,60 @@ class _AboutContent extends StatelessWidget {
                   color: ArgosyColors.dim,
                 ),
               ),
+              const SizedBox(height: 22),
+              const Divider(color: ArgosyColors.line, height: 1),
+              const SizedBox(height: 18),
+              _AboutRow(
+                label: 'Version',
+                value: version == null
+                    ? '…'
+                    : '${version.version} (${version.buildNumber})',
+              ),
+              const SizedBox(height: 12),
+              _AboutRow(
+                label: 'Server',
+                value: ref.watch(baseUrlProvider),
+              ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AboutRow extends StatelessWidget {
+  const _AboutRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'HankenGrotesk',
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: ArgosyColors.accent,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value.isEmpty ? '—' : value,
+            style: const TextStyle(
+              fontFamily: 'HankenGrotesk',
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: ArgosyColors.cream,
+            ),
           ),
         ),
       ],
@@ -1425,6 +1695,17 @@ class _Note extends StatelessWidget {
 }
 
 // --- Helpers -----------------------------------------------------------------
+
+/// Parses a `#RRGGBB` caption-colour hex into a [Color].
+Color _hex(String hex) {
+  var h = hex.replaceFirst('#', '').trim();
+  if (h.length == 6) h = 'FF$h';
+  return Color(int.tryParse(h, radix: 16) ?? 0xFFFFFFFF);
+}
+
+/// Black or white, whichever reads on [bg] (for the selected swatch's check).
+Color _onColor(Color bg) =>
+    bg.computeLuminance() > 0.5 ? Colors.black : Colors.white;
 
 Future<void> _guard(BuildContext context, Future<void> Function() save) async {
   try {
