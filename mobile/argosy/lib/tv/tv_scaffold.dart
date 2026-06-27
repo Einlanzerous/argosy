@@ -23,7 +23,9 @@ class TvScaffold extends StatelessWidget {
       body: TvStage(
         child: Row(
           children: [
-            TvNavRail(active: section),
+            // The sections that use TvScaffold are the PR3 placeholders, whose
+            // body has no focusable of its own — so the rail holds initial focus.
+            TvNavRail(active: section, autofocusActive: true),
             Expanded(child: child),
           ],
         ),

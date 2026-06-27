@@ -21,6 +21,8 @@ class TvFocusable extends StatefulWidget {
     this.scale = 1.06,
     this.focusOffset = 5,
     this.onFocusChange,
+    this.ensureVisibleOnFocus = false,
+    this.ensureVisibleAlignment = 0.12,
   });
 
   final Widget child;
@@ -39,6 +41,17 @@ class TvFocusable extends StatefulWidget {
 
   final ValueChanged<bool>? onFocusChange;
 
+  /// When true, gaining focus scrolls every enclosing [Scrollable] so this
+  /// element stays in view — the horizontal rail *and* the vertical page in one
+  /// call (Flutter's [Scrollable.ensureVisible] walks all ancestors). Set on
+  /// tiles inside the TV rails and the episode list so D-pad navigation keeps
+  /// the focused item on screen with a leading inset.
+  final bool ensureVisibleOnFocus;
+
+  /// Where in the viewport the focused element lands (0 = leading edge, 0.5 =
+  /// centered). A small value keeps a comfortable leading inset.
+  final double ensureVisibleAlignment;
+
   @override
   State<TvFocusable> createState() => _TvFocusableState();
 }
@@ -46,17 +59,40 @@ class TvFocusable extends StatefulWidget {
 class _TvFocusableState extends State<TvFocusable> {
   bool _focused = false;
 
+  /// Created when no [TvFocusable.focusNode] is supplied.
+  FocusNode? _ownNode;
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
+  @override
+  void dispose() {
+    _ownNode?.dispose();
+    super.dispose();
+  }
+
   void _setFocused(bool v) {
     if (v == _focused) return;
     setState(() => _focused = v);
     widget.onFocusChange?.call(v);
+    if (v && widget.ensureVisibleOnFocus) {
+      // After the focus frame settles, scroll every enclosing scrollable so the
+      // element is on screen (horizontal rail + vertical page in one call).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Scrollable.ensureVisible(
+          context,
+          alignment: widget.ensureVisibleAlignment,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final off = widget.focusOffset;
     return FocusableActionDetector(
-      focusNode: widget.focusNode,
+      focusNode: _node,
       autofocus: widget.autofocus,
       mouseCursor: SystemMouseCursors.click,
       onShowFocusHighlight: _setFocused,

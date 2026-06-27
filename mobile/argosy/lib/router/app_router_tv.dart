@@ -4,10 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_controller.dart';
 import '../features/auth/tv/tv_pairing_screen.dart';
-import '../features/detail/movie_detail_screen.dart';
-import '../features/detail/series_detail_screen.dart';
+import '../features/detail/tv/tv_movie_screen.dart';
+import '../features/detail/tv/tv_series_screen.dart';
 import '../features/home/tv/tv_home_screen.dart';
-import '../features/player/player_screen.dart';
+import '../features/player/tv/tv_player_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../tv/tv_nav_rail.dart';
 import '../tv/tv_placeholder_screen.dart';
@@ -20,9 +20,9 @@ final _tvRootKey = GlobalKey<NavigatorState>();
 /// bottom-nav. Selected over the phone router in `app.dart` when the device is a
 /// television (ARGY-51).
 ///
-/// PR1 ships the foundation: a real Home shell + navigable rail, with the other
-/// sections as placeholders and detail/player still using the existing screens.
-/// PR2/PR3 replace those with their TV layouts.
+/// PR2 lands the core loop: the real [TvHomeScreen] (hero + Continue-Watching
+/// rails), [TvMovieScreen]/[TvSeriesScreen] detail, and the D-pad
+/// [TvPlayerScreen]. Library/Search/Settings remain placeholders until PR3.
 final routerTvProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<AuthStatus>(AuthStatus.unknown);
   ref.onDispose(refresh.dispose);
@@ -79,24 +79,23 @@ final routerTvProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
-      // Detail + player reuse the existing screens until their TV layouts land
-      // in PR2.
+      // Detail + player: the TV (10-foot, D-pad) layouts (PR2).
       GoRoute(
         path: '/movie/:id',
         parentNavigatorKey: _tvRootKey,
         builder: (_, state) =>
-            MovieDetailScreen(itemId: state.pathParameters['id']!),
+            TvMovieScreen(itemId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/series/:id',
         parentNavigatorKey: _tvRootKey,
         builder: (_, state) =>
-            SeriesDetailScreen(seriesId: state.pathParameters['id']!),
+            TvSeriesScreen(seriesId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/player/:id',
         parentNavigatorKey: _tvRootKey,
-        builder: (_, state) => PlayerScreen(
+        builder: (_, state) => TvPlayerScreen(
           itemId: state.pathParameters['id']!,
           resume: state.uri.queryParameters['resume'] == '1',
           startOver: state.uri.queryParameters['start'] == '1',

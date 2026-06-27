@@ -479,6 +479,41 @@ class PlaybackController extends ChangeNotifier {
     _safeNotify();
   }
 
+  // --- speed / fit (the TV transport's Speed + Fit controls) ----------------
+
+  static const _speedLadder = <double>[1.0, 1.25, 1.5, 2.0, 0.5];
+
+  /// Current playback rate; cycled by [cycleSpeed].
+  double playbackSpeed = 1.0;
+
+  /// Advances playback speed through a small ladder (1× → 1.25 → 1.5 → 2 → 0.5).
+  void cycleSpeed() {
+    final i = _speedLadder.indexOf(playbackSpeed);
+    playbackSpeed = _speedLadder[(i + 1) % _speedLadder.length];
+    _player?.setSpeed(playbackSpeed);
+    _safeNotify();
+  }
+
+  /// "1×" / "1.5×" for the Speed control's label.
+  String get speedLabel {
+    final s = playbackSpeed;
+    return s == s.roundToDouble() ? '${s.toInt()}×' : '$s×';
+  }
+
+  /// How the video maps into the screen — letterboxed ([BoxFit.contain]) by
+  /// default, toggled to fill ([BoxFit.cover]) by [cycleFit].
+  BoxFit videoFit = BoxFit.contain;
+
+  /// Toggles between Fit (letterbox) and Fill (crop-to-fill).
+  void cycleFit() {
+    videoFit = videoFit == BoxFit.contain ? BoxFit.cover : BoxFit.contain;
+    _player?.setOverriddenFit(videoFit);
+    _safeNotify();
+  }
+
+  /// "Fit" / "Fill" for the Fit control's label.
+  String get fitLabel => videoFit == BoxFit.contain ? 'Fit' : 'Fill';
+
   // --- progress heartbeat --------------------------------------------------
 
   void _startHeartbeat() {

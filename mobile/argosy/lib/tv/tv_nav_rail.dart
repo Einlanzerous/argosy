@@ -14,9 +14,15 @@ enum TvSection { home, library, search, settings }
 /// section shows a brass left-bar + washed background; focus adds the ring+scale
 /// from [TvFocusable].
 class TvNavRail extends StatelessWidget {
-  const TvNavRail({super.key, required this.active});
+  const TvNavRail({super.key, required this.active, this.autofocusActive = false});
 
   final TvSection active;
+
+  /// When true, the active rail entry is the screen's autofocus target. Set by
+  /// screens whose body has no focusable content of its own (the PR3 placeholder
+  /// sections); content screens leave this false and autofocus their own primary
+  /// action instead.
+  final bool autofocusActive;
 
   static const _width = 100.0;
 
@@ -50,7 +56,7 @@ class TvNavRail extends StatelessWidget {
             icon: Icons.home_outlined,
             section: TvSection.home,
             active: active == TvSection.home,
-            autofocus: active == TvSection.home,
+            autofocus: autofocusActive && active == TvSection.home,
             onSelect: () => _go(context, TvSection.home),
           ),
           const SizedBox(height: 18),
@@ -58,7 +64,7 @@ class TvNavRail extends StatelessWidget {
             icon: Icons.grid_view_outlined,
             section: TvSection.library,
             active: active == TvSection.library,
-            autofocus: active == TvSection.library,
+            autofocus: autofocusActive && active == TvSection.library,
             onSelect: () => _go(context, TvSection.library),
           ),
           const SizedBox(height: 18),
@@ -66,7 +72,7 @@ class TvNavRail extends StatelessWidget {
             icon: Icons.search,
             section: TvSection.search,
             active: active == TvSection.search,
-            autofocus: active == TvSection.search,
+            autofocus: autofocusActive && active == TvSection.search,
             onSelect: () => _go(context, TvSection.search),
           ),
           const Spacer(),
@@ -74,7 +80,7 @@ class TvNavRail extends StatelessWidget {
             icon: Icons.settings_outlined,
             section: TvSection.settings,
             active: active == TvSection.settings,
-            autofocus: active == TvSection.settings,
+            autofocus: autofocusActive && active == TvSection.settings,
             onSelect: () => _go(context, TvSection.settings),
           ),
           const SizedBox(height: 48),
@@ -89,15 +95,15 @@ class _NavItem extends StatelessWidget {
     required this.icon,
     required this.section,
     required this.active,
-    required this.autofocus,
     required this.onSelect,
+    this.autofocus = false,
   });
 
   final IconData icon;
   final TvSection section;
   final bool active;
-  final bool autofocus;
   final VoidCallback onSelect;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
