@@ -259,7 +259,11 @@ onUnmounted(() => {
           <div class="cw-art" :style="posterStyle(c.posterUrl, c.title)">
             <div class="arg-hatch cw-hatch" />
             <div class="cw-grad" />
-            <div v-if="c.lastPlayedDevice" class="cw-dev" :title="`Left off on ${c.lastPlayedDevice.name}`">
+            <div
+              v-if="c.lastPlayedDevice"
+              class="cw-dev"
+              :title="`Left off on ${c.lastPlayedDevice.name}`"
+            >
               ⇄ {{ c.lastPlayedDevice.name }}
             </div>
             <div class="cw-meta">
