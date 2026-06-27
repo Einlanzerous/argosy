@@ -132,6 +132,51 @@ export interface paths {
         patch: operations["renameDevice"];
         trace?: never;
     };
+    "/api/v1/auth/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current account's profiles
+         * @description Returns every profile in the caller's account with its role and how many active devices are bound to it. Any signed-in profile may list; creating, editing, and deleting profiles is admin-only.
+         */
+        get: operations["listProfiles"];
+        put?: never;
+        /** Create a profile (admin only) */
+        post: operations["createProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/profiles/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a profile (admin only)
+         * @description Devices bound to the deleted profile are unbound — they keep working but drop to viewer access until reassigned. The account must keep at least one admin, and you can't delete the profile you're currently signed in as.
+         */
+        delete: operations["deleteProfile"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a profile or change its role (admin only)
+         * @description Omit a field to leave it unchanged. Demoting the only remaining admin to viewer is rejected so an account can never lock itself out.
+         */
+        patch: operations["updateProfile"];
+        trace?: never;
+    };
     "/api/v1/auth/link/start": {
         parameters: {
             query?: never;
@@ -1060,6 +1105,23 @@ export interface components {
         DeviceRenameRequest: {
             name: string;
         };
+        ProfileSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            role: components["schemas"]["Role"];
+            /** @description Number of active (non-revoked) devices currently bound to this profile. */
+            deviceCount: number;
+        };
+        ProfileCreateRequest: {
+            name: string;
+            role: components["schemas"]["Role"];
+        };
+        /** @description Fields to change; omit a field to leave it unchanged. */
+        ProfileUpdateRequest: {
+            name?: string;
+            role?: components["schemas"]["Role"];
+        };
         UserPreferences: {
             /**
              * @description Home density — focused trims to personal rows; discovery shows everything.
@@ -1461,6 +1523,24 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The request was malformed or failed validation */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The request conflicts with the current state */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: never;
     requestBodies: never;
@@ -1684,6 +1764,110 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileSummary"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Profile created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profile deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     startLink: {

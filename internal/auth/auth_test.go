@@ -350,3 +350,117 @@ func TestLinkPairing(t *testing.T) {
 		t.Errorf("platform = %v, want androidtv", paired.Platform)
 	}
 }
+
+// TestProfileManagement covers ARGY-65: the account-scoped profile CRUD plus its
+// guardrails (name uniqueness, last-admin protection, self-delete, device unbind).
+func TestProfileManagement(t *testing.T) {
+	store, ctx := testStore(t)
+	username := uniqueUsername()
+	password := "pw-" + uniqueUsername()
+	if _, err := store.CreateAccount(ctx, username, password, "Profiles Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	login, err := store.Login(ctx, username, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accountID := login.Account.Id.String()
+	admin := login.Profiles[0] // the bootstrap admin profile
+	adminSess := api.Session{AccountId: login.Account.Id, UserId: admin.Id, Role: api.Admin}
+
+	// Bootstrap account starts with exactly one admin, no devices.
+	list, err := store.ListProfiles(ctx, accountID)
+	if err != nil {
+		t.Fatalf("list profiles: %v", err)
+	}
+	if len(list) != 1 || list[0].Role != api.Admin || list[0].DeviceCount != 0 {
+		t.Fatalf("initial profiles = %+v, want one admin with 0 devices", list)
+	}
+
+	// Create a viewer profile.
+	viewer, err := store.CreateProfile(ctx, accountID, "  Kids  ", api.Viewer)
+	if err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+	if viewer.Name != "Kids" || viewer.Role != api.Viewer {
+		t.Errorf("created profile = %+v, want trimmed name 'Kids' / viewer", viewer)
+	}
+
+	// Validation: blank name and unknown role are rejected.
+	if _, err := store.CreateProfile(ctx, accountID, "   ", api.Viewer); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("blank name: got %v, want ErrInvalidInput", err)
+	}
+	if _, err := store.CreateProfile(ctx, accountID, "Bogus", api.Role("wizard")); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("bad role: got %v, want ErrInvalidInput", err)
+	}
+	// Duplicate name (case-sensitive unique on (account, name)) conflicts.
+	if _, err := store.CreateProfile(ctx, accountID, "Kids", api.Viewer); !errors.Is(err, ErrNameTaken) {
+		t.Errorf("dup name: got %v, want ErrNameTaken", err)
+	}
+
+	// Rename + promote the viewer in one update.
+	promoted, err := store.UpdateProfile(ctx, accountID, viewer.Id.String(), strPtr("Teens"), rolePtr(api.Admin))
+	if err != nil {
+		t.Fatalf("update profile: %v", err)
+	}
+	if promoted.Name != "Teens" || promoted.Role != api.Admin {
+		t.Errorf("updated profile = %+v, want Teens/admin", promoted)
+	}
+	// Renaming onto an existing name conflicts.
+	if _, err := store.UpdateProfile(ctx, accountID, viewer.Id.String(), strPtr(admin.Name), nil); !errors.Is(err, ErrNameTaken) {
+		t.Errorf("rename collision: got %v, want ErrNameTaken", err)
+	}
+	// Updating an unknown profile is a not-found.
+	if _, err := store.UpdateProfile(ctx, accountID, login.Account.Id.String(), strPtr("Nope"), nil); !errors.Is(err, ErrNotFound) {
+		t.Errorf("update missing: got %v, want ErrNotFound", err)
+	}
+
+	// With two admins, demote the bootstrap admin to viewer (another admin remains).
+	if _, err := store.UpdateProfile(ctx, accountID, admin.Id.String(), nil, rolePtr(api.Viewer)); err != nil {
+		t.Fatalf("demote with spare admin: %v", err)
+	}
+	// Now 'Teens' is the only admin: demoting it must be refused.
+	if _, err := store.UpdateProfile(ctx, accountID, viewer.Id.String(), nil, rolePtr(api.Viewer)); !errors.Is(err, ErrLastAdmin) {
+		t.Errorf("demote last admin: got %v, want ErrLastAdmin", err)
+	}
+
+	// Bind a device to the (now viewer) bootstrap profile and confirm the count.
+	if _, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+		Username: username, Password: password, UserId: admin.Id, DeviceName: "Old Phone",
+	}); err != nil {
+		t.Fatalf("register device: %v", err)
+	}
+	list, _ = store.ListProfiles(ctx, accountID)
+	var bootstrap api.ProfileSummary
+	for _, p := range list {
+		if p.Id == admin.Id {
+			bootstrap = p
+		}
+	}
+	if bootstrap.DeviceCount != 1 {
+		t.Errorf("bootstrap device count = %d, want 1", bootstrap.DeviceCount)
+	}
+
+	// Delete guards: can't delete the profile you're signed in as...
+	if err := store.DeleteProfile(ctx, adminSess, admin.Id.String()); !errors.Is(err, ErrSelfDelete) {
+		t.Errorf("self-delete: got %v, want ErrSelfDelete", err)
+	}
+	// ...and can't delete the last admin ('Teens'), even from another session.
+	if err := store.DeleteProfile(ctx, adminSess, viewer.Id.String()); !errors.Is(err, ErrLastAdmin) {
+		t.Errorf("delete last admin: got %v, want ErrLastAdmin", err)
+	}
+
+	// Delete the bootstrap viewer from the Teens session — its device unbinds
+	// (FK ON DELETE SET NULL) rather than blocking the delete.
+	teenSess := api.Session{AccountId: login.Account.Id, UserId: viewer.Id, Role: api.Admin}
+	if err := store.DeleteProfile(ctx, teenSess, admin.Id.String()); err != nil {
+		t.Fatalf("delete profile: %v", err)
+	}
+	list, _ = store.ListProfiles(ctx, accountID)
+	if len(list) != 1 || list[0].Id != viewer.Id {
+		t.Fatalf("after delete, profiles = %+v, want only Teens", list)
+	}
+}
+
+func strPtr(s string) *string      { return &s }
+func rolePtr(r api.Role) *api.Role { return &r }

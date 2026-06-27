@@ -241,6 +241,12 @@ class ApiClient {
           return PlaybackInfo.fromJson(value);
         case 'PlaybackSession':
           return PlaybackSession.fromJson(value);
+        case 'ProfileCreateRequest':
+          return ProfileCreateRequest.fromJson(value);
+        case 'ProfileSummary':
+          return ProfileSummary.fromJson(value);
+        case 'ProfileUpdateRequest':
+          return ProfileUpdateRequest.fromJson(value);
         case 'ProgressUpdate':
           return ProgressUpdate.fromJson(value);
         case 'ReorderVaultRequest':
