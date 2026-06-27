@@ -75,10 +75,24 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
   final FocusNode _rootFocus = FocusNode(debugLabel: 'tv-player');
 
   /// Stable key for the [BetterPlayer] so its platform view (the video texture)
-  /// persists across the frequent rebuilds driven by the controls ticker and
-  /// controller notifications — without it the texture churns, which showed up
-  /// on device as no video on first play and choppy playback after.
+  /// persists across rebuilds.
   final GlobalKey _playerKey = GlobalKey();
+
+  /// The video surface, built once and reused so the parent's frequent setState
+  /// (the controls ticker, overlay show/hide, seek-bar position) never rebuilds
+  /// it — rebuilding the platform view dropped the video while audio kept going.
+  /// It still repaints on the controller's own notifications via the inner
+  /// [AnimatedBuilder]; it just doesn't ride the parent's rebuilds.
+  late final Widget _video = AnimatedBuilder(
+    animation: _controller,
+    builder: (context, _) {
+      final player = _controller.player;
+      if (player == null || !_controller.isReady) {
+        return const ColoredBox(color: Colors.black);
+      }
+      return Center(child: BetterPlayer(key: _playerKey, controller: player));
+    },
+  );
 
   bool _overlayVisible = true;
   _Row _row = _Row.seek;
@@ -208,11 +222,19 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
   void _scheduleHide() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(milliseconds: 4000), () {
-      final playing = _controller.videoValue?.isPlaying ?? false;
-      // Don't auto-hide while the viewer is in the control row.
-      if (mounted && playing && _row == _Row.seek && !_controller.starting) {
+      if (!mounted) return;
+      // Only auto-hide once playback is actually running and the viewer is on
+      // the seek bar (not paused, not still spinning up the transcode, not in
+      // the control row). Otherwise keep checking — the first 4s can elapse
+      // before playback begins, and we still want it to hide once it does.
+      final canHide = _row == _Row.seek &&
+          !_controller.starting &&
+          (_controller.videoValue?.isPlaying ?? false);
+      if (canHide) {
         setState(() => _overlayVisible = false);
         _rootFocus.requestFocus();
+      } else if (_overlayVisible) {
+        _scheduleHide();
       }
     });
   }
@@ -346,27 +368,20 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                final player = _controller.player;
-                if (player == null || !_controller.isReady) {
-                  return const ColoredBox(color: Colors.black);
-                }
-                return Center(
-                  child: BetterPlayer(key: _playerKey, controller: player),
-                );
-              },
-            ),
+            _video,
             if (_controller.fatalError)
               _ErrorOverlay(controller: _controller)
             else if (_overlayVisible)
-              TvStage(child: _Overlay(state: this))
-            else
-              const _MinimalOverlay(),
-            // Up Next surfaces near the end regardless of overlay state; the
-            // roll-over itself is automatic (maybeAdvance), so the card is
-            // informational — the control row's Next Episode jumps immediately.
+              // Transparent stage so the video shows through behind the overlay
+              // (its own scrims provide the dimming) — an opaque fill here is
+              // what made the video "cut out" when the controls came up.
+              TvStage(
+                background: Colors.transparent,
+                child: _Overlay(state: this),
+              ),
+            // When the overlay auto-hides we just show the video — no persistent
+            // "press OK" hint (every media player has worked this way for years).
+            // Up Next still surfaces near the end; the roll-over is automatic.
             _UpNextCard(controller: _controller),
           ],
         ),
@@ -470,21 +485,15 @@ class _Overlay extends StatelessWidget {
           ),
         ),
 
-        // Bottom transport: seekbar + hint + control row.
+        // Bottom transport: hint, then seek bar, then control row.
         Positioned(
           left: 96,
           right: 96,
-          bottom: 60,
+          bottom: 44,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _SeekBar(
-                position: pos.toDouble(),
-                duration: duration,
-                focused: seekFocused,
-              ),
-              const SizedBox(height: 14),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Row(
@@ -502,6 +511,12 @@ class _Overlay extends StatelessWidget {
                             color: ArgosyColors.faint)),
                   ],
                 ),
+              ),
+              const SizedBox(height: 12),
+              _SeekBar(
+                position: pos.toDouble(),
+                duration: duration,
+                focused: seekFocused,
               ),
               const SizedBox(height: 18),
               _ControlRow(
@@ -706,65 +721,6 @@ class _Glyph extends StatelessWidget {
                 fontSize: 15,
                 color: ArgosyColors.soft2)),
       ],
-    );
-  }
-}
-
-/// The hidden-overlay hint: a thin progress line + an "OK to show controls"
-/// pill (mirrors the design's minimal state).
-class _MinimalOverlay extends StatelessWidget {
-  const _MinimalOverlay();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Align(
-      alignment: Alignment.bottomCenter,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: 40),
-        child: _OkHint(),
-      ),
-    );
-  }
-}
-
-class _OkHint extends StatelessWidget {
-  const _OkHint();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0x800C0C0B),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: ArgosyColors.line2),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: ArgosyColors.line3),
-            ),
-            child: const Text('OK',
-                style: TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: ArgosyColors.cream)),
-          ),
-          const SizedBox(width: 11),
-          const Text('Show controls',
-              style: TextStyle(
-                  fontFamily: 'HankenGrotesk',
-                  fontSize: 16,
-                  color: ArgosyColors.soft)),
-        ],
-      ),
     );
   }
 }

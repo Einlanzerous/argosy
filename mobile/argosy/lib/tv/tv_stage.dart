@@ -13,17 +13,23 @@ import '../theme/argosy_colors.dart';
 /// 1920×1080 and a 16:9 panel share the same aspect ratio, so there's no
 /// letterboxing.
 class TvStage extends StatelessWidget {
-  const TvStage({super.key, required this.child});
+  const TvStage({super.key, required this.child, this.background});
 
   static const double designWidth = 1920;
   static const double designHeight = 1080;
 
   final Widget child;
 
+  /// Fill behind the scaled canvas. Defaults to the app background; pass
+  /// [Colors.transparent] when the stage scales a *transparent* layer over
+  /// something else (e.g. the player's control overlay above the video — an
+  /// opaque fill there would hide the video while audio kept playing).
+  final Color? background;
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: ArgosyColors.bg,
+      color: background ?? ArgosyColors.bg,
       child: Center(
         child: FittedBox(
           child: SizedBox(
