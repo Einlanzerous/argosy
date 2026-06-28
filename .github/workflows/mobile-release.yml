@@ -5,9 +5,27 @@ name: mobile-release
 #   track (skipped until PLAY_SERVICE_ACCOUNT_JSON is set).
 # - iOS: TestFlight upload, skipped until the Apple secrets are set (ARGY-82).
 # See mobile/argosy/android/RELEASE.md for the secret/runbook details.
+#
+# Trigger: release-please cuts the v* tag with the default GITHUB_TOKEN, and
+# GitHub deliberately won't fire `on: push: tags` for token-pushed tags. So the
+# real entrypoint is `workflow_call` from release-please.yml (gated on
+# release_created). `workflow_dispatch` lets you build any existing tag by hand,
+# and `push: tags` still catches tags pushed manually with user creds.
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. v0.9.0)"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. v0.9.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write # upload assets onto the release-please GitHub Release
@@ -26,6 +44,11 @@ jobs:
       PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The tag when invoked by release-please / workflow_dispatch; the
+          # pushed ref otherwise. At release time main HEAD == the tagged commit,
+          # but checking out the tag is correct for dispatching older tags too.
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -37,8 +60,9 @@ jobs:
       - name: derive version
         id: ver
         run: |
-          name="${GITHUB_REF_NAME#v}"
-          echo "name=$name" >> "$GITHUB_OUTPUT"
+          tag="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: decode upload keystore
@@ -77,7 +101,7 @@ jobs:
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk \
              "argosy-${{ steps.ver.outputs.name }}.apk"
-          gh release upload "$GITHUB_REF_NAME" \
+          gh release upload "${{ steps.ver.outputs.tag }}" \
             "argosy-${{ steps.ver.outputs.name }}.apk" --clobber
 
       # --- Play internal track: only when the service account secret exists ---
@@ -116,6 +140,8 @@ jobs:
         run: echo "::notice::TestFlight upload skipped — Apple secrets not set (ARGY-82; see ios/RELEASE.md)."
       - uses: actions/checkout@v4
         if: steps.apple.outputs.enabled == 'true'
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: subosito/flutter-action@v2
         if: steps.apple.outputs.enabled == 'true'
         with:

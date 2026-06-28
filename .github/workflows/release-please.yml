@@ -11,9 +11,26 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      # v4 sets `releases_created` (plural) at top level; per-package fields are
+      # prefixed by the manifest path (`.` is our single root package).
+      releases_created: ${{ steps.rp.outputs.releases_created }}
+      tag_name: ${{ steps.rp.outputs['.--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@v4
+        id: rp
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # release-please cuts the v* tag with GITHUB_TOKEN, which can't fire a
+  # downstream `on: push: tags` run — so trigger the signed mobile build here,
+  # in the same (real-user push-to-main) run, once a release was actually cut.
+  mobile-release:
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    uses: ./.github/workflows/mobile-release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit
