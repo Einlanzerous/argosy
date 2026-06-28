@@ -84,6 +84,7 @@ Class | Method | HTTP request | Description
 *AuthApi* | [**setDevicePreferences**](doc//AuthApi.md#setdevicepreferences) | **PUT** /api/v1/preferences | Update the calling device's playback preferences
 *AuthApi* | [**setUserPreferences**](doc//AuthApi.md#setuserpreferences) | **PUT** /api/v1/user/preferences | Update the calling profile's account-wide preferences
 *AuthApi* | [**startLink**](doc//AuthApi.md#startlink) | **POST** /api/v1/auth/link/start | Begin TV code-pairing — mint a short code for the TV to display
+*AuthApi* | [**switchDeviceProfile**](doc//AuthApi.md#switchdeviceprofile) | **POST** /api/v1/auth/devices/switch | Re-bind the calling device to another profile (in-place switch)
 *AuthApi* | [**updateProfile**](doc//AuthApi.md#updateprofile) | **PATCH** /api/v1/auth/profiles/{userId} | Rename a profile or change its role (admin only)
 *LibraryApi* | [**addItemLabel**](doc//LibraryApi.md#additemlabel) | **POST** /api/v1/items/{itemId}/labels | Add one of the profile's custom labels to a film
 *LibraryApi* | [**addSeriesLabel**](doc//LibraryApi.md#addserieslabel) | **POST** /api/v1/series/{seriesId}/labels | Add one of the profile's custom labels to a series
@@ -146,6 +147,7 @@ Class | Method | HTTP request | Description
  - [DeviceRegistrationRequest](doc//DeviceRegistrationRequest.md)
  - [DeviceRegistrationResponse](doc//DeviceRegistrationResponse.md)
  - [DeviceRenameRequest](doc//DeviceRenameRequest.md)
+ - [DeviceSwitchRequest](doc//DeviceSwitchRequest.md)
  - [EpisodeSummary](doc//EpisodeSummary.md)
  - [Error](doc//Error.md)
  - [Facet](doc//Facet.md)

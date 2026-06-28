@@ -207,6 +207,8 @@ class ApiClient {
           return DeviceRegistrationResponse.fromJson(value);
         case 'DeviceRenameRequest':
           return DeviceRenameRequest.fromJson(value);
+        case 'DeviceSwitchRequest':
+          return DeviceSwitchRequest.fromJson(value);
         case 'EpisodeSummary':
           return EpisodeSummary.fromJson(value);
         case 'Error':

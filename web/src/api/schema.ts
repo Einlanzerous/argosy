@@ -111,6 +111,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/devices/switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-bind the calling device to another profile (in-place switch)
+         * @description Re-points the calling device to a different profile in the same account without re-pairing — the device token is unchanged. Switching INTO an admin profile requires the account password so a viewer device can't silently assume admin. Returns the refreshed session.
+         */
+        post: operations["switchDeviceProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/devices/{deviceId}": {
         parameters: {
             query?: never;
@@ -1105,6 +1125,18 @@ export interface components {
         DeviceRenameRequest: {
             name: string;
         };
+        DeviceSwitchRequest: {
+            /**
+             * Format: uuid
+             * @description The profile (in the same account) to bind this device to.
+             */
+            userId: string;
+            /**
+             * Format: password
+             * @description Account password. Required only when switching INTO an admin profile; ignored for viewer targets.
+             */
+            password?: string;
+        };
         ProfileSummary: {
             /** Format: uuid */
             id: string;
@@ -1712,6 +1744,34 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    switchDeviceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceSwitchRequest"];
+            };
+        };
+        responses: {
+            /** @description Switched; the session reflects the new profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     revokeDevice: {

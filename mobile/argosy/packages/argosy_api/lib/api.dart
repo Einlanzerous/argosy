@@ -45,6 +45,7 @@ part 'model/device_ref.dart';
 part 'model/device_registration_request.dart';
 part 'model/device_registration_response.dart';
 part 'model/device_rename_request.dart';
+part 'model/device_switch_request.dart';
 part 'model/episode_summary.dart';
 part 'model/error.dart';
 part 'model/facet.dart';

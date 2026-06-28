@@ -132,6 +132,25 @@ class AuthController extends Notifier<AuthStatus> {
     state = AuthStatus.authenticated;
   }
 
+  /// In-place profile switch (ARGY-85): re-point THIS device to [userId] without
+  /// re-pairing. The device token is unchanged — only its profile binding moves.
+  /// [password] is the account password, required by the server only when the
+  /// target is an admin profile (so a viewer can't silently assume admin); pass
+  /// null for viewer targets. Callers refresh profile-keyed providers (home,
+  /// prefs, fleet, session) on success. Returns the refreshed session.
+  Future<Session?> switchProfile({
+    required String userId,
+    String? password,
+  }) async {
+    try {
+      return await ref.read(authApiProvider).switchDeviceProfile(
+            DeviceSwitchRequest(userId: userId, password: password),
+          );
+    } catch (e) {
+      throw mapApiError(e);
+    }
+  }
+
   /// Sign out / re-pair. Keeps the server address (only the token is cleared).
   Future<void> signOut() async {
     await ref.read(tokenStoreProvider).clearToken();

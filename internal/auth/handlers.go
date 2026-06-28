@@ -23,6 +23,7 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("GET /api/v1/auth/devices", requireAuth(store, handleListDevices(store)))
 	mux.Handle("DELETE /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRevokeDevice(store)))
 	mux.Handle("PATCH /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRenameDevice(store)))
+	mux.Handle("POST /api/v1/auth/devices/switch", requireAuth(store, handleSwitchDeviceProfile(store)))
 	mux.Handle("GET /api/v1/auth/me", requireAuth(store, handleMe()))
 	// Profile management (ARGY-65): any signed-in profile may list; create/edit/
 	// delete are admin-gated.
@@ -249,6 +250,26 @@ func handleDeleteProfile(store *Store) http.HandlerFunc {
 	}
 }
 
+func handleSwitchDeviceProfile(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		var req api.DeviceSwitchRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		password := ""
+		if req.Password != nil {
+			password = *req.Password
+		}
+		newSess, err := store.SwitchDeviceProfile(r.Context(), sess, req.UserId.String(), password)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, newSess)
+	}
+}
+
 func handleMe() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := SessionFromContext(r.Context())
@@ -388,6 +409,8 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrSelfDelete):
 		httpx.Error(w, http.StatusConflict, err.Error())
+	case errors.Is(err, ErrPasswordRequired), errors.Is(err, ErrWrongPassword):
+		httpx.Error(w, http.StatusForbidden, err.Error())
 	default:
 		httpx.Error(w, http.StatusInternalServerError, "internal error")
 	}

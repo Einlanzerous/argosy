@@ -18,3 +18,16 @@ final fleetDevicesProvider = FutureProvider.autoDispose<List<Device>>((
     });
   return live;
 });
+
+/// This device's current session (account, profile, device, role). autoDispose so
+/// it re-fetches after an in-place profile switch invalidates it (ARGY-85).
+final currentSessionProvider = FutureProvider.autoDispose<Session?>(
+  (ref) => ref.watch(authApiProvider).getCurrentSession(),
+);
+
+/// The account's profiles, for the in-place profile switcher (ARGY-85).
+/// autoDispose so the picker re-fetches each time it opens.
+final accountProfilesProvider =
+    FutureProvider.autoDispose<List<ProfileSummary>>(
+  (ref) async => await ref.watch(authApiProvider).listProfiles() ?? const [],
+);
