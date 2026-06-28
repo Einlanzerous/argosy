@@ -56,6 +56,18 @@ android {
             signingConfig = signingConfigs.getByName(
                 if (hasReleaseSigning) "release" else "debug",
             )
+            // AGP 9 flipped isMinifyEnabled to default-true for release. R8 then
+            // shrinks/obfuscates reflection-driven startup deps pulled in
+            // transitively by flutter_secure_storage (androidx.startup →
+            // WorkManager's WorkDatabase_Impl, Google Tink), so the release APK
+            // crashes on launch with "Unable to get provider
+            // androidx.startup.InitializationProvider" (ARGY-114). We don't need
+            // code/resource shrinking for a self-hosted client, so opt out
+            // explicitly. To re-enable shrinking later, flip both back on and add
+            // keep rules for androidx.work.**, androidx.startup.**,
+            // com.google.crypto.tink.**.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
