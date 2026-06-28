@@ -839,6 +839,63 @@ class AuthApi {
     return null;
   }
 
+  /// Re-bind the calling device to another profile (in-place switch)
+  ///
+  /// Re-points the calling device to a different profile in the same account without re-pairing — the device token is unchanged. Switching INTO an admin profile requires the account password so a viewer device can't silently assume admin. Returns the refreshed session. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [DeviceSwitchRequest] deviceSwitchRequest (required):
+  Future<Response> switchDeviceProfileWithHttpInfo(DeviceSwitchRequest deviceSwitchRequest, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/devices/switch';
+
+    // ignore: prefer_final_locals
+    Object? postBody = deviceSwitchRequest;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Re-bind the calling device to another profile (in-place switch)
+  ///
+  /// Re-points the calling device to a different profile in the same account without re-pairing — the device token is unchanged. Switching INTO an admin profile requires the account password so a viewer device can't silently assume admin. Returns the refreshed session. 
+  ///
+  /// Parameters:
+  ///
+  /// * [DeviceSwitchRequest] deviceSwitchRequest (required):
+  Future<Session?> switchDeviceProfile(DeviceSwitchRequest deviceSwitchRequest, { Future<void>? abortTrigger, }) async {
+    final response = await switchDeviceProfileWithHttpInfo(deviceSwitchRequest, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Session',) as Session;
+    
+    }
+    return null;
+  }
+
   /// Rename a profile or change its role (admin only)
   ///
   /// Omit a field to leave it unchanged. Demoting the only remaining admin to viewer is rejected so an account can never lock itself out. 

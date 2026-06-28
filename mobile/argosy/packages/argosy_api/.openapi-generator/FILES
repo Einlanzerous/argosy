@@ -26,6 +26,7 @@ lib/model/device_ref.dart
 lib/model/device_registration_request.dart
 lib/model/device_registration_response.dart
 lib/model/device_rename_request.dart
+lib/model/device_switch_request.dart
 lib/model/episode_summary.dart
 lib/model/error.dart
 lib/model/facet.dart

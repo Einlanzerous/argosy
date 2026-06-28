@@ -136,6 +136,38 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/auth/devices/switch:
+    post:
+      tags: [auth]
+      operationId: switchDeviceProfile
+      summary: Re-bind the calling device to another profile (in-place switch)
+      description: >
+        Re-points the calling device to a different profile in the same account
+        without re-pairing — the device token is unchanged. Switching INTO an
+        admin profile requires the account password so a viewer device can't
+        silently assume admin. Returns the refreshed session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceSwitchRequest"
+      responses:
+        "200":
+          description: Switched; the session reflects the new profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/auth/devices/{deviceId}:
     delete:
       tags: [auth]
@@ -1607,6 +1639,21 @@ components:
       properties:
         name:
           type: string
+
+    DeviceSwitchRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: The profile (in the same account) to bind this device to.
+        password:
+          type: string
+          format: password
+          description: >-
+            Account password. Required only when switching INTO an admin profile;
+            ignored for viewer targets.
 
     ProfileSummary:
       type: object

@@ -7,7 +7,9 @@ import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
 import '../../theme/button_styles.dart';
 import '../../widgets/async_view.dart';
+import '../account/account_providers.dart';
 import '../auth/auth_controller.dart';
+import '../home/home_providers.dart';
 import 'settings_controller.dart';
 
 /// Curated subtitle languages for the default-track preference. `null` = let the
@@ -169,28 +171,22 @@ class SettingsScreen extends ConsumerWidget {
             FilledButton.icon(
               style: ghostButtonStyle(context, minimumSize: const Size.fromHeight(48)),
               icon: const Icon(Icons.switch_account_outlined, size: 20),
-              label: const Text('Switch profile / re-pair'),
-              onPressed: () => _confirmReauth(
-                context,
-                ref,
-                title: 'Switch profile or server?',
-                body: 'This signs the device out so you can pick a different '
-                    'profile or server address, then re-pair.',
-                confirmLabel: 'Continue',
-              ),
+              label: const Text('Switch profile'),
+              onPressed: () => _switchProfile(context, ref),
             ),
             const SizedBox(height: 10),
             FilledButton.icon(
               style: ghostButtonStyle(context, minimumSize: const Size.fromHeight(48))
                   .copyWith(foregroundColor: WidgetStatePropertyAll(_danger)),
               icon: const Icon(Icons.logout, size: 20),
-              label: const Text('Sign out'),
+              label: const Text('Sign out / change server'),
               onPressed: () => _confirmReauth(
                 context,
                 ref,
                 title: 'Sign out?',
-                body: 'You can stay offline, but you will need to sign in and '
-                    're-pair this device to watch again.',
+                body: 'Signs this device out so you can sign in to a different '
+                    'account or server address, then re-pair. You can stay offline, '
+                    'but you will need to re-pair to watch again.',
                 confirmLabel: 'Sign out',
               ),
             ),
@@ -232,6 +228,16 @@ class SettingsScreen extends ConsumerWidget {
       // (server address pre-filled), where a different profile/server is chosen.
       await ref.read(authControllerProvider.notifier).signOut();
     }
+  }
+
+  /// In-place profile switch (ARGY-85): pick another profile in this account and
+  /// re-bind the device without re-pairing. Opens the picker sheet.
+  Future<void> _switchProfile(BuildContext context, WidgetRef ref) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: ArgosyColors.panel,
+      builder: (_) => const _ProfilePickerSheet(),
+    );
   }
 
   Future<void> _pickLanguage(BuildContext context, WidgetRef ref, String? current) async {
@@ -444,5 +450,151 @@ class _Pill extends StatelessWidget {
             )),
       ),
     );
+  }
+}
+
+/// In-place profile switcher (ARGY-85): lists the account's profiles and re-binds
+/// this device to the chosen one without re-pairing. The current profile is
+/// marked and not tappable; admin targets are gated behind the account password.
+class _ProfilePickerSheet extends ConsumerWidget {
+  const _ProfilePickerSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profiles = ref.watch(accountProfilesProvider);
+    final currentId = ref.watch(currentSessionProvider).value?.userId;
+    return SafeArea(
+      child: profiles.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.all(28),
+          child: Center(child: CircularProgressIndicator(color: ArgosyColors.accentHi)),
+        ),
+        error: (_, _) => const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text("Couldn't load profiles. Try again.",
+              style: TextStyle(color: ArgosyColors.dim)),
+        ),
+        data: (list) => ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text('Switch profile',
+                  style: TextStyle(
+                      color: ArgosyColors.cream,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
+            ),
+            for (final p in list)
+              _profileTile(context, ref, p, isCurrent: p.id == currentId),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _profileTile(
+    BuildContext context,
+    WidgetRef ref,
+    ProfileSummary p, {
+    required bool isCurrent,
+  }) {
+    final isAdmin = p.role == Role.admin;
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: context.argosy.accentWash,
+        child: Text(
+          p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
+          style: const TextStyle(color: ArgosyColors.accentHi, fontWeight: FontWeight.w700),
+        ),
+      ),
+      title: Text(p.name,
+          style: TextStyle(
+            color: isCurrent ? ArgosyColors.accentHi : ArgosyColors.cream,
+            fontWeight: FontWeight.w600,
+          )),
+      subtitle: Text(isAdmin ? 'Admin' : 'Viewer',
+          style: const TextStyle(color: ArgosyColors.dim, fontSize: 12)),
+      trailing: isCurrent
+          ? const Icon(Icons.check, color: ArgosyColors.accentHi, size: 20)
+          : (isAdmin
+              ? const Icon(Icons.lock_outline, color: ArgosyColors.dim, size: 18)
+              : null),
+      onTap: isCurrent ? null : () => _pick(context, ref, p),
+    );
+  }
+
+  Future<void> _pick(BuildContext context, WidgetRef ref, ProfileSummary p) async {
+    // Capture before any await so we don't touch a possibly-popped sheet context.
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    String? password;
+    if (p.role == Role.admin) {
+      password = await _promptPassword(context, p.name);
+      if (password == null || password.isEmpty) return; // cancelled / empty
+    }
+
+    try {
+      await ref
+          .read(authControllerProvider.notifier)
+          .switchProfile(userId: p.id, password: password);
+    } on ApiFailure catch (f) {
+      // Keep the sheet open so they can retry (e.g. wrong password → 403).
+      messenger.showSnackBar(SnackBar(content: Text(f.message)));
+      return;
+    }
+
+    // Refresh everything keyed to the active profile: session/role, the fleet
+    // (whose device name now points to the new profile), prefs, and home layout.
+    ref.invalidate(currentSessionProvider);
+    ref.invalidate(accountProfilesProvider);
+    ref.invalidate(fleetDevicesProvider);
+    ref.invalidate(settingsControllerProvider);
+    ref.invalidate(homeDataProvider);
+
+    navigator.pop();
+    messenger.showSnackBar(SnackBar(content: Text('Switched to ${p.name}')));
+  }
+
+  Future<String?> _promptPassword(BuildContext context, String profileName) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ArgosyColors.panel,
+        title: const Text('Account password', style: TextStyle(color: ArgosyColors.cream)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Switching to “$profileName” (an admin profile) needs the account password.',
+                style: const TextStyle(color: ArgosyColors.dim, fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              style: const TextStyle(color: ArgosyColors.cream),
+              decoration: const InputDecoration(hintText: 'Password'),
+              onSubmitted: (v) => Navigator.pop(ctx, v),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: ArgosyColors.dim)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Switch', style: TextStyle(color: ArgosyColors.accentHi)),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 }

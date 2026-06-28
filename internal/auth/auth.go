@@ -32,6 +32,11 @@ var (
 	ErrNameTaken    = errors.New("a profile with that name already exists")
 	ErrLastAdmin    = errors.New("the account must keep at least one admin")
 	ErrSelfDelete   = errors.New("you can't delete the profile you're signed in as")
+	// Device profile-switch (ARGY-85): escalating into an admin profile needs the
+	// account password. Both surface as 403 (never 401 — a bad switch password
+	// must not look like an expired token and sign the device out).
+	ErrPasswordRequired = errors.New("the account password is required to switch to an admin profile")
+	ErrWrongPassword    = errors.New("incorrect account password")
 )
 
 // Store is the auth data layer over the connection pool.
@@ -248,6 +253,67 @@ func (s *Store) RenameDevice(ctx context.Context, sess api.Session, deviceID ope
 		 RETURNING id::text, name, platform, user_id::text, last_seen_at, revoked_at, created_at`,
 		name, deviceID.String())
 	return scanDevice(row)
+}
+
+// SwitchDeviceProfile re-points the calling device to another profile in the same
+// account without re-pairing — the device token is unchanged, only its user_id
+// binding moves. Switching into an admin profile requires the account password so
+// a viewer device can't silently assume admin. Returns the refreshed session.
+func (s *Store) SwitchDeviceProfile(ctx context.Context, sess api.Session, targetUserID, password string) (api.Session, error) {
+	accountID := sess.AccountId.String()
+	var role string
+	err := s.pool.QueryRow(ctx,
+		`SELECT role FROM users WHERE id = $1 AND account_id = $2`, targetUserID, accountID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.Session{}, ErrNotFound
+	}
+	if err != nil {
+		return api.Session{}, err
+	}
+	// Escalation guard: assuming an admin profile requires the account password.
+	if role == "admin" {
+		if password == "" {
+			return api.Session{}, ErrPasswordRequired
+		}
+		ok, err := s.checkAccountPassword(ctx, accountID, password)
+		if err != nil {
+			return api.Session{}, err
+		}
+		if !ok {
+			return api.Session{}, ErrWrongPassword
+		}
+	}
+	// Re-point the current (non-revoked) device. Scope to the account as defense
+	// in depth even though the device id comes from the authenticated session.
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE devices SET user_id = $1 WHERE id = $2 AND account_id = $3 AND revoked_at IS NULL`,
+		targetUserID, sess.DeviceId.String(), accountID)
+	if err != nil {
+		return api.Session{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return api.Session{}, ErrNotFound
+	}
+	return api.Session{
+		AccountId: sess.AccountId,
+		DeviceId:  sess.DeviceId,
+		UserId:    parseUUID(targetUserID),
+		Role:      api.Role(role),
+	}, nil
+}
+
+// checkAccountPassword reports whether password matches the account's bcrypt hash.
+func (s *Store) checkAccountPassword(ctx context.Context, accountID, password string) (bool, error) {
+	var hash string
+	err := s.pool.QueryRow(ctx,
+		`SELECT coalesce(password_hash, '') FROM accounts WHERE id = $1`, accountID).Scan(&hash)
+	if err != nil {
+		return false, err
+	}
+	if hash == "" {
+		return false, nil
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil, nil
 }
 
 // GetDevicePreferences returns a device's playback preferences, or sensible

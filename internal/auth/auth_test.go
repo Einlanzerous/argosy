@@ -464,3 +464,84 @@ func TestProfileManagement(t *testing.T) {
 
 func strPtr(s string) *string      { return &s }
 func rolePtr(r api.Role) *api.Role { return &r }
+
+// TestSwitchDeviceProfile covers ARGY-85: an in-place profile switch keeps the
+// device token, moves freely to a viewer profile, and gates escalation into an
+// admin profile behind the account password.
+func TestSwitchDeviceProfile(t *testing.T) {
+	store, ctx := testStore(t)
+	username := uniqueUsername()
+	password := "pw-" + uniqueUsername()
+	if _, err := store.CreateAccount(ctx, username, password, "Switch Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	login, err := store.Login(ctx, username, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accountID := login.Account.Id.String()
+	adminID := login.Profiles[0].Id
+
+	// A second admin and a viewer to switch between.
+	otherAdmin, err := store.CreateProfile(ctx, accountID, "Co-Admin", api.Admin)
+	if err != nil {
+		t.Fatalf("create co-admin: %v", err)
+	}
+	viewer, err := store.CreateProfile(ctx, accountID, "Kids", api.Viewer)
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+
+	// Pair a device on the admin profile.
+	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+		Username: username, Password: password, UserId: adminID, DeviceName: "Phone",
+	})
+	if err != nil {
+		t.Fatalf("register device: %v", err)
+	}
+	sess, err := store.AuthenticateDevice(ctx, reg.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Switch admin -> viewer: free (no password), token unchanged.
+	newSess, err := store.SwitchDeviceProfile(ctx, sess, viewer.Id.String(), "")
+	if err != nil {
+		t.Fatalf("switch to viewer: %v", err)
+	}
+	if newSess.UserId != viewer.Id || newSess.Role != api.Viewer {
+		t.Errorf("after switch session = %v/%v, want viewer", newSess.UserId, newSess.Role)
+	}
+	if newSess.DeviceId != sess.DeviceId {
+		t.Errorf("device id changed on switch: %v -> %v", sess.DeviceId, newSess.DeviceId)
+	}
+	// The same token now authenticates AS the viewer (binding moved, token kept).
+	reauth, err := store.AuthenticateDevice(ctx, reg.Token)
+	if err != nil {
+		t.Fatalf("re-auth after switch: %v", err)
+	}
+	if reauth.UserId != viewer.Id || reauth.Role != api.Viewer {
+		t.Errorf("token now resolves to %v/%v, want viewer", reauth.UserId, reauth.Role)
+	}
+
+	// From the viewer session, escalating to an admin profile needs the password.
+	viewerSess := reauth
+	if _, err := store.SwitchDeviceProfile(ctx, viewerSess, otherAdmin.Id.String(), ""); !errors.Is(err, ErrPasswordRequired) {
+		t.Errorf("escalate without password: got %v, want ErrPasswordRequired", err)
+	}
+	if _, err := store.SwitchDeviceProfile(ctx, viewerSess, otherAdmin.Id.String(), "wrong"); !errors.Is(err, ErrWrongPassword) {
+		t.Errorf("escalate with wrong password: got %v, want ErrWrongPassword", err)
+	}
+	adminSess, err := store.SwitchDeviceProfile(ctx, viewerSess, otherAdmin.Id.String(), password)
+	if err != nil {
+		t.Fatalf("escalate with correct password: %v", err)
+	}
+	if adminSess.UserId != otherAdmin.Id || adminSess.Role != api.Admin {
+		t.Errorf("after escalation session = %v/%v, want co-admin/admin", adminSess.UserId, adminSess.Role)
+	}
+
+	// Switching to a profile outside the account is a not-found.
+	if _, err := store.SwitchDeviceProfile(ctx, adminSess, login.Account.Id.String(), ""); !errors.Is(err, ErrNotFound) {
+		t.Errorf("switch to foreign id: got %v, want ErrNotFound", err)
+	}
+}
