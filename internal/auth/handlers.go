@@ -24,6 +24,12 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("DELETE /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRevokeDevice(store)))
 	mux.Handle("PATCH /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRenameDevice(store)))
 	mux.Handle("GET /api/v1/auth/me", requireAuth(store, handleMe()))
+	// Profile management (ARGY-65): any signed-in profile may list; create/edit/
+	// delete are admin-gated.
+	mux.Handle("GET /api/v1/auth/profiles", requireAuth(store, handleListProfiles(store)))
+	mux.Handle("POST /api/v1/auth/profiles", requireAdmin(store, handleCreateProfile(store)))
+	mux.Handle("PATCH /api/v1/auth/profiles/{userId}", requireAdmin(store, handleUpdateProfile(store)))
+	mux.Handle("DELETE /api/v1/auth/profiles/{userId}", requireAdmin(store, handleDeleteProfile(store)))
 	// TV code-pairing (ARGY-112): start + poll are unauthenticated (a TV with no
 	// session yet); approve is the authenticated web user blessing the code.
 	mux.HandleFunc("POST /api/v1/auth/link/start", handleStartLink(store))
@@ -178,6 +184,71 @@ func handleRenameDevice(store *Store) http.HandlerFunc {
 	}
 }
 
+func handleListProfiles(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		profiles, err := store.ListProfiles(r.Context(), sess.AccountId.String())
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		httpx.JSON(w, http.StatusOK, profiles)
+	}
+}
+
+func handleCreateProfile(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		var req api.ProfileCreateRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		p, err := store.CreateProfile(r.Context(), sess.AccountId.String(), req.Name, req.Role)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusCreated, p)
+	}
+}
+
+func handleUpdateProfile(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		id, err := uuid.Parse(r.PathValue("userId"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid profile id")
+			return
+		}
+		var req api.ProfileUpdateRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		p, err := store.UpdateProfile(r.Context(), sess.AccountId.String(), id.String(), req.Name, req.Role)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, p)
+	}
+}
+
+func handleDeleteProfile(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		id, err := uuid.Parse(r.PathValue("userId"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid profile id")
+			return
+		}
+		if err := store.DeleteProfile(r.Context(), sess, id.String()); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func handleMe() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := SessionFromContext(r.Context())
@@ -259,6 +330,12 @@ func requireAuth(store *Store, next http.HandlerFunc) http.Handler {
 	return Middleware(store)(next)
 }
 
+// requireAdmin authenticates then gates on the admin role (RequireAdmin reads the
+// session Middleware injects, so it must be composed inside it).
+func requireAdmin(store *Store, next http.HandlerFunc) http.Handler {
+	return Middleware(store)(RequireAdmin(next))
+}
+
 // RequireAdmin wraps next so only an admin session reaches it; a viewer gets
 // 403. It must be composed *inside* Middleware (it reads the session from the
 // context Middleware populates): e.g. mw(auth.RequireAdmin(handler)).
@@ -307,6 +384,10 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusForbidden, "forbidden")
 	case errors.Is(err, ErrNotFound):
 		httpx.Error(w, http.StatusNotFound, "not found")
+	case errors.Is(err, ErrInvalidInput):
+		httpx.Error(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrSelfDelete):
+		httpx.Error(w, http.StatusConflict, err.Error())
 	default:
 		httpx.Error(w, http.StatusInternalServerError, "internal error")
 	}

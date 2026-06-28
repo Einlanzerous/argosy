@@ -191,6 +191,117 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/auth/profiles:
+    get:
+      tags: [auth]
+      operationId: listProfiles
+      summary: List the current account's profiles
+      description: >
+        Returns every profile in the caller's account with its role and how many
+        active devices are bound to it. Any signed-in profile may list; creating,
+        editing, and deleting profiles is admin-only.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProfileSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [auth]
+      operationId: createProfile
+      summary: Create a profile (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileCreateRequest"
+      responses:
+        "201":
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/auth/profiles/{userId}:
+    patch:
+      tags: [auth]
+      operationId: updateProfile
+      summary: Rename a profile or change its role (admin only)
+      description: >
+        Omit a field to leave it unchanged. Demoting the only remaining admin to
+        viewer is rejected so an account can never lock itself out.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [auth]
+      operationId: deleteProfile
+      summary: Delete a profile (admin only)
+      description: >
+        Devices bound to the deleted profile are unbound — they keep working but
+        drop to viewer access until reassigned. The account must keep at least
+        one admin, and you can't delete the profile you're currently signed in as.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Profile deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/auth/link/start:
     post:
       tags: [auth]
@@ -1244,6 +1355,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    BadRequest:
+      description: The request was malformed or failed validation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The request conflicts with the current state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
 
   schemas:
     Error:
@@ -1484,6 +1607,39 @@ components:
       properties:
         name:
           type: string
+
+    ProfileSummary:
+      type: object
+      required: [id, name, role, deviceCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        deviceCount:
+          type: integer
+          description: Number of active (non-revoked) devices currently bound to this profile.
+
+    ProfileCreateRequest:
+      type: object
+      required: [name, role]
+      properties:
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+
+    ProfileUpdateRequest:
+      type: object
+      description: Fields to change; omit a field to leave it unchanged.
+      properties:
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
 
     UserPreferences:
       type: object

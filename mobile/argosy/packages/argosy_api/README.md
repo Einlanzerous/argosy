@@ -69,11 +69,14 @@ All URIs are relative to *http://localhost*
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 *AuthApi* | [**approveLink**](doc//AuthApi.md#approvelink) | **POST** /api/v1/auth/link/{code}/approve | Approve a TV pairing code from a signed-in session
+*AuthApi* | [**createProfile**](doc//AuthApi.md#createprofile) | **POST** /api/v1/auth/profiles | Create a profile (admin only)
+*AuthApi* | [**deleteProfile**](doc//AuthApi.md#deleteprofile) | **DELETE** /api/v1/auth/profiles/{userId} | Delete a profile (admin only)
 *AuthApi* | [**getCurrentSession**](doc//AuthApi.md#getcurrentsession) | **GET** /api/v1/auth/me | Resolve the current (account, profile, device) from the token
 *AuthApi* | [**getDevicePreferences**](doc//AuthApi.md#getdevicepreferences) | **GET** /api/v1/preferences | Get the calling device's playback preferences
 *AuthApi* | [**getLinkStatus**](doc//AuthApi.md#getlinkstatus) | **GET** /api/v1/auth/link/{code} | Poll a pairing code; returns the device token once approved
 *AuthApi* | [**getUserPreferences**](doc//AuthApi.md#getuserpreferences) | **GET** /api/v1/user/preferences | Get the calling profile's account-wide preferences
 *AuthApi* | [**listDevices**](doc//AuthApi.md#listdevices) | **GET** /api/v1/auth/devices | List devices in the current account (the Fleet)
+*AuthApi* | [**listProfiles**](doc//AuthApi.md#listprofiles) | **GET** /api/v1/auth/profiles | List the current account's profiles
 *AuthApi* | [**login**](doc//AuthApi.md#login) | **POST** /api/v1/auth/login | Authenticate an account and list its profiles
 *AuthApi* | [**registerDevice**](doc//AuthApi.md#registerdevice) | **POST** /api/v1/auth/devices | Register a device for a profile and issue a device token
 *AuthApi* | [**renameDevice**](doc//AuthApi.md#renamedevice) | **PATCH** /api/v1/auth/devices/{deviceId} | Rename a device in the Fleet
@@ -81,6 +84,7 @@ Class | Method | HTTP request | Description
 *AuthApi* | [**setDevicePreferences**](doc//AuthApi.md#setdevicepreferences) | **PUT** /api/v1/preferences | Update the calling device's playback preferences
 *AuthApi* | [**setUserPreferences**](doc//AuthApi.md#setuserpreferences) | **PUT** /api/v1/user/preferences | Update the calling profile's account-wide preferences
 *AuthApi* | [**startLink**](doc//AuthApi.md#startlink) | **POST** /api/v1/auth/link/start | Begin TV code-pairing — mint a short code for the TV to display
+*AuthApi* | [**updateProfile**](doc//AuthApi.md#updateprofile) | **PATCH** /api/v1/auth/profiles/{userId} | Rename a profile or change its role (admin only)
 *LibraryApi* | [**addItemLabel**](doc//LibraryApi.md#additemlabel) | **POST** /api/v1/items/{itemId}/labels | Add one of the profile's custom labels to a film
 *LibraryApi* | [**addSeriesLabel**](doc//LibraryApi.md#addserieslabel) | **POST** /api/v1/series/{seriesId}/labels | Add one of the profile's custom labels to a series
 *LibraryApi* | [**addVaultItem**](doc//LibraryApi.md#addvaultitem) | **POST** /api/v1/vaults/{vaultId}/items | Add a film or series to a vault
@@ -159,6 +163,9 @@ Class | Method | HTTP request | Description
  - [PlayState](doc//PlayState.md)
  - [PlaybackInfo](doc//PlaybackInfo.md)
  - [PlaybackSession](doc//PlaybackSession.md)
+ - [ProfileCreateRequest](doc//ProfileCreateRequest.md)
+ - [ProfileSummary](doc//ProfileSummary.md)
+ - [ProfileUpdateRequest](doc//ProfileUpdateRequest.md)
  - [ProgressUpdate](doc//ProgressUpdate.md)
  - [ReorderVaultRequest](doc//ReorderVaultRequest.md)
  - [Role](doc//Role.md)

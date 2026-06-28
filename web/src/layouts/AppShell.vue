@@ -16,6 +16,7 @@ const fullBleed = computed(() => ['home', 'library'].includes(String(route.name)
 // The bar's pill search is hidden on Library, which has its own inline search.
 const showBarSearch = computed(() => String(route.name) !== 'library')
 const initial = computed(() => (session.profileName || 'Argosy').charAt(0).toUpperCase())
+const isAdmin = computed(() => session.session?.role === 'admin')
 
 function goHome(): void {
   void router.push({ name: 'home' })
@@ -62,6 +63,9 @@ function logout(): void {
               </button>
               <button class="menu-item" type="button" @click="nav('fleet')">
                 <span class="mi">⛴</span> Fleet · Devices
+              </button>
+              <button v-if="isAdmin" class="menu-item" type="button" @click="nav('profiles')">
+                <span class="mi">☻</span> Profiles
               </button>
               <button class="menu-item danger" type="button" @click="logout">
                 <span class="mi">⎋</span> Log out

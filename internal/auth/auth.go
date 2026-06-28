@@ -10,11 +10,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"golang.org/x/crypto/bcrypt"
@@ -25,6 +27,11 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrForbidden          = errors.New("forbidden")
 	ErrNotFound           = errors.New("not found")
+	// Profile-management conflicts (ARGY-65), surfaced as 400/409.
+	ErrInvalidInput = errors.New("invalid input")
+	ErrNameTaken    = errors.New("a profile with that name already exists")
+	ErrLastAdmin    = errors.New("the account must keep at least one admin")
+	ErrSelfDelete   = errors.New("you can't delete the profile you're signed in as")
 )
 
 // Store is the auth data layer over the connection pool.
@@ -379,6 +386,151 @@ func (s *Store) profiles(ctx context.Context, accountID string) ([]api.UserProfi
 		out = append(out, api.UserProfile{Id: parseUUID(idStr), Name: name, Role: api.Role(role)})
 	}
 	return out, rows.Err()
+}
+
+// ListProfiles returns every profile in the account with its active (non-revoked)
+// device count, so the management UI can warn before deleting a profile in use.
+func (s *Store) ListProfiles(ctx context.Context, accountID string) ([]api.ProfileSummary, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT u.id::text, u.name, u.role,
+		        (SELECT count(*) FROM devices d WHERE d.user_id = u.id AND d.revoked_at IS NULL)
+		 FROM users u WHERE u.account_id = $1 ORDER BY u.name`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []api.ProfileSummary{}
+	for rows.Next() {
+		var idStr, name, role string
+		var count int
+		if err := rows.Scan(&idStr, &name, &role, &count); err != nil {
+			return nil, err
+		}
+		out = append(out, api.ProfileSummary{Id: parseUUID(idStr), Name: name, Role: api.Role(role), DeviceCount: count})
+	}
+	return out, rows.Err()
+}
+
+// CreateProfile adds a profile to the account. Names are unique per account.
+func (s *Store) CreateProfile(ctx context.Context, accountID, name string, role api.Role) (api.ProfileSummary, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || !validRole(role) {
+		return api.ProfileSummary{}, ErrInvalidInput
+	}
+	var idStr string
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO users (account_id, name, role) VALUES ($1, $2, $3) RETURNING id::text`,
+		accountID, name, string(role)).Scan(&idStr)
+	if isUniqueViolation(err) {
+		return api.ProfileSummary{}, ErrNameTaken
+	}
+	if err != nil {
+		return api.ProfileSummary{}, err
+	}
+	return api.ProfileSummary{Id: parseUUID(idStr), Name: name, Role: role, DeviceCount: 0}, nil
+}
+
+// UpdateProfile renames a profile and/or changes its role; nil fields are left
+// as-is. Demoting the only admin is refused so an account can't lock itself out.
+func (s *Store) UpdateProfile(ctx context.Context, accountID, userID string, name *string, role *api.Role) (api.ProfileSummary, error) {
+	var curRole string
+	err := s.pool.QueryRow(ctx,
+		`SELECT role FROM users WHERE id = $1 AND account_id = $2`, userID, accountID).Scan(&curRole)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.ProfileSummary{}, ErrNotFound
+	}
+	if err != nil {
+		return api.ProfileSummary{}, err
+	}
+
+	var nameArg *string
+	if name != nil {
+		trimmed := strings.TrimSpace(*name)
+		if trimmed == "" {
+			return api.ProfileSummary{}, ErrInvalidInput
+		}
+		nameArg = &trimmed
+	}
+	var roleArg *string
+	if role != nil {
+		if !validRole(*role) {
+			return api.ProfileSummary{}, ErrInvalidInput
+		}
+		// Demoting an admin: make sure another admin remains.
+		if *role == api.Viewer && curRole == "admin" {
+			ok, err := s.hasOtherAdmin(ctx, accountID, userID)
+			if err != nil {
+				return api.ProfileSummary{}, err
+			}
+			if !ok {
+				return api.ProfileSummary{}, ErrLastAdmin
+			}
+		}
+		r := string(*role)
+		roleArg = &r
+	}
+
+	var idStr, newName, newRole string
+	var count int
+	err = s.pool.QueryRow(ctx,
+		`UPDATE users SET name = COALESCE($1, name), role = COALESCE($2, role), updated_at = now()
+		 WHERE id = $3 AND account_id = $4
+		 RETURNING id::text, name, role,
+		   (SELECT count(*) FROM devices d WHERE d.user_id = users.id AND d.revoked_at IS NULL)`,
+		nameArg, roleArg, userID, accountID).Scan(&idStr, &newName, &newRole, &count)
+	if isUniqueViolation(err) {
+		return api.ProfileSummary{}, ErrNameTaken
+	}
+	if err != nil {
+		return api.ProfileSummary{}, err
+	}
+	return api.ProfileSummary{Id: parseUUID(idStr), Name: newName, Role: api.Role(newRole), DeviceCount: count}, nil
+}
+
+// DeleteProfile removes a profile from the account. Devices bound to it are
+// unbound by the FK (ON DELETE SET NULL) and drop to viewer access. The account
+// must keep an admin, and you can't delete the profile you're signed in as.
+func (s *Store) DeleteProfile(ctx context.Context, sess api.Session, userID string) error {
+	if userID == sess.UserId.String() {
+		return ErrSelfDelete
+	}
+	accountID := sess.AccountId.String()
+	var role string
+	err := s.pool.QueryRow(ctx,
+		`SELECT role FROM users WHERE id = $1 AND account_id = $2`, userID, accountID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if role == "admin" {
+		ok, err := s.hasOtherAdmin(ctx, accountID, userID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrLastAdmin
+		}
+	}
+	_, err = s.pool.Exec(ctx, `DELETE FROM users WHERE id = $1 AND account_id = $2`, userID, accountID)
+	return err
+}
+
+// hasOtherAdmin reports whether the account has an admin other than excludeID.
+func (s *Store) hasOtherAdmin(ctx context.Context, accountID, excludeID string) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT exists(SELECT 1 FROM users WHERE account_id = $1 AND role = 'admin' AND id <> $2)`,
+		accountID, excludeID).Scan(&ok)
+	return ok, err
+}
+
+func validRole(r api.Role) bool { return r == api.Admin || r == api.Viewer }
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // row is satisfied by both pgx.Row and pgx.Rows.

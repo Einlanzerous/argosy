@@ -70,6 +70,109 @@ class AuthApi {
     }
   }
 
+  /// Create a profile (admin only)
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [ProfileCreateRequest] profileCreateRequest (required):
+  Future<Response> createProfileWithHttpInfo(ProfileCreateRequest profileCreateRequest, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/profiles';
+
+    // ignore: prefer_final_locals
+    Object? postBody = profileCreateRequest;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Create a profile (admin only)
+  ///
+  /// Parameters:
+  ///
+  /// * [ProfileCreateRequest] profileCreateRequest (required):
+  Future<ProfileSummary?> createProfile(ProfileCreateRequest profileCreateRequest, { Future<void>? abortTrigger, }) async {
+    final response = await createProfileWithHttpInfo(profileCreateRequest, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'ProfileSummary',) as ProfileSummary;
+    
+    }
+    return null;
+  }
+
+  /// Delete a profile (admin only)
+  ///
+  /// Devices bound to the deleted profile are unbound — they keep working but drop to viewer access until reassigned. The account must keep at least one admin, and you can't delete the profile you're currently signed in as. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] userId (required):
+  Future<Response> deleteProfileWithHttpInfo(String userId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/profiles/{userId}'
+      .replaceAll('{userId}', userId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'DELETE',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Delete a profile (admin only)
+  ///
+  /// Devices bound to the deleted profile are unbound — they keep working but drop to viewer access until reassigned. The account must keep at least one admin, and you can't delete the profile you're currently signed in as. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] userId (required):
+  Future<void> deleteProfile(String userId, { Future<void>? abortTrigger, }) async {
+    final response = await deleteProfileWithHttpInfo(userId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Resolve the current (account, profile, device) from the token
   ///
   /// Note: This method returns the HTTP [Response].
@@ -305,6 +408,58 @@ class AuthApi {
       final responseBody = await _decodeBodyBytes(response);
       return (await apiClient.deserializeAsync(responseBody, 'List<Device>') as List)
         .cast<Device>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
+  /// List the current account's profiles
+  ///
+  /// Returns every profile in the caller's account with its role and how many active devices are bound to it. Any signed-in profile may list; creating, editing, and deleting profiles is admin-only. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> listProfilesWithHttpInfo({ Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/profiles';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// List the current account's profiles
+  ///
+  /// Returns every profile in the caller's account with its role and how many active devices are bound to it. Any signed-in profile may list; creating, editing, and deleting profiles is admin-only. 
+  Future<List<ProfileSummary>?> listProfiles({ Future<void>? abortTrigger, }) async {
+    final response = await listProfilesWithHttpInfo(abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<ProfileSummary>') as List)
+        .cast<ProfileSummary>()
         .toList(growable: false);
 
     }
@@ -679,6 +834,68 @@ class AuthApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'LinkStartResponse',) as LinkStartResponse;
+    
+    }
+    return null;
+  }
+
+  /// Rename a profile or change its role (admin only)
+  ///
+  /// Omit a field to leave it unchanged. Demoting the only remaining admin to viewer is rejected so an account can never lock itself out. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] userId (required):
+  ///
+  /// * [ProfileUpdateRequest] profileUpdateRequest (required):
+  Future<Response> updateProfileWithHttpInfo(String userId, ProfileUpdateRequest profileUpdateRequest, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/profiles/{userId}'
+      .replaceAll('{userId}', userId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = profileUpdateRequest;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'PATCH',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Rename a profile or change its role (admin only)
+  ///
+  /// Omit a field to leave it unchanged. Demoting the only remaining admin to viewer is rejected so an account can never lock itself out. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] userId (required):
+  ///
+  /// * [ProfileUpdateRequest] profileUpdateRequest (required):
+  Future<ProfileSummary?> updateProfile(String userId, ProfileUpdateRequest profileUpdateRequest, { Future<void>? abortTrigger, }) async {
+    final response = await updateProfileWithHttpInfo(userId, profileUpdateRequest, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'ProfileSummary',) as ProfileSummary;
     
     }
     return null;
