@@ -14,24 +14,35 @@ export '../../theme/button_styles.dart' show brassButtonStyle, ghostButtonStyle;
 /// The full-bleed backdrop at the top of a detail screen: landscape artwork
 /// (falling back to the poster, then a hatch placeholder) under a charcoal
 /// fade so the overlaid title stays legible.
+///
+/// Height scales with the viewport so the artwork carries real weight on tall
+/// screens (a 10" tablet in portrait) the way it already does in a phone's
+/// short landscape — [heightFactor] is the fraction of screen height it claims,
+/// floored at [minHeight] so a phone's landscape strip never shrinks below what
+/// reads well. Films lean toward a full "hero" fill; series claim a little less
+/// so the first episode rows peek below as a teaser.
 class DetailBackdrop extends ConsumerWidget {
   const DetailBackdrop({
     super.key,
     required this.backdropUrl,
     required this.posterUrl,
     required this.child,
-    this.height = 340,
+    this.heightFactor = 0.5,
+    this.minHeight = 340,
   });
 
   final String? backdropUrl;
   final String? posterUrl;
   final Widget child;
-  final double height;
+  final double heightFactor;
+  final double minHeight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final art = ref.watch(artworkResolverProvider);
     final bg = art(backdropUrl ?? posterUrl);
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final height = (screenHeight * heightFactor).clamp(minHeight, screenHeight);
 
     return SizedBox(
       height: height,

@@ -125,6 +125,9 @@ class _BodyState extends State<_Body> {
       padding: EdgeInsets.zero,
       children: [
         DetailBackdrop(
+          // A touch shorter than a film so the first episode rows peek below as
+          // a teaser — most viewers want to start/resume, not study the list.
+          heightFactor: 0.52,
           backdropUrl: series.backdropUrl,
           posterUrl: series.posterUrl,
           child: Column(

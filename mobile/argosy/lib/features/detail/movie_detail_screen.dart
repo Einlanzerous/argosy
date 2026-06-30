@@ -66,6 +66,9 @@ class _Body extends StatelessWidget {
       padding: EdgeInsets.zero,
       children: [
         DetailBackdrop(
+          // Films lean into the full-screen "hero" look — the backdrop is the
+          // pitch; metadata and actions live a scroll below.
+          heightFactor: 0.62,
           backdropUrl: movie.backdropUrl,
           posterUrl: movie.posterUrl,
           child: Text(
