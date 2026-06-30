@@ -112,14 +112,25 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
     return Scaffold(
       backgroundColor: ArgosyColors.bg,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Fill the viewport (minus the vertical padding) so the form stays
+            // vertically centred when the keyboard is closed, but can grow and
+            // scroll once it opens — keeping the focused field above the
+            // keyboard. Without this the lower fields (password) hid behind it.
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 64,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                   const Align(child: ArgosyMark(size: 76)),
                   const SizedBox(height: 24),
                   _StepRail(step: _step),
@@ -138,10 +149,13 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
                       ),
                     ),
                   ],
-                ],
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
