@@ -73,7 +73,18 @@ class _Body extends StatefulWidget {
 }
 
 class _BodyState extends State<_Body> {
-  int _activeSeason = 0;
+  late int _activeSeason = _resumeSeasonIndex;
+
+  /// The season tab to open on: the one holding the resume episode (mapping its
+  /// 1-indexed seasonNumber → the matching season index), else 0 so a fresh,
+  /// unwatched series still opens on Season 1.
+  int get _resumeSeasonIndex {
+    final target = _resumeTarget;
+    if (target == null) return 0;
+    final i = widget.series.seasons
+        .indexWhere((s) => s.seasonNumber == target.seasonNumber);
+    return i >= 0 ? i : 0;
+  }
 
   List<_Playable> get _playable => [
     for (final s in widget.series.seasons)
