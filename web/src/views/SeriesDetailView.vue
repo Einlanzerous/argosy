@@ -118,6 +118,16 @@ const resumeTarget = computed(() => {
   return eps[lastTouched + 1] ?? null
 })
 
+// The season tab to open on: the one holding the resume episode (mapping its
+// 1-indexed seasonNumber → the matching season's array index), or 0 when nothing
+// is in progress so a fresh series still opens on Season 1.
+const resumeSeasonIndex = computed(() => {
+  const t = resumeTarget.value
+  if (!t) return 0
+  const i = series.value?.seasons.findIndex((s) => s.seasonNumber === t.seasonNumber) ?? -1
+  return i >= 0 ? i : 0
+})
+
 const resumeLabel = computed(() => {
   const t = resumeTarget.value
   return t ? `Resume Season ${t.seasonNumber} Ep ${t.ep.episodeNumber}` : ''
@@ -148,6 +158,8 @@ async function load(id: string): Promise<void> {
     return
   }
   series.value = data
+  // Open on the season of the in-progress/next-up episode, not always Season 1.
+  activeSeason.value = resumeSeasonIndex.value
   setPage(data.title)
 }
 

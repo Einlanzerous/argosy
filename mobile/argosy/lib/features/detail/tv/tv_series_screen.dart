@@ -66,7 +66,17 @@ class _Series extends StatefulWidget {
 }
 
 class _SeriesState extends State<_Series> {
-  int _activeSeason = 0;
+  late int _activeSeason = _resumeSeasonIndex;
+
+  /// The season tab to open on: the one holding the resume episode (mapping its
+  /// 1-indexed seasonNumber → the matching season index), else 0 so a fresh,
+  /// unwatched series still opens on Season 1.
+  int get _resumeSeasonIndex {
+    final target = _resumeTarget;
+    if (target == null) return 0;
+    final i = _series.seasons.indexWhere((s) => s.seasonNumber == target.seasonNumber);
+    return i >= 0 ? i : 0;
+  }
 
   // Cross-column D-pad hops (ARGY-51): the left actions and the right episode
   // list share no horizontal focus band when the list is short, so directional
