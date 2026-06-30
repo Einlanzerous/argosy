@@ -72,6 +72,7 @@ services:
       - gocache:/root/.cache/go-build                        # persist Go build cache
       - gomod:/go/pkg/mod                                    # persist module cache
       - ${ARGOSY_MEDIA_DIR_HOST:-./sample-media}:/media:ro   # your media library
+      - ${ARGOSY_SSD_MEDIA_DIR_HOST:-./sample-media}:/media-ssd:ro  # second library (mirrors prod SSD Library)
       - artwork:/artwork                                     # cached posters/artwork
 
   # Optional Vite dev server with HMR. Enable with: make compose-web
