@@ -41,6 +41,13 @@ const duration = ref(0)
 const quality = ref('')
 const error = ref('')
 const starting = ref(false)
+// Seek-bar scrubbing (ARGY-105): while dragging we show a live preview position
+// (fill/knob/time follow the pointer) and only commit the seek on release, so a
+// transcode isn't restarted on every pointermove. bar is the hit element we
+// capture the pointer to, so the drag keeps tracking even off the thin strip.
+const bar = ref<HTMLElement | null>(null)
+const dragging = ref(false)
+const dragTime = ref(0)
 const resumeOpen = ref(false)
 const resumeFrom = ref(0)
 const subtitleTracks = ref<SubtitleTrack[]>([])
@@ -152,7 +159,9 @@ let heartbeat: ReturnType<typeof setInterval> | null = null
 let recovering = false
 let transcodeSessionId = ''
 
-const pct = computed(() => (duration.value ? (position.value / duration.value) * 100 : 0))
+// What the fill/knob render: the drag preview while scrubbing, otherwise live time.
+const displayTime = computed(() => (dragging.value ? dragTime.value : position.value))
+const displayPct = computed(() => (duration.value ? (displayTime.value / duration.value) * 100 : 0))
 const remaining = computed(() => Math.max(0, duration.value - position.value))
 // Start of the credits window (ARGY-90). Heuristic for now — the last
 // CREDITS_LEAD_SECONDS of runtime — but isolated here so ARGY-100 can replace it
@@ -474,11 +483,54 @@ function togglePlay(): void {
   else el.pause()
 }
 
-function seek(e: MouseEvent): void {
+// timeFromPointer maps a horizontal pointer position to an absolute media time,
+// clamped to the bar's extent.
+function timeFromPointer(clientX: number): number {
+  const el = bar.value
+  if (!el || !duration.value) return 0
+  const rect = el.getBoundingClientRect()
+  const ratio = rect.width ? (clientX - rect.left) / rect.width : 0
+  return Math.max(0, Math.min(1, ratio)) * duration.value
+}
+
+// Drag-to-scrub (ARGY-105). pointerdown captures the pointer to the bar so the
+// drag keeps tracking even when the cursor drifts vertically off the thin strip;
+// pointermove updates a live preview; pointerup commits the seek once (reusing
+// seekTo, which handles direct-play vs transcode-restart). A plain click is just
+// a down+up with no move, so it seeks to that spot too.
+function onScrubDown(e: PointerEvent): void {
   if (!duration.value) return
-  const bar = e.currentTarget as HTMLElement
-  const rect = bar.getBoundingClientRect()
-  void seekTo(((e.clientX - rect.left) / rect.width) * duration.value)
+  dragging.value = true
+  dragTime.value = timeFromPointer(e.clientX)
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  poke()
+}
+function onScrubMove(e: PointerEvent): void {
+  if (!dragging.value) return
+  dragTime.value = timeFromPointer(e.clientX)
+  poke()
+}
+function onScrubUp(e: PointerEvent): void {
+  if (!dragging.value) return
+  dragging.value = false
+  const t = timeFromPointer(e.clientX)
+  ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
+  void seekTo(t)
+}
+
+// Keyboard scrubbing for the focused slider. Arrows nudge ±10s (mirroring the
+// transport buttons); Home/End jump to the ends. stopPropagation keeps the
+// window-level arrow handler from also firing and double-skipping.
+function onBarKey(e: KeyboardEvent): void {
+  if (!duration.value) return
+  if (e.key === 'ArrowLeft') skip(-10)
+  else if (e.key === 'ArrowRight') skip(10)
+  else if (e.key === 'Home') void seekTo(0)
+  else if (e.key === 'End') void seekTo(duration.value)
+  else return
+  e.preventDefault()
+  e.stopPropagation()
+  poke()
 }
 
 function skip(delta: number): void {
@@ -664,24 +716,41 @@ function startOver(): void {
 }
 
 function goBack(): void {
-  // Go to the title's detail page deterministically. A plain router.back() lands
+  // Go to the title's detail page deterministically. A plain router.back() can land
   // on a previously-played episode, because auto-advance navigates between
   // episodes (ARGY-108). Films route by their own id; episodes by their series
   // (nextEpisode shares the current series).
   const it = item.value
-  if (it?.kind === 'movie') {
-    void router.push({ name: 'movie', params: { id: itemId } })
+  const target =
+    it?.kind === 'movie'
+      ? { name: 'movie', params: { id: itemId } }
+      : nextEpisode.value?.seriesId
+        ? { name: 'series', params: { id: nextEpisode.value.seriesId } }
+        : null
+
+  if (!target) {
+    // Last episode (no next) or unknown context: fall back to the entry point.
+    // advance() uses router.replace, so this won't resurface an earlier episode.
+    if (window.history.length > 1) router.back()
+    else void router.push({ name: 'home' })
     return
   }
-  const seriesId = nextEpisode.value?.seriesId
-  if (seriesId) {
-    void router.push({ name: 'series', params: { id: seriesId } })
-    return
+
+  // If we arrived straight from this detail page (series → episode), step back
+  // onto that existing history entry rather than stacking a second copy — so a
+  // further "back" from the detail page unwinds to where we started (library/home).
+  // Otherwise (resumed straight from Home/Continue-Watching, or rolled in via
+  // auto-advance) the player entry has no detail page under it, so *replace* it
+  // with the detail page instead of pushing. Pushing would leave the player
+  // sitting beneath the detail page, and the detail page's own back button would
+  // walk right back into playback (ARGY-108). Vue Router records the previous
+  // location in history.state.back, which lets us tell the two cases apart.
+  const targetPath = router.resolve(target).fullPath
+  if (window.history.state?.back === targetPath) {
+    router.back()
+  } else {
+    void router.replace(target)
   }
-  // Last episode (no next) or unknown context: fall back to the entry point.
-  // advance() uses router.replace, so this won't resurface an earlier episode.
-  if (window.history.length > 1) router.back()
-  else void router.push({ name: 'home' })
 }
 
 function onKey(e: KeyboardEvent): void {
@@ -769,10 +838,26 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     <!-- bottom controls -->
     <div class="bottom" :class="{ hidden: !controlsVisible }">
       <div class="scrub">
-        <span class="t">{{ formatClock(position) }}</span>
-        <div class="bar" @click="seek">
-          <div class="fill" :style="{ width: `${pct}%` }" />
-          <div class="knob" :style="{ left: `${pct}%` }" />
+        <span class="t">{{ formatClock(displayTime) }}</span>
+        <div
+          ref="bar"
+          class="bar"
+          :class="{ scrubbing: dragging }"
+          role="slider"
+          tabindex="0"
+          aria-label="Seek"
+          :aria-valuemin="0"
+          :aria-valuemax="Math.round(duration)"
+          :aria-valuenow="Math.round(displayTime)"
+          :aria-valuetext="formatClock(displayTime)"
+          @pointerdown="onScrubDown"
+          @pointermove="onScrubMove"
+          @pointerup="onScrubUp"
+          @pointercancel="onScrubUp"
+          @keydown="onBarKey"
+        >
+          <div class="fill" :style="{ width: `${displayPct}%` }" />
+          <div class="knob" :style="{ left: `${displayPct}%` }" />
         </div>
         <span class="t">{{ formatClock(duration) }}</span>
       </div>
@@ -1214,6 +1299,31 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-radius: 3px;
   background: rgba(234, 234, 229, 0.16);
   cursor: pointer;
+  /* Let a touch drag scrub instead of scrolling the page. */
+  touch-action: none;
+  transition: height 0.12s ease;
+}
+/* Forgiving hit target (ARGY-105): a transparent overlay taller than the 5px
+   visual fill, so clicks/drags near the bar still register — the look is
+   unchanged, only the pointer catchment grows. */
+.bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 20px;
+  transform: translateY(-50%);
+}
+/* Hover/drag affordance: the bar thickens and the knob grows so the target
+   visibly enlarges while you aim at or scrub it. */
+.bar:hover,
+.bar.scrubbing {
+  height: 7px;
+}
+.bar:focus-visible {
+  outline: 2px solid var(--arg-accent);
+  outline-offset: 5px;
 }
 .fill {
   position: absolute;
@@ -1232,6 +1342,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   background: var(--arg-cream);
   transform: translate(-50%, -50%);
   box-shadow: 0 0 0 4px rgba(201, 154, 78, 0.3);
+  transition:
+    width 0.12s ease,
+    height 0.12s ease;
+}
+.bar:hover .knob,
+.bar.scrubbing .knob {
+  width: 18px;
+  height: 18px;
 }
 .buttons {
   position: relative;
