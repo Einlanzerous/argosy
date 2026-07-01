@@ -150,7 +150,7 @@ watch(
   border-radius: var(--arg-r-xl);
   overflow: hidden;
   border: 1px solid var(--arg-line);
-  min-height: 380px;
+  min-height: 638px;
 }
 .hatch {
   position: absolute;
@@ -180,7 +180,7 @@ watch(
   display: flex;
   gap: 30px;
   align-items: flex-end;
-  min-height: 380px;
+  min-height: 638px;
 }
 .poster {
   flex: none;
@@ -333,5 +333,12 @@ h1 {
   text-align: center;
   color: var(--arg-dim);
   font: 500 15px var(--arg-body);
+}
+/* Keep the enlarged hero from dominating narrow viewports. */
+@media (max-width: 720px) {
+  .hero,
+  .body {
+    min-height: 400px;
+  }
 }
 </style>
