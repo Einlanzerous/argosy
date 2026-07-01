@@ -87,6 +87,9 @@ watch(
             <span class="kind">{{ movie.kind === 'movie' ? 'Film' : movie.kind }}</span>
           </div>
           <p v-if="movie.overview" class="synopsis">{{ movie.overview }}</p>
+          <p v-if="movie.cast?.length" class="cast">
+            <span class="cast-label">Cast</span>{{ movie.cast.join(', ') }}
+          </p>
           <div v-if="movie.genres?.length || movie.tags?.length" class="tags">
             <span v-for="g in movie.genres ?? []" :key="`g-${g}`" class="tag">{{ g }}</span>
             <span v-for="t in movie.tags ?? []" :key="`t-${t}`" class="tag accent">{{ t }}</span>
@@ -232,6 +235,19 @@ h1 {
   max-width: 620px;
   font: 400 15px/1.65 var(--arg-body);
   color: #c4c4bc;
+}
+.cast {
+  margin-top: 14px;
+  max-width: 620px;
+  font: 400 13.5px/1.6 var(--arg-body);
+  color: var(--arg-soft-2);
+}
+.cast-label {
+  margin-right: 10px;
+  font: 700 11px var(--arg-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--arg-dim);
 }
 .tags {
   margin-top: 16px;

@@ -89,6 +89,10 @@ class _Body extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
+              if (movie.cast.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                CastRow(cast: movie.cast),
+              ],
               const SizedBox(height: 16),
               GenreTagChips(genres: movie.genres, tags: movie.tags),
               const SizedBox(height: 20),

@@ -145,6 +145,10 @@ class _Movie extends StatelessWidget {
                 ),
               ),
             ],
+            if (movie.cast.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              _CastLine(cast: movie.cast),
+            ],
             const SizedBox(height: 34),
             _Actions(itemId: movie.id, resumable: _resumable, progress: data.progress),
             if (_resumable && data.progress != null) ...[
@@ -208,6 +212,48 @@ class _MetaRow extends StatelessWidget {
     if (genre != null) add(Text(genre!, style: brass));
 
     return Row(mainAxisSize: MainAxisSize.min, children: parts);
+  }
+}
+
+/// The 10-foot cast row: a "CAST" label above a comma-joined list of top-billed
+/// names (plus the director, for films), scaled for the TV detail screen.
+class _CastLine extends StatelessWidget {
+  const _CastLine({required this.cast});
+
+  final List<String> cast;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 660,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'CAST',
+            style: TextStyle(
+              fontFamily: 'HankenGrotesk',
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: ArgosyColors.dim,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            cast.join(', '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'HankenGrotesk',
+              fontSize: 19,
+              height: 1.5,
+              color: ArgosyColors.soft2,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
