@@ -21,6 +21,7 @@ class SeriesDetail {
     this.backdropUrl,
     this.seasons = const [],
     this.tags = const [],
+    this.cast = const [],
     this.labels = const [],
   });
 
@@ -41,6 +42,9 @@ class SeriesDetail {
 
   List<String> tags;
 
+  /// Top-billed cast names from the metadata provider. Omitted when none.
+  List<String> cast;
+
   /// The calling profile's custom labels on this series.
   List<String> labels;
 
@@ -54,6 +58,7 @@ class SeriesDetail {
     other.backdropUrl == backdropUrl &&
     _deepEquality.equals(other.seasons, seasons) &&
     _deepEquality.equals(other.tags, tags) &&
+    _deepEquality.equals(other.cast, cast) &&
     _deepEquality.equals(other.labels, labels);
 
   @override
@@ -67,10 +72,11 @@ class SeriesDetail {
     (backdropUrl == null ? 0 : backdropUrl!.hashCode) +
     (seasons.hashCode) +
     (tags.hashCode) +
+    (cast.hashCode) +
     (labels.hashCode);
 
   @override
-  String toString() => 'SeriesDetail[id=$id, title=$title, year=$year, overview=$overview, posterUrl=$posterUrl, backdropUrl=$backdropUrl, seasons=$seasons, tags=$tags, labels=$labels]';
+  String toString() => 'SeriesDetail[id=$id, title=$title, year=$year, overview=$overview, posterUrl=$posterUrl, backdropUrl=$backdropUrl, seasons=$seasons, tags=$tags, cast=$cast, labels=$labels]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -98,6 +104,7 @@ class SeriesDetail {
     }
       json[r'seasons'] = this.seasons;
       json[r'tags'] = this.tags;
+      json[r'cast'] = this.cast;
       json[r'labels'] = this.labels;
     return json;
   }
@@ -134,6 +141,9 @@ class SeriesDetail {
         seasons: SeasonSummary.listFromJson(json[r'seasons']),
         tags: json[r'tags'] is Iterable
             ? (json[r'tags'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
+        cast: json[r'cast'] is Iterable
+            ? (json[r'cast'] as Iterable).cast<String>().toList(growable: false)
             : const [],
         labels: json[r'labels'] is Iterable
             ? (json[r'labels'] as Iterable).cast<String>().toList(growable: false)

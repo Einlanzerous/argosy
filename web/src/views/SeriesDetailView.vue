@@ -194,6 +194,9 @@ watch(
           <span v-if="series.tags?.includes('anime')" class="kind">Anime</span>
         </div>
         <p v-if="series.overview" class="synopsis">{{ series.overview }}</p>
+        <p v-if="series.cast?.length" class="cast">
+          <span class="cast-label">Cast</span>{{ series.cast.join(', ') }}
+        </p>
         <div class="actions">
           <template v-if="resumeTarget">
             <button class="play" type="button" @click="resumeSeries">
@@ -330,6 +333,19 @@ h1 {
   max-width: 620px;
   font: 400 14.5px/1.6 var(--arg-body);
   color: #c4c4bc;
+}
+.cast {
+  margin-top: 14px;
+  max-width: 620px;
+  font: 400 13.5px/1.6 var(--arg-body);
+  color: var(--arg-soft-2);
+}
+.cast-label {
+  margin-right: 10px;
+  font: 700 11px var(--arg-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--arg-dim);
 }
 .actions {
   margin-top: 22px;

@@ -2028,6 +2028,7 @@ components:
         reviewRequired: { type: boolean }
         tags: { type: array, items: { type: string } }
         rating: { type: number, nullable: true, description: "Effective provider rating, 0–10." }
+        cast: { type: array, items: { type: string }, description: "Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none." }
         labels: { type: array, items: { type: string }, description: "The calling profile's custom labels on this item." }
 
     MediaItemPage:
@@ -2110,6 +2111,7 @@ components:
         backdropUrl: { type: string, nullable: true, description: "Landscape backdrop for full-screen heroes; falls back to posterUrl." }
         seasons: { type: array, items: { $ref: "#/components/schemas/SeasonSummary" } }
         tags: { type: array, items: { type: string } }
+        cast: { type: array, items: { type: string }, description: "Top-billed cast names from the metadata provider. Omitted when none." }
         labels: { type: array, items: { type: string }, description: "The calling profile's custom labels on this series." }
 
     AddLabelRequest:

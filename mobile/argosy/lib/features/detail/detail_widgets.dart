@@ -125,6 +125,39 @@ class _Pill extends StatelessWidget {
   }
 }
 
+/// A read-only "Cast" row — a "CAST" label above a comma-joined list of
+/// top-billed names (plus the director, for films). Renders nothing when the
+/// cast list is empty so items without credits degrade gracefully (ARGY-113).
+class CastRow extends StatelessWidget {
+  const CastRow({super.key, required this.cast});
+
+  final List<String> cast;
+
+  @override
+  Widget build(BuildContext context) {
+    if (cast.isEmpty) return const SizedBox.shrink();
+    final text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'CAST',
+          style: text.labelSmall?.copyWith(
+            color: ArgosyColors.dim,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          cast.join(', '),
+          style: text.bodyMedium?.copyWith(color: ArgosyColors.soft2),
+        ),
+      ],
+    );
+  }
+}
+
 /// The flag shown when Stevedore marked an item for metadata review.
 class ReviewFlag extends StatelessWidget {
   const ReviewFlag({super.key});

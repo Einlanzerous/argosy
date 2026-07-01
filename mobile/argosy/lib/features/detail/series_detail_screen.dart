@@ -158,6 +158,10 @@ class _BodyState extends State<_Body> {
                 ),
                 const SizedBox(height: 16),
               ],
+              if (series.cast.isNotEmpty) ...[
+                CastRow(cast: series.cast),
+                const SizedBox(height: 16),
+              ],
               GenreTagChips(tags: series.tags),
               if (series.tags.isNotEmpty) const SizedBox(height: 16),
               _SeriesActions(

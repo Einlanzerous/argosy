@@ -1442,6 +1442,8 @@ export interface components {
             tags: string[];
             /** @description Effective provider rating, 0–10. */
             rating?: number | null;
+            /** @description Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none. */
+            cast?: string[];
             /** @description The calling profile's custom labels on this item. */
             labels?: string[];
         };
@@ -1520,6 +1522,8 @@ export interface components {
             backdropUrl?: string | null;
             seasons: components["schemas"]["SeasonSummary"][];
             tags: string[];
+            /** @description Top-billed cast names from the metadata provider. Omitted when none. */
+            cast?: string[];
             /** @description The calling profile's custom labels on this series. */
             labels?: string[];
         };

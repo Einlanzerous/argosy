@@ -27,6 +27,7 @@ class MediaItemDetail {
     required this.reviewRequired,
     this.tags = const [],
     this.rating,
+    this.cast = const [],
     this.labels = const [],
   });
 
@@ -60,6 +61,9 @@ class MediaItemDetail {
   /// Effective provider rating, 0–10.
   num? rating;
 
+  /// Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none.
+  List<String> cast;
+
   /// The calling profile's custom labels on this item.
   List<String> labels;
 
@@ -79,6 +83,7 @@ class MediaItemDetail {
     other.reviewRequired == reviewRequired &&
     _deepEquality.equals(other.tags, tags) &&
     other.rating == rating &&
+    _deepEquality.equals(other.cast, cast) &&
     _deepEquality.equals(other.labels, labels);
 
   @override
@@ -98,10 +103,11 @@ class MediaItemDetail {
     (reviewRequired.hashCode) +
     (tags.hashCode) +
     (rating == null ? 0 : rating!.hashCode) +
+    (cast.hashCode) +
     (labels.hashCode);
 
   @override
-  String toString() => 'MediaItemDetail[id=$id, kind=$kind, title=$title, year=$year, overview=$overview, genres=$genres, posterUrl=$posterUrl, backdropUrl=$backdropUrl, durationSeconds=$durationSeconds, container=$container, filePath=$filePath, reviewRequired=$reviewRequired, tags=$tags, rating=$rating, labels=$labels]';
+  String toString() => 'MediaItemDetail[id=$id, kind=$kind, title=$title, year=$year, overview=$overview, genres=$genres, posterUrl=$posterUrl, backdropUrl=$backdropUrl, durationSeconds=$durationSeconds, container=$container, filePath=$filePath, reviewRequired=$reviewRequired, tags=$tags, rating=$rating, cast=$cast, labels=$labels]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -147,6 +153,7 @@ class MediaItemDetail {
     } else {
       json[r'rating'] = null;
     }
+      json[r'cast'] = this.cast;
       json[r'labels'] = this.labels;
     return json;
   }
@@ -200,6 +207,9 @@ class MediaItemDetail {
         rating: json[r'rating'] == null
             ? null
             : num.parse('${json[r'rating']}'),
+        cast: json[r'cast'] is Iterable
+            ? (json[r'cast'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
         labels: json[r'labels'] is Iterable
             ? (json[r'labels'] as Iterable).cast<String>().toList(growable: false)
             : const [],

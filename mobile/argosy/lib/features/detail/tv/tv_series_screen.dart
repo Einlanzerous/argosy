@@ -264,6 +264,31 @@ class _Meta extends StatelessWidget {
             ),
           ),
         ],
+        if (series.cast.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const Text(
+            'CAST',
+            style: TextStyle(
+              fontFamily: 'HankenGrotesk',
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: ArgosyColors.dim,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            series.cast.join(', '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'HankenGrotesk',
+              fontSize: 19,
+              height: 1.5,
+              color: ArgosyColors.soft2,
+            ),
+          ),
+        ],
         const SizedBox(height: 30),
         if (resume != null)
           TvButton(

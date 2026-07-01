@@ -237,6 +237,7 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 		ReviewRequired: reviewRequired,
 		Tags:           nonNil(tags),
 		Rating:         f32(effectiveRating(o, p)),
+		Cast:           effectiveCast(o, p),
 	}
 	if duration != nil {
 		f := float32(*duration)
@@ -273,6 +274,7 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 		BackdropUrl: backdropURL(s.artworkBase, o, p),
 		Seasons:     []api.SeasonSummary{},
 		Tags:        nonNil(tags),
+		Cast:        effectiveCast(o, p),
 	}
 
 	rows, err := s.pool.Query(ctx,

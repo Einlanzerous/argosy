@@ -99,6 +99,19 @@ func effectiveGenres(over, prov map[string]any) *[]string {
 	return nil
 }
 
+// effectiveCast returns the top-billed cast names (provider_metadata.cast,
+// override winning over provider), or nil when neither carries any — letting
+// the API omit the field so clients hide the "Cast" row entirely (ARGY-113).
+func effectiveCast(over, prov map[string]any) *[]string {
+	if c := mstrs(over, "cast"); len(c) > 0 {
+		return &c
+	}
+	if c := mstrs(prov, "cast"); len(c) > 0 {
+		return &c
+	}
+	return nil
+}
+
 // effectiveRating returns the provider rating (vote_average, 0–10), override
 // blob winning over provider, or nil when neither carries one.
 func effectiveRating(over, prov map[string]any) *float64 {
