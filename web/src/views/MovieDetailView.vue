@@ -153,7 +153,7 @@ watch(
   border-radius: var(--arg-r-xl);
   overflow: hidden;
   border: 1px solid var(--arg-line);
-  min-height: 638px;
+  min-height: 726px; /* films run ~20% taller than the series hero (605px) */
 }
 .hatch {
   position: absolute;
@@ -183,7 +183,7 @@ watch(
   display: flex;
   gap: 30px;
   align-items: flex-end;
-  min-height: 638px;
+  min-height: 726px; /* films run ~20% taller than the series hero (605px) */
 }
 .poster {
   flex: none;
@@ -354,7 +354,7 @@ h1 {
 @media (max-width: 720px) {
   .hero,
   .body {
-    min-height: 400px;
+    min-height: 456px; /* keep the ~20%-over-series ratio on narrow viewports (series 380px) */
   }
 }
 </style>
