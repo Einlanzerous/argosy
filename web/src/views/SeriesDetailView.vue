@@ -273,7 +273,7 @@ watch(
   border-radius: var(--arg-r-xl);
   overflow: hidden;
   border: 1px solid var(--arg-line);
-  min-height: 504px;
+  min-height: 605px;
 }
 .hatch {
   position: absolute;
@@ -301,7 +301,7 @@ watch(
   /* Extra top padding reserves room for the back button (top:50 + 40h) so the
      title always clears it even when the overview makes the content tall. */
   padding: 104px 40px 34px;
-  min-height: 504px;
+  min-height: 605px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;

@@ -150,7 +150,7 @@ watch(
   border-radius: var(--arg-r-xl);
   overflow: hidden;
   border: 1px solid var(--arg-line);
-  min-height: 532px;
+  min-height: 638px;
 }
 .hatch {
   position: absolute;
@@ -180,7 +180,7 @@ watch(
   display: flex;
   gap: 30px;
   align-items: flex-end;
-  min-height: 532px;
+  min-height: 638px;
 }
 .poster {
   flex: none;
