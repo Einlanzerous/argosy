@@ -21,10 +21,16 @@ export function setToken(token: string | null): void {
 // A stable per-browser install id, minted once and persisted across sign-outs so
 // re-pairing this browser updates its existing Fleet row instead of spawning a
 // duplicate (ARGY-99). Deliberately NOT cleared on logout.
+//
+// The value is opaque server-side (an upsert key, never parsed as a UUID), so we
+// mint plain random hex from getRandomValues — available in every context,
+// unlike crypto.randomUUID which is gated to secure origins (HTTPS/localhost) and
+// throws when the SPA is reached over plain HTTP by hostname (ARGY-121).
 export function getInstallId(): string {
   let id = localStorage.getItem(INSTALL_KEY)
   if (!id) {
-    id = crypto.randomUUID()
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    id = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
     localStorage.setItem(INSTALL_KEY, id)
   }
   return id

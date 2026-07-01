@@ -24,6 +24,9 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Reachable by hostname (not just localhost/IP) — Vite otherwise rejects
+    // requests whose Host header isn't in this allowlist.
+    allowedHosts: ['imperial-construct'],
     proxy: {
       '/api': proxyTarget,
       '/artwork': proxyTarget, // cached posters/backdrops served by the Go static handler
