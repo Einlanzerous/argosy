@@ -161,9 +161,7 @@ let transcodeSessionId = ''
 
 // What the fill/knob render: the drag preview while scrubbing, otherwise live time.
 const displayTime = computed(() => (dragging.value ? dragTime.value : position.value))
-const displayPct = computed(() =>
-  duration.value ? (displayTime.value / duration.value) * 100 : 0,
-)
+const displayPct = computed(() => (duration.value ? (displayTime.value / duration.value) * 100 : 0))
 const remaining = computed(() => Math.max(0, duration.value - position.value))
 // Start of the credits window (ARGY-90). Heuristic for now — the last
 // CREDITS_LEAD_SECONDS of runtime — but isolated here so ARGY-100 can replace it
