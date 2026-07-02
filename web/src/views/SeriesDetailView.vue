@@ -164,6 +164,12 @@ function rowOverview(row: EpisodeRow): string | null {
   return row.episodes.find((e) => e.overview)?.overview ?? null
 }
 
+// Per-episode provider rating (⭐), when TMDB has one — first rated episode in the
+// row represents it. Returns null so unrated rows omit the badge (ARGY-118).
+function rowRating(row: EpisodeRow): number | null {
+  return row.episodes.find((e) => e.rating != null)?.rating ?? null
+}
+
 // Playable episodes flattened in season/episode order, with their season number.
 const playableEpisodes = computed(() =>
   (series.value?.seasons ?? []).flatMap((s) =>
@@ -315,6 +321,9 @@ watch(
               <span class="ep-len">{{
                 row.mediaItemId ? formatRuntime(row.rep.durationSeconds) : 'No file linked'
               }}</span>
+              <span v-if="rowRating(row) != null" class="ep-rating"
+                >★ {{ rowRating(row)!.toFixed(1) }}</span
+              >
               <span v-if="row.episodes.length > 1" class="ep-combined">Combined</span>
               <span v-if="row.rep.watched" class="ep-flag">✓ Watched</span>
             </div>
@@ -627,6 +636,12 @@ h1 {
   font: 600 13.5px var(--arg-body);
   color: var(--arg-dim);
   font-variant-numeric: tabular-nums;
+}
+.ep-rating {
+  font: 700 13px var(--arg-body);
+  color: var(--arg-accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .ep-flag {
   font: 700 12px var(--arg-display);

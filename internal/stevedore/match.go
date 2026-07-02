@@ -336,6 +336,12 @@ func (m *Matcher) storeSeasonEpisodes(ctx context.Context, seriesID string, tmdb
 		if stillRel != "" {
 			pm["still"] = stillRel
 		}
+		// rating powers the per-episode ⭐ on series detail (ARGY-118); omit when
+		// the provider has no votes so unrated episodes don't carry a bogus 0.
+		if meta.VoteCount > 0 {
+			pm["vote_average"] = meta.VoteAverage
+			pm["vote_count"] = meta.VoteCount
+		}
 		raw, err := json.Marshal(pm)
 		if err != nil {
 			return count, err
