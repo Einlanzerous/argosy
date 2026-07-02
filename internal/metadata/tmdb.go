@@ -121,10 +121,12 @@ func (t *TMDB) toMatch(r tmdbResult, title, date string) *Match {
 func (t *TMDB) SeasonEpisodes(ctx context.Context, tmdbID int64, seasonNumber int) ([]EpisodeMeta, error) {
 	var body struct {
 		Episodes []struct {
-			EpisodeNumber int    `json:"episode_number"`
-			Name          string `json:"name"`
-			Overview      string `json:"overview"`
-			StillPath     string `json:"still_path"`
+			EpisodeNumber int     `json:"episode_number"`
+			Name          string  `json:"name"`
+			Overview      string  `json:"overview"`
+			StillPath     string  `json:"still_path"`
+			VoteAverage   float64 `json:"vote_average"`
+			VoteCount     int     `json:"vote_count"`
 		} `json:"episodes"`
 	}
 	path := fmt.Sprintf("/tv/%d/season/%d", tmdbID, seasonNumber)
@@ -133,7 +135,7 @@ func (t *TMDB) SeasonEpisodes(ctx context.Context, tmdbID int64, seasonNumber in
 	}
 	out := make([]EpisodeMeta, 0, len(body.Episodes))
 	for _, e := range body.Episodes {
-		em := EpisodeMeta{Number: e.EpisodeNumber, Name: e.Name, Overview: e.Overview}
+		em := EpisodeMeta{Number: e.EpisodeNumber, Name: e.Name, Overview: e.Overview, VoteAverage: e.VoteAverage, VoteCount: e.VoteCount}
 		if e.StillPath != "" {
 			em.StillURL = t.imageBase + "/" + stillSize + e.StillPath
 		}

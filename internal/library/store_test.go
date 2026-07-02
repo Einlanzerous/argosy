@@ -62,7 +62,13 @@ func TestBrowseStore(t *testing.T) {
 		libID, "ep-"+suffix+".mkv").Scan(&epItemID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1,1,$2,'Pilot')`, seasonID, epItemID); err != nil {
+	// Episode 1 carries a provider rating; episode 2 has none (unrated).
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO episodes (season_id, episode_number, media_item_id, title, provider_metadata) VALUES ($1,1,$2,'Pilot',$3::jsonb)`,
+		seasonID, epItemID, `{"source":"tmdb","vote_average":8.4,"vote_count":120}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO episodes (season_id, episode_number, title) VALUES ($1,2,'Unrated')`, seasonID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,8 +117,15 @@ func TestBrowseStore(t *testing.T) {
 	if err != nil || detail == nil {
 		t.Fatalf("series detail err %v", err)
 	}
-	if len(detail.Seasons) != 1 || len(detail.Seasons[0].Episodes) != 1 || detail.Seasons[0].Episodes[0].EpisodeNumber != 1 {
-		t.Fatalf("series detail seasons = %+v, want 1 season / 1 episode", detail.Seasons)
+	if len(detail.Seasons) != 1 || len(detail.Seasons[0].Episodes) != 2 || detail.Seasons[0].Episodes[0].EpisodeNumber != 1 {
+		t.Fatalf("series detail seasons = %+v, want 1 season / 2 episodes", detail.Seasons)
+	}
+	// Rated episode surfaces vote_average; unrated episode omits it (ARGY-118).
+	if r := detail.Seasons[0].Episodes[0].Rating; r == nil || *r < 8.39 || *r > 8.41 {
+		t.Errorf("episode 1 rating = %v, want ~8.4", r)
+	}
+	if r := detail.Seasons[0].Episodes[1].Rating; r != nil {
+		t.Errorf("episode 2 rating = %v, want nil (unrated)", r)
 	}
 
 	item, err := s.GetItem(ctx, accID, movieID)

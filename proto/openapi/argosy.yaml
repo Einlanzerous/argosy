@@ -2145,6 +2145,7 @@ components:
         durationSeconds: { type: number, nullable: true }
         positionSeconds: { type: number, nullable: true, description: "Current profile's resume position." }
         watched: { type: boolean, nullable: true }
+        rating: { type: number, nullable: true, description: "Effective per-episode provider rating (vote_average), 0–10. Null when the provider has none." }
 
     SeasonSummary:
       type: object

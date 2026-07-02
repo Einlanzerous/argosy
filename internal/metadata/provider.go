@@ -23,10 +23,12 @@ type Match struct {
 // EpisodeMeta is a normalized per-episode result for a single season, used to
 // fill in episode names/overviews/stills after a series matches.
 type EpisodeMeta struct {
-	Number   int
-	Name     string
-	Overview string
-	StillURL string // full still (16:9 landscape) image URL, or "" when none
+	Number      int
+	Name        string
+	Overview    string
+	StillURL    string  // full still (16:9 landscape) image URL, or "" when none
+	VoteAverage float64 // provider rating, 0–10 (0 when unrated/unknown)
+	VoteCount   int     // number of votes behind VoteAverage
 }
 
 // Provider looks up metadata for films and series.

@@ -22,6 +22,7 @@ class EpisodeSummary {
     this.durationSeconds,
     this.positionSeconds,
     this.watched,
+    this.rating,
   });
 
   String id;
@@ -46,6 +47,9 @@ class EpisodeSummary {
 
   bool? watched;
 
+  /// Effective per-episode provider rating (vote_average), 0–10. Null when the provider has none.
+  num? rating;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is EpisodeSummary &&
     other.id == id &&
@@ -56,7 +60,8 @@ class EpisodeSummary {
     other.mediaItemId == mediaItemId &&
     other.durationSeconds == durationSeconds &&
     other.positionSeconds == positionSeconds &&
-    other.watched == watched;
+    other.watched == watched &&
+    other.rating == rating;
 
   @override
   int get hashCode =>
@@ -69,10 +74,11 @@ class EpisodeSummary {
     (mediaItemId == null ? 0 : mediaItemId!.hashCode) +
     (durationSeconds == null ? 0 : durationSeconds!.hashCode) +
     (positionSeconds == null ? 0 : positionSeconds!.hashCode) +
-    (watched == null ? 0 : watched!.hashCode);
+    (watched == null ? 0 : watched!.hashCode) +
+    (rating == null ? 0 : rating!.hashCode);
 
   @override
-  String toString() => 'EpisodeSummary[id=$id, episodeNumber=$episodeNumber, title=$title, overview=$overview, stillUrl=$stillUrl, mediaItemId=$mediaItemId, durationSeconds=$durationSeconds, positionSeconds=$positionSeconds, watched=$watched]';
+  String toString() => 'EpisodeSummary[id=$id, episodeNumber=$episodeNumber, title=$title, overview=$overview, stillUrl=$stillUrl, mediaItemId=$mediaItemId, durationSeconds=$durationSeconds, positionSeconds=$positionSeconds, watched=$watched, rating=$rating]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -113,6 +119,11 @@ class EpisodeSummary {
     } else {
       json[r'watched'] = null;
     }
+    if (this.rating != null) {
+      json[r'rating'] = this.rating;
+    } else {
+      json[r'rating'] = null;
+    }
     return json;
   }
 
@@ -148,6 +159,9 @@ class EpisodeSummary {
             ? null
             : num.parse('${json[r'positionSeconds']}'),
         watched: mapValueOfType<bool>(json, r'watched'),
+        rating: json[r'rating'] == null
+            ? null
+            : num.parse('${json[r'rating']}'),
       );
     }
     return null;
