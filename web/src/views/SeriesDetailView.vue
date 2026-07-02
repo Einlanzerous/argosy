@@ -316,16 +316,15 @@ watch(
           <div class="ep-info">
             <div class="ep-line1">
               <span class="ep-tag">{{ rowLabel(row) }}</span>
+              <span v-if="rowRating(row) != null" class="ep-rating"
+                >★ {{ rowRating(row)!.toFixed(1) }}</span
+              >
               <span v-if="rowName(row)" class="ep-name">{{ rowName(row) }}</span>
               <span class="ep-dot">·</span>
               <span class="ep-len">{{
                 row.mediaItemId ? formatRuntime(row.rep.durationSeconds) : 'No file linked'
               }}</span>
-              <span v-if="rowRating(row) != null" class="ep-rating"
-                >★ {{ rowRating(row)!.toFixed(1) }}</span
-              >
               <span v-if="row.episodes.length > 1" class="ep-combined">Combined</span>
-              <span v-if="row.rep.watched" class="ep-flag">✓ Watched</span>
             </div>
             <p v-if="rowOverview(row)" class="ep-synopsis">{{ rowOverview(row) }}</p>
             <!-- Always rendered so an in-progress row (with its bar) is the same
@@ -643,10 +642,6 @@ h1 {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.ep-flag {
-  font: 700 12px var(--arg-display);
-  color: var(--arg-accent);
-}
 .ep-combined {
   font: 700 11px var(--arg-display);
   letter-spacing: 0.04em;
@@ -692,23 +687,24 @@ h1 {
   color: var(--arg-soft-2);
   font-variant-numeric: tabular-nums;
 }
-/* Watched toggle — a check chip in the row's top-right corner. Sibling of the
-   play button (not nested) so both stay valid, independently clickable buttons. */
+/* Watched toggle — a small rectangular check pill in the row's top-right corner,
+   right-justified past the line-1 metadata. Sibling of the play button (not
+   nested) so both stay valid, independently clickable buttons. */
 .ep-watch {
   position: absolute;
   top: 12px;
   right: 12px;
   z-index: 2;
-  width: 30px;
-  height: 30px;
+  height: 22px;
+  padding: 0 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: 5px;
   border: 1px solid var(--arg-line-2);
   background: rgba(20, 20, 19, 0.55);
   color: var(--arg-faint);
-  font: 700 15px var(--arg-display);
+  font: 700 13px var(--arg-display);
   line-height: 1;
   cursor: pointer;
 }
