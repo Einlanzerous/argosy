@@ -350,7 +350,9 @@ watch(
       <!-- Bulk controls live under the list so they don't wedge empty space
            between the season tabs and the episodes (ARGY-109). -->
       <div v-if="seasonPlayable.length" class="season-tools">
-        <span class="season-progress">{{ seasonWatchedCount }}/{{ seasonPlayable.length }} watched</span>
+        <span class="season-progress"
+          >{{ seasonWatchedCount }}/{{ seasonPlayable.length }} watched</span
+        >
         <button
           v-if="series.seasons.length > 1"
           class="season-mark"
