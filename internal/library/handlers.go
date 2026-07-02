@@ -79,6 +79,9 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.getProgress)))
 	mux.Handle("PUT /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.reportProgress)))
 	mux.Handle("POST /api/v1/items/{itemId}/watched", mw(http.HandlerFunc(h.setWatched)))
+	// Bulk watched (ARGY-109): mark a whole season / series watched or unwatched.
+	mux.Handle("POST /api/v1/series/{seriesId}/watched", mw(http.HandlerFunc(h.setSeriesWatched)))
+	mux.Handle("POST /api/v1/seasons/{seasonId}/watched", mw(http.HandlerFunc(h.setSeasonWatched)))
 	// Streaming authenticates inline (token may be a ?token= query param) since
 	// an HTML5 <video> element can't set the Authorization header.
 	mux.Handle("GET /api/v1/items/{itemId}/stream", streamHandler(h.store, authStore, logger))

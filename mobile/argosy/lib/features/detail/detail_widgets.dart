@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api/artwork.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../theme/button_styles.dart';
 import '../../widgets/hatch_pattern.dart';
 
 // The brass/ghost action-button styles now live in the shared theme module so
@@ -165,6 +166,65 @@ class CastRow extends StatelessWidget {
           style: text.bodyMedium?.copyWith(color: ArgosyColors.soft2),
         ),
       ],
+    );
+  }
+}
+
+/// A ghost-styled toggle that marks a title / season watched or unwatched
+/// (ARGY-109), independent of playback progress. Owns its busy state and shows a
+/// snackbar on failure; [onSet] performs the write (and typically refreshes the
+/// surrounding screen) with the requested next state.
+class WatchedButton extends ConsumerStatefulWidget {
+  const WatchedButton({
+    super.key,
+    required this.watched,
+    required this.onSet,
+    this.watchedLabel = 'Watched',
+    this.markLabel = 'Mark watched',
+  });
+
+  final bool watched;
+  final Future<void> Function(bool watched) onSet;
+  final String watchedLabel;
+  final String markLabel;
+
+  @override
+  ConsumerState<WatchedButton> createState() => _WatchedButtonState();
+}
+
+class _WatchedButtonState extends ConsumerState<WatchedButton> {
+  bool _busy = false;
+
+  Future<void> _toggle() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await widget.onSet(!widget.watched);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't update watched state"),
+            backgroundColor: ArgosyColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      style: ghostButtonStyle(context),
+      onPressed: _busy ? null : _toggle,
+      icon: Icon(
+        widget.watched ? Icons.check_circle : Icons.check_circle_outline,
+        size: 18,
+        color: widget.watched ? ArgosyColors.green : null,
+      ),
+      label: Text(widget.watched ? widget.watchedLabel : widget.markLabel),
     );
   }
 }

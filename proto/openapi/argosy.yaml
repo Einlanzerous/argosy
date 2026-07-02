@@ -1113,6 +1113,56 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/series/{seriesId}/watched:
+    post:
+      tags: [library]
+      operationId: setSeriesWatched
+      summary: Mark every episode of a series watched / unwatched for the current profile
+      parameters:
+        - { name: seriesId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchedUpdate"
+      responses:
+        "200":
+          description: Number of backing files whose watched state was set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchedBulkResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/seasons/{seasonId}/watched:
+    post:
+      tags: [library]
+      operationId: setSeasonWatched
+      summary: Mark every episode of a season watched / unwatched for the current profile
+      parameters:
+        - { name: seasonId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchedUpdate"
+      responses:
+        "200":
+          description: Number of backing files whose watched state was set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchedBulkResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/continue:
     get:
       tags: [library]
@@ -1852,6 +1902,12 @@ components:
       required: [watched]
       properties:
         watched: { type: boolean }
+
+    WatchedBulkResult:
+      type: object
+      required: [updated]
+      properties:
+        updated: { type: integer, description: "Backing files whose watched state was written." }
 
     PlaybackSession:
       type: object

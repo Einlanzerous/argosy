@@ -70,5 +70,6 @@ lib/model/user_profile.dart
 lib/model/vault.dart
 lib/model/vault_detail.dart
 lib/model/vault_entry.dart
+lib/model/watched_bulk_result.dart
 lib/model/watched_update.dart
 pubspec.yaml

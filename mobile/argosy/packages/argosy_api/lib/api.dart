@@ -89,6 +89,7 @@ part 'model/user_profile.dart';
 part 'model/vault.dart';
 part 'model/vault_detail.dart';
 part 'model/vault_entry.dart';
+part 'model/watched_bulk_result.dart';
 part 'model/watched_update.dart';
 
 
