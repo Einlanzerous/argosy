@@ -320,6 +320,7 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 			epP, epO := decodeMap(epProv), decodeMap(epOver)
 			ep.Overview = effectiveOverview(epO, epP)
 			ep.StillUrl = stillURL(s.artworkBase, epO, epP)
+			ep.Rating = f32(effectiveRating(epO, epP))
 			if epMediaItem != nil {
 				u := parseUUID(*epMediaItem)
 				ep.MediaItemId = &u

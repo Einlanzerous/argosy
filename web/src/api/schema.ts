@@ -1541,6 +1541,8 @@ export interface components {
             /** @description Current profile's resume position. */
             positionSeconds?: number | null;
             watched?: boolean | null;
+            /** @description Effective per-episode provider rating (vote_average), 0–10. Null when the provider has none. */
+            rating?: number | null;
         };
         SeasonSummary: {
             /** Format: uuid */
