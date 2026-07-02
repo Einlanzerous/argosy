@@ -124,6 +124,69 @@ func (s *Store) SetWatched(ctx context.Context, accountID, userID, itemID string
 	return s.GetProgress(ctx, accountID, userID, itemID)
 }
 
+// SetSeriesWatched flips the watched flag for every backing file of a series'
+// episodes (ARGY-109). Returns nil when the series isn't in the account (→ 404).
+// Resume positions are left intact — only the watched flag is written — matching
+// the single-item SetWatched. Combined rips (one file → several episodes) are
+// deduped so a file is written once.
+func (s *Store) SetSeriesWatched(ctx context.Context, accountID, userID, seriesID string, watched bool) (*api.WatchedBulkResult, error) {
+	var ok bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT exists(
+		   SELECT 1 FROM series sr JOIN libraries l ON l.id = sr.library_id
+		   WHERE sr.id = $1 AND l.account_id = $2)`,
+		seriesID, accountID).Scan(&ok); err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`INSERT INTO play_state (user_id, media_item_id, position_seconds, watched, updated_at)
+		 SELECT $1, mid, 0, $3, now() FROM (
+		     SELECT DISTINCT e.media_item_id AS mid
+		     FROM episodes e
+		     JOIN seasons se ON se.id = e.season_id
+		     WHERE se.series_id = $2 AND e.media_item_id IS NOT NULL
+		 ) q
+		 ON CONFLICT (user_id, media_item_id) DO UPDATE SET watched = EXCLUDED.watched, updated_at = now()`,
+		userID, seriesID, watched)
+	if err != nil {
+		return nil, err
+	}
+	return &api.WatchedBulkResult{Updated: int(tag.RowsAffected())}, nil
+}
+
+// SetSeasonWatched is SetSeriesWatched scoped to a single season (ARGY-109).
+func (s *Store) SetSeasonWatched(ctx context.Context, accountID, userID, seasonID string, watched bool) (*api.WatchedBulkResult, error) {
+	var ok bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT exists(
+		   SELECT 1 FROM seasons se
+		   JOIN series sr ON sr.id = se.series_id
+		   JOIN libraries l ON l.id = sr.library_id
+		   WHERE se.id = $1 AND l.account_id = $2)`,
+		seasonID, accountID).Scan(&ok); err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`INSERT INTO play_state (user_id, media_item_id, position_seconds, watched, updated_at)
+		 SELECT $1, mid, 0, $3, now() FROM (
+		     SELECT DISTINCT e.media_item_id AS mid
+		     FROM episodes e
+		     WHERE e.season_id = $2 AND e.media_item_id IS NOT NULL
+		 ) q
+		 ON CONFLICT (user_id, media_item_id) DO UPDATE SET watched = EXCLUDED.watched, updated_at = now()`,
+		userID, seasonID, watched)
+	if err != nil {
+		return nil, err
+	}
+	return &api.WatchedBulkResult{Updated: int(tag.RowsAffected())}, nil
+}
+
 // ContinueWatching returns the profile's in-progress items (not watched, started),
 // most-recent first — the home "Continue Watching" rail.
 //
@@ -340,6 +403,40 @@ func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishBeacon(r, sess, itemID, float64(ps.PositionSeconds), durf, ps.Watched)
 	httpx.JSON(w, http.StatusOK, ps)
+}
+
+func (h *handlers) setSeriesWatched(w http.ResponseWriter, r *http.Request) {
+	var body api.WatchedUpdate
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	res, err := h.store.SetSeriesWatched(r.Context(), accountOf(r), userOf(r), r.PathValue("seriesId"), body.Watched)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if res == nil {
+		httpx.Error(w, http.StatusNotFound, "not found")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, res)
+}
+
+func (h *handlers) setSeasonWatched(w http.ResponseWriter, r *http.Request) {
+	var body api.WatchedUpdate
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	res, err := h.store.SetSeasonWatched(r.Context(), accountOf(r), userOf(r), r.PathValue("seasonId"), body.Watched)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if res == nil {
+		httpx.Error(w, http.StatusNotFound, "not found")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, res)
 }
 
 func (h *handlers) listContinue(w http.ResponseWriter, r *http.Request) {

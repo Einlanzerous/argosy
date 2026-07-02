@@ -117,6 +117,23 @@ export async function setWatched(itemId: string, watched: boolean): Promise<void
   })
 }
 
+// setSeasonWatched marks every episode of a season watched/unwatched in one call
+// (ARGY-109). Resume positions are left intact server-side; only the flag flips.
+export async function setSeasonWatched(seasonId: string, watched: boolean): Promise<void> {
+  await api.POST('/api/v1/seasons/{seasonId}/watched', {
+    params: { path: { seasonId } },
+    body: { watched },
+  })
+}
+
+// setSeriesWatched marks every episode across all seasons of a series (ARGY-109).
+export async function setSeriesWatched(seriesId: string, watched: boolean): Promise<void> {
+  await api.POST('/api/v1/series/{seriesId}/watched', {
+    params: { path: { seriesId } },
+    body: { watched },
+  })
+}
+
 export async function getContinue(): Promise<ContinueItem[]> {
   const { data } = await api.GET('/api/v1/continue')
   return data ?? []

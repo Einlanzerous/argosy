@@ -2013,6 +2013,122 @@ class LibraryApi {
     return null;
   }
 
+  /// Mark every episode of a season watched / unwatched for the current profile
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] seasonId (required):
+  ///
+  /// * [WatchedUpdate] watchedUpdate (required):
+  Future<Response> setSeasonWatchedWithHttpInfo(String seasonId, WatchedUpdate watchedUpdate, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/seasons/{seasonId}/watched'
+      .replaceAll('{seasonId}', seasonId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = watchedUpdate;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Mark every episode of a season watched / unwatched for the current profile
+  ///
+  /// Parameters:
+  ///
+  /// * [String] seasonId (required):
+  ///
+  /// * [WatchedUpdate] watchedUpdate (required):
+  Future<WatchedBulkResult?> setSeasonWatched(String seasonId, WatchedUpdate watchedUpdate, { Future<void>? abortTrigger, }) async {
+    final response = await setSeasonWatchedWithHttpInfo(seasonId, watchedUpdate, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'WatchedBulkResult',) as WatchedBulkResult;
+    
+    }
+    return null;
+  }
+
+  /// Mark every episode of a series watched / unwatched for the current profile
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] seriesId (required):
+  ///
+  /// * [WatchedUpdate] watchedUpdate (required):
+  Future<Response> setSeriesWatchedWithHttpInfo(String seriesId, WatchedUpdate watchedUpdate, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/series/{seriesId}/watched'
+      .replaceAll('{seriesId}', seriesId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = watchedUpdate;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Mark every episode of a series watched / unwatched for the current profile
+  ///
+  /// Parameters:
+  ///
+  /// * [String] seriesId (required):
+  ///
+  /// * [WatchedUpdate] watchedUpdate (required):
+  Future<WatchedBulkResult?> setSeriesWatched(String seriesId, WatchedUpdate watchedUpdate, { Future<void>? abortTrigger, }) async {
+    final response = await setSeriesWatchedWithHttpInfo(seriesId, watchedUpdate, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'WatchedBulkResult',) as WatchedBulkResult;
+    
+    }
+    return null;
+  }
+
   /// Mark an item watched / unwatched for the current profile
   ///
   /// Note: This method returns the HTTP [Response].

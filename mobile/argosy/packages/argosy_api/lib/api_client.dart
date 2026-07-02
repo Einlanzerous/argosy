@@ -295,6 +295,8 @@ class ApiClient {
           return VaultDetail.fromJson(value);
         case 'VaultEntry':
           return VaultEntry.fromJson(value);
+        case 'WatchedBulkResult':
+          return WatchedBulkResult.fromJson(value);
         case 'WatchedUpdate':
           return WatchedUpdate.fromJson(value);
         default:

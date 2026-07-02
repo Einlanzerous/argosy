@@ -2,6 +2,7 @@ import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../api/api_providers.dart';
 import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
@@ -98,7 +99,11 @@ class _Body extends StatelessWidget {
               const SizedBox(height: 20),
               LabelEditor(movieId: movie.id, initial: movie.labels),
               const SizedBox(height: 20),
-              _Actions(itemId: movie.id, resumable: _resumable),
+              _Actions(
+                itemId: movie.id,
+                resumable: _resumable,
+                watched: data.progress?.watched ?? false,
+              ),
               if (_resumable && data.progress != null) ...[
                 const SizedBox(height: 14),
                 _ResumeBar(percent: _percent, progress: data.progress!),
@@ -163,14 +168,19 @@ class _MetaRow extends StatelessWidget {
   }
 }
 
-class _Actions extends StatelessWidget {
-  const _Actions({required this.itemId, required this.resumable});
+class _Actions extends ConsumerWidget {
+  const _Actions({
+    required this.itemId,
+    required this.resumable,
+    required this.watched,
+  });
 
   final String itemId;
   final bool resumable;
+  final bool watched;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -197,6 +207,16 @@ class _Actions extends StatelessWidget {
             label: const Text('Play'),
           ),
         AddToVaultButton(movieId: itemId),
+        WatchedButton(
+          watched: watched,
+          onSet: (next) async {
+            await ref
+                .read(libraryApiProvider)
+                .setWatched(itemId, WatchedUpdate(watched: next));
+            // Reflect the new watched/Resume state (and Continue Watching).
+            ref.invalidate(movieDetailProvider(itemId));
+          },
+        ),
       ],
     );
   }

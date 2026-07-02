@@ -772,6 +772,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/series/{seriesId}/watched": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark every episode of a series watched / unwatched for the current profile */
+        post: operations["setSeriesWatched"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/seasons/{seasonId}/watched": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark every episode of a season watched / unwatched for the current profile */
+        post: operations["setSeasonWatched"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/continue": {
         parameters: {
             query?: never;
@@ -1256,6 +1290,10 @@ export interface components {
         };
         WatchedUpdate: {
             watched: boolean;
+        };
+        WatchedBulkResult: {
+            /** @description Backing files whose watched state was written. */
+            updated: number;
         };
         PlaybackSession: {
             /** Format: uuid */
@@ -3015,6 +3053,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlayState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setSeriesWatched: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seriesId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchedUpdate"];
+            };
+        };
+        responses: {
+            /** @description Number of backing files whose watched state was set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedBulkResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setSeasonWatched: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seasonId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchedUpdate"];
+            };
+        };
+        responses: {
+            /** @description Number of backing files whose watched state was set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedBulkResult"];
                 };
             };
             401: components["responses"]["Unauthorized"];

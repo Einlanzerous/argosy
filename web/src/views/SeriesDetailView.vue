@@ -8,6 +8,7 @@ import LabelEditor from '@/components/LabelEditor.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
 import { setPage } from '@/lib/page'
+import { setWatched, setSeasonWatched, setSeriesWatched } from '@/lib/playback'
 import type { components } from '@/api/schema'
 
 type SeriesDetail = components['schemas']['SeriesDetail']
@@ -77,6 +78,72 @@ const seasonRows = computed<EpisodeRow[]>(() => {
   }
   return rows
 })
+
+// Watched-state affordances (ARGY-109). Toggling flips the flag server-side (the
+// backend keeps any resume position) and mirrors it onto the local episode
+// objects so the row updates without a refetch. A combined rip backs several
+// episode rows through one file, so we flip every episode in the row together.
+const busyItems = ref<Set<string>>(new Set())
+const seasonBusy = ref(false)
+
+function isRowBusy(row: EpisodeRow): boolean {
+  return !!row.mediaItemId && busyItems.value.has(row.mediaItemId)
+}
+
+async function toggleEpisodeWatched(row: EpisodeRow): Promise<void> {
+  const id = row.mediaItemId
+  if (!id || busyItems.value.has(id)) return
+  const next = !row.rep.watched
+  busyItems.value = new Set(busyItems.value).add(id)
+  try {
+    await setWatched(id, next)
+    for (const e of row.episodes) e.watched = next
+  } finally {
+    const s = new Set(busyItems.value)
+    s.delete(id)
+    busyItems.value = s
+  }
+}
+
+const seasonPlayable = computed(() => (season.value?.episodes ?? []).filter((e) => e.mediaItemId))
+const seasonWatchedCount = computed(() => seasonPlayable.value.filter((e) => e.watched).length)
+const allSeasonWatched = computed(
+  () => seasonPlayable.value.length > 0 && seasonWatchedCount.value === seasonPlayable.value.length,
+)
+
+async function markSeason(watched: boolean): Promise<void> {
+  const s = season.value
+  if (!s || seasonBusy.value || !seasonPlayable.value.length) return
+  seasonBusy.value = true
+  try {
+    await setSeasonWatched(s.id, watched)
+    for (const e of s.episodes) if (e.mediaItemId) e.watched = watched
+  } finally {
+    seasonBusy.value = false
+  }
+}
+
+// Series-level bulk (ARGY-109) — the "mark the whole show" shortcut, offered
+// alongside the per-season control on multi-season series.
+const seriesBusy = ref(false)
+const seriesPlayable = computed(() =>
+  (series.value?.seasons ?? []).flatMap((s) => s.episodes).filter((e) => e.mediaItemId),
+)
+const allSeriesWatched = computed(
+  () => seriesPlayable.value.length > 0 && seriesPlayable.value.every((e) => e.watched),
+)
+
+async function markSeries(watched: boolean): Promise<void> {
+  const s = series.value
+  if (!s || seriesBusy.value || !seriesPlayable.value.length) return
+  seriesBusy.value = true
+  try {
+    await setSeriesWatched(s.id, watched)
+    for (const se of s.seasons) for (const e of se.episodes) if (e.mediaItemId) e.watched = watched
+  } finally {
+    seriesBusy.value = false
+  }
+}
 
 function rowLabel(row: EpisodeRow): string {
   const nums = row.episodes.map((e) => e.episodeNumber)
@@ -229,41 +296,79 @@ watch(
     </div>
 
     <div v-if="season" class="episodes">
-      <button
-        v-for="row in seasonRows"
-        :key="row.key"
-        class="episode"
-        type="button"
-        :disabled="!row.mediaItemId"
-        @click="playEpisode(row.mediaItemId)"
-      >
-        <div class="thumb" :style="posterStyle(rowStill(row), `${series.title}-${row.key}`)">
-          <div v-if="!rowStill(row)" class="arg-hatch thumb-hatch" />
-          <span class="glyph">▶</span>
-        </div>
-        <div class="ep-info">
-          <div class="ep-line1">
-            <span class="ep-tag">{{ rowLabel(row) }}</span>
-            <span v-if="rowName(row)" class="ep-name">{{ rowName(row) }}</span>
-            <span class="ep-dot">·</span>
-            <span class="ep-len">{{
-              row.mediaItemId ? formatRuntime(row.rep.durationSeconds) : 'No file linked'
-            }}</span>
-            <span v-if="row.episodes.length > 1" class="ep-combined">Combined</span>
-            <span v-if="row.rep.watched" class="ep-flag">✓ Watched</span>
+      <div v-for="row in seasonRows" :key="row.key" class="episode-row">
+        <button
+          class="episode"
+          type="button"
+          :disabled="!row.mediaItemId"
+          @click="playEpisode(row.mediaItemId)"
+        >
+          <div class="thumb" :style="posterStyle(rowStill(row), `${series.title}-${row.key}`)">
+            <div v-if="!rowStill(row)" class="arg-hatch thumb-hatch" />
+            <span class="glyph">▶</span>
           </div>
-          <p v-if="rowOverview(row)" class="ep-synopsis">{{ rowOverview(row) }}</p>
-          <div v-if="epInProgress(row.rep)" class="ep-line2">
-            <div class="ep-bar">
-              <div class="ep-fill" :style="{ width: `${epPercent(row.rep)}%` }" />
+          <div class="ep-info">
+            <div class="ep-line1">
+              <span class="ep-tag">{{ rowLabel(row) }}</span>
+              <span v-if="rowName(row)" class="ep-name">{{ rowName(row) }}</span>
+              <span class="ep-dot">·</span>
+              <span class="ep-len">{{
+                row.mediaItemId ? formatRuntime(row.rep.durationSeconds) : 'No file linked'
+              }}</span>
+              <span v-if="row.episodes.length > 1" class="ep-combined">Combined</span>
+              <span v-if="row.rep.watched" class="ep-flag">✓ Watched</span>
             </div>
-            <span class="ep-prog"
-              >{{ Math.round(epPercent(row.rep)) }}% ·
-              {{ formatRuntime(epTimeLeft(row.rep)) }} left</span
-            >
+            <p v-if="rowOverview(row)" class="ep-synopsis">{{ rowOverview(row) }}</p>
+            <!-- Always rendered so an in-progress row (with its bar) is the same
+                 height as a not-started one — only the contents are conditional. -->
+            <div class="ep-line2">
+              <template v-if="epInProgress(row.rep)">
+                <div class="ep-bar">
+                  <div class="ep-fill" :style="{ width: `${epPercent(row.rep)}%` }" />
+                </div>
+                <span class="ep-prog"
+                  >{{ Math.round(epPercent(row.rep)) }}% ·
+                  {{ formatRuntime(epTimeLeft(row.rep)) }} left</span
+                >
+              </template>
+            </div>
           </div>
-        </div>
-      </button>
+        </button>
+        <button
+          v-if="row.mediaItemId"
+          class="ep-watch"
+          :class="{ on: row.rep.watched }"
+          type="button"
+          :disabled="isRowBusy(row)"
+          :aria-pressed="!!row.rep.watched"
+          :title="row.rep.watched ? 'Mark unwatched' : 'Mark watched'"
+          @click="toggleEpisodeWatched(row)"
+        >
+          ✓
+        </button>
+      </div>
+      <!-- Bulk controls live under the list so they don't wedge empty space
+           between the season tabs and the episodes (ARGY-109). -->
+      <div v-if="seasonPlayable.length" class="season-tools">
+        <span class="season-progress">{{ seasonWatchedCount }}/{{ seasonPlayable.length }} watched</span>
+        <button
+          v-if="series.seasons.length > 1"
+          class="season-mark"
+          type="button"
+          :disabled="seriesBusy"
+          @click="markSeries(!allSeriesWatched)"
+        >
+          {{ allSeriesWatched ? 'Mark series unwatched' : 'Mark series watched' }}
+        </button>
+        <button
+          class="season-mark"
+          type="button"
+          :disabled="seasonBusy"
+          @click="markSeason(!allSeasonWatched)"
+        >
+          {{ allSeasonWatched ? 'Mark season unwatched' : 'Mark season watched' }}
+        </button>
+      </div>
     </div>
   </div>
 
@@ -415,10 +520,48 @@ h1 {
   flex-direction: column;
   gap: 12px;
 }
+.season-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  /* Footer under the episode list — a hairline separates it from the last row. */
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--arg-line);
+}
+.season-progress {
+  font: 600 12.5px var(--arg-body);
+  color: var(--arg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.season-mark {
+  padding: 7px 14px;
+  border-radius: var(--arg-r-sm);
+  border: 1px solid var(--arg-line-2);
+  background: transparent;
+  color: var(--arg-soft);
+  font: 700 12px var(--arg-display);
+  cursor: pointer;
+}
+.season-mark:hover:not(:disabled) {
+  border-color: var(--arg-accent);
+  color: var(--arg-accent);
+}
+.season-mark:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.episode-row {
+  position: relative;
+}
 .episode {
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   gap: 18px;
-  padding: 14px;
+  /* Extra right padding reserves room for the watched toggle in the corner. */
+  padding: 14px 56px 14px 14px;
   border-radius: var(--arg-r-lg);
   border: 1px solid var(--arg-line);
   background: var(--arg-panel);
@@ -510,6 +653,9 @@ h1 {
   display: flex;
   align-items: center;
   gap: 14px;
+  /* Reserve the progress row's height even when empty so in-progress and
+     not-started rows are always the same size (ARGY-109). */
+  min-height: 16px;
 }
 .ep-bar {
   flex: 1;
@@ -528,6 +674,39 @@ h1 {
   font: 600 12.5px var(--arg-body);
   color: var(--arg-soft-2);
   font-variant-numeric: tabular-nums;
+}
+/* Watched toggle — a check chip in the row's top-right corner. Sibling of the
+   play button (not nested) so both stay valid, independently clickable buttons. */
+.ep-watch {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--arg-line-2);
+  background: rgba(20, 20, 19, 0.55);
+  color: var(--arg-faint);
+  font: 700 15px var(--arg-display);
+  line-height: 1;
+  cursor: pointer;
+}
+.ep-watch:hover:not(:disabled) {
+  border-color: var(--arg-accent);
+  color: var(--arg-accent);
+}
+.ep-watch.on {
+  border-color: var(--arg-accent);
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+}
+.ep-watch:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .missing {
   padding: 80px 0;

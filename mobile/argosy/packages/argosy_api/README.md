@@ -119,6 +119,8 @@ Class | Method | HTTP request | Description
 *LibraryApi* | [**reorderVault**](doc//LibraryApi.md#reordervault) | **PUT** /api/v1/vaults/{vaultId}/order | Reorder a vault's items
 *LibraryApi* | [**reportProgress**](doc//LibraryApi.md#reportprogress) | **PUT** /api/v1/items/{itemId}/progress | Heartbeat — upsert the resume position for the current profile
 *LibraryApi* | [**search**](doc//LibraryApi.md#search) | **GET** /api/v1/search | Full-text search across the account's films and series
+*LibraryApi* | [**setSeasonWatched**](doc//LibraryApi.md#setseasonwatched) | **POST** /api/v1/seasons/{seasonId}/watched | Mark every episode of a season watched / unwatched for the current profile
+*LibraryApi* | [**setSeriesWatched**](doc//LibraryApi.md#setserieswatched) | **POST** /api/v1/series/{seriesId}/watched | Mark every episode of a series watched / unwatched for the current profile
 *LibraryApi* | [**setWatched**](doc//LibraryApi.md#setwatched) | **POST** /api/v1/items/{itemId}/watched | Mark an item watched / unwatched for the current profile
 *LibraryApi* | [**streamItem**](doc//LibraryApi.md#streamitem) | **GET** /api/v1/items/{itemId}/stream | Direct-play media stream with HTTP range support
 *LibraryApi* | [**triggerScan**](doc//LibraryApi.md#triggerscan) | **POST** /api/v1/scan | Trigger an immediate library re-scan (\"rebuild the Manifest\")
@@ -191,6 +193,7 @@ Class | Method | HTTP request | Description
  - [Vault](doc//Vault.md)
  - [VaultDetail](doc//VaultDetail.md)
  - [VaultEntry](doc//VaultEntry.md)
+ - [WatchedBulkResult](doc//WatchedBulkResult.md)
  - [WatchedUpdate](doc//WatchedUpdate.md)
 
 

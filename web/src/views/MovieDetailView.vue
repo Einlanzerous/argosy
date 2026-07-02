@@ -10,7 +10,7 @@ import LabelEditor from '@/components/LabelEditor.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime, formatClock } from '@/lib/format'
 import { getMovies, type MovieSummary } from '@/lib/manifest'
-import { getProgress, type PlayState } from '@/lib/playback'
+import { getProgress, setWatched, type PlayState } from '@/lib/playback'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
@@ -40,6 +40,25 @@ const percent = computed(() => {
   if (!p?.durationSeconds) return 0
   return Math.min(100, (p.positionSeconds / p.durationSeconds) * 100)
 })
+
+// Explicit watched toggle (ARGY-109), independent of playback progress. Marking
+// watched clears Resume (resumable checks !watched); unmarking restores it if a
+// resume position is still on file. The backend keeps the position either way.
+const marking = ref(false)
+const isWatched = computed(() => !!progress.value?.watched)
+async function toggleWatched(): Promise<void> {
+  const m = movie.value
+  if (!m || marking.value) return
+  const next = !isWatched.value
+  marking.value = true
+  try {
+    await setWatched(m.id, next)
+    if (progress.value) progress.value.watched = next
+    else progress.value = { positionSeconds: 0, watched: next }
+  } finally {
+    marking.value = false
+  }
+}
 
 async function load(id: string): Promise<void> {
   notFound.value = false
@@ -114,6 +133,15 @@ watch(
               <span>▶</span> Play
             </RouterLink>
             <AddToVault :movie-id="movie.id" />
+            <button
+              class="ghost mark"
+              :class="{ on: isWatched }"
+              type="button"
+              :disabled="marking"
+              @click="toggleWatched"
+            >
+              {{ isWatched ? '✓ Watched' : 'Mark watched' }}
+            </button>
           </div>
           <div v-if="resumable && progress" class="resume-bar">
             <div class="track"><div class="fill" :style="{ width: `${percent}%` }" /></div>
@@ -300,6 +328,14 @@ h1 {
 }
 .ghost:hover {
   border-color: var(--arg-cream);
+}
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.mark.on {
+  border-color: rgba(201, 154, 78, 0.5);
+  color: var(--arg-accent);
 }
 .vault {
   width: 48px;

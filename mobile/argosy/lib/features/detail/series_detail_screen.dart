@@ -2,6 +2,7 @@ import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../api/api_providers.dart';
 import '../../api/artwork.dart';
 import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
@@ -63,17 +64,84 @@ List<List<EpisodeSummary>> _groupEpisodes(List<EpisodeSummary> episodes) {
   return groups;
 }
 
-class _Body extends StatefulWidget {
+class _Body extends ConsumerStatefulWidget {
   const _Body({required this.series});
 
   final SeriesDetail series;
 
   @override
-  State<_Body> createState() => _BodyState();
+  ConsumerState<_Body> createState() => _BodyState();
 }
 
-class _BodyState extends State<_Body> {
+class _BodyState extends ConsumerState<_Body> {
   late int _activeSeason = _resumeSeasonIndex;
+
+  /// Optimistic watched overrides keyed by backing-file id (ARGY-109). Toggling
+  /// an episode or a whole season writes here so the list updates immediately
+  /// without a full refetch; the server keeps the authoritative flag + position.
+  final Map<String, bool> _watchedOverrides = {};
+
+  bool _isWatched(EpisodeSummary e) {
+    final id = e.mediaItemId;
+    if (id != null && _watchedOverrides.containsKey(id)) {
+      return _watchedOverrides[id]!;
+    }
+    return e.watched ?? false;
+  }
+
+  Future<void> _setEpisodeWatched(String mediaItemId, bool next) async {
+    await ref
+        .read(libraryApiProvider)
+        .setWatched(mediaItemId, WatchedUpdate(watched: next));
+    if (mounted) setState(() => _watchedOverrides[mediaItemId] = next);
+  }
+
+  Future<void> _setSeasonWatched(
+    String seasonId,
+    List<String> mediaItemIds,
+    bool next,
+  ) async {
+    await ref
+        .read(libraryApiProvider)
+        .setSeasonWatched(seasonId, WatchedUpdate(watched: next));
+    if (mounted) {
+      setState(() {
+        for (final id in mediaItemIds) {
+          _watchedOverrides[id] = next;
+        }
+      });
+    }
+  }
+
+  bool _seasonAllWatched(SeasonSummary s) {
+    final playable = s.episodes.where((e) => e.mediaItemId != null);
+    return playable.isNotEmpty && playable.every(_isWatched);
+  }
+
+  List<EpisodeSummary> get _seriesPlayable => [
+    for (final s in widget.series.seasons)
+      for (final e in s.episodes)
+        if (e.mediaItemId != null) e,
+  ];
+
+  bool get _seriesAllWatched {
+    final playable = _seriesPlayable;
+    return playable.isNotEmpty && playable.every(_isWatched);
+  }
+
+  Future<void> _setSeriesWatched(bool next) async {
+    final ids = [for (final e in _seriesPlayable) e.mediaItemId!];
+    await ref
+        .read(libraryApiProvider)
+        .setSeriesWatched(widget.series.id, WatchedUpdate(watched: next));
+    if (mounted) {
+      setState(() {
+        for (final id in ids) {
+          _watchedOverrides[id] = next;
+        }
+      });
+    }
+  }
 
   /// The season tab to open on: the one holding the resume episode (mapping its
   /// 1-indexed seasonNumber → the matching season index), else 0 so a fresh,
@@ -92,8 +160,8 @@ class _BodyState extends State<_Body> {
         if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
   ];
 
-  static bool _touched(EpisodeSummary e) =>
-      (e.watched ?? false) || (e.positionSeconds ?? 0) > 5;
+  bool _touched(EpisodeSummary e) =>
+      _isWatched(e) || (e.positionSeconds ?? 0) > 5;
 
   /// The episode to resume: the last in-progress one, else the one after the
   /// last episode you finished. Null when nothing's been started.
@@ -105,7 +173,7 @@ class _BodyState extends State<_Body> {
     }
     if (lastTouched == -1) return null;
     final last = playable[lastTouched];
-    if (!(last.ep.watched ?? false) && (last.ep.positionSeconds ?? 0) > 5) {
+    if (!_isWatched(last.ep) && (last.ep.positionSeconds ?? 0) > 5) {
       return last; // still mid-episode
     }
     return lastTouched + 1 < playable.length ? playable[lastTouched + 1] : null;
@@ -197,7 +265,47 @@ class _BodyState extends State<_Body> {
         const SizedBox(height: 8),
         if (season != null)
           for (final group in _groupEpisodes(season.episodes))
-            _EpisodeTile(episodes: group, seasonNumber: season.seasonNumber),
+            _EpisodeTile(
+              episodes: group,
+              seasonNumber: season.seasonNumber,
+              watched: _isWatched(group.first),
+              onSet: group.first.mediaItemId == null
+                  ? null
+                  : (next) => _setEpisodeWatched(group.first.mediaItemId!, next),
+            ),
+        // Bulk controls sit under the episode list so they don't wedge empty
+        // space between the season chips and the episodes (ARGY-109).
+        if (season != null &&
+            season.episodes.any((e) => e.mediaItemId != null))
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                if (series.seasons.length > 1)
+                  WatchedButton(
+                    watched: _seriesAllWatched,
+                    watchedLabel: 'Series watched',
+                    markLabel: 'Mark series watched',
+                    onSet: _setSeriesWatched,
+                  ),
+                WatchedButton(
+                  watched: _seasonAllWatched(season),
+                  watchedLabel: 'Season watched',
+                  markLabel: 'Mark season watched',
+                  onSet: (next) => _setSeasonWatched(
+                    season.id,
+                    [
+                      for (final e in season.episodes)
+                        if (e.mediaItemId != null) e.mediaItemId!,
+                    ],
+                    next,
+                  ),
+                ),
+              ],
+            ),
+          ),
         const SizedBox(height: 24),
       ],
     );
@@ -248,12 +356,22 @@ class _SeriesActions extends StatelessWidget {
 }
 
 class _EpisodeTile extends ConsumerWidget {
-  const _EpisodeTile({required this.episodes, required this.seasonNumber});
+  const _EpisodeTile({
+    required this.episodes,
+    required this.seasonNumber,
+    required this.watched,
+    required this.onSet,
+  });
 
   /// One or more episode rows backed by a single file. Length > 1 is a combined
   /// rip; the first is the representative for runtime/progress/play.
   final List<EpisodeSummary> episodes;
   final int seasonNumber;
+
+  /// Resolved watched state (honoring any optimistic override) and the setter to
+  /// flip it — null when there's no backing file to mark (ARGY-109).
+  final bool watched;
+  final Future<void> Function(bool next)? onSet;
 
   EpisodeSummary get _rep => episodes.first;
   bool get _combined => episodes.length > 1;
@@ -301,7 +419,6 @@ class _EpisodeTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.argosy;
     final playable = _rep.mediaItemId != null;
-    final watched = _rep.watched ?? false;
     final inProgress = _percent > 0 && !watched;
     final runtime = formatRuntime(_rep.durationSeconds);
     final overview = _overview;
@@ -436,9 +553,61 @@ class _EpisodeTile extends ConsumerWidget {
                   ),
                 ),
               ),
+              if (playable && onSet != null)
+                _EpisodeWatchedToggle(watched: watched, onSet: onSet!),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A compact per-episode watched toggle (ARGY-109): a check chip trailing the
+/// row. Owns its busy state and surfaces failures via a snackbar; [onSet] flips
+/// the flag (the parent applies the optimistic override on success).
+class _EpisodeWatchedToggle extends StatefulWidget {
+  const _EpisodeWatchedToggle({required this.watched, required this.onSet});
+
+  final bool watched;
+  final Future<void> Function(bool next) onSet;
+
+  @override
+  State<_EpisodeWatchedToggle> createState() => _EpisodeWatchedToggleState();
+}
+
+class _EpisodeWatchedToggleState extends State<_EpisodeWatchedToggle> {
+  bool _busy = false;
+
+  Future<void> _toggle() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await widget.onSet(!widget.watched);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't update watched state"),
+            backgroundColor: ArgosyColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: _busy ? null : _toggle,
+      iconSize: 22,
+      visualDensity: VisualDensity.compact,
+      tooltip: widget.watched ? 'Mark unwatched' : 'Mark watched',
+      icon: Icon(
+        widget.watched ? Icons.check_circle : Icons.check_circle_outline,
+        color: widget.watched ? ArgosyColors.green : ArgosyColors.faint,
       ),
     );
   }
