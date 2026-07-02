@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.9.0](https://github.com/Einlanzerous/argosy/compare/v0.8.1...v0.9.0) (2026-07-02)
+
+
+### Features
+
+* **auth:** in-place device profile switch — re-bind endpoint + Flutter picker (ARGY-85) ([#112](https://github.com/Einlanzerous/argosy/issues/112)) ([637982d](https://github.com/Einlanzerous/argosy/commit/637982d6b4e617616ba5b6fd27b38adfc1e3c6cc))
+* **detail:** enlarge series & film hero artwork ~40% (ARGY-116) ([#118](https://github.com/Einlanzerous/argosy/issues/118)) ([bc2183b](https://github.com/Einlanzerous/argosy/commit/bc2183b03211b7d42f3e675a306cfc1cf1a0bd74))
+* **detail:** per-episode TMDB ratings on series detail (ARGY-118) ([#125](https://github.com/Einlanzerous/argosy/issues/125)) ([f96400b](https://github.com/Einlanzerous/argosy/commit/f96400b4bec32bf13398baae8bd91701fbccf8a6))
+* **detail:** scale mobile detail hero with the viewport (ARGY-116) ([#119](https://github.com/Einlanzerous/argosy/issues/119)) ([048a3d6](https://github.com/Einlanzerous/argosy/commit/048a3d6ebebffd4c706430866c8de4f71d15849f))
+* **detail:** surface cast/credits on movie + series detail views (ARGY-113) ([#120](https://github.com/Einlanzerous/argosy/issues/120)) ([174a7cb](https://github.com/Einlanzerous/argosy/commit/174a7cba0aea139dec63ebd2a7f23dfde52a2108))
+* **home:** last-played device pill on resume items (ARGY-98) ([#108](https://github.com/Einlanzerous/argosy/issues/108)) ([50b9d23](https://github.com/Einlanzerous/argosy/commit/50b9d2314e02a475048db6bba1503a43a2e25a79))
+* **library:** mark episodes/items watched or unwatched (ARGY-109) ([#124](https://github.com/Einlanzerous/argosy/issues/124)) ([b6892da](https://github.com/Einlanzerous/argosy/commit/b6892da04faebd3ddcaf53e9d57c60f534f47b44))
+* **player:** caption position presets (Bottom/Raised/Higher) (ARGY-60) ([#110](https://github.com/Einlanzerous/argosy/issues/110)) ([51a4949](https://github.com/Einlanzerous/argosy/commit/51a4949071156570a37095667ff1a3742f6f6319))
+* **player:** forgiving seek-bar hit area + drag-to-scrub (ARGY-105) ([#123](https://github.com/Einlanzerous/argosy/issues/123)) ([3e51a5c](https://github.com/Einlanzerous/argosy/commit/3e51a5cf81edc268b33b5de115795611e661ca70))
+* **profiles:** account profile management — CRUD + web admin screen (ARGY-65) ([#111](https://github.com/Einlanzerous/argosy/issues/111)) ([b8f02a0](https://github.com/Einlanzerous/argosy/commit/b8f02a018f64f2c49360c8436e013394e9fe8676))
+* **search:** people/cast search via TMDB credits ingest + backfill (ARGY-67) ([#109](https://github.com/Einlanzerous/argosy/issues/109)) ([21b7363](https://github.com/Einlanzerous/argosy/commit/21b736327b9e084a276c35aba3f4f3a2aa0a92a6))
+* **tv:** Android TV foundation + phone code-pairing (ARGY-51, ARGY-112) ([#105](https://github.com/Einlanzerous/argosy/issues/105)) ([35aaa0c](https://github.com/Einlanzerous/argosy/commit/35aaa0c88d27430ec33f3fbc5cfa2fbc64d40a88))
+* **tv:** TVHome/detail/player core loop with D-pad focus (ARGY-51) ([#106](https://github.com/Einlanzerous/argosy/issues/106)) ([87a41e2](https://github.com/Einlanzerous/argosy/commit/87a41e2041fdf726a244679df63b3667da83d227))
+* **tv:** TVLibrary/Search/Settings — PR3 completes the Android TV shell (ARGY-51) ([#107](https://github.com/Einlanzerous/argosy/issues/107)) ([cad21f5](https://github.com/Einlanzerous/argosy/commit/cad21f5c963465bd8415e4b437b06fe2ca487263))
+
+
+### Bug Fixes
+
+* **android:** disable R8 minify for release — fixes launch crash (ARGY-114) ([#113](https://github.com/Einlanzerous/argosy/issues/113)) ([ed215a5](https://github.com/Einlanzerous/argosy/commit/ed215a5491552c0d3ef3ff87d2eadaab7f42d6e2))
+* **detail:** make the film hero ~20% taller than the series hero (web) ([#122](https://github.com/Einlanzerous/argosy/issues/122)) ([156705d](https://github.com/Einlanzerous/argosy/commit/156705d8c77ab2cca4bb90d83c8c91178befdf70))
+* **detail:** open series on the in-progress season, not always Season 1 (ARGY-117) ([#117](https://github.com/Einlanzerous/argosy/issues/117)) ([c93a4fb](https://github.com/Einlanzerous/argosy/commit/c93a4fb3fc975d0e4ed620f3983068608b8eb582))
+* **fleet:** dedup device registrations on re-pair via stable install id (ARGY-99) ([#102](https://github.com/Einlanzerous/argosy/issues/102)) ([5340cb1](https://github.com/Einlanzerous/argosy/commit/5340cb143804e1619edf3d0def675b25808a86cd))
+* **mobile:** keep sign-in fields above the keyboard on pairing screen ([#116](https://github.com/Einlanzerous/argosy/issues/116)) ([02932ee](https://github.com/Einlanzerous/argosy/commit/02932ee31afb1b638e2786d555e1835bd4b46fa5))
+* **web:** mint opaque install id via getRandomValues, not crypto.randomUUID (ARGY-121) ([#121](https://github.com/Einlanzerous/argosy/issues/121)) ([a521bd8](https://github.com/Einlanzerous/argosy/commit/a521bd826822cbfda90f8924c8b806caf69e567f))
+
 ## [0.8.1](https://github.com/Einlanzerous/argosy/compare/v0.8.0...v0.8.1) (2026-06-26)
 
 
