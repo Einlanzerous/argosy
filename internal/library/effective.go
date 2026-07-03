@@ -168,12 +168,3 @@ func f32(v *float64) *float32 {
 	f := float32(*v)
 	return &f
 }
-
-// nonNil normalizes a nil slice to an empty one so required JSON arrays
-// serialize as [] rather than null.
-func nonNil(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}

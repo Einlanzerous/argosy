@@ -36,22 +36,22 @@ func TestFacets(t *testing.T) {
 		t.Fatal(err)
 	}
 	n := 0
-	mv := func(genres, tags string) {
+	mv := func(genres string) {
 		t.Helper()
 		n++
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO media_items (library_id, kind, title, file_path, tags, provider_metadata)
-			 VALUES ($1,'movie','m',$2,$3,$4::jsonb)`,
-			libID, "m"+strconv.Itoa(n)+suffix, tags, `{"genres":`+genres+`}`); err != nil {
+			`INSERT INTO media_items (library_id, kind, title, file_path, provider_metadata)
+			 VALUES ($1,'movie','m',$2,$3::jsonb)`,
+			libID, "m"+strconv.Itoa(n)+suffix, `{"genres":`+genres+`}`); err != nil {
 			t.Fatal(err)
 		}
 	}
-	mv(`["Action","Drama"]`, `{anime}`)
-	mv(`["Action"]`, `{}`)
+	mv(`["Action","Drama"]`)
+	mv(`["Action"]`)
 
-	// A series with a genre+tag, plus an episode carrying a tag that must NOT count.
+	// A series with a genre, plus an episode whose genres must NOT count.
 	var seriesID, seasonID string
-	if err := pool.QueryRow(ctx, `INSERT INTO series (library_id, title, tags, provider_metadata) VALUES ($1,'s','{anime}',$2::jsonb) RETURNING id::text`,
+	if err := pool.QueryRow(ctx, `INSERT INTO series (library_id, title, provider_metadata) VALUES ($1,'s',$2::jsonb) RETURNING id::text`,
 		libID, `{"genres":["Drama"]}`).Scan(&seriesID); err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestFacets(t *testing.T) {
 		t.Fatal(err)
 	}
 	var epItem string
-	if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path, tags) VALUES ($1,'episode','e',$2,'{anime}') RETURNING id::text`,
+	if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'episode','e',$2) RETURNING id::text`,
 		libID, "ep"+suffix).Scan(&epItem); err != nil {
 		t.Fatal(err)
 	}
@@ -75,17 +75,17 @@ func TestFacets(t *testing.T) {
 	for _, f := range facets {
 		got[string(f.Type)+":"+f.Value] = f.Count
 	}
-	// 2 movies + 1 series: Action on both movies (2), Drama on movie1 + series (2),
-	// anime tag on movie1 + series (2). The episode's anime tag must be excluded.
-	want := map[string]int{"genre:Action": 2, "genre:Drama": 2, "tag:anime": 2}
+	// 2 movies + 1 series: Action on both movies (2), Drama on movie1 + series (2).
+	want := map[string]int{"genre:Action": 2, "genre:Drama": 2}
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("facet %s = %d, want %d (all: %v)", k, got[k], v, got)
 		}
 	}
-	// Ranking is by count desc — every returned facet here is count 2, and nothing
-	// spurious (e.g. tag:anime == 3 would mean the episode leaked in).
-	if got["tag:anime"] == 3 {
-		t.Error("episode tag leaked into facet counts")
+	// Only genres are surfaced now — no tag facets.
+	for k := range got {
+		if len(k) >= 4 && k[:4] == "tag:" {
+			t.Errorf("unexpected tag facet %q (all: %v)", k, got)
+		}
 	}
 }

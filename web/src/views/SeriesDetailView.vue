@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import BackButton from '@/components/BackButton.vue'
 import AddToVault from '@/components/AddToVault.vue'
-import LabelEditor from '@/components/LabelEditor.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
 import { setPage } from '@/lib/page'
@@ -263,8 +262,6 @@ watch(
           <span>{{ series.year ?? '—' }}</span>
           <span class="sep">•</span>
           <span>{{ series.seasons.length }} seasons</span>
-          <span v-if="series.tags?.includes('anime')" class="sep">•</span>
-          <span v-if="series.tags?.includes('anime')" class="kind">Anime</span>
         </div>
         <p v-if="series.overview" class="synopsis">{{ series.overview }}</p>
         <p v-if="series.cast?.length" class="cast">
@@ -284,7 +281,6 @@ watch(
           </button>
           <AddToVault v-if="series" :series-id="series.id" />
         </div>
-        <LabelEditor v-if="series" :series-id="series.id" :initial="series.labels ?? []" />
       </div>
     </section>
 

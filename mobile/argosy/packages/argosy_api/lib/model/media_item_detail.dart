@@ -25,10 +25,8 @@ class MediaItemDetail {
     this.container,
     required this.filePath,
     required this.reviewRequired,
-    this.tags = const [],
     this.rating,
     this.cast = const [],
-    this.labels = const [],
   });
 
   String id;
@@ -56,16 +54,11 @@ class MediaItemDetail {
 
   bool reviewRequired;
 
-  List<String> tags;
-
   /// Effective provider rating, 0–10.
   num? rating;
 
   /// Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none.
   List<String> cast;
-
-  /// The calling profile's custom labels on this item.
-  List<String> labels;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is MediaItemDetail &&
@@ -81,10 +74,8 @@ class MediaItemDetail {
     other.container == container &&
     other.filePath == filePath &&
     other.reviewRequired == reviewRequired &&
-    _deepEquality.equals(other.tags, tags) &&
     other.rating == rating &&
-    _deepEquality.equals(other.cast, cast) &&
-    _deepEquality.equals(other.labels, labels);
+    _deepEquality.equals(other.cast, cast);
 
   @override
   int get hashCode =>
@@ -101,13 +92,11 @@ class MediaItemDetail {
     (container == null ? 0 : container!.hashCode) +
     (filePath.hashCode) +
     (reviewRequired.hashCode) +
-    (tags.hashCode) +
     (rating == null ? 0 : rating!.hashCode) +
-    (cast.hashCode) +
-    (labels.hashCode);
+    (cast.hashCode);
 
   @override
-  String toString() => 'MediaItemDetail[id=$id, kind=$kind, title=$title, year=$year, overview=$overview, genres=$genres, posterUrl=$posterUrl, backdropUrl=$backdropUrl, durationSeconds=$durationSeconds, container=$container, filePath=$filePath, reviewRequired=$reviewRequired, tags=$tags, rating=$rating, cast=$cast, labels=$labels]';
+  String toString() => 'MediaItemDetail[id=$id, kind=$kind, title=$title, year=$year, overview=$overview, genres=$genres, posterUrl=$posterUrl, backdropUrl=$backdropUrl, durationSeconds=$durationSeconds, container=$container, filePath=$filePath, reviewRequired=$reviewRequired, rating=$rating, cast=$cast]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -147,14 +136,12 @@ class MediaItemDetail {
     }
       json[r'filePath'] = this.filePath;
       json[r'reviewRequired'] = this.reviewRequired;
-      json[r'tags'] = this.tags;
     if (this.rating != null) {
       json[r'rating'] = this.rating;
     } else {
       json[r'rating'] = null;
     }
       json[r'cast'] = this.cast;
-      json[r'labels'] = this.labels;
     return json;
   }
 
@@ -179,8 +166,6 @@ class MediaItemDetail {
         assert(json[r'filePath'] != null, 'Required key "MediaItemDetail[filePath]" has a null value in JSON.');
         assert(json.containsKey(r'reviewRequired'), 'Required key "MediaItemDetail[reviewRequired]" is missing from JSON.');
         assert(json[r'reviewRequired'] != null, 'Required key "MediaItemDetail[reviewRequired]" has a null value in JSON.');
-        assert(json.containsKey(r'tags'), 'Required key "MediaItemDetail[tags]" is missing from JSON.');
-        assert(json[r'tags'] != null, 'Required key "MediaItemDetail[tags]" has a null value in JSON.');
         return true;
       }());
 
@@ -201,17 +186,11 @@ class MediaItemDetail {
         container: mapValueOfType<String>(json, r'container'),
         filePath: mapValueOfType<String>(json, r'filePath')!,
         reviewRequired: mapValueOfType<bool>(json, r'reviewRequired')!,
-        tags: json[r'tags'] is Iterable
-            ? (json[r'tags'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
         rating: json[r'rating'] == null
             ? null
             : num.parse('${json[r'rating']}'),
         cast: json[r'cast'] is Iterable
             ? (json[r'cast'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        labels: json[r'labels'] is Iterable
-            ? (json[r'labels'] as Iterable).cast<String>().toList(growable: false)
             : const [],
       );
     }
@@ -265,7 +244,6 @@ class MediaItemDetail {
     'title',
     'filePath',
     'reviewRequired',
-    'tags',
   };
 }
 

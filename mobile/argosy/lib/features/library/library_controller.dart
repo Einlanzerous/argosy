@@ -22,14 +22,6 @@ class LibraryFilterController extends Notifier<BrowseFilter> {
     state = state.copyWith(genres: genres);
   }
 
-  void toggleTag(String tag) {
-    final v = tag.toLowerCase();
-    state = state.copyWith(tag: state.tag == v ? null : v);
-  }
-
-  void toggleLabel(String label) =>
-      state = state.copyWith(label: state.label == label ? null : label);
-
   void setWatched(WatchedState? w) =>
       state = state.copyWith(watched: state.watched == w ? null : w);
 
@@ -57,12 +49,7 @@ final libraryResultsProvider =
   return ref.watch(browseRepositoryProvider).browse(filter);
 });
 
-/// The profile's custom labels, for the Labels facet (fetched once).
-final myLabelsProvider = FutureProvider<List<String>>(
-  (ref) async => (await ref.watch(libraryApiProvider).listLabels()) ?? const [],
-);
-
-/// The account's most common genre/tag facets (with counts), for the TV
+/// The account's most common genre facets (with counts), for the TV
 /// library's facet side panel. Mirrors the home genre rows' source so the facet
 /// list is identical across surfaces.
 final libraryFacetsProvider = FutureProvider<List<Facet>>(

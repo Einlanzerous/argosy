@@ -15,10 +15,9 @@ import '../../widgets/hatch_pattern.dart';
 import 'add_to_vault.dart';
 import 'detail_providers.dart';
 import 'detail_widgets.dart';
-import 'label_editor.dart';
 
-/// A series' detail screen: backdrop hero, your labels, Add-to-Vault, a season
-/// selector, and the episode list with per-episode resume/play.
+/// A series' detail screen: backdrop hero, Add-to-Vault, a season selector, and
+/// the episode list with per-episode resume/play.
 class SeriesDetailScreen extends ConsumerWidget {
   const SeriesDetailScreen({super.key, required this.seriesId});
 
@@ -233,15 +232,11 @@ class _BodyState extends ConsumerState<_Body> {
                 CastRow(cast: series.cast),
                 const SizedBox(height: 16),
               ],
-              GenreTagChips(tags: series.tags),
-              if (series.tags.isNotEmpty) const SizedBox(height: 16),
               _SeriesActions(
                 seriesId: series.id,
                 resume: resume,
                 firstPlayable: _firstPlayable,
               ),
-              const SizedBox(height: 20),
-              LabelEditor(seriesId: series.id, initial: series.labels),
             ],
           ),
         ),

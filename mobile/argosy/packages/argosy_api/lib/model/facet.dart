@@ -141,12 +141,10 @@ class FacetTypeEnum {
   String toJson() => value;
 
   static const genre = FacetTypeEnum._(r'genre');
-  static const tag = FacetTypeEnum._(r'tag');
 
   /// List of all possible values in this [enum][FacetTypeEnum].
   static const values = <FacetTypeEnum>[
     genre,
-    tag,
   ];
 
   static FacetTypeEnum? fromJson(dynamic value) => FacetTypeEnumTypeTransformer().decode(value);
@@ -186,7 +184,6 @@ class FacetTypeEnumTypeTransformer {
     if (data != null) {
       switch (data) {
         case r'genre': return FacetTypeEnum.genre;
-        case r'tag': return FacetTypeEnum.tag;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');

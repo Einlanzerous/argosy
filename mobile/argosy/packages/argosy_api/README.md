@@ -86,8 +86,6 @@ Class | Method | HTTP request | Description
 *AuthApi* | [**startLink**](doc//AuthApi.md#startlink) | **POST** /api/v1/auth/link/start | Begin TV code-pairing — mint a short code for the TV to display
 *AuthApi* | [**switchDeviceProfile**](doc//AuthApi.md#switchdeviceprofile) | **POST** /api/v1/auth/devices/switch | Re-bind the calling device to another profile (in-place switch)
 *AuthApi* | [**updateProfile**](doc//AuthApi.md#updateprofile) | **PATCH** /api/v1/auth/profiles/{userId} | Rename a profile or change its role (admin only)
-*LibraryApi* | [**addItemLabel**](doc//LibraryApi.md#additemlabel) | **POST** /api/v1/items/{itemId}/labels | Add one of the profile's custom labels to a film
-*LibraryApi* | [**addSeriesLabel**](doc//LibraryApi.md#addserieslabel) | **POST** /api/v1/series/{seriesId}/labels | Add one of the profile's custom labels to a series
 *LibraryApi* | [**addVaultItem**](doc//LibraryApi.md#addvaultitem) | **POST** /api/v1/vaults/{vaultId}/items | Add a film or series to a vault
 *LibraryApi* | [**beaconStream**](doc//LibraryApi.md#beaconstream) | **GET** /api/v1/beacon | SSE stream of the current user's live play-state events (Beacon)
 *LibraryApi* | [**createLibrary**](doc//LibraryApi.md#createlibrary) | **POST** /api/v1/libraries | Register a new media library (admin only)
@@ -103,8 +101,7 @@ Class | Method | HTTP request | Description
 *LibraryApi* | [**getSubtitle**](doc//LibraryApi.md#getsubtitle) | **GET** /api/v1/items/{itemId}/subtitles/{trackId} | A subtitle track as WebVTT
 *LibraryApi* | [**getVault**](doc//LibraryApi.md#getvault) | **GET** /api/v1/vaults/{vaultId} | Vault detail with its items
 *LibraryApi* | [**listContinue**](doc//LibraryApi.md#listcontinue) | **GET** /api/v1/continue | Continue-watching / on-deck items for the current profile
-*LibraryApi* | [**listFacets**](doc//LibraryApi.md#listfacets) | **GET** /api/v1/facets | Most common facets (genres + tags) across the account's manifest
-*LibraryApi* | [**listLabels**](doc//LibraryApi.md#listlabels) | **GET** /api/v1/labels | The calling profile's distinct custom labels
+*LibraryApi* | [**listFacets**](doc//LibraryApi.md#listfacets) | **GET** /api/v1/facets | Most common genres across the account's manifest
 *LibraryApi* | [**listLibraries**](doc//LibraryApi.md#listlibraries) | **GET** /api/v1/libraries | List the account's libraries
 *LibraryApi* | [**listMovies**](doc//LibraryApi.md#listmovies) | **GET** /api/v1/libraries/{libraryId}/movies | Browse movies in a library
 *LibraryApi* | [**listOnDeck**](doc//LibraryApi.md#listondeck) | **GET** /api/v1/ondeck | On-deck (up-next) episodes for series the user is currently watching
@@ -113,8 +110,6 @@ Class | Method | HTTP request | Description
 *LibraryApi* | [**listSeries**](doc//LibraryApi.md#listseries) | **GET** /api/v1/libraries/{libraryId}/series | Browse series in a library
 *LibraryApi* | [**listSubtitles**](doc//LibraryApi.md#listsubtitles) | **GET** /api/v1/items/{itemId}/subtitles | Available subtitle tracks for an item
 *LibraryApi* | [**listVaults**](doc//LibraryApi.md#listvaults) | **GET** /api/v1/vaults | List vaults visible to the current profile (own + shared)
-*LibraryApi* | [**removeItemLabel**](doc//LibraryApi.md#removeitemlabel) | **DELETE** /api/v1/items/{itemId}/labels/{label} | Remove a custom label from a film
-*LibraryApi* | [**removeSeriesLabel**](doc//LibraryApi.md#removeserieslabel) | **DELETE** /api/v1/series/{seriesId}/labels/{label} | Remove a custom label from a series
 *LibraryApi* | [**removeVaultItem**](doc//LibraryApi.md#removevaultitem) | **DELETE** /api/v1/vaults/{vaultId}/items/{entryId} | Remove an item from a vault
 *LibraryApi* | [**reorderVault**](doc//LibraryApi.md#reordervault) | **PUT** /api/v1/vaults/{vaultId}/order | Reorder a vault's items
 *LibraryApi* | [**reportProgress**](doc//LibraryApi.md#reportprogress) | **PUT** /api/v1/items/{itemId}/progress | Heartbeat — upsert the resume position for the current profile
@@ -138,7 +133,6 @@ Class | Method | HTTP request | Description
 ## Documentation For Models
 
  - [Account](doc//Account.md)
- - [AddLabelRequest](doc//AddLabelRequest.md)
  - [AddVaultItemRequest](doc//AddVaultItemRequest.md)
  - [ContinueItem](doc//ContinueItem.md)
  - [CreateLibraryRequest](doc//CreateLibraryRequest.md)

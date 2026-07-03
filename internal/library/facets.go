@@ -6,11 +6,10 @@ import (
 	"github.com/Einlanzerous/argosy/internal/api"
 )
 
-// Facets returns the most common facets — genres and path/label tags merged into
-// one ranking by item count — across the account's films and series. It powers
-// the discovery chips. Episodes are excluded (they carry neither genres nor
-// meaningful tags); counts are over standalone movies + series. Genres read the
-// effective value (override blob over provider).
+// Facets returns the most common genres, ranked by item count, across the
+// account's films and series. It powers the discovery chips. Episodes are
+// excluded (they carry no genres); counts are over standalone movies + series.
+// Genres read the effective value (override blob over provider).
 func (s *Store) Facets(ctx context.Context, accountID string, limit int) ([]api.Facet, error) {
 	switch {
 	case limit < 1:
@@ -20,18 +19,10 @@ func (s *Store) Facets(ctx context.Context, accountID string, limit int) ([]api.
 	}
 	const q = `
 WITH facets AS (
-	SELECT 'tag' AS type, t AS value
-	FROM media_items mi JOIN libraries l ON l.id = mi.library_id, unnest(mi.tags) AS t
-	WHERE l.account_id = $1 AND mi.kind = 'movie'
-	UNION ALL
-	SELECT 'genre', g
+	SELECT 'genre' AS type, g AS value
 	FROM media_items mi JOIN libraries l ON l.id = mi.library_id,
 	     jsonb_array_elements_text(COALESCE(mi.metadata->'genres', mi.provider_metadata->'genres', '[]'::jsonb)) AS g
 	WHERE l.account_id = $1 AND mi.kind = 'movie'
-	UNION ALL
-	SELECT 'tag', t
-	FROM series r JOIN libraries l ON l.id = r.library_id, unnest(r.tags) AS t
-	WHERE l.account_id = $1
 	UNION ALL
 	SELECT 'genre', g
 	FROM series r JOIN libraries l ON l.id = r.library_id,

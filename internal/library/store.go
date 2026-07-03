@@ -89,13 +89,13 @@ func (s *Store) ListMovies(ctx context.Context, accountID, libraryID, userID str
 	watchJoin, watchWhere := f.movieWatched(a, userID)
 	from := ` FROM media_items mi JOIN libraries l ON l.id = mi.library_id` + watchJoin +
 		` WHERE l.account_id = ` + acc + ` AND mi.library_id = ` + lib + ` AND mi.kind = 'movie'` +
-		f.common("mi", a) + watchWhere + f.labelClause("mi", "media_item_id", userID, a)
+		f.common("mi", a) + watchWhere
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+from, a.vals...).Scan(&page.Total); err != nil {
 		return page, err
 	}
 	lim, off := a.add(limit), a.add(offset)
 	rows, err := s.pool.Query(ctx,
-		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.tags, mi.provider_metadata, mi.metadata`+
+		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.provider_metadata, mi.metadata`+
 			from+` ORDER BY `+order+` LIMIT `+lim+` OFFSET `+off,
 		a.vals...)
 	if err != nil {
@@ -105,12 +105,11 @@ func (s *Store) ListMovies(ctx context.Context, accountID, libraryID, userID str
 	for rows.Next() {
 		var id, kind, title string
 		var year *int
-		var tags []string
 		var prov, over []byte
-		if err := rows.Scan(&id, &kind, &title, &year, &tags, &prov, &over); err != nil {
+		if err := rows.Scan(&id, &kind, &title, &year, &prov, &over); err != nil {
 			return page, err
 		}
-		page.Items = append(page.Items, s.summary(id, kind, title, year, tags, prov, over))
+		page.Items = append(page.Items, s.summary(id, kind, title, year, prov, over))
 	}
 	return page, rows.Err()
 }
@@ -127,13 +126,13 @@ func (s *Store) ListSeries(ctx context.Context, accountID, libraryID, userID str
 	acc, lib := a.add(accountID), a.add(libraryID)
 	from := ` FROM series r JOIN libraries l ON l.id = r.library_id` +
 		` WHERE l.account_id = ` + acc + ` AND r.library_id = ` + lib +
-		f.common("r", a) + f.seriesWatched(a, userID) + f.labelClause("r", "series_id", userID, a)
+		f.common("r", a) + f.seriesWatched(a, userID)
 	if err := s.pool.QueryRow(ctx, `SELECT count(*)`+from, a.vals...).Scan(&page.Total); err != nil {
 		return page, err
 	}
 	lim, off := a.add(limit), a.add(offset)
 	rows, err := s.pool.Query(ctx,
-		`SELECT r.id::text, r.title, r.year, r.tags, r.provider_metadata, r.metadata`+
+		`SELECT r.id::text, r.title, r.year, r.provider_metadata, r.metadata`+
 			from+` ORDER BY `+order+` LIMIT `+lim+` OFFSET `+off,
 		a.vals...)
 	if err != nil {
@@ -143,12 +142,11 @@ func (s *Store) ListSeries(ctx context.Context, accountID, libraryID, userID str
 	for rows.Next() {
 		var id, title string
 		var year *int
-		var tags []string
 		var prov, over []byte
-		if err := rows.Scan(&id, &title, &year, &tags, &prov, &over); err != nil {
+		if err := rows.Scan(&id, &title, &year, &prov, &over); err != nil {
 			return page, err
 		}
-		page.Items = append(page.Items, s.seriesSummary(id, title, year, tags, prov, over))
+		page.Items = append(page.Items, s.seriesSummary(id, title, year, prov, over))
 	}
 	return page, rows.Err()
 }
@@ -163,14 +161,14 @@ func (s *Store) ListRecent(ctx context.Context, accountID string, limit int) ([]
 		limit = 24
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, kind, title, year, tags, prov, over FROM (
+		`SELECT id, kind, title, year, prov, over FROM (
 			SELECT mi.id::text AS id, mi.kind AS kind, mi.title AS title, mi.year AS year,
-			       mi.tags AS tags, mi.provider_metadata AS prov, mi.metadata AS over,
+			       mi.provider_metadata AS prov, mi.metadata AS over,
 			       mi.added_at AS added_at
 			FROM media_items mi JOIN libraries l ON l.id = mi.library_id
 			WHERE l.account_id = $1 AND mi.kind = 'movie'
 			UNION ALL
-			SELECT r.id::text, 'series', r.title, r.year, r.tags, r.provider_metadata, r.metadata,
+			SELECT r.id::text, 'series', r.title, r.year, r.provider_metadata, r.metadata,
 			       max(mi.added_at) AS added_at
 			FROM series r
 			JOIN libraries l ON l.id = r.library_id
@@ -191,12 +189,11 @@ func (s *Store) ListRecent(ctx context.Context, accountID string, limit int) ([]
 	for rows.Next() {
 		var id, kind, title string
 		var year *int
-		var tags []string
 		var prov, over []byte
-		if err := rows.Scan(&id, &kind, &title, &year, &tags, &prov, &over); err != nil {
+		if err := rows.Scan(&id, &kind, &title, &year, &prov, &over); err != nil {
 			return nil, err
 		}
-		out = append(out, s.summary(id, kind, title, year, tags, prov, over))
+		out = append(out, s.summary(id, kind, title, year, prov, over))
 	}
 	return out, rows.Err()
 }
@@ -208,14 +205,13 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 	var container *string
 	var duration *float64
 	var reviewRequired bool
-	var tags []string
 	var prov, over []byte
 	err := s.pool.QueryRow(ctx,
 		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.container, mi.duration_seconds,
-		        mi.file_path, mi.review_required, mi.tags, mi.provider_metadata, mi.metadata
+		        mi.file_path, mi.review_required, mi.provider_metadata, mi.metadata
 		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id
 		 WHERE l.account_id = $1 AND mi.id = $2`,
-		accountID, itemID).Scan(&id, &kind, &title, &year, &container, &duration, &filePath, &reviewRequired, &tags, &prov, &over)
+		accountID, itemID).Scan(&id, &kind, &title, &year, &container, &duration, &filePath, &reviewRequired, &prov, &over)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -235,7 +231,6 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 		Container:      container,
 		FilePath:       filePath,
 		ReviewRequired: reviewRequired,
-		Tags:           nonNil(tags),
 		Rating:         f32(effectiveRating(o, p)),
 		Cast:           effectiveCast(o, p),
 	}
@@ -251,13 +246,12 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID string) (*api.SeriesDetail, error) {
 	var id, title string
 	var year *int
-	var tags []string
 	var prov, over []byte
 	err := s.pool.QueryRow(ctx,
-		`SELECT r.id::text, r.title, r.year, r.tags, r.provider_metadata, r.metadata
+		`SELECT r.id::text, r.title, r.year, r.provider_metadata, r.metadata
 		 FROM series r JOIN libraries l ON l.id = r.library_id
 		 WHERE l.account_id = $1 AND r.id = $2`,
-		accountID, seriesID).Scan(&id, &title, &year, &tags, &prov, &over)
+		accountID, seriesID).Scan(&id, &title, &year, &prov, &over)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -273,7 +267,6 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 		PosterUrl:   posterURL(s.artworkBase, o, p),
 		BackdropUrl: backdropURL(s.artworkBase, o, p),
 		Seasons:     []api.SeasonSummary{},
-		Tags:        nonNil(tags),
 		Cast:        effectiveCast(o, p),
 	}
 
@@ -340,7 +333,7 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 	return &detail, rows.Err()
 }
 
-func (s *Store) seriesSummary(id, title string, year *int, tags []string, prov, over []byte) api.SeriesSummary {
+func (s *Store) seriesSummary(id, title string, year *int, prov, over []byte) api.SeriesSummary {
 	p, o := decodeMap(prov), decodeMap(over)
 	return api.SeriesSummary{
 		Id:          parseUUID(id),
@@ -348,12 +341,11 @@ func (s *Store) seriesSummary(id, title string, year *int, tags []string, prov, 
 		Year:        effectiveYear(o, p, year),
 		PosterUrl:   posterURL(s.artworkBase, o, p),
 		BackdropUrl: backdropURL(s.artworkBase, o, p),
-		Tags:        nonNil(tags),
 		Rating:      f32(effectiveRating(o, p)),
 	}
 }
 
-func (s *Store) summary(id, kind, title string, year *int, tags []string, prov, over []byte) api.MediaItemSummary {
+func (s *Store) summary(id, kind, title string, year *int, prov, over []byte) api.MediaItemSummary {
 	p, o := decodeMap(prov), decodeMap(over)
 	return api.MediaItemSummary{
 		Id:          parseUUID(id),
@@ -362,7 +354,6 @@ func (s *Store) summary(id, kind, title string, year *int, tags []string, prov, 
 		Year:        effectiveYear(o, p, year),
 		PosterUrl:   posterURL(s.artworkBase, o, p),
 		BackdropUrl: backdropURL(s.artworkBase, o, p),
-		Tags:        nonNil(tags),
 		Rating:      f32(effectiveRating(o, p)),
 	}
 }

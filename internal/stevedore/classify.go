@@ -153,7 +153,7 @@ func (s *Scanner) Classify(ctx context.Context, libraryID string) error {
 				}
 				continue
 			}
-			if err := s.linkEpisode(ctx, libraryID, info, it.id, it.title, deriveTags(it.filePath)); err != nil {
+			if err := s.linkEpisode(ctx, libraryID, info, it.id, it.title); err != nil {
 				return fmt.Errorf("link episode %s: %w", it.filePath, err)
 			}
 		} else {
@@ -168,21 +168,15 @@ func (s *Scanner) Classify(ctx context.Context, libraryID string) error {
 	return nil
 }
 
-func (s *Scanner) linkEpisode(ctx context.Context, libraryID string, info episodeInfo, mediaItemID, fallbackTitle string, tags []string) error {
-	if tags == nil {
-		tags = []string{}
-	}
+func (s *Scanner) linkEpisode(ctx context.Context, libraryID string, info episodeInfo, mediaItemID, fallbackTitle string) error {
 	var seriesID string
-	// On conflict, union the episode's path-derived tags into the series so a
-	// series picks up `anime` (etc.) from any of its episodes.
 	if err := s.pool.QueryRow(ctx,
-		`INSERT INTO series (library_id, title, sort_title, tags) VALUES ($1, $2, $3, $4)
+		`INSERT INTO series (library_id, title, sort_title) VALUES ($1, $2, $3)
 		 ON CONFLICT (library_id, sort_title) DO UPDATE SET
 			title = EXCLUDED.title,
-			tags = (SELECT coalesce(array_agg(DISTINCT t), '{}') FROM unnest(series.tags || EXCLUDED.tags) AS t),
 			updated_at = now()
 		 RETURNING id::text`,
-		libraryID, info.show, sortTitle(info.show), tags).Scan(&seriesID); err != nil {
+		libraryID, info.show, sortTitle(info.show)).Scan(&seriesID); err != nil {
 		return err
 	}
 	var seasonID string

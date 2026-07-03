@@ -20,9 +20,7 @@ class SeriesDetail {
     this.posterUrl,
     this.backdropUrl,
     this.seasons = const [],
-    this.tags = const [],
     this.cast = const [],
-    this.labels = const [],
   });
 
   String id;
@@ -40,13 +38,8 @@ class SeriesDetail {
 
   List<SeasonSummary> seasons;
 
-  List<String> tags;
-
   /// Top-billed cast names from the metadata provider. Omitted when none.
   List<String> cast;
-
-  /// The calling profile's custom labels on this series.
-  List<String> labels;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is SeriesDetail &&
@@ -57,9 +50,7 @@ class SeriesDetail {
     other.posterUrl == posterUrl &&
     other.backdropUrl == backdropUrl &&
     _deepEquality.equals(other.seasons, seasons) &&
-    _deepEquality.equals(other.tags, tags) &&
-    _deepEquality.equals(other.cast, cast) &&
-    _deepEquality.equals(other.labels, labels);
+    _deepEquality.equals(other.cast, cast);
 
   @override
   int get hashCode =>
@@ -71,12 +62,10 @@ class SeriesDetail {
     (posterUrl == null ? 0 : posterUrl!.hashCode) +
     (backdropUrl == null ? 0 : backdropUrl!.hashCode) +
     (seasons.hashCode) +
-    (tags.hashCode) +
-    (cast.hashCode) +
-    (labels.hashCode);
+    (cast.hashCode);
 
   @override
-  String toString() => 'SeriesDetail[id=$id, title=$title, year=$year, overview=$overview, posterUrl=$posterUrl, backdropUrl=$backdropUrl, seasons=$seasons, tags=$tags, cast=$cast, labels=$labels]';
+  String toString() => 'SeriesDetail[id=$id, title=$title, year=$year, overview=$overview, posterUrl=$posterUrl, backdropUrl=$backdropUrl, seasons=$seasons, cast=$cast]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -103,9 +92,7 @@ class SeriesDetail {
       json[r'backdropUrl'] = null;
     }
       json[r'seasons'] = this.seasons;
-      json[r'tags'] = this.tags;
       json[r'cast'] = this.cast;
-      json[r'labels'] = this.labels;
     return json;
   }
 
@@ -126,8 +113,6 @@ class SeriesDetail {
         assert(json[r'title'] != null, 'Required key "SeriesDetail[title]" has a null value in JSON.');
         assert(json.containsKey(r'seasons'), 'Required key "SeriesDetail[seasons]" is missing from JSON.');
         assert(json[r'seasons'] != null, 'Required key "SeriesDetail[seasons]" has a null value in JSON.');
-        assert(json.containsKey(r'tags'), 'Required key "SeriesDetail[tags]" is missing from JSON.');
-        assert(json[r'tags'] != null, 'Required key "SeriesDetail[tags]" has a null value in JSON.');
         return true;
       }());
 
@@ -139,14 +124,8 @@ class SeriesDetail {
         posterUrl: mapValueOfType<String>(json, r'posterUrl'),
         backdropUrl: mapValueOfType<String>(json, r'backdropUrl'),
         seasons: SeasonSummary.listFromJson(json[r'seasons']),
-        tags: json[r'tags'] is Iterable
-            ? (json[r'tags'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
         cast: json[r'cast'] is Iterable
             ? (json[r'cast'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        labels: json[r'labels'] is Iterable
-            ? (json[r'labels'] as Iterable).cast<String>().toList(growable: false)
             : const [],
       );
     }
@@ -198,7 +177,6 @@ class SeriesDetail {
     'id',
     'title',
     'seasons',
-    'tags',
   };
 }
 

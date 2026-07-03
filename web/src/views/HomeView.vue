@@ -33,7 +33,6 @@ type GenreCard = {
   title: string
   year?: number
   kind: string
-  anime: boolean
   posterUrl?: string | null
   to: RouteLocationRaw
 }
@@ -58,7 +57,6 @@ async function buildVaultRows(): Promise<void> {
         title: e.title,
         year: e.year ?? undefined,
         kind: e.kind === 'series' ? 'Series' : 'Film',
-        anime: false,
         posterUrl: e.posterUrl,
         to: (e.kind === 'series'
           ? { name: 'series', params: { id: e.id } }
@@ -86,7 +84,6 @@ async function buildGenreRows(): Promise<void> {
           title: m.title,
           year: m.year ?? undefined,
           kind: m.kind,
-          anime: !!m.tags?.includes('anime'),
           posterUrl: m.posterUrl,
           to: { name: 'movie', params: { id: m.id } } as RouteLocationRaw,
         })),
@@ -95,7 +92,6 @@ async function buildGenreRows(): Promise<void> {
           title: s.title,
           year: s.year ?? undefined,
           kind: 'Series',
-          anime: !!s.tags?.includes('anime'),
           posterUrl: s.posterUrl,
           to: { name: 'series', params: { id: s.id } } as RouteLocationRaw,
         })),
@@ -297,7 +293,6 @@ onUnmounted(() => {
           :title="m.title"
           :subtitle="m.year ? String(m.year) : undefined"
           :kind="m.kind"
-          :anime="m.tags?.includes('anime')"
           :poster-url="m.posterUrl"
           :to="
             m.kind === 'series'
@@ -320,7 +315,6 @@ onUnmounted(() => {
           :title="c.title"
           :subtitle="c.year ? String(c.year) : undefined"
           :kind="c.kind"
-          :anime="c.anime"
           :poster-url="c.posterUrl"
           :to="c.to"
         />
@@ -339,7 +333,6 @@ onUnmounted(() => {
           :title="c.title"
           :subtitle="c.year ? String(c.year) : undefined"
           :kind="c.kind"
-          :anime="c.anime"
           :poster-url="c.posterUrl"
           :to="c.to"
         />

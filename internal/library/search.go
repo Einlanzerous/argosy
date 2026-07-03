@@ -45,7 +45,7 @@ func (s *Store) Search(ctx context.Context, accountID, query string, limit int) 
 	}
 
 	movieRows, err := s.pool.Query(ctx,
-		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.tags, mi.provider_metadata, mi.metadata
+		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.provider_metadata, mi.metadata
 		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id
 		 WHERE l.account_id = $1 AND mi.kind = 'movie'
 		   AND mi.search_vector @@ to_tsquery('simple', $2)
@@ -60,19 +60,18 @@ func (s *Store) Search(ctx context.Context, accountID, query string, limit int) 
 	for movieRows.Next() {
 		var id, kind, title string
 		var year *int
-		var tags []string
 		var prov, over []byte
-		if err := movieRows.Scan(&id, &kind, &title, &year, &tags, &prov, &over); err != nil {
+		if err := movieRows.Scan(&id, &kind, &title, &year, &prov, &over); err != nil {
 			return res, err
 		}
-		res.Movies = append(res.Movies, s.summary(id, kind, title, year, tags, prov, over))
+		res.Movies = append(res.Movies, s.summary(id, kind, title, year, prov, over))
 	}
 	if err := movieRows.Err(); err != nil {
 		return res, err
 	}
 
 	seriesRows, err := s.pool.Query(ctx,
-		`SELECT r.id::text, r.title, r.year, r.tags, r.provider_metadata, r.metadata
+		`SELECT r.id::text, r.title, r.year, r.provider_metadata, r.metadata
 		 FROM series r JOIN libraries l ON l.id = r.library_id
 		 WHERE l.account_id = $1 AND r.search_vector @@ to_tsquery('simple', $2)
 		 ORDER BY ts_rank_cd(r.search_vector, to_tsquery('simple', $2)) DESC,
@@ -86,12 +85,11 @@ func (s *Store) Search(ctx context.Context, accountID, query string, limit int) 
 	for seriesRows.Next() {
 		var id, title string
 		var year *int
-		var tags []string
 		var prov, over []byte
-		if err := seriesRows.Scan(&id, &title, &year, &tags, &prov, &over); err != nil {
+		if err := seriesRows.Scan(&id, &title, &year, &prov, &over); err != nil {
 			return res, err
 		}
-		res.Series = append(res.Series, s.seriesSummary(id, title, year, tags, prov, over))
+		res.Series = append(res.Series, s.seriesSummary(id, title, year, prov, over))
 	}
 	return res, seriesRows.Err()
 }

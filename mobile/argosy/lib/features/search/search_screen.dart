@@ -150,8 +150,8 @@ class _Hint extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Search the Manifest for any film or series in the hold — by title, '
-            'genre, or tag.',
+            'Search the Manifest for any film or series in the hold — by title '
+            'or genre.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],

@@ -185,8 +185,6 @@ class ApiClient {
           return value is DateTime ? value : DateTime.tryParse(value);
         case 'Account':
           return Account.fromJson(value);
-        case 'AddLabelRequest':
-          return AddLabelRequest.fromJson(value);
         case 'AddVaultItemRequest':
           return AddVaultItemRequest.fromJson(value);
         case 'ContinueItem':

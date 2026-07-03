@@ -57,24 +57,24 @@ func TestSearchStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	addMovie := func(title, filePath, tags, prov, over string) {
+	addMovie := func(title, filePath, prov, over string) {
 		t.Helper()
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO media_items (library_id, kind, title, sort_title, file_path, tags, provider_metadata, metadata)
-			 VALUES ($1,'movie',$2,$2,$3,$4,$5::jsonb,$6::jsonb)`,
-			libID, title, filePath, tags, prov, over); err != nil {
+			`INSERT INTO media_items (library_id, kind, title, sort_title, file_path, provider_metadata, metadata)
+			 VALUES ($1,'movie',$2,$2,$3,$4::jsonb,$5::jsonb)`,
+			libID, title, filePath, prov, over); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// base title "raw blade", override title "Blade Runner", anime tag, Sci-Fi genre,
+	// base title "raw blade", override title "Blade Runner", Sci-Fi genre,
 	// overview mentions "replicant".
-	addMovie("raw blade", "br.mkv", "{anime}",
+	addMovie("raw blade", "br.mkv",
 		`{"genres":["Sci-Fi"],"overview":"a blade runner hunts a replicant"}`,
 		`{"title":"Blade Runner"}`)
-	addMovie("Big Buck Bunny", "bbb.mkv", "{}", `{}`, `{}`)
+	addMovie("Big Buck Bunny", "bbb.mkv", `{}`, `{}`)
 	// Ranking probe: "zen" in a title (weight A) must outrank "zen" only in an overview (weight C).
-	addMovie("Zen Garden", "zg.mkv", "{}", `{}`, `{}`)
-	addMovie("Quiet Place", "qp.mkv", "{}", `{"overview":"a peaceful zen retreat"}`, `{}`)
+	addMovie("Zen Garden", "zg.mkv", `{}`, `{}`)
+	addMovie("Quiet Place", "qp.mkv", `{"overview":"a peaceful zen retreat"}`, `{}`)
 
 	var seriesID string
 	if err := pool.QueryRow(ctx,
@@ -110,8 +110,8 @@ func TestSearchStore(t *testing.T) {
 	if got := titlesOf("blade"); !contains(got, "Blade Runner") || contains(got, "Big Buck Bunny") {
 		t.Errorf(`Search("blade") movies = %v, want Blade Runner only`, got)
 	}
-	// Tag, genre, and overview are all searchable and resolve to the same film.
-	for _, q := range []string{"anime", "sci", "replicant"} {
+	// Genre and overview are both searchable and resolve to the same film.
+	for _, q := range []string{"sci", "replicant"} {
 		if got := titlesOf(q); !contains(got, "Blade Runner") {
 			t.Errorf(`Search(%q) movies = %v, want to include Blade Runner`, q, got)
 		}

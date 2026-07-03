@@ -14,8 +14,6 @@ export type WatchedState = 'watched' | 'unwatched' | 'in_progress'
 // Facet filters shared by the movie + series browse helpers. All optional;
 // omitted/empty fields impose no constraint.
 export type BrowseFilter = {
-  tag?: string
-  label?: string // user-applied custom label (per-profile)
   genres?: string[]
   ratingMin?: number
   watched?: WatchedState
@@ -43,13 +41,8 @@ export const GENRES = [
   'Western',
 ]
 
-// Real labels/tags Stevedore derives from the path layout — distinct from genres.
-export const LABELS = ['Anime']
-
 function filterQuery(f: BrowseFilter) {
   return {
-    tag: f.tag || undefined,
-    label: f.label || undefined,
     genre: f.genres && f.genres.length ? f.genres : undefined,
     rating_min: f.ratingMin || undefined,
     watched: f.watched || undefined,

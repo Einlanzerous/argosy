@@ -11,10 +11,9 @@ import '../../widgets/async_view.dart';
 import 'add_to_vault.dart';
 import 'detail_providers.dart';
 import 'detail_widgets.dart';
-import 'label_editor.dart';
 
-/// A film's detail screen: backdrop hero, metadata, genres/tags, your labels,
-/// and Play / Resume + Add-to-Vault entry points.
+/// A film's detail screen: backdrop hero, metadata, genres, and Play / Resume +
+/// Add-to-Vault entry points.
 class MovieDetailScreen extends ConsumerWidget {
   const MovieDetailScreen({super.key, required this.itemId});
 
@@ -95,9 +94,7 @@ class _Body extends StatelessWidget {
                 CastRow(cast: movie.cast),
               ],
               const SizedBox(height: 16),
-              GenreTagChips(genres: movie.genres, tags: movie.tags),
-              const SizedBox(height: 20),
-              LabelEditor(movieId: movie.id, initial: movie.labels),
+              GenreTagChips(genres: movie.genres),
               const SizedBox(height: 20),
               _Actions(
                 itemId: movie.id,

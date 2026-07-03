@@ -208,7 +208,6 @@ class _Meta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = series.seasons.length;
-    final genre = series.tags.isNotEmpty ? series.tags.first : null;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -238,18 +237,10 @@ class _Meta extends StatelessWidget {
             color: ArgosyColors.cream,
           ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (series.year != null) ...[
-              Text('${series.year}', style: _dim),
-              if (genre != null) _dot,
-            ],
-            if (genre != null)
-              Text(genre, style: _brass),
-          ],
-        ),
+        if (series.year != null) ...[
+          const SizedBox(height: 16),
+          Text('${series.year}', style: _dim),
+        ],
         if (series.overview != null && series.overview!.isNotEmpty) ...[
           const SizedBox(height: 20),
           Text(
@@ -322,16 +313,6 @@ class _Meta extends StatelessWidget {
     fontSize: 18,
     fontWeight: FontWeight.w600,
     color: ArgosyColors.soft,
-  );
-  static const _brass = TextStyle(
-    fontFamily: 'HankenGrotesk',
-    fontSize: 18,
-    fontWeight: FontWeight.w600,
-    color: ArgosyColors.accent,
-  );
-  static const _dot = Padding(
-    padding: EdgeInsets.symmetric(horizontal: 12),
-    child: Text('•', style: TextStyle(color: ArgosyColors.faint)),
   );
 }
 

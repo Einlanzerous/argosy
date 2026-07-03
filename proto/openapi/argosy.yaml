@@ -557,8 +557,6 @@ paths:
         - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
         - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0 } }
         - { name: sort, in: query, schema: { type: string, enum: [title, added, year, rating], default: title } }
-        - { name: tag, in: query, description: "Filter to items carrying this label/tag (e.g. anime).", schema: { type: string } }
-        - { name: label, in: query, description: "Filter to items the calling profile has labelled with this custom label.", schema: { type: string } }
         - { name: genre, in: query, description: "Filter to items in any of these genres (repeatable).", style: form, explode: true, schema: { type: array, items: { type: string } } }
         - { name: rating_min, in: query, description: "Minimum effective rating (0–10).", schema: { type: number, minimum: 0, maximum: 10 } }
         - { name: watched, in: query, description: "Per-user watched state.", schema: { type: string, enum: [watched, unwatched, in_progress] } }
@@ -584,8 +582,6 @@ paths:
         - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
         - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0 } }
         - { name: sort, in: query, schema: { type: string, enum: [title, year, rating], default: title } }
-        - { name: tag, in: query, description: "Filter to series carrying this label/tag (e.g. anime).", schema: { type: string } }
-        - { name: label, in: query, description: "Filter to series the calling profile has labelled with this custom label.", schema: { type: string } }
         - { name: genre, in: query, description: "Filter to series in any of these genres (repeatable).", style: form, explode: true, schema: { type: array, items: { type: string } } }
         - { name: rating_min, in: query, description: "Minimum effective rating (0–10).", schema: { type: number, minimum: 0, maximum: 10 } }
         - { name: watched, in: query, description: "Per-user watched state (aggregated over episodes).", schema: { type: string, enum: [watched, unwatched, in_progress] } }
@@ -607,7 +603,7 @@ paths:
       operationId: search
       summary: Full-text search across the account's films and series
       description: >-
-        Ranked full-text search over titles, tags, genres, cast/crew, and
+        Ranked full-text search over titles, genres, cast/crew, and
         overviews, scoped to the calling account's libraries. Results are grouped
         by kind (films vs. series). The query supports typeahead — the last token
         of each word is treated as a prefix.
@@ -628,11 +624,10 @@ paths:
     get:
       tags: [library]
       operationId: listFacets
-      summary: Most common facets (genres + tags) across the account's manifest
+      summary: Most common genres across the account's manifest
       description: >-
-        The most-used genres and labels/tags across the account's films and
-        series, ranked by item count — used to surface discovery chips. Genres
-        and tags are merged into one ranking, each carrying its own type.
+        The most-used genres across the account's films and series, ranked by
+        item count — used to surface discovery chips.
       parameters:
         - { name: limit, in: query, description: "Max facets to return.", schema: { type: integer, default: 8, minimum: 1, maximum: 50 } }
       responses:
@@ -797,94 +792,6 @@ paths:
           description: Not permitted
         "404":
           description: Not found
-
-  /api/v1/labels:
-    get:
-      tags: [library]
-      operationId: listLabels
-      summary: The calling profile's distinct custom labels
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: array, items: { type: string } }
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /api/v1/items/{itemId}/labels:
-    post:
-      tags: [library]
-      operationId: addItemLabel
-      summary: Add one of the profile's custom labels to a film
-      parameters:
-        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/AddLabelRequest" }
-      responses:
-        "200":
-          description: The item's labels after the add
-          content:
-            application/json:
-              schema: { type: array, items: { type: string } }
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Item not found
-
-  /api/v1/items/{itemId}/labels/{label}:
-    delete:
-      tags: [library]
-      operationId: removeItemLabel
-      summary: Remove a custom label from a film
-      parameters:
-        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
-        - { name: label, in: path, required: true, schema: { type: string } }
-      responses:
-        "204":
-          description: Removed
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /api/v1/series/{seriesId}/labels:
-    post:
-      tags: [library]
-      operationId: addSeriesLabel
-      summary: Add one of the profile's custom labels to a series
-      parameters:
-        - { name: seriesId, in: path, required: true, schema: { type: string, format: uuid } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/AddLabelRequest" }
-      responses:
-        "200":
-          description: The series' labels after the add
-          content:
-            application/json:
-              schema: { type: array, items: { type: string } }
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Series not found
-
-  /api/v1/series/{seriesId}/labels/{label}:
-    delete:
-      tags: [library]
-      operationId: removeSeriesLabel
-      summary: Remove a custom label from a series
-      parameters:
-        - { name: seriesId, in: path, required: true, schema: { type: string, format: uuid } }
-        - { name: label, in: path, required: true, schema: { type: string } }
-      responses:
-        "204":
-          description: Removed
-        "401":
-          $ref: "#/components/responses/Unauthorized"
 
   /api/v1/series/{seriesId}:
     get:
@@ -2055,7 +1962,7 @@ components:
 
     MediaItemSummary:
       type: object
-      required: [id, kind, title, tags]
+      required: [id, kind, title]
       properties:
         id: { type: string, format: uuid }
         kind: { type: string }
@@ -2063,12 +1970,11 @@ components:
         year: { type: integer, nullable: true }
         posterUrl: { type: string, nullable: true }
         backdropUrl: { type: string, nullable: true, description: "Landscape backdrop for full-screen heroes; falls back to posterUrl." }
-        tags: { type: array, items: { type: string } }
         rating: { type: number, nullable: true, description: "Effective provider rating, 0–10." }
 
     MediaItemDetail:
       type: object
-      required: [id, kind, title, filePath, reviewRequired, tags]
+      required: [id, kind, title, filePath, reviewRequired]
       properties:
         id: { type: string, format: uuid }
         kind: { type: string }
@@ -2082,10 +1988,8 @@ components:
         container: { type: string, nullable: true }
         filePath: { type: string }
         reviewRequired: { type: boolean }
-        tags: { type: array, items: { type: string } }
         rating: { type: number, nullable: true, description: "Effective provider rating, 0–10." }
         cast: { type: array, items: { type: string }, description: "Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none." }
-        labels: { type: array, items: { type: string }, description: "The calling profile's custom labels on this item." }
 
     MediaItemPage:
       type: object
@@ -2098,14 +2002,13 @@ components:
 
     SeriesSummary:
       type: object
-      required: [id, title, tags]
+      required: [id, title]
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
         year: { type: integer, nullable: true }
         posterUrl: { type: string, nullable: true }
         backdropUrl: { type: string, nullable: true, description: "Landscape backdrop for full-screen heroes; falls back to posterUrl." }
-        tags: { type: array, items: { type: string } }
         rating: { type: number, nullable: true, description: "Effective provider rating, 0–10." }
 
     SeriesPage:
@@ -2128,7 +2031,7 @@ components:
       type: object
       required: [type, value, count]
       properties:
-        type: { type: string, enum: [genre, tag], description: "Which dimension the value belongs to." }
+        type: { type: string, enum: [genre], description: "Which dimension the value belongs to." }
         value: { type: string }
         count: { type: integer, description: "Number of films + series carrying it." }
 
@@ -2158,7 +2061,7 @@ components:
 
     SeriesDetail:
       type: object
-      required: [id, title, seasons, tags]
+      required: [id, title, seasons]
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
@@ -2167,15 +2070,7 @@ components:
         posterUrl: { type: string, nullable: true }
         backdropUrl: { type: string, nullable: true, description: "Landscape backdrop for full-screen heroes; falls back to posterUrl." }
         seasons: { type: array, items: { $ref: "#/components/schemas/SeasonSummary" } }
-        tags: { type: array, items: { type: string } }
         cast: { type: array, items: { type: string }, description: "Top-billed cast names from the metadata provider. Omitted when none." }
-        labels: { type: array, items: { type: string }, description: "The calling profile's custom labels on this series." }
-
-    AddLabelRequest:
-      type: object
-      required: [label]
-      properties:
-        label: { type: string }
 
 security:
   - bearerAuth: []

@@ -16,128 +16,6 @@ class LibraryApi {
 
   final ApiClient apiClient;
 
-  /// Add one of the profile's custom labels to a film
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] itemId (required):
-  ///
-  /// * [AddLabelRequest] addLabelRequest (required):
-  Future<Response> addItemLabelWithHttpInfo(String itemId, AddLabelRequest addLabelRequest, { Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final path = r'/api/v1/items/{itemId}/labels'
-      .replaceAll('{itemId}', itemId);
-
-    // ignore: prefer_final_locals
-    Object? postBody = addLabelRequest;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      path,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// Add one of the profile's custom labels to a film
-  ///
-  /// Parameters:
-  ///
-  /// * [String] itemId (required):
-  ///
-  /// * [AddLabelRequest] addLabelRequest (required):
-  Future<List<String>?> addItemLabel(String itemId, AddLabelRequest addLabelRequest, { Future<void>? abortTrigger, }) async {
-    final response = await addItemLabelWithHttpInfo(itemId, addLabelRequest, abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      final responseBody = await _decodeBodyBytes(response);
-      return (await apiClient.deserializeAsync(responseBody, 'List<String>') as List)
-        .cast<String>()
-        .toList(growable: false);
-
-    }
-    return null;
-  }
-
-  /// Add one of the profile's custom labels to a series
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] seriesId (required):
-  ///
-  /// * [AddLabelRequest] addLabelRequest (required):
-  Future<Response> addSeriesLabelWithHttpInfo(String seriesId, AddLabelRequest addLabelRequest, { Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final path = r'/api/v1/series/{seriesId}/labels'
-      .replaceAll('{seriesId}', seriesId);
-
-    // ignore: prefer_final_locals
-    Object? postBody = addLabelRequest;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      path,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// Add one of the profile's custom labels to a series
-  ///
-  /// Parameters:
-  ///
-  /// * [String] seriesId (required):
-  ///
-  /// * [AddLabelRequest] addLabelRequest (required):
-  Future<List<String>?> addSeriesLabel(String seriesId, AddLabelRequest addLabelRequest, { Future<void>? abortTrigger, }) async {
-    final response = await addSeriesLabelWithHttpInfo(seriesId, addLabelRequest, abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      final responseBody = await _decodeBodyBytes(response);
-      return (await apiClient.deserializeAsync(responseBody, 'List<String>') as List)
-        .cast<String>()
-        .toList(growable: false);
-
-    }
-    return null;
-  }
-
   /// Add a film or series to a vault
   ///
   /// Note: This method returns the HTTP [Response].
@@ -953,9 +831,9 @@ class LibraryApi {
     return null;
   }
 
-  /// Most common facets (genres + tags) across the account's manifest
+  /// Most common genres across the account's manifest
   ///
-  /// The most-used genres and labels/tags across the account's films and series, ranked by item count — used to surface discovery chips. Genres and tags are merged into one ranking, each carrying its own type.
+  /// The most-used genres across the account's films and series, ranked by item count — used to surface discovery chips.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -993,9 +871,9 @@ class LibraryApi {
     );
   }
 
-  /// Most common facets (genres + tags) across the account's manifest
+  /// Most common genres across the account's manifest
   ///
-  /// The most-used genres and labels/tags across the account's films and series, ranked by item count — used to surface discovery chips. Genres and tags are merged into one ranking, each carrying its own type.
+  /// The most-used genres across the account's films and series, ranked by item count — used to surface discovery chips.
   ///
   /// Parameters:
   ///
@@ -1013,54 +891,6 @@ class LibraryApi {
       final responseBody = await _decodeBodyBytes(response);
       return (await apiClient.deserializeAsync(responseBody, 'List<Facet>') as List)
         .cast<Facet>()
-        .toList(growable: false);
-
-    }
-    return null;
-  }
-
-  /// The calling profile's distinct custom labels
-  ///
-  /// Note: This method returns the HTTP [Response].
-  Future<Response> listLabelsWithHttpInfo({ Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final path = r'/api/v1/labels';
-
-    // ignore: prefer_final_locals
-    Object? postBody;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>[];
-
-
-    return apiClient.invokeAPI(
-      path,
-      'GET',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// The calling profile's distinct custom labels
-  Future<List<String>?> listLabels({ Future<void>? abortTrigger, }) async {
-    final response = await listLabelsWithHttpInfo(abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      final responseBody = await _decodeBodyBytes(response);
-      return (await apiClient.deserializeAsync(responseBody, 'List<String>') as List)
-        .cast<String>()
         .toList(growable: false);
 
     }
@@ -1129,12 +959,6 @@ class LibraryApi {
   ///
   /// * [String] sort:
   ///
-  /// * [String] tag:
-  ///   Filter to items carrying this label/tag (e.g. anime).
-  ///
-  /// * [String] label:
-  ///   Filter to items the calling profile has labelled with this custom label.
-  ///
   /// * [List<String>] genre:
   ///   Filter to items in any of these genres (repeatable).
   ///
@@ -1149,7 +973,7 @@ class LibraryApi {
   ///
   /// * [int] yearTo:
   ///   Latest release year (inclusive).
-  Future<Response> listMoviesWithHttpInfo(String libraryId, { int? limit, int? offset, String? sort, String? tag, String? label, List<String>? genre, num? ratingMin, String? watched, int? yearFrom, int? yearTo, Future<void>? abortTrigger, }) async {
+  Future<Response> listMoviesWithHttpInfo(String libraryId, { int? limit, int? offset, String? sort, List<String>? genre, num? ratingMin, String? watched, int? yearFrom, int? yearTo, Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/v1/libraries/{libraryId}/movies'
       .replaceAll('{libraryId}', libraryId);
@@ -1169,12 +993,6 @@ class LibraryApi {
     }
     if (sort != null) {
       queryParams.addAll(_queryParams('', 'sort', sort));
-    }
-    if (tag != null) {
-      queryParams.addAll(_queryParams('', 'tag', tag));
-    }
-    if (label != null) {
-      queryParams.addAll(_queryParams('', 'label', label));
     }
     if (genre != null) {
       queryParams.addAll(_queryParams('multi', 'genre', genre));
@@ -1219,12 +1037,6 @@ class LibraryApi {
   ///
   /// * [String] sort:
   ///
-  /// * [String] tag:
-  ///   Filter to items carrying this label/tag (e.g. anime).
-  ///
-  /// * [String] label:
-  ///   Filter to items the calling profile has labelled with this custom label.
-  ///
   /// * [List<String>] genre:
   ///   Filter to items in any of these genres (repeatable).
   ///
@@ -1239,8 +1051,8 @@ class LibraryApi {
   ///
   /// * [int] yearTo:
   ///   Latest release year (inclusive).
-  Future<MediaItemPage?> listMovies(String libraryId, { int? limit, int? offset, String? sort, String? tag, String? label, List<String>? genre, num? ratingMin, String? watched, int? yearFrom, int? yearTo, Future<void>? abortTrigger, }) async {
-    final response = await listMoviesWithHttpInfo(libraryId, limit: limit, offset: offset, sort: sort, tag: tag, label: label, genre: genre, ratingMin: ratingMin, watched: watched, yearFrom: yearFrom, yearTo: yearTo, abortTrigger: abortTrigger,);
+  Future<MediaItemPage?> listMovies(String libraryId, { int? limit, int? offset, String? sort, List<String>? genre, num? ratingMin, String? watched, int? yearFrom, int? yearTo, Future<void>? abortTrigger, }) async {
+    final response = await listMoviesWithHttpInfo(libraryId, limit: limit, offset: offset, sort: sort, genre: genre, ratingMin: ratingMin, watched: watched, yearFrom: yearFrom, yearTo: yearTo, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1448,12 +1260,6 @@ class LibraryApi {
   ///
   /// * [String] sort:
   ///
-  /// * [String] tag:
-  ///   Filter to series carrying this label/tag (e.g. anime).
-  ///
-  /// * [String] label:
-  ///   Filter to series the calling profile has labelled with this custom label.
-  ///
   /// * [List<String>] genre:
   ///   Filter to series in any of these genres (repeatable).
   ///
@@ -1468,7 +1274,7 @@ class LibraryApi {
   ///
   /// * [int] yearTo:
   ///   Latest release year (inclusive).
-  Future<Response> listSeriesWithHttpInfo(String libraryId, { int? limit, int? offset, String? sort, String? tag, String? label, List<String>? genre, num? ratingMin, String? watched, int? yearFrom, int? yearTo, Future<void>? abortTrigger, }) async {
+  Future<Response> listSeriesWithHttpInfo(String libraryId, { int? limit, int? offset, String? sort, List<String>? genre, num? ratingMin, String? watched, int? yearFrom, int? yearTo, Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/v1/libraries/{libraryId}/series'
       .replaceAll('{libraryId}', libraryId);
@@ -1488,12 +1294,6 @@ class LibraryApi {
     }
     if (sort != null) {
       queryParams.addAll(_queryParams('', 'sort', sort));
-    }
-    if (tag != null) {
-      queryParams.addAll(_queryParams('', 'tag', tag));
-    }
-    if (label != null) {
-      queryParams.addAll(_queryParams('', 'label', label));
     }
     if (genre != null) {
       queryParams.addAll(_queryParams('multi', 'genre', genre));
@@ -1538,12 +1338,6 @@ class LibraryApi {
   ///
   /// * [String] sort:
   ///
-  /// * [String] tag:
-  ///   Filter to series carrying this label/tag (e.g. anime).
-  ///
-  /// * [String] label:
-  ///   Filter to series the calling profile has labelled with this custom label.
-  ///
   /// * [List<String>] genre:
   ///   Filter to series in any of these genres (repeatable).
   ///
@@ -1558,8 +1352,8 @@ class LibraryApi {
   ///
   /// * [int] yearTo:
   ///   Latest release year (inclusive).
-  Future<SeriesPage?> listSeries(String libraryId, { int? limit, int? offset, String? sort, String? tag, String? label, List<String>? genre, num? ratingMin, String? watched, int? yearFrom, int? yearTo, Future<void>? abortTrigger, }) async {
-    final response = await listSeriesWithHttpInfo(libraryId, limit: limit, offset: offset, sort: sort, tag: tag, label: label, genre: genre, ratingMin: ratingMin, watched: watched, yearFrom: yearFrom, yearTo: yearTo, abortTrigger: abortTrigger,);
+  Future<SeriesPage?> listSeries(String libraryId, { int? limit, int? offset, String? sort, List<String>? genre, num? ratingMin, String? watched, int? yearFrom, int? yearTo, Future<void>? abortTrigger, }) async {
+    final response = await listSeriesWithHttpInfo(libraryId, limit: limit, offset: offset, sort: sort, genre: genre, ratingMin: ratingMin, watched: watched, yearFrom: yearFrom, yearTo: yearTo, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1680,108 +1474,6 @@ class LibraryApi {
 
     }
     return null;
-  }
-
-  /// Remove a custom label from a film
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] itemId (required):
-  ///
-  /// * [String] label (required):
-  Future<Response> removeItemLabelWithHttpInfo(String itemId, String label, { Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final path = r'/api/v1/items/{itemId}/labels/{label}'
-      .replaceAll('{itemId}', itemId)
-      .replaceAll('{label}', label);
-
-    // ignore: prefer_final_locals
-    Object? postBody;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>[];
-
-
-    return apiClient.invokeAPI(
-      path,
-      'DELETE',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// Remove a custom label from a film
-  ///
-  /// Parameters:
-  ///
-  /// * [String] itemId (required):
-  ///
-  /// * [String] label (required):
-  Future<void> removeItemLabel(String itemId, String label, { Future<void>? abortTrigger, }) async {
-    final response = await removeItemLabelWithHttpInfo(itemId, label, abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-  }
-
-  /// Remove a custom label from a series
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] seriesId (required):
-  ///
-  /// * [String] label (required):
-  Future<Response> removeSeriesLabelWithHttpInfo(String seriesId, String label, { Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final path = r'/api/v1/series/{seriesId}/labels/{label}'
-      .replaceAll('{seriesId}', seriesId)
-      .replaceAll('{label}', label);
-
-    // ignore: prefer_final_locals
-    Object? postBody;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>[];
-
-
-    return apiClient.invokeAPI(
-      path,
-      'DELETE',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// Remove a custom label from a series
-  ///
-  /// Parameters:
-  ///
-  /// * [String] seriesId (required):
-  ///
-  /// * [String] label (required):
-  Future<void> removeSeriesLabel(String seriesId, String label, { Future<void>? abortTrigger, }) async {
-    final response = await removeSeriesLabelWithHttpInfo(seriesId, label, abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
   }
 
   /// Remove an item from a vault
@@ -1945,7 +1637,7 @@ class LibraryApi {
 
   /// Full-text search across the account's films and series
   ///
-  /// Ranked full-text search over titles, tags, genres, cast/crew, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix.
+  /// Ranked full-text search over titles, genres, cast/crew, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1989,7 +1681,7 @@ class LibraryApi {
 
   /// Full-text search across the account's films and series
   ///
-  /// Ranked full-text search over titles, tags, genres, cast/crew, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix.
+  /// Ranked full-text search over titles, genres, cast/crew, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix.
   ///
   /// Parameters:
   ///
