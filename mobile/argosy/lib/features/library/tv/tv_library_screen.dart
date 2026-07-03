@@ -16,7 +16,7 @@ import '../browse_filter.dart';
 import '../library_controller.dart';
 
 /// The Manifest on the 10-foot screen (ARGY-51 / `TVLibrary.dc.html`): a 330px
-/// facet side panel (Kind / Tags / Genre) over the brass-on-charcoal poster
+/// facet side panel (Kind / Genre) over the brass-on-charcoal poster
 /// grid. Binds the same [libraryFilterProvider] / [libraryResultsProvider] the
 /// phone Manifest uses, plus [libraryFacetsProvider] for the genre counts — only
 /// the layout + D-pad focus differ.
@@ -54,7 +54,7 @@ class TvLibraryScreen extends ConsumerWidget {
   }
 }
 
-/// The left facet rail: title block + Kind (scope), Tags (anime), and Genre
+/// The left facet rail: title block + Kind (scope) and Genre
 /// (from [libraryFacetsProvider], with counts) groups.
 class _FacetPanel extends ConsumerWidget {
   const _FacetPanel();
@@ -67,9 +67,6 @@ class _FacetPanel extends ConsumerWidget {
     final count = ref.watch(libraryResultsProvider).value?.length;
 
     final genres = facets.where((f) => f.type == FacetTypeEnum.genre).toList();
-    final animeFacet = facets
-        .where((f) => f.type == FacetTypeEnum.tag && f.value.toLowerCase() == 'anime')
-        .firstOrNull;
 
     return Container(
       width: 330,
@@ -136,20 +133,6 @@ class _FacetPanel extends ConsumerWidget {
                 ),
               ],
             ),
-            if (animeFacet != null) ...[
-              const SizedBox(height: 28),
-              _FacetGroup(
-                title: 'Tags',
-                children: [
-                  _FacetRow(
-                    label: 'Anime',
-                    count: animeFacet.count,
-                    active: filter.tag == 'anime',
-                    onSelect: () => ctrl.toggleTag('anime'),
-                  ),
-                ],
-              ),
-            ],
             if (genres.isNotEmpty) ...[
               const SizedBox(height: 28),
               _FacetGroup(

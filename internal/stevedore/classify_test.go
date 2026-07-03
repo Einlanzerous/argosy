@@ -123,12 +123,6 @@ func TestClassifyDB(t *testing.T) {
 		t.Fatalf("hierarchy series=%d seasons=%d episodes=%d linked=%d, want 2/2/3/3", series, seasons, episodes, linked)
 	}
 
-	// The anime series picked up its 'anime' tag from the episode path; the
-	// non-anime series did not.
-	if n := queryInt(`SELECT count(*) FROM series WHERE library_id=$1 AND 'anime' = ANY(tags)`); n != 1 {
-		t.Fatalf("series tagged anime = %d, want 1 (Cowboy Bebop only)", n)
-	}
-
 	var movieYear *int
 	if err := pool.QueryRow(ctx, `SELECT year FROM media_items WHERE library_id=$1 AND kind='movie'`, libID).Scan(&movieYear); err != nil {
 		t.Fatal(err)

@@ -6,7 +6,6 @@ import BackButton from '@/components/BackButton.vue'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import AddToVault from '@/components/AddToVault.vue'
-import LabelEditor from '@/components/LabelEditor.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime, formatClock } from '@/lib/format'
 import { getMovies, type MovieSummary } from '@/lib/manifest'
@@ -109,11 +108,9 @@ watch(
           <p v-if="movie.cast?.length" class="cast">
             <span class="cast-label">Cast</span>{{ movie.cast.join(', ') }}
           </p>
-          <div v-if="movie.genres?.length || movie.tags?.length" class="tags">
+          <div v-if="movie.genres?.length" class="tags">
             <span v-for="g in movie.genres ?? []" :key="`g-${g}`" class="tag">{{ g }}</span>
-            <span v-for="t in movie.tags ?? []" :key="`t-${t}`" class="tag accent">{{ t }}</span>
           </div>
-          <LabelEditor :movie-id="movie.id" :initial="movie.labels ?? []" />
           <div class="actions">
             <template v-if="resumable">
               <RouterLink
@@ -165,7 +162,6 @@ watch(
         :title="r.title"
         :subtitle="r.year ? String(r.year) : undefined"
         :kind="r.kind"
-        :anime="r.tags?.includes('anime')"
         :poster-url="r.posterUrl"
         :to="{ name: 'movie', params: { id: r.id } }"
       />
@@ -289,10 +285,6 @@ h1 {
   background: rgba(234, 234, 229, 0.07);
   font: 600 11.5px var(--arg-body);
   color: #a8a89f;
-}
-.tag.accent {
-  background: var(--arg-accent-bg-2);
-  color: var(--arg-accent-soft);
 }
 .actions {
   margin-top: 24px;

@@ -61,9 +61,6 @@ const kGenres = <String>[
   'Western',
 ];
 
-/// Path-derived tags (distinct from genres and from user labels).
-const kTags = <String>['Anime'];
-
 /// Immutable browse query: scope + sort + facets. Lives in the library
 /// controller's state; the grid reloads whenever it changes.
 @immutable
@@ -72,8 +69,6 @@ class BrowseFilter {
     this.scope = BrowseScope.all,
     this.sort = BrowseSort.added,
     this.genres = const [],
-    this.tag,
-    this.label,
     this.ratingMin,
     this.watched,
     this.yearFrom,
@@ -83,12 +78,6 @@ class BrowseFilter {
   final BrowseScope scope;
   final BrowseSort sort;
   final List<String> genres;
-
-  /// Path tag facet (e.g. `anime`), lowercased.
-  final String? tag;
-
-  /// User-applied custom label facet.
-  final String? label;
   final num? ratingMin;
   final WatchedState? watched;
   final int? yearFrom;
@@ -98,9 +87,7 @@ class BrowseFilter {
       genres.length +
       (watched != null ? 1 : 0) +
       ((ratingMin ?? 0) > 0 ? 1 : 0) +
-      (yearFrom != null || yearTo != null ? 1 : 0) +
-      (tag != null ? 1 : 0) +
-      (label != null ? 1 : 0);
+      (yearFrom != null || yearTo != null ? 1 : 0);
 
   bool get hasFacets => activeCount > 0;
 
@@ -108,8 +95,6 @@ class BrowseFilter {
     BrowseScope? scope,
     BrowseSort? sort,
     List<String>? genres,
-    Object? tag = _unset,
-    Object? label = _unset,
     Object? ratingMin = _unset,
     Object? watched = _unset,
     Object? yearFrom = _unset,
@@ -119,8 +104,6 @@ class BrowseFilter {
       scope: scope ?? this.scope,
       sort: sort ?? this.sort,
       genres: genres ?? this.genres,
-      tag: tag == _unset ? this.tag : tag as String?,
-      label: label == _unset ? this.label : label as String?,
       ratingMin: ratingMin == _unset ? this.ratingMin : ratingMin as num?,
       watched: watched == _unset ? this.watched : watched as WatchedState?,
       yearFrom: yearFrom == _unset ? this.yearFrom : yearFrom as int?,

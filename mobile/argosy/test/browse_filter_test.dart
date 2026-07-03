@@ -6,13 +6,12 @@ void main() {
     test('activeCount counts each engaged facet once', () {
       const f = BrowseFilter(
         genres: ['Action', 'Drama'],
-        tag: 'anime',
         watched: WatchedState.unwatched,
         ratingMin: 7,
         yearFrom: 1990,
       );
-      // 2 genres + tag + watched + rating + year-range = 6
-      expect(f.activeCount, 6);
+      // 2 genres + watched + rating + year-range = 5
+      expect(f.activeCount, 5);
       expect(f.hasFacets, isTrue);
     });
 
@@ -26,16 +25,16 @@ void main() {
     });
 
     test('copyWith can null a facet out via sentinel', () {
-      const f = BrowseFilter(tag: 'anime', watched: WatchedState.watched);
-      final cleared = f.copyWith(tag: null, watched: null);
-      expect(cleared.tag, isNull);
+      const f = BrowseFilter(
+          ratingMin: 7, watched: WatchedState.watched);
+      final cleared = f.copyWith(ratingMin: null, watched: null);
+      expect(cleared.ratingMin, isNull);
       expect(cleared.watched, isNull);
     });
 
     test('copyWith preserves untouched facets', () {
-      const f = BrowseFilter(tag: 'anime', genres: ['Action']);
+      const f = BrowseFilter(genres: ['Action']);
       final next = f.copyWith(sort: BrowseSort.title);
-      expect(next.tag, 'anime');
       expect(next.genres, ['Action']);
       expect(next.sort, BrowseSort.title);
     });
@@ -45,7 +44,6 @@ void main() {
         scope: BrowseScope.movies,
         sort: BrowseSort.rating,
         genres: ['Action'],
-        tag: 'anime',
       );
       final c = f.cleared();
       expect(c.scope, BrowseScope.movies);

@@ -7,7 +7,6 @@ const props = defineProps<{
   title: string
   subtitle?: string
   kind?: string
-  anime?: boolean
   posterUrl?: string | null
   to: RouteLocationRaw
   width?: number
@@ -21,7 +20,6 @@ const style = computed(() => posterStyle(props.posterUrl, props.title))
     <div class="poster" :style="style">
       <div class="arg-hatch overlay" />
       <span v-if="kind" class="kind">{{ kind }}</span>
-      <span v-if="anime" class="anime">ANIME</span>
       <div class="meta">
         <div class="title">{{ title }}</div>
         <div v-if="subtitle" class="sub">{{ subtitle }}</div>
@@ -64,17 +62,6 @@ const style = computed(() => posterStyle(props.posterUrl, props.title))
   letter-spacing: 0.13em;
   color: rgba(234, 234, 229, 0.4);
   text-transform: uppercase;
-}
-.anime {
-  position: absolute;
-  top: 9px;
-  right: 9px;
-  font: 700 9px var(--arg-display);
-  letter-spacing: 0.08em;
-  padding: 3px 7px;
-  border-radius: 5px;
-  background: rgba(201, 154, 78, 0.2);
-  color: var(--arg-accent-soft);
 }
 .meta {
   position: absolute;

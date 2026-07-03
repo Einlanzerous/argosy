@@ -75,30 +75,22 @@ class DetailBackdrop extends ConsumerWidget {
   }
 }
 
-/// A row of read-only metadata chips — genres (neutral) and path tags (brass).
+/// A row of read-only genre chips.
 class GenreTagChips extends StatelessWidget {
-  const GenreTagChips({super.key, this.genres = const [], this.tags = const []});
+  const GenreTagChips({super.key, this.genres = const []});
 
   final List<String> genres;
-  final List<String> tags;
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.argosy;
-    if (genres.isEmpty && tags.isEmpty) return const SizedBox.shrink();
+    if (genres.isEmpty) return const SizedBox.shrink();
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         for (final g in genres)
           _Pill(label: g, color: ArgosyColors.soft2, border: tokens.line2),
-        for (final t in tags)
-          _Pill(
-            label: t,
-            color: ArgosyColors.accentHi,
-            border: tokens.accentLine,
-            fill: tokens.accentWash,
-          ),
       ],
     );
   }
@@ -109,20 +101,18 @@ class _Pill extends StatelessWidget {
     required this.label,
     required this.color,
     required this.border,
-    this.fill,
   });
 
   final String label;
   final Color color;
   final Color border;
-  final Color? fill;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: fill ?? Colors.transparent,
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: border),
       ),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw, RouteLocationRaw } from 'vue-router'
 import PosterCard from '@/components/PosterCard.vue'
@@ -10,13 +10,11 @@ import {
   getMovies,
   getSeries,
   GENRES,
-  LABELS,
   type BrowseFilter,
   type MovieSort,
   type SeriesSort,
   type WatchedState,
 } from '@/lib/manifest'
-import { listMyLabels } from '@/lib/labels'
 import { setPage } from '@/lib/page'
 
 type Card = {
@@ -24,7 +22,6 @@ type Card = {
   title: string
   subtitle?: string
   kind: string
-  anime: boolean
   posterUrl?: string | null
   backdropUrl?: string | null
   to: RouteLocationRaw
@@ -87,10 +84,6 @@ const watched = computed<WatchedState | undefined>(() => {
 const ratingMin = computed(() => num(route.query.rating_min))
 const yearFrom = computed(() => num(route.query.year_from))
 const yearTo = computed(() => num(route.query.year_to))
-const label = computed(() => (typeof route.query.tag === 'string' ? route.query.tag : ''))
-// User-applied custom label (?label=), distinct from the path tag above.
-const userLabel = computed(() => (typeof route.query.label === 'string' ? route.query.label : ''))
-const userLabels = ref<string[]>([])
 
 const hasFilters = computed(
   () =>
@@ -98,9 +91,7 @@ const hasFilters = computed(
     !!watched.value ||
     !!ratingMin.value ||
     !!yearFrom.value ||
-    !!yearTo.value ||
-    !!label.value ||
-    !!userLabel.value,
+    !!yearTo.value,
 )
 
 // The advanced filter panel is collapsed by default (it's tall); the toggle shows
@@ -111,9 +102,7 @@ const activeCount = computed(
     genres.value.length +
     (watched.value ? 1 : 0) +
     (ratingMin.value ? 1 : 0) +
-    (yearFrom.value || yearTo.value ? 1 : 0) +
-    (label.value ? 1 : 0) +
-    (userLabel.value ? 1 : 0),
+    (yearFrom.value || yearTo.value ? 1 : 0),
 )
 // Live label for the rating slider while dragging (committed on change).
 const ratingLabel = ref(0)
@@ -146,13 +135,6 @@ function setWatched(w: WatchedState): void {
 function setRating(r: number): void {
   patch({ rating_min: r > 0 ? r : undefined })
 }
-function toggleLabel(l: string): void {
-  const v = l.toLowerCase()
-  patch({ tag: label.value === v ? undefined : v })
-}
-function toggleUserLabel(l: string): void {
-  patch({ label: userLabel.value === l ? undefined : l })
-}
 function setYear(which: 'year_from' | 'year_to', e: Event): void {
   patch({ [which]: (e.target as HTMLInputElement).value || undefined })
 }
@@ -180,8 +162,6 @@ function subtitleOf(year?: number | null, rating?: number | null): string | unde
 async function load(): Promise<void> {
   loading.value = true
   const f: BrowseFilter = {
-    tag: label.value || undefined,
-    label: userLabel.value || undefined,
     genres: genres.value,
     ratingMin: ratingMin.value,
     watched: watched.value,
@@ -198,7 +178,6 @@ async function load(): Promise<void> {
         title: m.title,
         subtitle: subtitleOf(m.year, m.rating),
         kind: m.kind,
-        anime: !!m.tags?.includes('anime'),
         posterUrl: m.posterUrl,
         backdropUrl: m.backdropUrl,
         to: { name: 'movie', params: { id: m.id } } as RouteLocationRaw,
@@ -216,7 +195,6 @@ async function load(): Promise<void> {
         title: s.title,
         subtitle: subtitleOf(s.year, s.rating),
         kind: 'Series',
-        anime: !!s.tags?.includes('anime'),
         posterUrl: s.posterUrl,
         backdropUrl: s.backdropUrl,
         to: { name: 'series', params: { id: s.id } } as RouteLocationRaw,
@@ -226,13 +204,6 @@ async function load(): Promise<void> {
   cards.value = out
   loading.value = false
 }
-
-// The profile's custom labels populate the Labels facet (fetched once).
-onMounted(() => {
-  void listMyLabels()
-    .then((l) => (userLabels.value = l))
-    .catch(() => {})
-})
 
 // Any change to the scope/sort/filter query reloads (and retitles) the view.
 watch(
@@ -321,38 +292,6 @@ watch(
           </div>
         </div>
 
-        <div class="facet" v-if="LABELS.length">
-          <span class="facet-label">Tags</span>
-          <div class="chips">
-            <button
-              v-for="l in LABELS"
-              :key="l"
-              class="chip"
-              :class="{ on: label === l.toLowerCase() }"
-              type="button"
-              @click="toggleLabel(l)"
-            >
-              {{ l }}
-            </button>
-          </div>
-        </div>
-
-        <div class="facet" v-if="userLabels.length">
-          <span class="facet-label">Labels</span>
-          <div class="chips">
-            <button
-              v-for="l in userLabels"
-              :key="l"
-              class="chip"
-              :class="{ on: userLabel === l }"
-              type="button"
-              @click="toggleUserLabel(l)"
-            >
-              {{ l }}
-            </button>
-          </div>
-        </div>
-
         <div class="facet-row">
           <div class="facet">
             <span class="facet-label">Watched</span>
@@ -420,7 +359,6 @@ watch(
           :title="c.title"
           :subtitle="c.subtitle"
           :kind="c.kind"
-          :anime="c.anime"
           :poster-url="c.posterUrl"
           :to="c.to"
         />

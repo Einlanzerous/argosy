@@ -15,10 +15,9 @@ import (
 
 func TestParseFilter(t *testing.T) {
 	r := httptest.NewRequest("GET",
-		"/?tag=anime&genre=Action&genre=Drama&rating_min=7.5&watched=unwatched&year_from=2000&year_to=2010", nil)
+		"/?genre=Action&genre=Drama&rating_min=7.5&watched=unwatched&year_from=2000&year_to=2010", nil)
 	got := parseFilter(r)
 	want := browseFilter{
-		Tag:       "anime",
 		Genres:    []string{"Action", "Drama"},
 		RatingMin: 7.5,
 		Watched:   "unwatched",

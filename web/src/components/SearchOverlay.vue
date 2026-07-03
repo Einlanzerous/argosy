@@ -84,13 +84,15 @@ function onKey(e: KeyboardEvent): void {
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
   input.value?.focus()
-  // A genre chip filters by genre; a tag chip by tag — routed to the Library.
+  // A genre chip filters the Library by genre.
   const facets = await getFacets(6)
-  facetChips.value = facets.map((f) => ({
-    label: f.value,
-    icon: f.type === 'tag' ? '◆' : '◇',
-    to: { name: 'library', query: f.type === 'tag' ? { tag: f.value } : { genre: f.value } },
-  }))
+  facetChips.value = facets
+    .filter((f) => f.type === 'genre')
+    .map((f) => ({
+      label: f.value,
+      icon: '◇',
+      to: { name: 'library', query: { genre: f.value } },
+    }))
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
@@ -109,7 +111,7 @@ onUnmounted(() => {
           ref="input"
           v-model="query"
           type="text"
-          placeholder="Search titles, genres, tags…"
+          placeholder="Search titles, genres…"
           @keyup.enter="submit"
         />
       </div>

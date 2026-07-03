@@ -19,7 +19,6 @@ class MediaCard {
     this.backdropUrl,
     this.progress,
     this.subtitleOverride,
-    this.tags = const [],
   });
 
   final String id;
@@ -35,7 +34,6 @@ class MediaCard {
 
   /// Used instead of the year·rating line when set (e.g. "S1 · E3" on rails).
   final String? subtitleOverride;
-  final List<String> tags;
 
   String get kindLabel => kind == MediaKind.series ? 'Series' : 'Film';
 
@@ -49,7 +47,6 @@ class MediaCard {
         rating: m.rating,
         posterUrl: m.posterUrl,
         backdropUrl: m.backdropUrl,
-        tags: m.tags,
       );
 
   factory MediaCard.fromSeries(SeriesSummary s) => MediaCard(
@@ -60,6 +57,5 @@ class MediaCard {
         rating: s.rating,
         posterUrl: s.posterUrl,
         backdropUrl: s.backdropUrl,
-        tags: s.tags,
       );
 }

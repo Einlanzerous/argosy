@@ -50,13 +50,6 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/search", mw(http.HandlerFunc(h.search)))
 	mux.Handle("GET /api/v1/facets", mw(http.HandlerFunc(h.listFacets)))
 
-	// User labels (ARGY-73): the calling profile's custom tags on films + series.
-	mux.Handle("GET /api/v1/labels", mw(http.HandlerFunc(h.listLabels)))
-	mux.Handle("POST /api/v1/items/{itemId}/labels", mw(http.HandlerFunc(h.addItemLabel)))
-	mux.Handle("DELETE /api/v1/items/{itemId}/labels/{label}", mw(http.HandlerFunc(h.removeItemLabel)))
-	mux.Handle("POST /api/v1/series/{seriesId}/labels", mw(http.HandlerFunc(h.addSeriesLabel)))
-	mux.Handle("DELETE /api/v1/series/{seriesId}/labels/{label}", mw(http.HandlerFunc(h.removeSeriesLabel)))
-
 	// Vaults (ARGY-42): user-curated collections.
 	mux.Handle("GET /api/v1/vaults", mw(http.HandlerFunc(h.listVaults)))
 	mux.Handle("POST /api/v1/vaults", mw(http.HandlerFunc(h.createVault)))
@@ -236,9 +229,6 @@ func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
-	if labels, err := h.store.SeriesLabels(r.Context(), userOf(r), r.PathValue("seriesId")); err == nil {
-		d.Labels = &labels
-	}
 	httpx.JSON(w, http.StatusOK, d)
 }
 
@@ -251,9 +241,6 @@ func (h *handlers) getItem(w http.ResponseWriter, r *http.Request) {
 	if d == nil {
 		httpx.Error(w, http.StatusNotFound, "not found")
 		return
-	}
-	if labels, err := h.store.ItemLabels(r.Context(), userOf(r), r.PathValue("itemId")); err == nil {
-		d.Labels = &labels
 	}
 	httpx.JSON(w, http.StatusOK, d)
 }
@@ -289,7 +276,7 @@ func pagination(r *http.Request) (limit, offset int) {
 // Unknown/zero values mean "no constraint".
 func parseFilter(r *http.Request) browseFilter {
 	q := r.URL.Query()
-	f := browseFilter{Tag: q.Get("tag"), Label: q.Get("label"), Genres: q["genre"], Watched: q.Get("watched")}
+	f := browseFilter{Genres: q["genre"], Watched: q.Get("watched")}
 	if v, err := strconv.ParseFloat(q.Get("rating_min"), 64); err == nil {
 		f.RatingMin = v
 	}

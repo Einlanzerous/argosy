@@ -392,7 +392,7 @@ export interface paths {
         };
         /**
          * Full-text search across the account's films and series
-         * @description Ranked full-text search over titles, tags, genres, cast/crew, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix.
+         * @description Ranked full-text search over titles, genres, cast/crew, and overviews, scoped to the calling account's libraries. Results are grouped by kind (films vs. series). The query supports typeahead — the last token of each word is treated as a prefix.
          */
         get: operations["search"];
         put?: never;
@@ -411,8 +411,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Most common facets (genres + tags) across the account's manifest
-         * @description The most-used genres and labels/tags across the account's films and series, ranked by item count — used to surface discovery chips. Genres and tags are merged into one ranking, each carrying its own type.
+         * Most common genres across the account's manifest
+         * @description The most-used genres across the account's films and series, ranked by item count — used to surface discovery chips.
          */
         get: operations["listFacets"];
         put?: never;
@@ -506,91 +506,6 @@ export interface paths {
         put: operations["reorderVault"];
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/labels": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The calling profile's distinct custom labels */
-        get: operations["listLabels"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/items/{itemId}/labels": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Add one of the profile's custom labels to a film */
-        post: operations["addItemLabel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/items/{itemId}/labels/{label}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove a custom label from a film */
-        delete: operations["removeItemLabel"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/series/{seriesId}/labels": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Add one of the profile's custom labels to a series */
-        post: operations["addSeriesLabel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/series/{seriesId}/labels/{label}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove a custom label from a series */
-        delete: operations["removeSeriesLabel"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1458,7 +1373,6 @@ export interface components {
             posterUrl?: string | null;
             /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
             backdropUrl?: string | null;
-            tags: string[];
             /** @description Effective provider rating, 0–10. */
             rating?: number | null;
         };
@@ -1477,13 +1391,10 @@ export interface components {
             container?: string | null;
             filePath: string;
             reviewRequired: boolean;
-            tags: string[];
             /** @description Effective provider rating, 0–10. */
             rating?: number | null;
             /** @description Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none. */
             cast?: string[];
-            /** @description The calling profile's custom labels on this item. */
-            labels?: string[];
         };
         MediaItemPage: {
             items: components["schemas"]["MediaItemSummary"][];
@@ -1499,7 +1410,6 @@ export interface components {
             posterUrl?: string | null;
             /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
             backdropUrl?: string | null;
-            tags: string[];
             /** @description Effective provider rating, 0–10. */
             rating?: number | null;
         };
@@ -1518,7 +1428,7 @@ export interface components {
              * @description Which dimension the value belongs to.
              * @enum {string}
              */
-            type: "genre" | "tag";
+            type: "genre";
             value: string;
             /** @description Number of films + series carrying it. */
             count: number;
@@ -1561,14 +1471,8 @@ export interface components {
             /** @description Landscape backdrop for full-screen heroes; falls back to posterUrl. */
             backdropUrl?: string | null;
             seasons: components["schemas"]["SeasonSummary"][];
-            tags: string[];
             /** @description Top-billed cast names from the metadata provider. Omitted when none. */
             cast?: string[];
-            /** @description The calling profile's custom labels on this series. */
-            labels?: string[];
-        };
-        AddLabelRequest: {
-            label: string;
         };
     };
     responses: {
@@ -2264,10 +2168,6 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 sort?: "title" | "added" | "year" | "rating";
-                /** @description Filter to items carrying this label/tag (e.g. anime). */
-                tag?: string;
-                /** @description Filter to items the calling profile has labelled with this custom label. */
-                label?: string;
                 /** @description Filter to items in any of these genres (repeatable). */
                 genre?: string[];
                 /** @description Minimum effective rating (0–10). */
@@ -2305,10 +2205,6 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 sort?: "title" | "year" | "rating";
-                /** @description Filter to series carrying this label/tag (e.g. anime). */
-                tag?: string;
-                /** @description Filter to series the calling profile has labelled with this custom label. */
-                label?: string;
                 /** @description Filter to series in any of these genres (repeatable). */
                 genre?: string[];
                 /** @description Minimum effective rating (0–10). */
@@ -2656,139 +2552,6 @@ export interface operations {
                 };
                 content?: never;
             };
-        };
-    };
-    listLabels: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string[];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    addItemLabel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                itemId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AddLabelRequest"];
-            };
-        };
-        responses: {
-            /** @description The item's labels after the add */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string[];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            /** @description Item not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    removeItemLabel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                itemId: string;
-                label: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Removed */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    addSeriesLabel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                seriesId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AddLabelRequest"];
-            };
-        };
-        responses: {
-            /** @description The series' labels after the add */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string[];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            /** @description Series not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    removeSeriesLabel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                seriesId: string;
-                label: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Removed */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
         };
     };
     getSeries: {

@@ -6,8 +6,8 @@ import '../../widgets/arg_chip.dart';
 import 'browse_filter.dart';
 import 'library_controller.dart';
 
-/// The faceted filter panel, shown as a draggable bottom sheet: genre / tag /
-/// label chips, watched state, a rating-floor slider, and a year range.
+/// The faceted filter panel, shown as a draggable bottom sheet: genre chips,
+/// watched state, a rating-floor slider, and a year range.
 class LibraryFilterSheet extends ConsumerWidget {
   const LibraryFilterSheet({super.key});
 
@@ -23,7 +23,6 @@ class LibraryFilterSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(libraryFilterProvider);
     final controller = ref.read(libraryFilterProvider.notifier);
-    final myLabels = ref.watch(myLabelsProvider).value ?? const [];
 
     return DraggableScrollableSheet(
       expand: false,
@@ -55,23 +54,6 @@ class LibraryFilterSheet extends ConsumerWidget {
               onTap: controller.toggleGenre,
             ),
           ),
-          _Facet(
-            label: 'Tags',
-            child: _ChipWrap(
-              items: kTags,
-              isOn: (t) => filter.tag == t.toLowerCase(),
-              onTap: controller.toggleTag,
-            ),
-          ),
-          if (myLabels.isNotEmpty)
-            _Facet(
-              label: 'Labels',
-              child: _ChipWrap(
-                items: myLabels,
-                isOn: (l) => filter.label == l,
-                onTap: controller.toggleLabel,
-              ),
-            ),
           _Facet(
             label: 'Watched',
             child: _ChipWrap(

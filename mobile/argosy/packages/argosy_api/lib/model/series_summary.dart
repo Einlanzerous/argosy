@@ -18,7 +18,6 @@ class SeriesSummary {
     this.year,
     this.posterUrl,
     this.backdropUrl,
-    this.tags = const [],
     this.rating,
   });
 
@@ -33,8 +32,6 @@ class SeriesSummary {
   /// Landscape backdrop for full-screen heroes; falls back to posterUrl.
   String? backdropUrl;
 
-  List<String> tags;
-
   /// Effective provider rating, 0–10.
   num? rating;
 
@@ -45,7 +42,6 @@ class SeriesSummary {
     other.year == year &&
     other.posterUrl == posterUrl &&
     other.backdropUrl == backdropUrl &&
-    _deepEquality.equals(other.tags, tags) &&
     other.rating == rating;
 
   @override
@@ -56,11 +52,10 @@ class SeriesSummary {
     (year == null ? 0 : year!.hashCode) +
     (posterUrl == null ? 0 : posterUrl!.hashCode) +
     (backdropUrl == null ? 0 : backdropUrl!.hashCode) +
-    (tags.hashCode) +
     (rating == null ? 0 : rating!.hashCode);
 
   @override
-  String toString() => 'SeriesSummary[id=$id, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, tags=$tags, rating=$rating]';
+  String toString() => 'SeriesSummary[id=$id, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, rating=$rating]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -81,7 +76,6 @@ class SeriesSummary {
     } else {
       json[r'backdropUrl'] = null;
     }
-      json[r'tags'] = this.tags;
     if (this.rating != null) {
       json[r'rating'] = this.rating;
     } else {
@@ -105,8 +99,6 @@ class SeriesSummary {
         assert(json[r'id'] != null, 'Required key "SeriesSummary[id]" has a null value in JSON.');
         assert(json.containsKey(r'title'), 'Required key "SeriesSummary[title]" is missing from JSON.');
         assert(json[r'title'] != null, 'Required key "SeriesSummary[title]" has a null value in JSON.');
-        assert(json.containsKey(r'tags'), 'Required key "SeriesSummary[tags]" is missing from JSON.');
-        assert(json[r'tags'] != null, 'Required key "SeriesSummary[tags]" has a null value in JSON.');
         return true;
       }());
 
@@ -116,9 +108,6 @@ class SeriesSummary {
         year: mapValueOfType<int>(json, r'year'),
         posterUrl: mapValueOfType<String>(json, r'posterUrl'),
         backdropUrl: mapValueOfType<String>(json, r'backdropUrl'),
-        tags: json[r'tags'] is Iterable
-            ? (json[r'tags'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
         rating: json[r'rating'] == null
             ? null
             : num.parse('${json[r'rating']}'),
@@ -171,7 +160,6 @@ class SeriesSummary {
   static const requiredKeys = <String>{
     'id',
     'title',
-    'tags',
   };
 }
 
