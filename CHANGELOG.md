@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1](https://github.com/Einlanzerous/argosy/compare/v0.10.0...v0.10.1) (2026-07-04)
+
+
+### Bug Fixes
+
+* **ci:** run check-apple from workspace root (no checkout) (ARGY-88) ([#129](https://github.com/Einlanzerous/argosy/issues/129)) ([5d58847](https://github.com/Einlanzerous/argosy/commit/5d58847739078c74f2915f90a62b57ba1385d90b))
+* **mobile:** TV pairing replace-on-first-keystroke + name attempted URL (ARGY-124) ([#131](https://github.com/Einlanzerous/argosy/issues/131)) ([dfef6b0](https://github.com/Einlanzerous/argosy/commit/dfef6b00866833060548d60e07114d91a8d1fedd))
+
 ## [0.10.0](https://github.com/Einlanzerous/argosy/compare/v0.9.0...v0.10.0) (2026-07-04)
 
 
