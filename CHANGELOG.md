@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/Einlanzerous/argosy/compare/v0.9.0...v0.10.0) (2026-07-04)
+
+
+### Features
+
+* **library:** drop the labels feature (ARGY-110) ([#126](https://github.com/Einlanzerous/argosy/issues/126)) ([490b629](https://github.com/Einlanzerous/argosy/commit/490b6294fde0d427fd8f8daf84b9e8065e9d6845))
+
+
+### Bug Fixes
+
+* **ci:** correct release-please tag output + gate iOS stub (ARGY-88) ([#128](https://github.com/Einlanzerous/argosy/issues/128)) ([1ae67a7](https://github.com/Einlanzerous/argosy/commit/1ae67a7e674bda439b161d64922b0754185c62ba))
+
 ## [0.9.0](https://github.com/Einlanzerous/argosy/compare/v0.8.1...v0.9.0) (2026-07-02)
 
 
