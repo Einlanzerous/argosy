@@ -75,7 +75,14 @@ class AuthController extends Notifier<AuthStatus> {
     try {
       await ref.read(systemApiProvider).ping();
     } catch (e) {
-      throw mapApiError(e);
+      // Name the address we actually tried — a wrong/typo'd/concatenated URL
+      // otherwise looks like a generic network failure.
+      final mapped = mapApiError(e);
+      final detail = mapped.statusCode == null
+          ? 'Check the address is correct and the server is reachable.'
+          : mapped.message;
+      throw ApiFailure("Couldn't reach $url — $detail",
+          statusCode: mapped.statusCode);
     }
   }
 
@@ -163,6 +170,9 @@ class AuthController extends Notifier<AuthStatus> {
     var s = raw.trim();
     if (s.isEmpty) return null;
     if (!s.contains('://')) s = 'http://$s';
+    // Reject malformed input like a doubled scheme (e.g. text concatenated onto
+    // a stale value) rather than silently aiming at the wrong host.
+    if ('://'.allMatches(s).length > 1) return null;
     final uri = Uri.tryParse(s);
     if (uri == null || uri.host.isEmpty) return null;
     return s.endsWith('/') ? s.substring(0, s.length - 1) : s;
