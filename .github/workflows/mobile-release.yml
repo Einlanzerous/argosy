@@ -124,26 +124,37 @@ jobs:
         if: steps.play.outputs.enabled != 'true'
         run: echo "::notice::Play upload skipped — PLAY_SERVICE_ACCOUNT_JSON not set (see android/RELEASE.md)."
 
-  ios:
-    # Stub: builds + uploads to TestFlight only once the Apple secrets exist.
-    # Until then the whole job no-ops (no macOS minutes spent). See ios runbook.
-    runs-on: macos-latest
-    env:
-      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+  # Secrets can't be referenced in a job-level `if:`, so surface Apple-secret
+  # presence from a cheap ubuntu job. This keeps the 10x-billed macOS runner
+  # (and its stub failure) from ever spinning up until the Apple secrets exist.
+  check-apple:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.c.outputs.enabled }}
     steps:
-      - name: gate on Apple secrets
-        id: apple
+      - id: c
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
-          if [ -n "$ASC_KEY_ID" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; fi
-      - name: skipped notice
-        if: steps.apple.outputs.enabled != 'true'
-        run: echo "::notice::TestFlight upload skipped — Apple secrets not set (ARGY-82; see ios/RELEASE.md)."
+          if [ -n "$ASC_KEY_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::TestFlight upload skipped — Apple secrets not set (ARGY-82; see ios/RELEASE.md)."
+          fi
+
+  ios:
+    # Stub: builds + uploads to TestFlight once the Apple secrets exist (ARGY-82).
+    # Gated so no macOS minutes are spent — and the release run stays green —
+    # until then. The final step intentionally fails as a not-yet-implemented
+    # marker once Apple secrets are added.
+    needs: check-apple
+    if: needs.check-apple.outputs.enabled == 'true'
+    runs-on: macos-latest
+    steps:
       - uses: actions/checkout@v4
-        if: steps.apple.outputs.enabled == 'true'
         with:
           ref: ${{ inputs.tag || github.ref_name }}
       - uses: subosito/flutter-action@v2
-        if: steps.apple.outputs.enabled == 'true'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
@@ -152,7 +163,6 @@ jobs:
       # apple-actions/upload-testflight-build) wired in once certs exist —
       # the portal steps are framework-independent. See ios/RELEASE.md.
       - name: build + upload (pending Apple account)
-        if: steps.apple.outputs.enabled == 'true'
         run: |
           echo "Wire flutter build ipa + TestFlight upload here — see ios/RELEASE.md"
           exit 1
