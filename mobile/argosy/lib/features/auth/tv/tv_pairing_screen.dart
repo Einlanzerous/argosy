@@ -38,6 +38,11 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
   /// The field the on-screen keyboard currently edits.
   TextEditingController? _active;
 
+  /// True when [_active] was just focused and still holds its prior value, so
+  /// the next keystroke should REPLACE it rather than append. Without this, a
+  /// retype concatenates onto stale/prefilled text and we ping the wrong host.
+  bool _pristine = true;
+
   List<UserProfile> _profiles = const [];
   String? _selectedProfileId;
   bool _busy = false;
@@ -66,22 +71,43 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
     super.dispose();
   }
 
+  /// Focus [c] for keyboard input, marking it pristine so the first keystroke
+  /// replaces its current value.
+  void _focus(TextEditingController c) =>
+      setState(() {
+        _active = c;
+        _pristine = true;
+      });
+
   void _type(String ch) {
     final c = _active;
     if (c == null) return;
-    setState(() => c.text += ch);
+    setState(() {
+      if (_pristine) {
+        c.text = ch; // replace stale/prefilled value on the first keystroke
+        _pristine = false;
+      } else {
+        c.text += ch;
+      }
+    });
   }
 
   void _backspace() {
     final c = _active;
     if (c == null || c.text.isEmpty) return;
-    setState(() => c.text = c.text.substring(0, c.text.length - 1));
+    setState(() {
+      _pristine = false;
+      c.text = c.text.substring(0, c.text.length - 1);
+    });
   }
 
   void _clear() {
     final c = _active;
     if (c == null) return;
-    setState(() => c.text = '');
+    setState(() {
+      _pristine = false;
+      c.text = '';
+    });
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -156,6 +182,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
     setState(() {
       _step = _Step.signIn;
       _active = _username;
+      _pristine = true;
     });
   }
 
@@ -171,6 +198,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
       _profiles = profiles;
       _selectedProfileId = profiles.first.id;
       _active = _deviceName;
+      _pristine = true;
       _step = _Step.pair;
     });
   });
@@ -250,7 +278,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
             value: _server.text,
             active: _active == _server,
             autofocus: true,
-            onFocused: () => setState(() => _active = _server),
+            onFocused: () => _focus(_server),
           ),
           const SizedBox(height: 18),
           _keyboard(),
@@ -268,7 +296,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
             value: _username.text,
             active: _active == _username,
             autofocus: true,
-            onFocused: () => setState(() => _active = _username),
+            onFocused: () => _focus(_username),
           ),
           const SizedBox(height: 12),
           _TvField(
@@ -276,7 +304,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
             value: _password.text,
             obscure: true,
             active: _active == _password,
-            onFocused: () => setState(() => _active = _password),
+            onFocused: () => _focus(_password),
           ),
           const SizedBox(height: 18),
           _keyboard(),
@@ -294,7 +322,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
             label: 'Device name',
             value: _deviceName.text,
             active: _active == _deviceName,
-            onFocused: () => setState(() => _active = _deviceName),
+            onFocused: () => _focus(_deviceName),
           ),
           const SizedBox(height: 18),
           _keyboard(),
