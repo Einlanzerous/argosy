@@ -133,6 +133,9 @@ jobs:
       enabled: ${{ steps.c.outputs.enabled }}
     steps:
       - id: c
+        # This job doesn't check out, so the workflow-default working-directory
+        # (mobile/argosy) doesn't exist — run from the workspace root instead.
+        working-directory: ${{ github.workspace }}
         env:
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
