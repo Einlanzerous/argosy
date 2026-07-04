@@ -12,10 +12,12 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      # v4 sets `releases_created` (plural) at top level; per-package fields are
-      # prefixed by the manifest path (`.` is our single root package).
+      # For a root component (path `.`) v4 exposes UN-prefixed outputs
+      # (`releases_created`, `tag_name`); the `<path>--` prefix is only for
+      # non-root monorepo paths. Using `.--tag_name` here returned empty, so the
+      # mobile build fell back to github.ref_name (`main`) and failed at upload.
       releases_created: ${{ steps.rp.outputs.releases_created }}
-      tag_name: ${{ steps.rp.outputs['.--tag_name'] }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: rp
