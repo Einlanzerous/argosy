@@ -859,7 +859,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           <div class="fill" :style="{ width: `${displayPct}%` }" />
           <div class="knob" :style="{ left: `${displayPct}%` }" />
         </div>
-        <span class="t">{{ formatClock(duration) }}</span>
+        <span class="t">{{ duration ? `-${formatClock(duration - displayTime)}` : '—' }}</span>
       </div>
       <div class="buttons">
         <div class="btn-left">
