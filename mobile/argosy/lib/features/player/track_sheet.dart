@@ -1,4 +1,5 @@
 import 'package:argosy_api/api.dart';
+import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/argosy_colors.dart';
@@ -31,6 +32,7 @@ class _TrackSheetState extends State<_TrackSheet> {
   @override
   Widget build(BuildContext context) {
     final audio = _c.audioTracks;
+    final audioLabels = _audioLabels(audio);
     return SafeArea(
       child: SingleChildScrollView(
         child: Column(
@@ -53,13 +55,11 @@ class _TrackSheetState extends State<_TrackSheet> {
               _header('Audio'),
               for (final a in audio)
                 _option(
-                  label: a.label?.isNotEmpty == true
-                      ? a.label!
-                      : (a.language ?? 'Track ${a.id}'),
-                  selected: false,
+                  label: audioLabels[a.id] ?? 'Track ${a.id}',
+                  selected: _c.activeAudioTrackId == a.id,
                   onTap: () {
                     _c.selectAudioTrack(a);
-                    Navigator.of(context).pop();
+                    setState(() {});
                   },
                 ),
             ],
@@ -81,6 +81,43 @@ class _TrackSheetState extends State<_TrackSheet> {
       if (t.forced) 'Forced',
     ];
     return parts.join(' · ');
+  }
+
+  // Common ISO-639-1 display names, mirroring the server's language table so the
+  // picker reads "Japanese"/"English" rather than the raw code or ffmpeg's
+  // generic "audio_N" rendition NAME.
+  static const _langNames = <String, String>{
+    'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+    'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'ja': 'Japanese',
+    'zh': 'Chinese', 'ko': 'Korean', 'ar': 'Arabic', 'nl': 'Dutch',
+    'pl': 'Polish', 'sv': 'Swedish', 'no': 'Norwegian', 'da': 'Danish',
+    'fi': 'Finnish', 'tr': 'Turkish', 'he': 'Hebrew', 'hi': 'Hindi',
+    'th': 'Thai', 'vi': 'Vietnamese', 'cs': 'Czech', 'el': 'Greek',
+    'hu': 'Hungarian', 'id': 'Indonesian', 'ro': 'Romanian', 'uk': 'Ukrainian',
+  };
+
+  String _audioBase(BetterPlayerAsmsAudioTrack a) {
+    final lang = a.language;
+    if (lang != null && lang.isNotEmpty) {
+      return _langNames[lang.toLowerCase()] ?? lang.toUpperCase();
+    }
+    final label = a.label;
+    if (label != null && label.isNotEmpty && !label.startsWith('audio_')) return label;
+    return 'Track ${a.id ?? 0}';
+  }
+
+  // Builds display labels keyed by track id, de-duplicating when several tracks
+  // share a language (e.g. an English dub + English commentary) by suffixing an
+  // index — matching the web picker (ARGY-128).
+  Map<int?, String> _audioLabels(List<BetterPlayerAsmsAudioTrack> tracks) {
+    final counts = <String, int>{};
+    final labels = <int?, String>{};
+    for (final a in tracks) {
+      final base = _audioBase(a);
+      counts[base] = (counts[base] ?? 0) + 1;
+      labels[a.id] = counts[base]! > 1 ? '$base ${counts[base]}' : base;
+    }
+    return labels;
   }
 
   Widget _header(String text) => Padding(
