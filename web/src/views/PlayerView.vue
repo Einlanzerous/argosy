@@ -53,6 +53,16 @@ const resumeFrom = ref(0)
 const subtitleTracks = ref<SubtitleTrack[]>([])
 const activeSubtitle = ref<string | null>(null)
 const subMenuOpen = ref(false)
+// Audio-track selection (ARGY-128). The server now emits one HLS audio rendition
+// per source language (ARGY-127); hls.js surfaces them and switches in-session
+// with no rebuffer. The manifest NAME is ffmpeg-generated ("audio_N"), so labels
+// derive from the track language. preferredAudioLang is the language the viewer
+// has settled on (their pick, else the saved pref), reapplied after a transcode
+// restart recreates the hls instance. Only shown when there's more than one track.
+const audioTracks = ref<{ id: number; label: string; lang: string }[]>([])
+const activeAudioTrack = ref(-1)
+const audioMenuOpen = ref(false)
+const preferredAudioLang = ref<string | null>(null)
 // This device's saved playback preferences (subtitle language/on-off), applied
 // when tracks load and updated when the viewer changes the subtitle (ARGY-37).
 const prefs = ref<DevicePreferences | null>(null)
@@ -183,6 +193,7 @@ onMounted(async () => {
   ])
   item.value = data ?? null
   prefs.value = devicePrefs
+  preferredAudioLang.value = devicePrefs?.audioLanguage ?? null
   if (devicePrefs) {
     captionScale.value = devicePrefs.captionScale ?? CAPTION_DEFAULTS.scale
     captionColor.value = devicePrefs.captionColor ?? CAPTION_DEFAULTS.color
@@ -298,7 +309,16 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
           if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
         },
       })
-      hls.on(Hls.Events.MANIFEST_PARSED, () => void el.play().catch(() => {}))
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        refreshAudioTracks()
+        void el.play().catch(() => {})
+      })
+      // Renditions can be (re)declared after the initial manifest, and hls.js may
+      // switch on its own; keep the list + active marker in sync either way.
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => refreshAudioTracks())
+      hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_e, data) => {
+        activeAudioTrack.value = data.id
+      })
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return
         // The idle reaper purges a transcode session that went quiet (e.g. a long
@@ -471,7 +491,8 @@ function poke(): void {
   controlsVisible.value = true
   if (hideTimer) clearTimeout(hideTimer)
   hideTimer = setTimeout(() => {
-    if (playing.value && !subMenuOpen.value && !resumeOpen.value) controlsVisible.value = false
+    if (playing.value && !subMenuOpen.value && !audioMenuOpen.value && !resumeOpen.value)
+      controlsVisible.value = false
   }, 4000)
 }
 
@@ -630,6 +651,71 @@ function applyPreferredSubtitle(): void {
   if (match) void selectSubtitle(match.id, false)
 }
 
+// langLabel turns an ISO code into a display name ("ja" → "Japanese"), since the
+// HLS renditions' NAME is ffmpeg's generic "audio_N". Falls back to the code.
+function langLabel(code: string): string {
+  if (!code || code === 'und') return ''
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code.toUpperCase()
+  } catch {
+    return code.toUpperCase()
+  }
+}
+
+// refreshAudioTracks rebuilds the picker list from hls.js's parsed renditions,
+// de-duplicating labels when several tracks share a language (e.g. two English
+// dubs), then reasserts the preferred language and syncs the active marker.
+function refreshAudioTracks(): void {
+  if (!hls) return
+  const seen: Record<string, number> = {}
+  audioTracks.value = hls.audioTracks.map((t) => {
+    const lang = t.lang ?? ''
+    let label = langLabel(lang) || t.name || `Track ${t.id + 1}`
+    seen[label] = (seen[label] ?? 0) + 1
+    if (seen[label] > 1) label = `${label} ${seen[label]}`
+    return { id: t.id, label, lang }
+  })
+  applyPreferredAudio()
+  activeAudioTrack.value = hls.audioTrack
+}
+
+// applyPreferredAudio selects the settled-on language once tracks load — the
+// viewer's session pick or the saved device pref — and is reapplied after a
+// transcode restart recreates the hls instance so the choice survives seeks.
+function applyPreferredAudio(): void {
+  const want = preferredAudioLang.value
+  if (!want || !hls) return
+  const match = audioTracks.value.find((t) => t.lang === want)
+  if (match && hls.audioTrack !== match.id) hls.audioTrack = match.id
+}
+
+// selectAudio switches the active rendition and remembers the language as this
+// device's preference so it auto-applies on the next title.
+function selectAudio(id: number): void {
+  audioMenuOpen.value = false
+  if (!hls) return
+  hls.audioTrack = id
+  activeAudioTrack.value = id
+  const t = audioTracks.value.find((a) => a.id === id)
+  if (t) {
+    preferredAudioLang.value = t.lang
+    void savePreferredAudio(t.lang)
+  }
+}
+
+function savePreferredAudio(lang: string): Promise<void> {
+  const next = buildPrefs({ audioLanguage: lang })
+  prefs.value = next
+  return putPreferences(next).catch(() => {})
+}
+
+// The active audio language as a compact button label ("EN"/"JA"), mirroring the
+// "CC" subtitle glyph so the current dub/sub is visible at a glance.
+const activeAudioLabelShort = computed(() => {
+  const t = audioTracks.value.find((a) => a.id === activeAudioTrack.value)
+  return (t?.lang || 'aud').slice(0, 2).toUpperCase()
+})
+
 // applySubtitle fetches the WebVTT (authenticated), rewrites its cue timings for
 // the current transcode offset, and loads the cues into the TextTrack. Rebuilding
 // per offset keeps cues aligned whether we direct-play or seek a transcode.
@@ -775,6 +861,7 @@ function onKey(e: KeyboardEvent): void {
   else if (e.key === 'ArrowRight') skip(10)
   else if (e.key === 'f') fullscreen()
   else if (e.key === 'c' && subtitleTracks.value.length) subMenuOpen.value = !subMenuOpen.value
+  else if (e.key === 'a' && audioTracks.value.length > 1) audioMenuOpen.value = !audioMenuOpen.value
   else if (e.key === 'Escape') goBack()
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -886,6 +973,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           </button>
         </div>
         <div class="btn-right">
+          <div v-if="audioTracks.length > 1" class="cc-wrap">
+            <button
+              class="ctrl icon-only on"
+              type="button"
+              title="Audio track"
+              @click="audioMenuOpen = !audioMenuOpen"
+            >
+              <span class="ic cc">{{ activeAudioLabelShort }}</span>
+            </button>
+            <div v-if="audioMenuOpen" class="cc-menu">
+              <div class="cc-head">Audio</div>
+              <button
+                v-for="t in audioTracks"
+                :key="t.id"
+                class="cc-item"
+                :class="{ sel: activeAudioTrack === t.id }"
+                type="button"
+                @click="selectAudio(t.id)"
+              >
+                <span class="cc-label">{{ t.label }}</span>
+                <span v-if="activeAudioTrack === t.id" class="cc-check">✓</span>
+              </button>
+            </div>
+          </div>
           <div v-if="subtitleTracks.length" class="cc-wrap">
             <button
               class="ctrl icon-only"
