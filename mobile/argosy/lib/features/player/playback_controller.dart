@@ -474,9 +474,69 @@ class PlaybackController extends ChangeNotifier {
   List<BetterPlayerAsmsAudioTrack> get audioTracks =>
       _player?.betterPlayerAsmsAudioTracks ?? const [];
 
-  void selectAudioTrack(BetterPlayerAsmsAudioTrack track) {
+  /// The id of the active audio rendition, for the picker's selected marker.
+  int? _activeAudioTrackId;
+  int? get activeAudioTrackId => _activeAudioTrackId;
+
+  /// The language the viewer has settled on (their pick, else the saved pref),
+  /// reasserted whenever the HLS renditions (re)parse — e.g. after a transcode
+  /// restart on seek — so the choice survives (mirrors the web player, ARGY-128).
+  String? _preferredAudioLang;
+
+  /// Selects an audio rendition. When [persist] the language is saved as this
+  /// device's preference so it auto-applies on the next title (ARGY-129).
+  void selectAudioTrack(BetterPlayerAsmsAudioTrack track, {bool persist = true}) {
     _player?.setAudioTrack(track);
+    _activeAudioTrackId = track.id;
+    _preferredAudioLang = track.language;
     _safeNotify();
+    if (persist) unawaited(_savePreferredAudio(track.language));
+  }
+
+  /// Applies the preferred audio language once the renditions are available: the
+  /// viewer's session pick or the saved device pref, else the stream's first
+  /// (default) rendition so the picker reflects what's actually playing. No-op
+  /// unless there's more than one track.
+  void _applyPreferredAudio() {
+    final tracks = audioTracks;
+    if (tracks.length < 2) return;
+    final want = _preferredAudioLang ?? prefs?.audioLanguage;
+    if (want != null && want.isNotEmpty) {
+      for (final t in tracks) {
+        if (t.language == want) {
+          _player?.setAudioTrack(t);
+          _activeAudioTrackId = t.id;
+          _preferredAudioLang = t.language;
+          _safeNotify();
+          return;
+        }
+      }
+    }
+    // No preference (or no match): mark the current default so the sheet shows a
+    // selection. The server emits the source-default rendition first (ARGY-127).
+    if (_activeAudioTrackId == null) {
+      _activeAudioTrackId = tracks.first.id;
+      _safeNotify();
+    }
+  }
+
+  Future<void> _savePreferredAudio(String? lang) async {
+    final next = DevicePreferences(
+      subtitleEnabled: prefs?.subtitleEnabled ?? false,
+      subtitleLanguage: prefs?.subtitleLanguage,
+      audioLanguage: lang ?? prefs?.audioLanguage,
+      captionScale: prefs?.captionScale,
+      captionColor: prefs?.captionColor,
+      captionBackground: prefs?.captionBackground,
+      captionPosition: prefs?.captionPosition,
+      seriesAutoAdvance: prefs?.seriesAutoAdvance,
+    );
+    prefs = next;
+    try {
+      await authApi.setDevicePreferences(next);
+    } catch (_) {
+      /* best-effort persistence */
+    }
   }
 
   // --- fit (the TV transport's Fit control) ---------------------------------
@@ -540,6 +600,11 @@ class PlaybackController extends ChangeNotifier {
         // A restart tears the data source down and back up; only surface an
         // exception when we're not mid-(re)start.
         if (!starting) _fail('Playback stopped unexpectedly.');
+      case BetterPlayerEventType.initialized:
+        // The HLS alternate-audio renditions are parsed by now (ARGY-127); apply
+        // the preferred (or default) track and reflect it in the picker. Also
+        // reasserts the choice after a transcode restart recreates the source.
+        _applyPreferredAudio();
       case BetterPlayerEventType.play:
         // Hold the screen awake while actively playing (ARGY-50). The wakelock
         // is window-scoped, so it lifts automatically once the app backgrounds
