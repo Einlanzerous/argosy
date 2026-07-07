@@ -57,6 +57,20 @@ type Progress struct {
 	FPS float64 `json:"fps"`
 }
 
+// AudioTrack describes one selectable source audio stream. When a source has 2+
+// tracks the HLS builders emit every one as a per-language #EXT-X-MEDIA:TYPE=AUDIO
+// rendition so clients can switch audio in-session — dub vs. sub (ARGY-126).
+type AudioTrack struct {
+	// Index is the 0-based position among the source's audio streams; it maps to
+	// ffmpeg's `0:a:<Index>`.
+	Index int
+	// Language is the ISO code emitted as the rendition's LANGUAGE (e.g. "en",
+	// "ja"); "und" when unknown. Clients label the track from this.
+	Language string
+	// Default marks the rendition players pick when the viewer has no preference.
+	Default bool
+}
+
 // Spec describes a single transcode job handed to a Backend.
 type Spec struct {
 	SessionID    string
@@ -73,6 +87,10 @@ type Spec struct {
 	// TranscodeAudio, on the remux path, re-encodes audio to stereo AAC instead
 	// of copying it (e.g. TrueHD/DTS alongside a copied 4K HEVC video stream).
 	TranscodeAudio bool
+	// AudioTracks are the source's selectable audio streams. With 2+ entries the
+	// builders emit multi-rendition HLS (ARGY-126); 0–1 keeps the single-audio
+	// output unchanged.
+	AudioTracks []AudioTrack
 }
 
 // StartRequest is the caller-facing request to begin (or join) a session.
@@ -83,9 +101,10 @@ type StartRequest struct {
 	StartAt        float64 // seek offset in seconds
 	Encoder        string
 	SourceHeight   int
-	Method         string // MethodRemux or MethodTranscode (default transcode)
-	VideoCodec     string // output/copied video codec (CodecH264/CodecHEVC)
-	TranscodeAudio bool   // remux: re-encode audio to AAC instead of copying
+	Method         string       // MethodRemux or MethodTranscode (default transcode)
+	VideoCodec     string       // output/copied video codec (CodecH264/CodecHEVC)
+	TranscodeAudio bool         // remux: re-encode audio to AAC instead of copying
+	AudioTracks    []AudioTrack // source audio streams; 2+ → multi-rendition HLS
 }
 
 // Session is an immutable snapshot of a transcode session's public state,
@@ -272,7 +291,7 @@ func (m *Manager) Start(req StartRequest) (Session, error) {
 	go m.run(ctx, s, Spec{
 		SessionID: id, Source: req.Source, OutputDir: outputDir,
 		StartAt: req.StartAt, Encoder: req.Encoder, SourceHeight: req.SourceHeight, Method: method,
-		VideoCodec: req.VideoCodec, TranscodeAudio: req.TranscodeAudio,
+		VideoCodec: req.VideoCodec, TranscodeAudio: req.TranscodeAudio, AudioTracks: req.AudioTracks,
 	})
 	return s.snapshot(), nil
 }

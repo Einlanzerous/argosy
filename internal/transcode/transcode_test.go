@@ -333,6 +333,101 @@ func TestBuildArgsSingleRung(t *testing.T) {
 	}
 }
 
+// dubSub is a two-track (English dub + Japanese) audio set, the ARGY-126 case.
+var dubSub = []AudioTrack{
+	{Index: 0, Language: "en", Default: true},
+	{Index: 1, Language: "ja"},
+}
+
+func TestBuildArgsRemuxMultiAudio(t *testing.T) {
+	// A remux with 2+ audio tracks maps every stream and emits an EXT-X-MEDIA
+	// audio group in a master playlist so clients can switch dub/sub in-session.
+	args := buildArgs(Spec{
+		Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodRemux, AudioTracks: dubSub,
+	})
+	joined := strings.Join(args, " ")
+	for _, want := range []string{
+		"-map 0:v:0", "-map 0:a:0", "-map 0:a:1", "-c:v copy", "-c:a copy",
+		"-master_pl_name " + PlaylistName, "stream_%v.m3u8", "init_%v.mp4",
+		"v:0,agroup:aud",
+		"a:0,agroup:aud,language:en,default:yes",
+		"a:1,agroup:aud,language:ja",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("multi-audio remux missing %q\nargs: %s", want, joined)
+		}
+	}
+	// `name:` must never appear — it sets the output filename in ffmpeg's
+	// var_stream_map (breaking the numeric segment layout / allowlist regex),
+	// not the EXT-X-MEDIA NAME.
+	if strings.Contains(joined, "name:") {
+		t.Errorf("var_stream_map must not use name: (it renames output files)\nargs: %s", joined)
+	}
+	// Copy-remux must not re-encode the video, and only one rendition is DEFAULT.
+	if strings.Contains(joined, "libx264") {
+		t.Errorf("multi-audio remux must not re-encode video\nargs: %s", joined)
+	}
+	if strings.Count(joined, "default:yes") != 1 {
+		t.Errorf("exactly one audio rendition must be DEFAULT\nargs: %s", joined)
+	}
+	// A -b:v hint is required so ffmpeg writes the video EXT-X-STREAM-INF for the
+	// copied stream (BANDWIDTH is otherwise unknown and the variant is dropped).
+	if !strings.Contains(joined, "-b:v ") {
+		t.Errorf("multi-audio remux needs a -b:v hint for the master STREAM-INF\nargs: %s", joined)
+	}
+}
+
+func TestBuildArgsLadderMultiAudio(t *testing.T) {
+	// A transcode ladder with 2+ audio tracks decouples audio from the video
+	// rungs: each track is mapped once (not once per rung) and every video
+	// variant references the shared audio group.
+	args := buildArgs(Spec{
+		Source: "/m/a.mkv", OutputDir: "/tmp/out", Encoder: EncoderSoftware,
+		SourceHeight: 1080, AudioTracks: dubSub,
+	})
+	joined := strings.Join(args, " ")
+	for _, want := range []string{
+		"split=3", "-map 0:a:0", "-map 0:a:1",
+		"v:0,agroup:aud v:1,agroup:aud v:2,agroup:aud",
+		"a:0,agroup:aud,language:en,default:yes",
+		"a:1,agroup:aud,language:ja",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("multi-audio ladder missing %q\nargs: %s", want, joined)
+		}
+	}
+	// Audio is transcoded to AAC on the ladder path, and mapped exactly once per
+	// track (not the single-audio "once per rung" pairing).
+	if strings.Count(joined, "-map 0:a:") != 2 {
+		t.Errorf("each of 2 audio tracks must map exactly once\nargs: %s", joined)
+	}
+	if !strings.Contains(joined, "-c:a aac") {
+		t.Errorf("ladder audio must be transcoded to AAC\nargs: %s", joined)
+	}
+	// The old paired var_stream_map form must not appear alongside the group.
+	if strings.Contains(joined, "v:0,a:0") {
+		t.Errorf("multi-audio ladder must not use the paired v:i,a:i map\nargs: %s", joined)
+	}
+}
+
+func TestBuildArgsSingleAudioTrackUnchanged(t *testing.T) {
+	// A lone audio track is not the multi-rendition case: output stays the simple
+	// single-variant layout (no master playlist, no audio group).
+	args := buildArgs(Spec{
+		Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+		AudioTracks: []AudioTrack{{Index: 0, Language: "en", Default: true}},
+	})
+	joined := strings.Join(args, " ")
+	for _, bad := range []string{"var_stream_map", "agroup", "%v"} {
+		if strings.Contains(joined, bad) {
+			t.Errorf("single audio track must keep the simple layout, found %q\nargs: %s", bad, joined)
+		}
+	}
+	if !strings.Contains(joined, "-map 0:a:0") {
+		t.Errorf("single audio track should map 0:a:0\nargs: %s", joined)
+	}
+}
+
 func TestRungsFor(t *testing.T) {
 	cases := []struct {
 		height int

@@ -141,7 +141,9 @@ func buildRemuxArgs(spec Spec) []string {
 	// Remux copies the video (no re-encode), so the encoder backend is
 	// irrelevant; software contributes no hwaccel flags.
 	args := inputArgs(spec, softwareEncoder{})
-	args = append(args, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy")
+	args = append(args, "-map", "0:v:0")
+	args = append(args, audioMaps(spec)...)
+	args = append(args, "-c:v", "copy")
 	if resolveCodec(spec.VideoCodec) == CodecHEVC {
 		// Copied HEVC needs the hvc1 sample-entry tag for fMP4/MSE playback.
 		args = append(args, "-tag:v", "hvc1")
@@ -150,6 +152,17 @@ func buildRemuxArgs(spec Spec) []string {
 		args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
 	} else {
 		args = append(args, "-c:a", "copy")
+	}
+	if multiAudio(spec) {
+		// One video variant sharing the audio group across every rendition. A
+		// copied video stream has no encoder bitrate, so ffmpeg can't compute the
+		// master playlist's BANDWIDTH and omits the video EXT-X-STREAM-INF
+		// entirely — leaving a master with only audio renditions and nothing to
+		// play. A -b:v hint populates BANDWIDTH so the variant is written; it does
+		// NOT re-encode (copy ignores it), and BANDWIDTH is only a hint anyway for
+		// a lone video variant.
+		args = append(args, "-b:v", bandwidthHint(spec.SourceHeight))
+		return append(args, hlsMasterTail(audioGroupVSM(1, spec.AudioTracks))...)
 	}
 	return append(args, singleOutputTail()...)
 }
@@ -171,10 +184,15 @@ func buildTranscodeArgs(spec Spec) []string {
 
 func buildSingleTranscodeArgs(spec Spec, enc videoEncoder, codec string, r rung) []string {
 	args := inputArgs(spec, enc)
-	args = append(args, "-map", "0:v:0", "-map", "0:a:0", "-vf", enc.scale(r.height))
+	args = append(args, "-map", "0:v:0")
+	args = append(args, audioMaps(spec)...)
+	args = append(args, "-vf", enc.scale(r.height))
 	args = append(args, enc.videoCodec(codec)...)
 	args = append(args, enc.rateControl(-1, r)...)
 	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
+	if multiAudio(spec) {
+		return append(args, hlsMasterTail(audioGroupVSM(1, spec.AudioTracks))...)
+	}
 	return append(args, singleOutputTail()...)
 }
 
@@ -197,8 +215,15 @@ func buildLadderArgs(spec Spec, enc videoEncoder, codec string, rungs []rung) []
 	for i := range rungs {
 		args = append(args, "-map", fmt.Sprintf("[v%do]", i))
 	}
-	for range rungs {
-		args = append(args, "-map", "0:a:0")
+	if multiAudio(spec) {
+		// Each source track maps once and joins a shared audio group; the video
+		// rungs reference it (below) rather than each carrying a muxed copy.
+		args = append(args, audioMaps(spec)...)
+	} else {
+		// Single-audio: the original scheme pairs one muxed audio copy per rung.
+		for range rungs {
+			args = append(args, "-map", "0:a:0")
+		}
 	}
 
 	args = append(args, enc.videoCodec(codec)...)
@@ -207,25 +232,20 @@ func buildLadderArgs(spec Spec, enc videoEncoder, codec string, rungs []rung) []
 	}
 	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
 
-	var vsm strings.Builder
-	for i := range rungs {
-		if i > 0 {
-			vsm.WriteByte(' ')
+	var vsm string
+	if multiAudio(spec) {
+		vsm = audioGroupVSM(n, spec.AudioTracks)
+	} else {
+		var b strings.Builder
+		for i := range rungs {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			fmt.Fprintf(&b, "v:%d,a:%d", i, i)
 		}
-		fmt.Fprintf(&vsm, "v:%d,a:%d", i, i)
+		vsm = b.String()
 	}
-
-	args = append(args,
-		"-f", "hls", "-hls_time", "4", "-hls_playlist_type", "event",
-		"-hls_segment_type", "fmp4", "-hls_flags", "independent_segments",
-		"-hls_fmp4_init_filename", "init_%v.mp4",
-		"-master_pl_name", PlaylistName,
-		"-var_stream_map", vsm.String(),
-		"-hls_segment_filename", "stream_%v_%05d.m4s",
-		"-progress", "pipe:1",
-		"stream_%v.m3u8",
-	)
-	return args
+	return append(args, hlsMasterTail(vsm)...)
 }
 
 func inputArgs(spec Spec, enc videoEncoder) []string {
@@ -261,6 +281,106 @@ func singleOutputTail() []string {
 		"-progress", "pipe:1",
 		PlaylistName,
 	}
+}
+
+// hlsMasterTail writes a master playlist (index.m3u8) plus %v-templated variant
+// playlists/inits/segments, driven by the var_stream_map vsm. Shared by the
+// bitrate ladder and the multi-audio (EXT-X-MEDIA) paths.
+func hlsMasterTail(vsm string) []string {
+	return []string{
+		"-f", "hls", "-hls_time", "4", "-hls_playlist_type", "event",
+		"-hls_segment_type", "fmp4", "-hls_flags", "independent_segments",
+		"-hls_fmp4_init_filename", "init_%v.mp4",
+		"-master_pl_name", PlaylistName,
+		"-var_stream_map", vsm,
+		"-hls_segment_filename", "stream_%v_%05d.m4s",
+		"-progress", "pipe:1",
+		"stream_%v.m3u8",
+	}
+}
+
+// audioGroup is the HLS AUDIO group-id shared by every video variant and audio
+// rendition on the multi-audio path.
+const audioGroup = "aud"
+
+// bandwidthHint is an approximate video bitrate (an ffmpeg -b:v value) by source
+// height. It exists only to populate the master playlist's BANDWIDTH on the
+// copied (remux) multi-audio path so ffmpeg writes the video EXT-X-STREAM-INF;
+// it never drives a re-encode, and the exact value is immaterial for a lone
+// video variant.
+func bandwidthHint(height int) string {
+	switch {
+	case height >= 2160:
+		return "20M"
+	case height >= 1080:
+		return "8M"
+	case height >= 720:
+		return "4M"
+	case height > 0:
+		return "2M"
+	default:
+		return "6M"
+	}
+}
+
+// multiAudio reports whether the spec carries 2+ selectable audio tracks — the
+// EXT-X-MEDIA audio-group path (ARGY-126). With 0–1 tracks the builders keep the
+// original single-audio output byte-for-byte.
+func multiAudio(spec Spec) bool { return len(spec.AudioTracks) >= 2 }
+
+// audioMaps returns the -map flags for the audio streams: every selectable
+// source track on the multi-audio path (one output stream each, in track order),
+// else just the first (0:a:0).
+func audioMaps(spec Spec) []string {
+	if !multiAudio(spec) {
+		return []string{"-map", "0:a:0"}
+	}
+	out := make([]string, 0, len(spec.AudioTracks)*2)
+	for _, t := range spec.AudioTracks {
+		out = append(out, "-map", fmt.Sprintf("0:a:%d", t.Index))
+	}
+	return out
+}
+
+// audioGroupVSM builds a var_stream_map binding nVideo video renditions to a
+// shared audio group of tracks (EXT-X-MEDIA): each video variant references the
+// group; each track becomes its own audio rendition carrying LANGUAGE and, for
+// exactly one, DEFAULT. Output audio index a:i follows audioMaps' order.
+//
+// Deliberately no `name:` field: in ffmpeg's var_stream_map `name:` sets the
+// output *playlist filename* (→ stream_<name>.m3u8), not the EXT-X-MEDIA NAME
+// attribute — a non-numeric name would break the transcodeFile allowlist regex
+// and the numeric segment layout. The EXT-X-MEDIA NAME is ffmpeg-generated
+// ("audio_N"); clients label tracks from LANGUAGE instead.
+func audioGroupVSM(nVideo int, tracks []AudioTrack) string {
+	var b strings.Builder
+	for i := 0; i < nVideo; i++ {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "v:%d,agroup:%s", i, audioGroup)
+	}
+	// Exactly one rendition must be DEFAULT so players auto-pick audio; honor the
+	// source's default disposition, else fall back to the first track.
+	def := 0
+	for i, t := range tracks {
+		if t.Default {
+			def = i
+			break
+		}
+	}
+	for i, t := range tracks {
+		b.WriteByte(' ')
+		lang := t.Language
+		if lang == "" {
+			lang = "und"
+		}
+		fmt.Fprintf(&b, "a:%d,agroup:%s,language:%s", i, audioGroup, lang)
+		if i == def {
+			b.WriteString(",default:yes")
+		}
+	}
+	return b.String()
 }
 
 // parseProgress reads ffmpeg's -progress key=value stream and reports a Progress

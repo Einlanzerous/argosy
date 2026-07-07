@@ -47,3 +47,9 @@ func langName(code string) string {
 	}
 	return strings.ToUpper(code)
 }
+
+// LangCode exposes the shared normalization to other packages (the library's
+// audio-track enumerator, ARGY-126) so audio-rendition language codes match the
+// format subtitles use — which is what makes the per-device audioLanguage
+// preference auto-select the right track.
+func LangCode(tag string) string { return langCode(tag) }
