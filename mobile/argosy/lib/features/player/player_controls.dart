@@ -347,7 +347,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                 ),
               ),
               Text(
-                duration > 0 ? formatClock(duration) : '—',
+                duration > 0 ? '-${formatClock(duration - clamped)}' : '—',
                 style: const TextStyle(color: ArgosyColors.soft, fontSize: 13),
               ),
             ],

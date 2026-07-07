@@ -625,7 +625,7 @@ class _SeekBar extends StatelessWidget {
           ),
           const SizedBox(width: 22),
           Text(
-            duration > 0 ? formatClock(duration) : '—',
+            duration > 0 ? '-${formatClock(duration - position)}' : '—',
             style: const TextStyle(
               fontFamily: 'HankenGrotesk',
               fontSize: 20,
