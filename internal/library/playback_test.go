@@ -75,3 +75,40 @@ func TestCodecsFromTechnical(t *testing.T) {
 		t.Errorf("empty technical = (%q,%q), want empty", v, a)
 	}
 }
+
+func TestAudioTracksFromTechnical(t *testing.T) {
+	// Two audio streams (English dub tagged default + Japanese), interleaved with
+	// video/subtitle streams. Audio index is relative to audio streams, not the
+	// absolute ffprobe stream index; ISO 639-2 tags normalize to short codes.
+	raw := []byte(`{"streams":[
+		{"codec_type":"video","codec_name":"h264"},
+		{"codec_type":"audio","codec_name":"aac","tags":{"language":"eng"},"disposition":{"default":1}},
+		{"codec_type":"audio","codec_name":"aac","tags":{"language":"jpn","title":"Original"}},
+		{"codec_type":"subtitle","codec_name":"subrip"}
+	]}`)
+	got := audioTracksFromTechnical(raw)
+	want := []transcode.AudioTrack{
+		{Index: 0, Language: "en", Default: true},
+		{Index: 1, Language: "ja"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d tracks, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("track %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+
+	// A single audio stream still enumerates (the builders decide single vs
+	// multi); no audio streams and empty input both yield nothing.
+	if one := audioTracksFromTechnical([]byte(`{"streams":[{"codec_type":"audio","codec_name":"aac"}]}`)); len(one) != 1 {
+		t.Errorf("single audio stream = %d tracks, want 1", len(one))
+	}
+	if none := audioTracksFromTechnical([]byte(`{"streams":[{"codec_type":"video"}]}`)); len(none) != 0 {
+		t.Errorf("no audio streams = %d tracks, want 0", len(none))
+	}
+	if nilTracks := audioTracksFromTechnical(nil); nilTracks != nil {
+		t.Errorf("nil technical = %+v, want nil", nilTracks)
+	}
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/httpx"
+	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -58,6 +59,47 @@ type transcodeSource struct {
 	path         string
 	height       int
 	video, audio string
+	// audioTracks are the source's selectable audio streams (dub/sub); passed to
+	// the transcoder to emit multi-rendition HLS when there's more than one.
+	audioTracks []transcode.AudioTrack
+}
+
+// audioTracksFromTechnical enumerates the source's audio streams from the stored
+// ffprobe JSON (ARGY-126), preserving order so a track's position doubles as its
+// `0:a:<index>` map target. Language codes share the subtitle package's table so
+// they match the per-device audioLanguage preference for client auto-select.
+func audioTracksFromTechnical(technical []byte) []transcode.AudioTrack {
+	var doc struct {
+		Streams []struct {
+			CodecType string `json:"codec_type"`
+			Tags      struct {
+				Language string `json:"language"`
+			} `json:"tags"`
+			Disposition struct {
+				Default int `json:"default"`
+			} `json:"disposition"`
+		} `json:"streams"`
+	}
+	if len(technical) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(technical, &doc); err != nil {
+		return nil
+	}
+	var out []transcode.AudioTrack
+	ai := 0
+	for _, st := range doc.Streams {
+		if st.CodecType != "audio" {
+			continue
+		}
+		out = append(out, transcode.AudioTrack{
+			Index:    ai,
+			Language: subtitle.LangCode(st.Tags.Language),
+			Default:  st.Disposition.Default == 1,
+		})
+		ai++
+	}
+	return out
 }
 
 // itemSource resolves the absolute, traversal-safe media path plus the source
@@ -82,7 +124,13 @@ func (s *Store) itemSource(ctx context.Context, accountID, itemID string) (src t
 		return transcodeSource{}, false, e
 	}
 	video, audio := codecsFromTechnical(technical)
-	return transcodeSource{path: abs, height: videoHeightFromTechnical(technical), video: video, audio: audio}, true, nil
+	return transcodeSource{
+		path:        abs,
+		height:      videoHeightFromTechnical(technical),
+		video:       video,
+		audio:       audio,
+		audioTracks: audioTracksFromTechnical(technical),
+	}, true, nil
 }
 
 // startTranscode begins (or joins) an HLS transcode session for an item and
@@ -141,6 +189,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		Method:         mode,
 		VideoCodec:     plan.videoCodec,
 		TranscodeAudio: plan.transcodeAudio,
+		AudioTracks:    src.audioTracks,
 	})
 	if errors.Is(err, transcode.ErrAtCapacity) {
 		httpx.Error(w, http.StatusServiceUnavailable, "server at transcode capacity, try again shortly")
