@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.11.0](https://github.com/Einlanzerous/argosy/compare/v0.10.1...v0.11.0) (2026-07-09)
+
+
+### Features
+
+* **auth:** PIN-first device onboarding — discover, show a code, approve elsewhere (ARGY-123) ([#137](https://github.com/Einlanzerous/argosy/issues/137)) ([bfb63f7](https://github.com/Einlanzerous/argosy/commit/bfb63f75ba948daa3583654e9c5ae13bb37a6125))
+* **mobile:** audio auto-select + active-track marker for dub/sub (ARGY-129) ([#136](https://github.com/Einlanzerous/argosy/issues/136)) ([4936018](https://github.com/Einlanzerous/argosy/commit/493601875811cd6aa616ab9548de4985b01e6f86))
+* **player:** web audio-track picker for dub/sub switching (ARGY-128) ([#135](https://github.com/Einlanzerous/argosy/issues/135)) ([c69cfc3](https://github.com/Einlanzerous/argosy/commit/c69cfc3957f446c4cafd1020148d31bb11ed9cb4))
+* **transcode:** multi-audio HLS renditions for dub/sub switching (ARGY-127) ([#133](https://github.com/Einlanzerous/argosy/issues/133)) ([7a46045](https://github.com/Einlanzerous/argosy/commit/7a46045d0e7f1ebb2b2e1e215ba0928e4be79333))
+
+
+### Bug Fixes
+
+* **player:** count down remaining time instead of static total (ARGY-125) ([#132](https://github.com/Einlanzerous/argosy/issues/132)) ([0b70780](https://github.com/Einlanzerous/argosy/commit/0b70780ddd0fd976fcc9f8350662d9149e09d188))
+
 ## [0.10.1](https://github.com/Einlanzerous/argosy/compare/v0.10.0...v0.10.1) (2026-07-04)
 
 
