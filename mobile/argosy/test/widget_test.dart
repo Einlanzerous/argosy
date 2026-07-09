@@ -33,10 +33,22 @@ void main() {
     // Splash shows the wordmark while auth bootstraps.
     expect(find.text('ARGOSY'), findsOneWidget);
 
-    // Let the redirect settle.
-    await tester.pumpAndSettle();
+    // Let the redirect + the PIN controller's discovery attempt settle
+    // (bounded pumps — the code step animates a spinner while searching, so
+    // pumpAndSettle would never return). Advancing past the discovery
+    // timeout + hang backstop lands the fallback offer regardless of how the
+    // absent mDNS plugin fails (throw, silence, or hang).
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 9));
 
-    // Pairing flow opens on the server-address step.
+    // PIN-first (ARGY-123): the pairing flow opens on the code step. With no
+    // discovery plugin in the test env the search fails fast into the
+    // graceful fallback offer.
+    expect(find.text("Can't find your server"), findsOneWidget);
+
+    // The manual server-address fallback is still a tap away.
+    await tester.tap(find.text('Enter address manually'));
+    await tester.pump();
     expect(find.text('Connect to your server'), findsOneWidget);
     expect(find.text('Continue'), findsOneWidget);
   });

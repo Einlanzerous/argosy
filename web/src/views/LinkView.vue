@@ -1,20 +1,57 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { api } from '@/api/client'
 
-// Approve a TV's pairing code (ARGY-112). The web user is already signed in
-// (this route is auth-gated), so approving links the TV to their account.
+// Approve a new device's pairing code (ARGY-112, PIN-first ARGY-123). The web
+// user is already signed in (this route is auth-gated), so approving links the
+// device to their account.
 const code = ref('')
-const deviceName = ref('Living Room TV')
+const deviceName = ref('')
 const busy = ref(false)
 const error = ref('')
 const done = ref(false)
+// What the new device announced about itself, looked up once 6 chars are in.
+const announced = ref<{ name?: string; platform?: string } | null>(null)
+
+// Prefill the device's self-reported name as soon as a full code is typed —
+// so approving "Pixel 9 (phone)" is a two-keystroke affair. Best-effort: a
+// miss just leaves the fields as they were.
+watch(code, async (value) => {
+  const c = value.trim().toUpperCase()
+  announced.value = null
+  if (c.length !== 6) return
+  try {
+    const { data, response } = await api.GET('/api/v1/auth/link/{code}', {
+      params: { path: { code: c } },
+    })
+    if (!response.ok || !data || data.status !== 'pending') return
+    announced.value = { name: data.deviceName ?? undefined, platform: data.platform ?? undefined }
+    if (!deviceName.value.trim() && data.deviceName) deviceName.value = data.deviceName
+  } catch {
+    // Lookup is a nicety; approval below reports real errors.
+  }
+})
+
+function platformLabel(platform?: string): string {
+  switch (platform) {
+    case 'androidtv':
+      return 'TV'
+    case 'android':
+      return 'Android phone'
+    case 'ios':
+      return 'iPhone or iPad'
+    case 'web':
+      return 'browser'
+    default:
+      return 'device'
+  }
+}
 
 async function approve(): Promise<void> {
   error.value = ''
   const c = code.value.trim().toUpperCase()
   if (c.length < 6) {
-    error.value = 'Enter the 6-character code shown on your TV.'
+    error.value = 'Enter the 6-character code shown on the new device.'
     return
   }
   busy.value = true
@@ -26,10 +63,10 @@ async function approve(): Promise<void> {
     if (!response.ok) {
       error.value =
         response.status === 404
-          ? "That code wasn't found — it may have expired. Start over on your TV."
+          ? "That code wasn't found — it may have expired. Start over on the new device."
           : response.status === 409
             ? 'That code was already used.'
-            : 'Could not link the TV. Please try again.'
+            : 'Could not link the device. Please try again.'
       return
     }
     done.value = true
@@ -44,11 +81,11 @@ async function approve(): Promise<void> {
 <template>
   <div class="link">
     <div class="card">
-      <div class="eyebrow">Fleet · Add a screen</div>
-      <h1>Link a TV</h1>
+      <div class="eyebrow">Fleet · Add a device</div>
+      <h1>Link a device</h1>
 
       <template v-if="!done">
-        <p class="lede">Enter the code shown on your TV to add it to your Fleet.</p>
+        <p class="lede">Enter the code shown on the new TV or phone to add it to your Fleet.</p>
         <form @submit.prevent="approve">
           <label>Pairing code</label>
           <input
@@ -60,21 +97,30 @@ async function approve(): Promise<void> {
             autocomplete="off"
             placeholder="ABC123"
           />
-          <label>TV name</label>
+          <p v-if="announced" class="announced">
+            This links a <span class="accent">{{ platformLabel(announced.platform) }}</span>
+            <template v-if="announced.name"> ("{{ announced.name }}")</template>
+            to your account.
+          </p>
+          <label>Device name</label>
           <input v-model="deviceName" type="text" placeholder="Living Room TV" />
           <p v-if="error" class="error">{{ error }}</p>
           <button class="primary" type="submit" :disabled="busy">
-            {{ busy ? 'Linking…' : 'Link this TV' }}
+            {{ busy ? 'Linking…' : 'Link this device' }}
           </button>
         </form>
       </template>
 
       <template v-else>
         <p class="lede">
-          <span class="accent">Linked.</span> Your TV will connect in a moment — no need to type
-          anything on it.
+          <span class="accent">Linked.</span> The new device will connect in a moment — no need to
+          type anything on it.
         </p>
-        <button class="primary" type="button" @click="((done = false), (code = ''))">
+        <button
+          class="primary"
+          type="button"
+          @click="((done = false), (code = ''), (deviceName = ''), (announced = null))"
+        >
           Link another
         </button>
       </template>
@@ -167,5 +213,10 @@ input:focus {
   margin: 16px 0 0;
   font: 500 13px var(--arg-body);
   color: var(--arg-danger);
+}
+.announced {
+  margin: 12px 0 0;
+  font: 400 13px/1.5 var(--arg-body);
+  color: var(--arg-dim);
 }
 </style>

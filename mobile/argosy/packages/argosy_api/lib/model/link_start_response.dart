@@ -17,7 +17,7 @@ class LinkStartResponse {
     required this.expiresAt,
   });
 
-  /// Short, unambiguous pairing code the TV displays.
+  /// Short, unambiguous pairing code the new device displays.
   String code;
 
   DateTime expiresAt;

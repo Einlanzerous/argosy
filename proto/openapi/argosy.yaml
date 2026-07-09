@@ -338,12 +338,21 @@ paths:
     post:
       tags: [auth]
       operationId: startLink
-      summary: Begin TV code-pairing — mint a short code for the TV to display
+      summary: Begin code-pairing — mint a short code for the new device to display
       description: |
-        A TV (which can't comfortably type credentials) calls this to get a short
-        pairing code. It displays the code, then polls `GET /auth/link/{code}`
-        until an authenticated user approves it and a device token is handed back.
+        A new device (TV or phone, which shouldn't have to type credentials)
+        calls this to get a short pairing code. It displays the code, then polls
+        `GET /auth/link/{code}` until an authenticated user approves it and a
+        device token is handed back. The optional body lets the device announce
+        what it is, so the approver sees "Pixel 9 (android)" instead of a bare
+        code and the created Fleet device is named/typed correctly.
       security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkStartRequest"
       responses:
         "201":
           description: Pairing code created
@@ -358,9 +367,11 @@ paths:
       operationId: getLinkStatus
       summary: Poll a pairing code; returns the device token once approved
       description: |
-        The TV polls this. While pending, `status` is `pending`. Once approved,
-        it returns `status: approved` plus the one-time device `token`, and the
-        code is consumed (single use).
+        The new device polls this. While pending, `status` is `pending`. Once
+        approved, it returns `status: approved` plus the one-time device
+        `token`, and the code is consumed (single use). While pending it also
+        echoes the device-announced `deviceName`/`platform` so an approving UI
+        can show what is about to be linked.
       security: []
       parameters:
         - name: code
@@ -382,11 +393,11 @@ paths:
     post:
       tags: [auth]
       operationId: approveLink
-      summary: Approve a TV pairing code from a signed-in session
+      summary: Approve a pairing code from a signed-in session
       description: >
-        Called from an authenticated web session. Links the TV to the caller's
-        account and profile by creating a device; the TV claims its token on the
-        next poll.
+        Called from an authenticated session (web or mobile). Links the new
+        device to the caller's account and profile by creating a device; the
+        new device claims its token on the next poll.
       parameters:
         - name: code
           in: path
@@ -1706,13 +1717,27 @@ components:
           type: string
           description: Bearer token for this device.
 
+    LinkStartRequest:
+      type: object
+      properties:
+        deviceName:
+          type: string
+          description: >-
+            The new device's suggested Fleet name (e.g. "Pixel 9"). The approver
+            may override it.
+        platform:
+          type: string
+          description: >-
+            The new device's platform (android, ios, androidtv, web). Defaults
+            to androidtv for older clients that send no body.
+
     LinkStartResponse:
       type: object
       required: [code, expiresAt]
       properties:
         code:
           type: string
-          description: Short, unambiguous pairing code the TV displays.
+          description: Short, unambiguous pairing code the new device displays.
         expiresAt:
           type: string
           format: date-time
@@ -1730,13 +1755,24 @@ components:
           description: >-
             The device bearer token, present once the code is approved. Returned
             exactly once — the code is consumed on the poll that returns it.
+        deviceName:
+          type: string
+          nullable: true
+          description: The name the new device announced at start, if any.
+        platform:
+          type: string
+          nullable: true
+          description: The platform the new device announced at start, if any.
 
     LinkApproveRequest:
       type: object
       properties:
         deviceName:
           type: string
-          description: Friendly name for the TV in the Fleet (defaults to "Living Room TV").
+          description: >-
+            Friendly name for the device in the Fleet. Overrides the name the
+            device announced at start; falls back to "Living Room TV" when
+            neither side names it.
 
     Session:
       type: object

@@ -31,8 +31,9 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("POST /api/v1/auth/profiles", requireAdmin(store, handleCreateProfile(store)))
 	mux.Handle("PATCH /api/v1/auth/profiles/{userId}", requireAdmin(store, handleUpdateProfile(store)))
 	mux.Handle("DELETE /api/v1/auth/profiles/{userId}", requireAdmin(store, handleDeleteProfile(store)))
-	// TV code-pairing (ARGY-112): start + poll are unauthenticated (a TV with no
-	// session yet); approve is the authenticated web user blessing the code.
+	// Device code-pairing (ARGY-112, PIN-first ARGY-123): start + poll are
+	// unauthenticated (a device with no session yet); approve is any
+	// authenticated user (web or mobile) blessing the code.
 	mux.HandleFunc("POST /api/v1/auth/link/start", handleStartLink(store))
 	mux.HandleFunc("GET /api/v1/auth/link/{code}", handleLinkStatus(store))
 	mux.Handle("POST /api/v1/auth/link/{code}/approve", requireAuth(store, handleApproveLink(store)))
@@ -279,7 +280,18 @@ func handleMe() http.HandlerFunc {
 
 func handleStartLink(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		resp, err := store.StartLink(r.Context())
+		// The body (device identity) is optional; ignore a decode miss so old
+		// clients that POST nothing keep working.
+		var req api.LinkStartRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		name, platform := "", ""
+		if req.DeviceName != nil {
+			name = *req.DeviceName
+		}
+		if req.Platform != nil {
+			platform = *req.Platform
+		}
+		resp, err := store.StartLink(r.Context(), name, platform)
 		if err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "internal error")
 			return

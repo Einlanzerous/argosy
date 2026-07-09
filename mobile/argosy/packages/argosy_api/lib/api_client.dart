@@ -215,6 +215,8 @@ class ApiClient {
           return Facet.fromJson(value);
         case 'LinkApproveRequest':
           return LinkApproveRequest.fromJson(value);
+        case 'LinkStartRequest':
+          return LinkStartRequest.fromJson(value);
         case 'LinkStartResponse':
           return LinkStartResponse.fromJson(value);
         case 'LinkStatusResponse':

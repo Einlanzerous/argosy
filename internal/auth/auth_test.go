@@ -291,7 +291,7 @@ func TestLinkPairing(t *testing.T) {
 	profile := login.Profiles[0].Id
 	sess := api.Session{AccountId: login.Account.Id, UserId: profile, Role: api.Admin}
 
-	start, err := store.StartLink(ctx)
+	start, err := store.StartLink(ctx, "", "")
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -348,6 +348,83 @@ func TestLinkPairing(t *testing.T) {
 	}
 	if paired.Platform == nil || *paired.Platform != "androidtv" {
 		t.Errorf("platform = %v, want androidtv", paired.Platform)
+	}
+}
+
+// TestLinkPairingAnnouncedIdentity covers ARGY-123: the new device announces its
+// name/platform at start, the approver sees them while pending, and approval
+// uses them (unless the approver overrides the name).
+func TestLinkPairingAnnouncedIdentity(t *testing.T) {
+	store, ctx := testStore(t)
+	username := uniqueUsername()
+	password := "pw-" + uniqueUsername()
+	if _, err := store.CreateAccount(ctx, username, password, "Pin Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	login, err := store.Login(ctx, username, password)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	sess := api.Session{AccountId: login.Account.Id, UserId: login.Profiles[0].Id, Role: api.Admin}
+
+	// Announced identity is echoed on the pending poll.
+	start, err := store.StartLink(ctx, "Pixel 9", "android")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	st, err := store.LinkStatus(ctx, start.Code)
+	if err != nil || st.Status != api.Pending {
+		t.Fatalf("pending poll = %+v (err %v)", st, err)
+	}
+	if st.DeviceName == nil || *st.DeviceName != "Pixel 9" || st.Platform == nil || *st.Platform != "android" {
+		t.Fatalf("pending identity = %v/%v, want Pixel 9/android", st.DeviceName, st.Platform)
+	}
+
+	// Approval with no override adopts the announced name + platform.
+	if err := store.ApproveLink(ctx, sess, start.Code, ""); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	if st, err = store.LinkStatus(ctx, start.Code); err != nil || st.Status != api.Approved || st.Token == nil {
+		t.Fatalf("approved poll = %+v (err %v)", st, err)
+	}
+	devices, _ := store.ListDevices(ctx, sess)
+	var paired *api.Device
+	for i := range devices {
+		if devices[i].Name == "Pixel 9" {
+			paired = &devices[i]
+		}
+	}
+	if paired == nil {
+		t.Fatal("announced-name device not found in Fleet")
+	}
+	if paired.Platform == nil || *paired.Platform != "android" {
+		t.Errorf("platform = %v, want android", paired.Platform)
+	}
+
+	// Approver override wins over the announced name; an unknown announced
+	// platform is dropped and defaults to androidtv.
+	start2, err := store.StartLink(ctx, "Mystery Box", "toaster")
+	if err != nil {
+		t.Fatalf("start2: %v", err)
+	}
+	if err := store.ApproveLink(ctx, sess, start2.Code, "Kitchen Screen"); err != nil {
+		t.Fatalf("approve2: %v", err)
+	}
+	if st, err = store.LinkStatus(ctx, start2.Code); err != nil || st.Token == nil {
+		t.Fatalf("approved poll 2 = %+v (err %v)", st, err)
+	}
+	devices, _ = store.ListDevices(ctx, sess)
+	paired = nil
+	for i := range devices {
+		if devices[i].Name == "Kitchen Screen" {
+			paired = &devices[i]
+		}
+	}
+	if paired == nil {
+		t.Fatal("override-name device not found in Fleet")
+	}
+	if paired.Platform == nil || *paired.Platform != "androidtv" {
+		t.Errorf("platform = %v, want androidtv fallback", paired.Platform)
 	}
 }
 

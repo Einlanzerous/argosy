@@ -72,5 +72,14 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- LAN discovery of the household server for PIN-first pairing (ARGY-123):
+	     Bonjour browsing needs the service type declared and a local-network
+	     usage string, or iOS silently returns nothing. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Argosy looks for your household server on the local network so this device can pair with a PIN instead of a typed address.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_argosy._tcp</string>
+	</array>
 </dict>
 </plist>

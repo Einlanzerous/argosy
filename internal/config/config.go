@@ -63,6 +63,12 @@ type Config struct {
 	// SubtitleLanguages is the ISO-639 language set to fetch external subtitles
 	// for (comma-separated, e.g. "en,es"). Empty defaults to English.
 	SubtitleLanguages []string
+	// ServerName is the human-friendly name advertised over mDNS and shown by
+	// clients during PIN pairing (ARGY-123).
+	ServerName string
+	// DisableMDNS turns off LAN service advertising (e.g. when the deployment
+	// network can't multicast anyway and the log noise isn't wanted).
+	DisableMDNS bool
 }
 
 // Load reads configuration from the environment, applying sensible defaults.
@@ -90,6 +96,9 @@ func Load() Config {
 		OpenSubtitlesUsername: os.Getenv("OPEN_SUBTITLES_USERNAME"),
 		OpenSubtitlesPassword: os.Getenv("OPEN_SUBTITLES_PASSWORD"),
 		SubtitleLanguages:     parseList(os.Getenv("ARGOSY_SUBTITLE_LANGUAGES")),
+
+		ServerName:  getenv("ARGOSY_SERVER_NAME", "Argosy"),
+		DisableMDNS: os.Getenv("ARGOSY_DISABLE_MDNS") == "1" || os.Getenv("ARGOSY_DISABLE_MDNS") == "true",
 	}
 }
 

@@ -95,6 +95,19 @@ onMounted(() => {
       <span>Every device in your Fleet shares one playhead. Retire any to drop it from sync.</span>
     </div>
 
+    <!-- PIN-first onboarding (ARGY-123): the primary way to add a device is to
+         approve the code it shows, right from here. -->
+    <RouterLink class="add-device" :to="{ name: 'link' }">
+      <span class="add-glyph">+</span>
+      <span class="add-copy">
+        <span class="add-title">Link a device</span>
+        <span class="add-sub"
+          >Approve the PIN shown on a new TV or phone — nothing to type there.</span
+        >
+      </span>
+      <span class="add-chev">›</span>
+    </RouterLink>
+
     <div class="list">
       <div v-for="d in devices" :key="d.id" class="device">
         <div class="glyph">{{ glyph(d) }}</div>
@@ -181,6 +194,44 @@ onMounted(() => {
 .banner span:last-child {
   font: 500 13.5px var(--arg-body);
   color: var(--arg-accent-soft);
+}
+.add-device {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  border-radius: var(--arg-r-lg);
+  border: 1px dashed var(--arg-line-2);
+  background: transparent;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.add-device:hover {
+  border-color: var(--arg-accent);
+}
+.add-glyph {
+  font: 700 22px var(--arg-display);
+  color: var(--arg-accent);
+  line-height: 1;
+}
+.add-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.add-title {
+  font: 700 14px var(--arg-display);
+  color: var(--arg-cream);
+}
+.add-sub {
+  font: 400 12.5px var(--arg-body);
+  color: var(--arg-dim);
+}
+.add-chev {
+  font: 400 20px var(--arg-body);
+  color: var(--arg-dim);
 }
 .list {
   display: flex;
