@@ -10,13 +10,14 @@
 
 part of openapi.api;
 
-class LinkApproveRequest {
-  /// Returns a new [LinkApproveRequest] instance.
-  LinkApproveRequest({
+class LinkStartRequest {
+  /// Returns a new [LinkStartRequest] instance.
+  LinkStartRequest({
     this.deviceName,
+    this.platform,
   });
 
-  /// Friendly name for the device in the Fleet. Overrides the name the device announced at start; falls back to \"Living Room TV\" when neither side names it.
+  /// The new device's suggested Fleet name (e.g. \"Pixel 9\"). The approver may override it.
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated
@@ -25,17 +26,28 @@ class LinkApproveRequest {
   ///
   String? deviceName;
 
+  /// The new device's platform (android, ios, androidtv, web). Defaults to androidtv for older clients that send no body.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? platform;
+
   @override
-  bool operator ==(Object other) => identical(this, other) || other is LinkApproveRequest &&
-    other.deviceName == deviceName;
+  bool operator ==(Object other) => identical(this, other) || other is LinkStartRequest &&
+    other.deviceName == deviceName &&
+    other.platform == platform;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (deviceName == null ? 0 : deviceName!.hashCode);
+    (deviceName == null ? 0 : deviceName!.hashCode) +
+    (platform == null ? 0 : platform!.hashCode);
 
   @override
-  String toString() => 'LinkApproveRequest[deviceName=$deviceName]';
+  String toString() => 'LinkStartRequest[deviceName=$deviceName, platform=$platform]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -44,13 +56,18 @@ class LinkApproveRequest {
     } else {
       json[r'deviceName'] = null;
     }
+    if (this.platform != null) {
+      json[r'platform'] = this.platform;
+    } else {
+      json[r'platform'] = null;
+    }
     return json;
   }
 
-  /// Returns a new [LinkApproveRequest] instance and imports its values from
+  /// Returns a new [LinkStartRequest] instance and imports its values from
   /// [value] if it's a [Map], null otherwise.
   // ignore: prefer_constructors_over_static_methods
-  static LinkApproveRequest? fromJson(dynamic value) {
+  static LinkStartRequest? fromJson(dynamic value) {
     if (value is Map) {
       final json = value.cast<String, dynamic>();
 
@@ -61,18 +78,19 @@ class LinkApproveRequest {
         return true;
       }());
 
-      return LinkApproveRequest(
+      return LinkStartRequest(
         deviceName: mapValueOfType<String>(json, r'deviceName'),
+        platform: mapValueOfType<String>(json, r'platform'),
       );
     }
     return null;
   }
 
-  static List<LinkApproveRequest> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <LinkApproveRequest>[];
+  static List<LinkStartRequest> listFromJson(dynamic json, {bool growable = false,}) {
+    final result = <LinkStartRequest>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
-        final value = LinkApproveRequest.fromJson(row);
+        final value = LinkStartRequest.fromJson(row);
         if (value != null) {
           result.add(value);
         }
@@ -81,12 +99,12 @@ class LinkApproveRequest {
     return result.toList(growable: growable);
   }
 
-  static Map<String, LinkApproveRequest> mapFromJson(dynamic json) {
-    final map = <String, LinkApproveRequest>{};
+  static Map<String, LinkStartRequest> mapFromJson(dynamic json) {
+    final map = <String, LinkStartRequest>{};
     if (json is Map && json.isNotEmpty) {
       json = json.cast<String, dynamic>(); // ignore: parameter_assignments
       for (final entry in json.entries) {
-        final value = LinkApproveRequest.fromJson(entry.value);
+        final value = LinkStartRequest.fromJson(entry.value);
         if (value != null) {
           map[entry.key] = value;
         }
@@ -95,14 +113,14 @@ class LinkApproveRequest {
     return map;
   }
 
-  // maps a json object with a list of LinkApproveRequest-objects as value to a dart map
-  static Map<String, List<LinkApproveRequest>> mapListFromJson(dynamic json, {bool growable = false,}) {
-    final map = <String, List<LinkApproveRequest>>{};
+  // maps a json object with a list of LinkStartRequest-objects as value to a dart map
+  static Map<String, List<LinkStartRequest>> mapListFromJson(dynamic json, {bool growable = false,}) {
+    final map = <String, List<LinkStartRequest>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = LinkApproveRequest.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = LinkStartRequest.listFromJson(entry.value, growable: growable,);
       }
     }
     return map;

@@ -15,6 +15,8 @@ class LinkStatusResponse {
   LinkStatusResponse({
     required this.status,
     this.token,
+    this.deviceName,
+    this.platform,
   });
 
   LinkStatusResponseStatusEnum status;
@@ -22,19 +24,29 @@ class LinkStatusResponse {
   /// The device bearer token, present once the code is approved. Returned exactly once — the code is consumed on the poll that returns it.
   String? token;
 
+  /// The name the new device announced at start, if any.
+  String? deviceName;
+
+  /// The platform the new device announced at start, if any.
+  String? platform;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is LinkStatusResponse &&
     other.status == status &&
-    other.token == token;
+    other.token == token &&
+    other.deviceName == deviceName &&
+    other.platform == platform;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
-    (token == null ? 0 : token!.hashCode);
+    (token == null ? 0 : token!.hashCode) +
+    (deviceName == null ? 0 : deviceName!.hashCode) +
+    (platform == null ? 0 : platform!.hashCode);
 
   @override
-  String toString() => 'LinkStatusResponse[status=$status, token=$token]';
+  String toString() => 'LinkStatusResponse[status=$status, token=$token, deviceName=$deviceName, platform=$platform]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -43,6 +55,16 @@ class LinkStatusResponse {
       json[r'token'] = this.token;
     } else {
       json[r'token'] = null;
+    }
+    if (this.deviceName != null) {
+      json[r'deviceName'] = this.deviceName;
+    } else {
+      json[r'deviceName'] = null;
+    }
+    if (this.platform != null) {
+      json[r'platform'] = this.platform;
+    } else {
+      json[r'platform'] = null;
     }
     return json;
   }
@@ -66,6 +88,8 @@ class LinkStatusResponse {
       return LinkStatusResponse(
         status: LinkStatusResponseStatusEnum.fromJson(json[r'status'])!,
         token: mapValueOfType<String>(json, r'token'),
+        deviceName: mapValueOfType<String>(json, r'deviceName'),
+        platform: mapValueOfType<String>(json, r'platform'),
       );
     }
     return null;

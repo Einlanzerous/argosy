@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,15 +9,19 @@ import '../../../tv/tv_keyboard.dart';
 import '../../../tv/tv_stage.dart';
 import '../../../widgets/argosy_mark.dart';
 import '../auth_controller.dart';
+import '../pin_pairing_controller.dart';
 
-// `code` is the primary path (pair from a phone — no TV typing); the typed
-// `signIn`/`pair` steps are the fallback.
-enum _Step { server, code, signIn, pair }
+// `code` is the primary path (ARGY-123): the TV discovers the server over the
+// LAN, shows a PIN, and a signed-in phone/web session approves it — no TV
+// typing at all. `server` (manual address) and the typed `signIn`/`pair` steps
+// are the graceful fallbacks.
+enum _Step { code, server, signIn, pair }
 
-/// The TV pairing flow (ARGY-51): server → sign in → pick a profile, driven
-/// entirely by the D-pad via the in-app [TvOnScreenKeyboard]. Reuses the same
-/// [AuthController] actions as the phone `PairingScreen`; only the input is
-/// remote-friendly (the system keyboard can't be operated on a TV).
+/// The TV pairing flow (ARGY-51, PIN-first since ARGY-123): discover + code
+/// first, with manual address / typed sign-in fallbacks driven by the D-pad
+/// via the in-app [TvOnScreenKeyboard]. Reuses the same [AuthController]
+/// actions as the phone `PairingScreen`; only the input is remote-friendly
+/// (the system keyboard can't be operated on a TV).
 class TvPairingScreen extends ConsumerStatefulWidget {
   const TvPairingScreen({super.key});
 
@@ -28,7 +30,7 @@ class TvPairingScreen extends ConsumerStatefulWidget {
 }
 
 class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
-  _Step _step = _Step.server;
+  _Step _step = _Step.code;
 
   final _server = TextEditingController();
   final _username = TextEditingController();
@@ -48,10 +50,8 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
   bool _busy = false;
   String? _error;
 
-  // Code-pairing state.
-  Timer? _pollTimer;
-  String? _linkCode;
-  String? _linkBaseUrl;
+  // PIN-first pairing: discovery + code mint + approval polling (ARGY-123).
+  late final PinPairingController _pin;
 
   @override
   void initState() {
@@ -59,11 +59,23 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
     final existing = ref.read(baseUrlProvider);
     if (existing.isNotEmpty) _server.text = existing;
     _active = _server;
+    _pin = PinPairingController(
+      ref,
+      deviceName: 'Living Room TV',
+      platform: 'androidtv',
+    );
+    _pin.addListener(_onPinChanged);
+    _pin.connect();
+  }
+
+  void _onPinChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _pin.removeListener(_onPinChanged);
+    _pin.dispose();
     _server.dispose();
     _username.dispose();
     _password.dispose();
@@ -131,55 +143,26 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
   void _submitServer() => _run(() async {
     await ref.read(authControllerProvider.notifier).setServer(_server.text);
     if (!mounted) return;
+    // Stay PIN-first even after manual entry: the address alone is enough,
+    // credentials remain the last resort.
     setState(() => _step = _Step.code);
-    await _startLink();
+    await _pin.startOnCurrentServer();
   });
 
-  /// Mint a pairing code and begin polling for approval (the primary path).
-  Future<void> _startLink() async {
-    _pollTimer?.cancel();
+  void _useManualServer() {
     setState(() {
-      _linkCode = null;
+      final current = ref.read(baseUrlProvider);
+      if (_server.text.isEmpty && current.isNotEmpty) _server.text = current;
       _error = null;
-      _linkBaseUrl = ref.read(baseUrlProvider);
+      _step = _Step.server;
+      _active = _server;
+      _pristine = true;
     });
-    try {
-      final res = await ref.read(authApiProvider).startLink();
-      if (!mounted) return;
-      setState(() => _linkCode = res?.code);
-      _pollTimer =
-          Timer.periodic(const Duration(seconds: 2), (_) => _pollLink());
-    } catch (_) {
-      if (mounted) {
-        setState(() =>
-            _error = "Couldn't start pairing. Check the server and try again.");
-      }
-    }
-  }
-
-  Future<void> _pollLink() async {
-    final code = _linkCode;
-    if (code == null) return;
-    try {
-      final res = await ref.read(authApiProvider).getLinkStatus(code);
-      if (!mounted) return;
-      if (res?.status == LinkStatusResponseStatusEnum.approved &&
-          res?.token != null) {
-        _pollTimer?.cancel();
-        // Auth gate flips → the router leaves this screen.
-        await ref.read(authControllerProvider.notifier).adoptToken(res!.token!);
-      }
-    } on ApiException catch (e) {
-      // The code expired or was consumed — mint a fresh one.
-      if (e.code == 404) await _startLink();
-    } catch (_) {
-      // Transient network blip — keep polling.
-    }
   }
 
   void _useTypedSignIn() {
-    _pollTimer?.cancel();
     setState(() {
+      _error = null;
       _step = _Step.signIn;
       _active = _username;
       _pristine = true;
@@ -231,10 +214,10 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
                 _title(context),
                 const SizedBox(height: 22),
                 ..._stepBody(),
-                if (_error != null) ...[
+                if (_stepError != null) ...[
                   const SizedBox(height: 16),
                   Text(
-                    _error!,
+                    _stepError!,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: ArgosyColors.danger,
@@ -252,8 +235,25 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
   Widget _title(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final (label, sub) = switch (_step) {
-      _Step.server => ('Connect to your server', 'Enter your household Argosy server address.'),
-      _Step.code => ('Pair from your phone', 'Open the link below on any signed-in device.'),
+      _Step.code => switch (_pin.phase) {
+        PinPhase.searching => (
+            'Finding your server',
+            'Looking for your Argosy server on this network…',
+          ),
+        PinPhase.notFound => (
+            "Can't find your server",
+            'Search again, or enter the server address instead.',
+          ),
+        PinPhase.waiting => (
+            'Pair from your phone',
+            'Approve this code from any signed-in device — nothing to type here.',
+          ),
+      },
+      _Step.server => (
+          'Connect to your server',
+          'Tip: on home Wi-Fi use the LAN IP (e.g. 10.0.0.45:8096). A Tailscale '
+              'name only works if this TV is on the tailnet too.',
+        ),
       _Step.signIn => ('Welcome aboard', 'Sign in to reach your library.'),
       _Step.pair => ('Who’s aboard?', 'Pick a profile — this TV joins your Fleet.'),
     };
@@ -272,6 +272,42 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
 
   List<Widget> _stepBody() {
     return switch (_step) {
+      _Step.code => switch (_pin.phase) {
+        PinPhase.searching => [
+            const SizedBox(
+              height: 200,
+              child: Center(
+                child: CircularProgressIndicator(color: ArgosyColors.accent),
+              ),
+            ),
+            const SizedBox(height: 18),
+            _secondary(
+              'Enter server address instead',
+              _useManualServer,
+              autofocus: true,
+            ),
+          ],
+        PinPhase.notFound => [
+            _action('Search again', _pin.connect, autofocus: true),
+            const SizedBox(height: 18),
+            _secondary('Enter server address instead', _useManualServer),
+          ],
+        PinPhase.waiting => [
+            _CodeCard(
+              code: _pin.code,
+              baseUrl: _pin.baseUrl,
+              serverName: _pin.serverName,
+            ),
+            const SizedBox(height: 26),
+            _secondary(
+              'Enter server address instead',
+              _useManualServer,
+              autofocus: true,
+            ),
+            const SizedBox(height: 14),
+            _secondary('Sign in with email instead', _useTypedSignIn),
+          ],
+      },
       _Step.server => [
           _TvField(
             label: 'Server address',
@@ -284,11 +320,11 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
           _keyboard(),
           const SizedBox(height: 18),
           _action('Continue', _submitServer),
-        ],
-      _Step.code => [
-          _CodeCard(code: _linkCode, baseUrl: _linkBaseUrl),
-          const SizedBox(height: 26),
-          _secondary('Sign in with email instead', _useTypedSignIn),
+          const SizedBox(height: 14),
+          _secondary('Back to code pairing', () {
+            setState(() => _step = _Step.code);
+            _pin.connect();
+          }),
         ],
       _Step.signIn => [
           _TvField(
@@ -332,15 +368,20 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
     };
   }
 
+  /// The error to surface under the current step: the PIN controller owns
+  /// errors on the code step; typed-flow errors live in [_error].
+  String? get _stepError => _step == _Step.code ? _pin.error : _error;
+
   Widget _keyboard() => TvOnScreenKeyboard(
         onChar: _type,
         onBackspace: _backspace,
         onClear: _clear,
       );
 
-  Widget _action(String label, VoidCallback onPressed) {
+  Widget _action(String label, VoidCallback onPressed, {bool autofocus = false}) {
     return TvFocusable(
       scale: 1.05,
+      autofocus: autofocus,
       onSelect: _busy ? () {} : onPressed,
       child: Container(
         height: 64,
@@ -372,10 +413,11 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
     );
   }
 
-  Widget _secondary(String label, VoidCallback onPressed) {
+  Widget _secondary(String label, VoidCallback onPressed,
+      {bool autofocus = false}) {
     return TvFocusable(
       scale: 1.04,
-      autofocus: true,
+      autofocus: autofocus,
       onSelect: onPressed,
       child: Container(
         height: 56,
@@ -402,10 +444,17 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
 
 /// The pairing code + instructions the TV shows while it polls for approval.
 class _CodeCard extends StatelessWidget {
-  const _CodeCard({required this.code, required this.baseUrl});
+  const _CodeCard({
+    required this.code,
+    required this.baseUrl,
+    this.serverName,
+  });
 
   final String? code;
   final String? baseUrl;
+
+  /// The discovered server's friendly name, when it was found via mDNS.
+  final String? serverName;
 
   @override
   Widget build(BuildContext context) {
@@ -443,12 +492,21 @@ class _CodeCard extends StatelessWidget {
                     color: ArgosyColors.dim,
                   ),
                   children: [
-                    const TextSpan(text: 'Open  '),
+                    if (serverName != null) ...[
+                      const TextSpan(text: 'Found  '),
+                      TextSpan(
+                        text: serverName,
+                        style: const TextStyle(color: ArgosyColors.cream),
+                      ),
+                      const TextSpan(text: '  ·  '),
+                    ],
+                    const TextSpan(
+                        text: 'In the Argosy app: Settings → Link a device — '
+                            'or open  '),
                     TextSpan(
                       text: '${baseUrl ?? ''}/link',
                       style: const TextStyle(color: ArgosyColors.cream),
                     ),
-                    const TextSpan(text: '  and enter this code'),
                   ],
                 ),
               ),

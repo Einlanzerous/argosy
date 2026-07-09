@@ -207,10 +207,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Begin TV code-pairing — mint a short code for the TV to display
-         * @description A TV (which can't comfortably type credentials) calls this to get a short
-         *     pairing code. It displays the code, then polls `GET /auth/link/{code}`
-         *     until an authenticated user approves it and a device token is handed back.
+         * Begin code-pairing — mint a short code for the new device to display
+         * @description A new device (TV or phone, which shouldn't have to type credentials)
+         *     calls this to get a short pairing code. It displays the code, then polls
+         *     `GET /auth/link/{code}` until an authenticated user approves it and a
+         *     device token is handed back. The optional body lets the device announce
+         *     what it is, so the approver sees "Pixel 9 (android)" instead of a bare
+         *     code and the created Fleet device is named/typed correctly.
          */
         post: operations["startLink"];
         delete?: never;
@@ -228,9 +231,11 @@ export interface paths {
         };
         /**
          * Poll a pairing code; returns the device token once approved
-         * @description The TV polls this. While pending, `status` is `pending`. Once approved,
-         *     it returns `status: approved` plus the one-time device `token`, and the
-         *     code is consumed (single use).
+         * @description The new device polls this. While pending, `status` is `pending`. Once
+         *     approved, it returns `status: approved` plus the one-time device
+         *     `token`, and the code is consumed (single use). While pending it also
+         *     echoes the device-announced `deviceName`/`platform` so an approving UI
+         *     can show what is about to be linked.
          */
         get: operations["getLinkStatus"];
         put?: never;
@@ -251,8 +256,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Approve a TV pairing code from a signed-in session
-         * @description Called from an authenticated web session. Links the TV to the caller's account and profile by creating a device; the TV claims its token on the next poll.
+         * Approve a pairing code from a signed-in session
+         * @description Called from an authenticated session (web or mobile). Links the new device to the caller's account and profile by creating a device; the new device claims its token on the next poll.
          */
         post: operations["approveLink"];
         delete?: never;
@@ -1139,8 +1144,14 @@ export interface components {
             /** @description Bearer token for this device. */
             token: string;
         };
+        LinkStartRequest: {
+            /** @description The new device's suggested Fleet name (e.g. "Pixel 9"). The approver may override it. */
+            deviceName?: string;
+            /** @description The new device's platform (android, ios, androidtv, web). Defaults to androidtv for older clients that send no body. */
+            platform?: string;
+        };
         LinkStartResponse: {
-            /** @description Short, unambiguous pairing code the TV displays. */
+            /** @description Short, unambiguous pairing code the new device displays. */
             code: string;
             /** Format: date-time */
             expiresAt: string;
@@ -1150,9 +1161,13 @@ export interface components {
             status: "pending" | "approved";
             /** @description The device bearer token, present once the code is approved. Returned exactly once — the code is consumed on the poll that returns it. */
             token?: string | null;
+            /** @description The name the new device announced at start, if any. */
+            deviceName?: string | null;
+            /** @description The platform the new device announced at start, if any. */
+            platform?: string | null;
         };
         LinkApproveRequest: {
-            /** @description Friendly name for the TV in the Fleet (defaults to "Living Room TV"). */
+            /** @description Friendly name for the device in the Fleet. Overrides the name the device announced at start; falls back to "Living Room TV" when neither side names it. */
             deviceName?: string;
         };
         Session: {
@@ -1885,7 +1900,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LinkStartRequest"];
+            };
+        };
         responses: {
             /** @description Pairing code created */
             201: {

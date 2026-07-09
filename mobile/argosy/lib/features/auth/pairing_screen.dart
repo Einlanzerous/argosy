@@ -8,12 +8,17 @@ import '../../api/api_providers.dart';
 import '../../theme/argosy_colors.dart';
 import '../../widgets/argosy_mark.dart';
 import 'auth_controller.dart';
+import 'pin_pairing_controller.dart';
 
-enum _Step { server, signIn, pair }
+// `code` is the primary path (ARGY-123): discover the server over the LAN,
+// show a PIN, and let an already-signed-in device approve it — nothing typed
+// here. `server` (manual address) and `signIn`/`pair` (typed credentials) are
+// the graceful fallbacks.
+enum _Step { code, server, signIn, pair }
 
-/// The device pairing flow (ARGY-46): server address → sign in → pick a
-/// profile + name the device. Mirrors the web's `LoginView` two-step flow,
-/// with an added server-address step (the app isn't served from the server).
+/// The device pairing flow (ARGY-46, PIN-first since ARGY-123): show a pairing
+/// code approved from another device, falling back to server address → sign
+/// in → pick a profile + name the device.
 class PairingScreen extends ConsumerStatefulWidget {
   const PairingScreen({super.key});
 
@@ -22,12 +27,14 @@ class PairingScreen extends ConsumerStatefulWidget {
 }
 
 class _PairingScreenState extends ConsumerState<PairingScreen> {
-  _Step _step = _Step.server;
+  _Step _step = _Step.code;
 
   final _server = TextEditingController();
   final _username = TextEditingController();
   final _password = TextEditingController();
   final _deviceName = TextEditingController();
+
+  late final PinPairingController _pin;
 
   List<UserProfile> _profiles = const [];
   String? _selectedProfileId;
@@ -39,10 +46,23 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
     super.initState();
     final existing = ref.read(baseUrlProvider);
     if (existing.isNotEmpty) _server.text = existing;
+    _pin = PinPairingController(
+      ref,
+      deviceName: _defaultDeviceName(),
+      platform: Platform.isIOS ? 'ios' : 'android',
+    );
+    _pin.addListener(_onPinChanged);
+    _pin.connect();
+  }
+
+  void _onPinChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _pin.removeListener(_onPinChanged);
+    _pin.dispose();
     _server.dispose();
     _username.dispose();
     _password.dispose();
@@ -70,8 +90,28 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
 
   void _submitServer() => _run(() async {
     await ref.read(authControllerProvider.notifier).setServer(_server.text);
-    if (mounted) setState(() => _step = _Step.signIn);
+    if (!mounted) return;
+    // Stay PIN-first even after manual entry: the address alone is enough,
+    // credentials remain the last resort.
+    setState(() => _step = _Step.code);
+    await _pin.startOnCurrentServer();
   });
+
+  void _useManualServer() {
+    setState(() {
+      final current = ref.read(baseUrlProvider);
+      if (_server.text.isEmpty && current.isNotEmpty) _server.text = current;
+      _error = null;
+      _step = _Step.server;
+    });
+  }
+
+  void _useTypedSignIn() {
+    setState(() {
+      _error = null;
+      _step = _Step.signIn;
+    });
+  }
 
   void _submitSignIn() => _run(() async {
     final profiles = await ref
@@ -133,8 +173,12 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
                       children: [
                   const Align(child: ArgosyMark(size: 76)),
                   const SizedBox(height: 24),
-                  _StepRail(step: _step),
-                  const SizedBox(height: 28),
+                  // The rail narrates the typed fallback; the PIN path is a
+                  // single step and doesn't need one.
+                  if (_step != _Step.code) ...[
+                    _StepRail(step: _step),
+                    const SizedBox(height: 28),
+                  ],
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 250),
                     child: _buildStep(context),
@@ -164,6 +208,23 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   Widget _buildStep(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return switch (_step) {
+      _Step.code => Column(
+        key: const ValueKey('code'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'OWNED MEDIA · SELF-HOSTED',
+            textAlign: TextAlign.center,
+            style: text.labelMedium?.copyWith(
+              color: ArgosyColors.accent,
+              letterSpacing: 1.8,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ..._codePhase(context),
+        ],
+      ),
       _Step.server => Column(
         key: const ValueKey('server'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -201,11 +262,27 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
               hintText: 'http://10.0.0.20:8097',
             ),
           ),
+          const SizedBox(height: 12),
+          Text(
+            'Tip: on home Wi-Fi use the LAN IP (e.g. 10.0.0.45:8096). A '
+            'Tailscale name only works if this device is on the tailnet too.',
+            textAlign: TextAlign.center,
+            style: text.bodySmall?.copyWith(color: ArgosyColors.mute),
+          ),
           const SizedBox(height: 20),
           _PrimaryButton(
             label: 'Continue',
             busy: _busy,
             onPressed: _submitServer,
+          ),
+          _BackLink(
+            label: 'Back to code pairing',
+            onPressed: _busy
+                ? null
+                : () {
+                    setState(() => _step = _Step.code);
+                    _pin.connect();
+                  },
           ),
         ],
       ),
@@ -300,6 +377,105 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
       ),
     };
   }
+
+  /// The PIN step body, by where the [PinPairingController] stands.
+  List<Widget> _codePhase(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    switch (_pin.phase) {
+      case PinPhase.searching:
+        return [
+          Text(
+            'Finding your server',
+            textAlign: TextAlign.center,
+            style: text.displaySmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Looking for your Argosy server on this network…',
+            textAlign: TextAlign.center,
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 28),
+          const Center(
+            child: CircularProgressIndicator(color: ArgosyColors.accent),
+          ),
+          const SizedBox(height: 20),
+          _BackLink(label: 'Enter address manually', onPressed: _useManualServer),
+        ];
+      case PinPhase.notFound:
+        return [
+          Text(
+            "Can't find your server",
+            textAlign: TextAlign.center,
+            style: text.displaySmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _pin.error ??
+                'Make sure this device is on the same network as your '
+                    'Argosy server, or enter its address instead.',
+            textAlign: TextAlign.center,
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 24),
+          _PrimaryButton(
+            label: 'Search again',
+            busy: false,
+            onPressed: _pin.connect,
+          ),
+          _BackLink(label: 'Enter address manually', onPressed: _useManualServer),
+        ];
+      case PinPhase.waiting:
+        final where = _pin.serverName == null
+            ? 'On a signed-in phone or computer'
+            : 'Found ${_pin.serverName}. On a signed-in phone or computer';
+        return [
+          Text(
+            'Add this device',
+            textAlign: TextAlign.center,
+            style: text.displaySmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$where, open Settings → Link a device — or visit '
+            '${_pin.baseUrl ?? ''}/link — and enter this code.',
+            textAlign: TextAlign.center,
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            _pin.code ?? '',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'Archivo',
+              fontSize: 52,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 10,
+              color: ArgosyColors.accent,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: ArgosyColors.accent,
+                ),
+              ),
+              SizedBox(width: 10),
+              Text('Waiting for approval…'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _BackLink(label: 'Enter address manually', onPressed: _useManualServer),
+          _BackLink(label: 'Sign in with email instead', onPressed: _useTypedSignIn),
+        ];
+    }
+  }
 }
 
 class _StepRail extends StatelessWidget {
@@ -309,7 +485,8 @@ class _StepRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final index = _Step.values.indexOf(step);
+    // The rail narrates only the typed fallback (code isn't part of it).
+    final index = _Step.values.indexOf(step) - 1;
     const labels = ['Server', 'Sign in', 'Pair'];
     return Row(
       children: [

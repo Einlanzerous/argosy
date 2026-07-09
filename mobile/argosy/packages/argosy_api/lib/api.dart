@@ -49,6 +49,7 @@ part 'model/episode_summary.dart';
 part 'model/error.dart';
 part 'model/facet.dart';
 part 'model/link_approve_request.dart';
+part 'model/link_start_request.dart';
 part 'model/link_start_response.dart';
 part 'model/link_status_response.dart';
 part 'model/login_request.dart';

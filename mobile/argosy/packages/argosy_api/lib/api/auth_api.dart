@@ -16,9 +16,9 @@ class AuthApi {
 
   final ApiClient apiClient;
 
-  /// Approve a TV pairing code from a signed-in session
+  /// Approve a pairing code from a signed-in session
   ///
-  /// Called from an authenticated web session. Links the TV to the caller's account and profile by creating a device; the TV claims its token on the next poll. 
+  /// Called from an authenticated session (web or mobile). Links the new device to the caller's account and profile by creating a device; the new device claims its token on the next poll. 
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -54,9 +54,9 @@ class AuthApi {
     );
   }
 
-  /// Approve a TV pairing code from a signed-in session
+  /// Approve a pairing code from a signed-in session
   ///
-  /// Called from an authenticated web session. Links the TV to the caller's account and profile by creating a device; the TV claims its token on the next poll. 
+  /// Called from an authenticated session (web or mobile). Links the new device to the caller's account and profile by creating a device; the new device claims its token on the next poll. 
   ///
   /// Parameters:
   ///
@@ -265,7 +265,7 @@ class AuthApi {
 
   /// Poll a pairing code; returns the device token once approved
   ///
-  /// The TV polls this. While pending, `status` is `pending`. Once approved, it returns `status: approved` plus the one-time device `token`, and the code is consumed (single use). 
+  /// The new device polls this. While pending, `status` is `pending`. Once approved, it returns `status: approved` plus the one-time device `token`, and the code is consumed (single use). While pending it also echoes the device-announced `deviceName`/`platform` so an approving UI can show what is about to be linked. 
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -301,7 +301,7 @@ class AuthApi {
 
   /// Poll a pairing code; returns the device token once approved
   ///
-  /// The TV polls this. While pending, `status` is `pending`. Once approved, it returns `status: approved` plus the one-time device `token`, and the code is consumed (single use). 
+  /// The new device polls this. While pending, `status` is `pending`. Once approved, it returns `status: approved` plus the one-time device `token`, and the code is consumed (single use). While pending it also echoes the device-announced `deviceName`/`platform` so an approving UI can show what is about to be linked. 
   ///
   /// Parameters:
   ///
@@ -790,23 +790,27 @@ class AuthApi {
     return null;
   }
 
-  /// Begin TV code-pairing — mint a short code for the TV to display
+  /// Begin code-pairing — mint a short code for the new device to display
   ///
-  /// A TV (which can't comfortably type credentials) calls this to get a short pairing code. It displays the code, then polls `GET /auth/link/{code}` until an authenticated user approves it and a device token is handed back. 
+  /// A new device (TV or phone, which shouldn't have to type credentials) calls this to get a short pairing code. It displays the code, then polls `GET /auth/link/{code}` until an authenticated user approves it and a device token is handed back. The optional body lets the device announce what it is, so the approver sees \"Pixel 9 (android)\" instead of a bare code and the created Fleet device is named/typed correctly. 
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> startLinkWithHttpInfo({ Future<void>? abortTrigger, }) async {
+  ///
+  /// Parameters:
+  ///
+  /// * [LinkStartRequest] linkStartRequest:
+  Future<Response> startLinkWithHttpInfo({ LinkStartRequest? linkStartRequest, Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final path = r'/api/v1/auth/link/start';
 
     // ignore: prefer_final_locals
-    Object? postBody;
+    Object? postBody = linkStartRequest;
 
     final queryParams = <QueryParam>[];
     final headerParams = <String, String>{};
     final formParams = <String, String>{};
 
-    const contentTypes = <String>[];
+    const contentTypes = <String>['application/json'];
 
 
     return apiClient.invokeAPI(
@@ -821,11 +825,15 @@ class AuthApi {
     );
   }
 
-  /// Begin TV code-pairing — mint a short code for the TV to display
+  /// Begin code-pairing — mint a short code for the new device to display
   ///
-  /// A TV (which can't comfortably type credentials) calls this to get a short pairing code. It displays the code, then polls `GET /auth/link/{code}` until an authenticated user approves it and a device token is handed back. 
-  Future<LinkStartResponse?> startLink({ Future<void>? abortTrigger, }) async {
-    final response = await startLinkWithHttpInfo(abortTrigger: abortTrigger,);
+  /// A new device (TV or phone, which shouldn't have to type credentials) calls this to get a short pairing code. It displays the code, then polls `GET /auth/link/{code}` until an authenticated user approves it and a device token is handed back. The optional body lets the device announce what it is, so the approver sees \"Pixel 9 (android)\" instead of a bare code and the created Fleet device is named/typed correctly. 
+  ///
+  /// Parameters:
+  ///
+  /// * [LinkStartRequest] linkStartRequest:
+  Future<LinkStartResponse?> startLink({ LinkStartRequest? linkStartRequest, Future<void>? abortTrigger, }) async {
+    final response = await startLinkWithHttpInfo(linkStartRequest: linkStartRequest, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

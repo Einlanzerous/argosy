@@ -55,6 +55,11 @@ services:
       # First-run admin bootstrap (created only if absent).
       ARGOSY_ADMIN_USERNAME: "${ARGOSY_ADMIN_USERNAME:-admin}"
       ARGOSY_ADMIN_PASSWORD: "${ARGOSY_ADMIN_PASSWORD:-changeme}"
+      # LAN discovery for PIN pairing (ARGY-123) can't work from a bridge
+      # network — multicast never leaves the docker bridge — so keep the
+      # advertiser quiet here. To make discovery work from a container, run it
+      # with host networking (and set ARGOSY_SERVER_NAME for a friendly name).
+      ARGOSY_DISABLE_MDNS: "1"
     # 8096 is the production container's host port; publish the dev server on 8097
     # so the two run side by side (the container always listens on 8096).
     ports:

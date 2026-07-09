@@ -10,6 +10,7 @@ import '../../widgets/async_view.dart';
 import '../account/account_providers.dart';
 import '../auth/auth_controller.dart';
 import '../home/home_providers.dart';
+import 'link_device_sheet.dart';
 import 'settings_controller.dart';
 
 /// Curated subtitle languages for the default-track preference. `null` = let the
@@ -156,6 +157,26 @@ class SettingsScreen extends ConsumerWidget {
               value: UserPreferencesHomeLayoutEnum.discovery,
               selected: data.user.homeLayout,
               onSelect: (v) => _guard(context, () => ctrl.setHomeLayout(v)),
+            ),
+            const SizedBox(height: 28),
+
+            _section('Fleet'),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.add_to_queue_outlined,
+                  color: ArgosyColors.dim),
+              title: const Text('Link a device',
+                  style: TextStyle(color: ArgosyColors.cream)),
+              subtitle: const Text(
+                  'Approve the PIN shown on a new TV or phone — no typing there.',
+                  style: TextStyle(color: ArgosyColors.dim, fontSize: 12)),
+              trailing: const Icon(Icons.chevron_right, color: ArgosyColors.dim),
+              onTap: () => showModalBottomSheet<void>(
+                context: context,
+                backgroundColor: ArgosyColors.panel,
+                isScrollControlled: true,
+                builder: (_) => const LinkDeviceSheet(),
+              ),
             ),
             const SizedBox(height: 28),
 

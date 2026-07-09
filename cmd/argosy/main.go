@@ -17,6 +17,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/beacon"
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/db"
+	"github.com/Einlanzerous/argosy/internal/discovery"
 	"github.com/Einlanzerous/argosy/internal/mediatool"
 	"github.com/Einlanzerous/argosy/internal/metadata"
 	"github.com/Einlanzerous/argosy/internal/presence"
@@ -177,6 +178,11 @@ func main() {
 	}
 	if hub != nil {
 		go hub.Run(ctx)
+	}
+	// LAN advertising so new devices can find the server for PIN pairing
+	// (ARGY-123). Best-effort: it logs and gives up where multicast can't work.
+	if !cfg.DisableMDNS {
+		go discovery.Advertise(ctx, cfg.Addr, cfg.ServerName, logger)
 	}
 
 	go func() {
