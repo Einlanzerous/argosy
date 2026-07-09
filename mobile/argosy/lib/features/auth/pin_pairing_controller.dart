@@ -56,6 +56,12 @@ class PinPairingController extends ChangeNotifier {
   /// must not touch state.
   int _generation = 0;
 
+  /// Bound on every network step. The generated client has no request timeout,
+  /// and a host that silently drops packets (client/AP isolation) would
+  /// otherwise leave the screen "searching" for the OS connect timeout —
+  /// minutes, not seconds.
+  static const _stepTimeout = Duration(seconds: 5);
+
   @override
   void dispose() {
     _generation++;
@@ -71,12 +77,13 @@ class PinPairingController extends ChangeNotifier {
     final saved = _ref.read(baseUrlProvider);
     if (saved.isNotEmpty) {
       try {
-        await _ref.read(systemApiProvider).ping();
+        await _ref.read(systemApiProvider).ping().timeout(_stepTimeout);
         if (gen != _generation) return;
         return _startLink(gen);
       } catch (_) {
         if (gen != _generation) return;
-        // Saved server unreachable (network moved?) — try discovery.
+        // Saved server unreachable or blackholed (network moved?) — try
+        // discovery.
       }
     }
 
@@ -88,7 +95,10 @@ class PinPairingController extends ChangeNotifier {
       return;
     }
     try {
-      await _ref.read(authControllerProvider.notifier).setServer(found.url);
+      await _ref
+          .read(authControllerProvider.notifier)
+          .setServer(found.url)
+          .timeout(_stepTimeout);
     } catch (_) {
       if (gen != _generation) return;
       phase = PinPhase.notFound;
@@ -120,12 +130,15 @@ class PinPairingController extends ChangeNotifier {
     _pollTimer?.cancel();
     baseUrl = _ref.read(baseUrlProvider);
     try {
-      final res = await _ref.read(authApiProvider).startLink(
+      final res = await _ref
+          .read(authApiProvider)
+          .startLink(
             linkStartRequest: LinkStartRequest(
               deviceName: deviceName,
               platform: platform,
             ),
-          );
+          )
+          .timeout(_stepTimeout);
       if (gen != _generation) return;
       final minted = res?.code;
       if (minted == null) {
@@ -151,7 +164,8 @@ class PinPairingController extends ChangeNotifier {
     final c = code;
     if (c == null || gen != _generation) return;
     try {
-      final res = await _ref.read(authApiProvider).getLinkStatus(c);
+      final res =
+          await _ref.read(authApiProvider).getLinkStatus(c).timeout(_stepTimeout);
       if (gen != _generation) return;
       if (res?.status == LinkStatusResponseStatusEnum.approved &&
           res?.token != null) {
