@@ -21,10 +21,23 @@ const argosyServiceType = '_argosy._tcp';
 /// Browses the LAN for an Argosy server and completes with the first one that
 /// resolves, or null after [timeout]. Any platform/discovery failure also
 /// yields null — the caller falls back to manual address entry, so discovery
-/// must never throw out of this function.
+/// must never throw out of this function. The whole attempt (including plugin
+/// init, which can hang outright where the platform side is missing) is
+/// bounded, not just the browse.
 Future<DiscoveredServer?> discoverServer({
   Duration timeout = const Duration(seconds: 6),
 }) async {
+  try {
+    return await _browse(timeout).timeout(
+      timeout + const Duration(seconds: 2),
+      onTimeout: () => null,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<DiscoveredServer?> _browse(Duration timeout) async {
   BonsoirDiscovery? discovery;
   StreamSubscription<BonsoirDiscoveryEvent>? sub;
   final found = Completer<DiscoveredServer?>();
@@ -51,8 +64,6 @@ Future<DiscoveredServer?> discoverServer({
     await discovery.start();
     return await found.future
         .timeout(timeout, onTimeout: () => null);
-  } catch (_) {
-    return null;
   } finally {
     await sub?.cancel();
     try {
