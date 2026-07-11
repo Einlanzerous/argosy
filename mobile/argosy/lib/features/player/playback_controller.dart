@@ -98,6 +98,25 @@ class PlaybackController extends ChangeNotifier {
   /// the finished event. Manual Play Next jumps immediately.
   static const upNextTailSeconds = 25;
 
+  /// Aggressive buffering for smoother playback on remote/flaky links, mirroring
+  /// the web player's deep hls.js buffer. Each transcode is a single video
+  /// rendition (no lower-quality fallback to switch down to), so a deep buffer is
+  /// our only defense against a bandwidth dip. The server transcodes far ahead of
+  /// the playhead and won't reap a live session with a full buffer, so it can feed
+  /// this. Levers exposed by better_player_plus map to ExoPlayer's DefaultLoadControl:
+  /// - minBufferMs 50s (from 25s): maintain a deeper continuous floor.
+  /// - maxBufferMs 10min: the time ceiling. ExoPlayer *also* caps by an internal
+  ///   per-track byte target that the plugin doesn't expose, so the real ahead-depth
+  ///   is bounded there (≈ its default video buffer size) — this can't be raised from
+  ///   Dart without forking the plugin (tracked as a follow-up).
+  /// - bufferForPlaybackAfterRebufferMs 10s (from 6s): rebuild a bigger cushion
+  ///   after a stall so a shaky remote link doesn't repeatedly micro-stall.
+  static const _bufferingConfig = BetterPlayerBufferingConfiguration(
+    minBufferMs: 50000,
+    maxBufferMs: 600000,
+    bufferForPlaybackAfterRebufferMs: 10000,
+  );
+
   BetterPlayerController? _player;
   BetterPlayerController? get player => _player;
 
@@ -244,6 +263,7 @@ class PlaybackController extends ChangeNotifier {
         BetterPlayerDataSourceType.network,
         '$baseUrl/api/v1/items/$itemId/stream$qp',
         headers: _authHeaders,
+        bufferingConfiguration: _bufferingConfig,
         notificationConfiguration: _notificationConfig,
       ));
       if (offset > 0) {
@@ -291,6 +311,7 @@ class PlaybackController extends ChangeNotifier {
         videoFormat: BetterPlayerVideoFormat.hls,
         liveStream: true,
         headers: _authHeaders,
+        bufferingConfiguration: _bufferingConfig,
         notificationConfiguration: _notificationConfig,
       ));
       await _player!.play();

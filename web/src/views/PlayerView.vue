@@ -304,6 +304,18 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // remux-copy races so far ahead that the edge can be minutes in, dropping a
         // fresh play deep into the episode (ARGY-103). Pin the start explicitly.
         startPosition: 0,
+        // Buffer aggressively. The server transcodes far ahead of the playhead (no
+        // realtime throttle) and won't reap a live session with a full buffer, so the
+        // only thing capping look-ahead is hls.js's conservative defaults (30s /
+        // 60MB). Since each transcode is a single video rendition — there's no
+        // lower-quality fallback to switch down to — a deep buffer is our sole defense
+        // against a bandwidth dip on remote links. Fetch 60s ahead to start and let it
+        // grow to a 500MB / ~50-min ceiling as size permits; a pause naturally fills
+        // to the cap. backBufferLength bounds the memory retained behind the playhead.
+        maxBufferLength: 60,
+        maxMaxBufferLength: 3000,
+        maxBufferSize: 500_000_000,
+        backBufferLength: 60,
         xhrSetup: (xhr) => {
           const t = getToken()
           if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
