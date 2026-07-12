@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.0](https://github.com/Einlanzerous/argosy/compare/v0.11.0...v0.12.0) (2026-07-12)
+
+
+### Features
+
+* **player:** aggressive client-side buffering for smoother remote playback (ARGY-133) ([#139](https://github.com/Einlanzerous/argosy/issues/139)) ([362c204](https://github.com/Einlanzerous/argosy/commit/362c2047a257711b7994bb5fa69a16d3b522eb56))
+
+
+### Bug Fixes
+
+* **mobile:** bound every PIN-pairing network step (ARGY-123) ([#138](https://github.com/Einlanzerous/argosy/issues/138)) ([4c7b694](https://github.com/Einlanzerous/argosy/commit/4c7b694380e26f0189fa5a5d35e2993af35df871))
+
 ## [0.11.0](https://github.com/Einlanzerous/argosy/compare/v0.10.1...v0.11.0) (2026-07-09)
 
 
