@@ -73,7 +73,13 @@ class AuthController extends Notifier<AuthStatus> {
     await ref.read(tokenStoreProvider).setBaseUrl(url);
     ref.read(baseUrlProvider.notifier).set(url);
     try {
-      await ref.read(systemApiProvider).ping();
+      // Bounded: the generated client has no request timeout, and a host that
+      // silently drops packets (client/AP isolation) would otherwise hang the
+      // "Continue" spinner for the OS connect timeout — minutes, not seconds.
+      await ref
+          .read(systemApiProvider)
+          .ping()
+          .timeout(const Duration(seconds: 8));
     } catch (e) {
       // Name the address we actually tried — a wrong/typo'd/concatenated URL
       // otherwise looks like a generic network failure.
