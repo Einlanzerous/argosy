@@ -418,6 +418,21 @@ class _Overlay extends StatelessWidget {
     final pos = duration > 0 ? c.position.clamp(0.0, duration) : c.position;
     final seekFocused = state._row == _Row.seek;
 
+    // Now-playing header: for a series episode with resolved metadata this reads
+    // "Show · Episode Title · Season 1, Ep 1"; films and un-matched episodes fall
+    // back to the humanized flat title (ARGY-134).
+    final item = state.widget.setup.item;
+    final headerTitle = (item.seriesTitle != null &&
+            item.seasonNumber != null &&
+            item.episodeNumber != null)
+        ? episodeHeader(
+            item.seriesTitle!,
+            episodeName(item.episodeTitle),
+            item.seasonNumber!,
+            item.episodeNumber!,
+          )
+        : formatTitle(item.title);
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -446,7 +461,7 @@ class _Overlay extends StatelessWidget {
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
-                  formatTitle(state.widget.setup.item.title),
+                  headerTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

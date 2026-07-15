@@ -27,6 +27,10 @@ class MediaItemDetail {
     required this.reviewRequired,
     this.rating,
     this.cast = const [],
+    this.seriesTitle,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.episodeTitle,
   });
 
   String id;
@@ -60,6 +64,18 @@ class MediaItemDetail {
   /// Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none.
   List<String> cast;
 
+  /// Parent series title, set only when this media item backs one or more episodes. Drives the player's now-playing header (ARGY-134).
+  String? seriesTitle;
+
+  /// Season number of the episode this item backs, when applicable.
+  int? seasonNumber;
+
+  /// Episode number this item backs; for a combined rip it's the first episode of the span.
+  int? episodeNumber;
+
+  /// Per-episode title (TMDB), when resolved. May still be the SxxExx filename fallback — clients should sanitize before display.
+  String? episodeTitle;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is MediaItemDetail &&
     other.id == id &&
@@ -75,7 +91,11 @@ class MediaItemDetail {
     other.filePath == filePath &&
     other.reviewRequired == reviewRequired &&
     other.rating == rating &&
-    _deepEquality.equals(other.cast, cast);
+    _deepEquality.equals(other.cast, cast) &&
+    other.seriesTitle == seriesTitle &&
+    other.seasonNumber == seasonNumber &&
+    other.episodeNumber == episodeNumber &&
+    other.episodeTitle == episodeTitle;
 
   @override
   int get hashCode =>
@@ -93,10 +113,14 @@ class MediaItemDetail {
     (filePath.hashCode) +
     (reviewRequired.hashCode) +
     (rating == null ? 0 : rating!.hashCode) +
-    (cast.hashCode);
+    (cast.hashCode) +
+    (seriesTitle == null ? 0 : seriesTitle!.hashCode) +
+    (seasonNumber == null ? 0 : seasonNumber!.hashCode) +
+    (episodeNumber == null ? 0 : episodeNumber!.hashCode) +
+    (episodeTitle == null ? 0 : episodeTitle!.hashCode);
 
   @override
-  String toString() => 'MediaItemDetail[id=$id, kind=$kind, title=$title, year=$year, overview=$overview, genres=$genres, posterUrl=$posterUrl, backdropUrl=$backdropUrl, durationSeconds=$durationSeconds, container=$container, filePath=$filePath, reviewRequired=$reviewRequired, rating=$rating, cast=$cast]';
+  String toString() => 'MediaItemDetail[id=$id, kind=$kind, title=$title, year=$year, overview=$overview, genres=$genres, posterUrl=$posterUrl, backdropUrl=$backdropUrl, durationSeconds=$durationSeconds, container=$container, filePath=$filePath, reviewRequired=$reviewRequired, rating=$rating, cast=$cast, seriesTitle=$seriesTitle, seasonNumber=$seasonNumber, episodeNumber=$episodeNumber, episodeTitle=$episodeTitle]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -142,6 +166,26 @@ class MediaItemDetail {
       json[r'rating'] = null;
     }
       json[r'cast'] = this.cast;
+    if (this.seriesTitle != null) {
+      json[r'seriesTitle'] = this.seriesTitle;
+    } else {
+      json[r'seriesTitle'] = null;
+    }
+    if (this.seasonNumber != null) {
+      json[r'seasonNumber'] = this.seasonNumber;
+    } else {
+      json[r'seasonNumber'] = null;
+    }
+    if (this.episodeNumber != null) {
+      json[r'episodeNumber'] = this.episodeNumber;
+    } else {
+      json[r'episodeNumber'] = null;
+    }
+    if (this.episodeTitle != null) {
+      json[r'episodeTitle'] = this.episodeTitle;
+    } else {
+      json[r'episodeTitle'] = null;
+    }
     return json;
   }
 
@@ -192,6 +236,10 @@ class MediaItemDetail {
         cast: json[r'cast'] is Iterable
             ? (json[r'cast'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        seriesTitle: mapValueOfType<String>(json, r'seriesTitle'),
+        seasonNumber: mapValueOfType<int>(json, r'seasonNumber'),
+        episodeNumber: mapValueOfType<int>(json, r'episodeNumber'),
+        episodeTitle: mapValueOfType<String>(json, r'episodeTitle'),
       );
     }
     return null;

@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import Hls from 'hls.js'
 import { api, getToken } from '@/api/client'
 import { posterStyle } from '@/lib/poster'
-import { formatClock, formatTitle } from '@/lib/format'
+import { formatClock, formatTitle, episodeHeader, episodeName } from '@/lib/format'
 import {
   getNextEpisode,
   getPlaybackInfo,
@@ -94,6 +94,18 @@ const upNextCountdown = ref(0)
 const upNextCancelled = ref(false)
 // Guards against firing the navigation twice (countdown end + ended event).
 let advancing = false
+
+// Now-playing header: for a series episode with resolved metadata this reads
+// "Show · Episode Title · Season 1, Ep 1"; films and un-matched episodes fall
+// back to the humanized flat title (ARGY-134).
+const headerTitle = computed(() => {
+  const it = item.value
+  if (!it) return 'Loading…'
+  if (it.seriesTitle && it.seasonNumber != null && it.episodeNumber != null) {
+    return episodeHeader(it.seriesTitle, episodeName(it.episodeTitle), it.seasonNumber, it.episodeNumber)
+  }
+  return formatTitle(it.title)
+})
 
 const nextEpisodeLabel = computed(() => {
   const n = nextEpisode.value
@@ -894,7 +906,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <div class="top-left">
         <button class="back" type="button" @click="goBack">‹</button>
         <div>
-          <div class="title">{{ item ? formatTitle(item.title) : 'Loading…' }}</div>
+          <div class="title">{{ headerTitle }}</div>
           <div class="sub">{{ item?.year ?? '' }}</div>
         </div>
       </div>
