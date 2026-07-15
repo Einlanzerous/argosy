@@ -2026,6 +2026,10 @@ components:
         reviewRequired: { type: boolean }
         rating: { type: number, nullable: true, description: "Effective provider rating, 0–10." }
         cast: { type: array, items: { type: string }, description: "Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none." }
+        seriesTitle: { type: string, nullable: true, description: "Parent series title, set only when this media item backs one or more episodes. Drives the player's now-playing header (ARGY-134)." }
+        seasonNumber: { type: integer, nullable: true, description: "Season number of the episode this item backs, when applicable." }
+        episodeNumber: { type: integer, nullable: true, description: "Episode number this item backs; for a combined rip it's the first episode of the span." }
+        episodeTitle: { type: string, nullable: true, description: "Per-episode title (TMDB), when resolved. May still be the SxxExx filename fallback — clients should sanitize before display." }
 
     MediaItemPage:
       type: object

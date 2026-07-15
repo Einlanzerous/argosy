@@ -41,6 +41,31 @@ export function formatTitle(title: string | null | undefined): string {
   return replaced.replace(/^\s*·\s*/, '').trim()
 }
 
+// A real episode name, or null when the title is still the "<Show> S01E01"
+// filename fallback (carries an SxxExx code). Lets callers show a name only once
+// TMDB per-episode metadata (ARGY-58) has landed. Mirrored in mobile format.dart.
+const hasEpisodeCode = /S\d{1,2}E\d{1,2}/i
+export function episodeName(title: string | null | undefined): string | null {
+  if (!title) return null
+  if (hasEpisodeCode.test(title)) return null
+  return title
+}
+
+// Now-playing header for a series episode: "Show · Episode Title · Season 1, Ep 1".
+// episodeTitle is dropped when absent (films, or episodes without a resolved name).
+// Mirrored in mobile format.dart.
+export function episodeHeader(
+  seriesTitle: string,
+  episodeTitle: string | null | undefined,
+  seasonNumber: number,
+  episodeNumber: number,
+): string {
+  const parts = [seriesTitle]
+  if (episodeTitle) parts.push(episodeTitle)
+  parts.push(`Season ${seasonNumber}, Ep ${episodeNumber}`)
+  return parts.join(' · ')
+}
+
 // Clock like "0:42:15" from a position in seconds.
 export function formatClock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds))

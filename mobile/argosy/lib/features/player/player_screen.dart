@@ -90,6 +90,24 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
   bool _showResumePrompt = false;
   double _resumePosition = 0;
 
+  /// Now-playing header: for a series episode with resolved metadata this reads
+  /// "Show · Episode Title · Season 1, Ep 1"; films and un-matched episodes fall
+  /// back to the humanized flat title (ARGY-134).
+  String get _headerTitle {
+    final it = widget.setup.item;
+    if (it.seriesTitle != null &&
+        it.seasonNumber != null &&
+        it.episodeNumber != null) {
+      return episodeHeader(
+        it.seriesTitle!,
+        episodeName(it.episodeTitle),
+        it.seasonNumber!,
+        it.episodeNumber!,
+      );
+    }
+    return formatTitle(it.title);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -260,7 +278,7 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
           if (!_inPip && !_showResumePrompt)
             PlayerControls(
               controller: _controller,
-              title: widget.setup.item.title,
+              title: _headerTitle,
               onBack: () => Navigator.of(context).maybePop(),
               onEnterPip: _pipSupported ? _enterPip : null,
             ),

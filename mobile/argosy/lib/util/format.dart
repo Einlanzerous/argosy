@@ -52,6 +52,21 @@ String? episodeName(String? title) {
   return title;
 }
 
+/// Now-playing header for a series episode: `Show · Episode Title · Season 1, Ep 1`.
+/// [episodeTitle] is dropped when absent (films, or episodes without a resolved
+/// name). Mirrors the web client's `episodeHeader` (ARGY-134).
+String episodeHeader(
+  String seriesTitle,
+  String? episodeTitle,
+  int seasonNumber,
+  int episodeNumber,
+) {
+  final parts = <String>[seriesTitle];
+  if (episodeTitle != null && episodeTitle.isNotEmpty) parts.add(episodeTitle);
+  parts.add('Season $seasonNumber, Ep $episodeNumber');
+  return parts.join(' · ');
+}
+
 /// A coarse "last seen" label like `just now`, `5m ago`, `3h ago`, `2d ago`,
 /// or a date for anything older than a week. [now] is injectable for tests.
 String formatRelativeTime(DateTime? when, {DateTime? now}) {

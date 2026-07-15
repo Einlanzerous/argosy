@@ -206,12 +206,35 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 	var duration *float64
 	var reviewRequired bool
 	var prov, over []byte
+	// Episode context (nullable): populated by the lateral join only when this
+	// media item backs one or more episodes. A combined rip backs several episode
+	// rows sharing this media_item — ORDER BY season, episode + LIMIT 1 picks the
+	// first of the span so the header reads as its opening episode (ARGY-134).
+	var seasonNum, epNum *int
+	var epTitle, seriesTitle *string
+	var seriesProv, seriesOver []byte
 	err := s.pool.QueryRow(ctx,
 		`SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.container, mi.duration_seconds,
-		        mi.file_path, mi.review_required, mi.provider_metadata, mi.metadata
-		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id
+		        mi.file_path, mi.review_required, mi.provider_metadata, mi.metadata,
+		        ep.season_number, ep.episode_number, ep.episode_title,
+		        ep.series_title, ep.series_provider_metadata, ep.series_metadata
+		 FROM media_items mi
+		 JOIN libraries l ON l.id = mi.library_id
+		 LEFT JOIN LATERAL (
+		     SELECT sea.season_number, e.episode_number, e.title AS episode_title,
+		            sr.title AS series_title,
+		            sr.provider_metadata AS series_provider_metadata,
+		            sr.metadata AS series_metadata
+		     FROM episodes e
+		     JOIN seasons sea ON sea.id = e.season_id
+		     JOIN series sr ON sr.id = sea.series_id
+		     WHERE e.media_item_id = mi.id
+		     ORDER BY sea.season_number, e.episode_number
+		     LIMIT 1
+		 ) ep ON true
 		 WHERE l.account_id = $1 AND mi.id = $2`,
-		accountID, itemID).Scan(&id, &kind, &title, &year, &container, &duration, &filePath, &reviewRequired, &prov, &over)
+		accountID, itemID).Scan(&id, &kind, &title, &year, &container, &duration, &filePath, &reviewRequired, &prov, &over,
+		&seasonNum, &epNum, &epTitle, &seriesTitle, &seriesProv, &seriesOver)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -237,6 +260,14 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 	if duration != nil {
 		f := float32(*duration)
 		d.DurationSeconds = &f
+	}
+	if seriesTitle != nil {
+		sp, so := decodeMap(seriesProv), decodeMap(seriesOver)
+		st := effectiveTitle(so, sp, *seriesTitle)
+		d.SeriesTitle = &st
+		d.SeasonNumber = seasonNum
+		d.EpisodeNumber = epNum
+		d.EpisodeTitle = epTitle
 	}
 	return &d, nil
 }

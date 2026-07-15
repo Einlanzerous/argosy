@@ -1410,6 +1410,14 @@ export interface components {
             rating?: number | null;
             /** @description Top-billed cast names (plus the director, for films) from the metadata provider. Omitted when none. */
             cast?: string[];
+            /** @description Parent series title, set only when this media item backs one or more episodes. Drives the player's now-playing header (ARGY-134). */
+            seriesTitle?: string | null;
+            /** @description Season number of the episode this item backs, when applicable. */
+            seasonNumber?: number | null;
+            /** @description Episode number this item backs; for a combined rip it's the first episode of the span. */
+            episodeNumber?: number | null;
+            /** @description Per-episode title (TMDB), when resolved. May still be the SxxExx filename fallback — clients should sanitize before display. */
+            episodeTitle?: string | null;
         };
         MediaItemPage: {
             items: components["schemas"]["MediaItemSummary"][];
