@@ -102,7 +102,12 @@ const headerTitle = computed(() => {
   const it = item.value
   if (!it) return 'Loading…'
   if (it.seriesTitle && it.seasonNumber != null && it.episodeNumber != null) {
-    return episodeHeader(it.seriesTitle, episodeName(it.episodeTitle), it.seasonNumber, it.episodeNumber)
+    return episodeHeader(
+      it.seriesTitle,
+      episodeName(it.episodeTitle),
+      it.seasonNumber,
+      it.episodeNumber,
+    )
   }
   return formatTitle(it.title)
 })
