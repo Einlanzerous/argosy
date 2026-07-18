@@ -179,6 +179,7 @@ func (s *Store) scanVaultEntry(rows pgx.Rows) (api.VaultEntry, error) {
 		e.PosterUrl = posterURL(s.artworkBase, o, p)
 		e.BackdropUrl = backdropURL(s.artworkBase, o, p)
 		e.Rating = f32(effectiveRating(o, p))
+		e.Genres = effectiveGenres(o, p)
 	} else {
 		p, o := decodeMap(srProv), decodeMap(srOver)
 		e.Kind = api.VaultEntryKind("series")
@@ -188,6 +189,7 @@ func (s *Store) scanVaultEntry(rows pgx.Rows) (api.VaultEntry, error) {
 		e.PosterUrl = posterURL(s.artworkBase, o, p)
 		e.BackdropUrl = backdropURL(s.artworkBase, o, p)
 		e.Rating = f32(effectiveRating(o, p))
+		e.Genres = effectiveGenres(o, p)
 	}
 	return e, nil
 }

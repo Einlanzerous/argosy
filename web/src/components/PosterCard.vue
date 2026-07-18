@@ -7,12 +7,21 @@ const props = defineProps<{
   title: string
   subtitle?: string
   kind?: string
+  genre?: string | null
+  rating?: number | null
   posterUrl?: string | null
   to: RouteLocationRaw
   width?: number
 }>()
 
 const style = computed(() => posterStyle(props.posterUrl, props.title))
+
+// Caption line under the title: subtitle (year / SxxExx) joined with the primary
+// genre, matching the design's "2021 · Sci-Fi" treatment.
+const metaLine = computed(() => [props.subtitle, props.genre].filter(Boolean).join(' · '))
+const ratingText = computed(() =>
+  typeof props.rating === 'number' ? props.rating.toFixed(1) : null,
+)
 </script>
 
 <template>
@@ -22,7 +31,10 @@ const style = computed(() => posterStyle(props.posterUrl, props.title))
       <span v-if="kind" class="kind">{{ kind }}</span>
       <div class="plate">
         <div class="title">{{ title }}</div>
-        <div v-if="subtitle" class="sub">{{ subtitle }}</div>
+        <div v-if="metaLine || ratingText" class="line">
+          <span class="sub">{{ metaLine }}</span>
+          <span v-if="ratingText" class="score">★ {{ ratingText }}</span>
+        </div>
       </div>
     </div>
   </RouterLink>
@@ -33,6 +45,9 @@ const style = computed(() => posterStyle(props.posterUrl, props.title))
   display: block;
   cursor: pointer;
   transition: transform 0.18s ease;
+  /* In a PosterRail's horizontal scroller, hold the intended width instead of
+     shrinking to cram the whole row in (which squeezed the caption line). */
+  flex: none;
 }
 .card:hover,
 .card:focus-visible {
@@ -82,8 +97,8 @@ const style = computed(() => posterStyle(props.posterUrl, props.title))
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 11px 12px;
-  background: linear-gradient(180deg, rgba(30, 26, 18, 0.5), rgba(24, 20, 14, 0.95));
+  padding: 11px 10px;
+  background: linear-gradient(180deg, rgba(30, 26, 18, 0.65), rgba(24, 20, 14, 1));
   border-top: 2px solid var(--arg-accent);
   opacity: 0;
   transform: translateY(14px);
@@ -104,10 +119,27 @@ const style = computed(() => posterStyle(props.posterUrl, props.title))
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.sub {
+.line {
   margin-top: 3px;
-  font: 600 10.5px var(--arg-body);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 600 10px var(--arg-body);
   color: var(--arg-accent-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.score {
+  flex: none;
+  margin-left: auto;
+  font: 600 10px var(--arg-body);
+  color: var(--arg-accent);
+  white-space: nowrap;
 }
 /* Touch devices have no hover: keep the plate visible so titles never vanish. */
 @media (hover: none) {

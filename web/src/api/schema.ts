@@ -1323,6 +1323,8 @@ export interface components {
             posterUrl?: string | null;
             backdropUrl?: string | null;
             rating?: number | null;
+            /** @description Effective genres, for card captions. Omitted when none. */
+            genres?: string[];
         };
         VaultDetail: {
             /** Format: uuid */
@@ -1390,6 +1392,8 @@ export interface components {
             backdropUrl?: string | null;
             /** @description Effective provider rating, 0–10. */
             rating?: number | null;
+            /** @description Effective genres, for card captions. Omitted when none. */
+            genres?: string[];
         };
         MediaItemDetail: {
             /** Format: uuid */
@@ -1435,6 +1439,8 @@ export interface components {
             backdropUrl?: string | null;
             /** @description Effective provider rating, 0–10. */
             rating?: number | null;
+            /** @description Effective genres, for card captions. Omitted when none. */
+            genres?: string[];
         };
         SeriesPage: {
             items: components["schemas"]["SeriesSummary"][];

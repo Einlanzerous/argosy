@@ -33,6 +33,8 @@ type GenreCard = {
   title: string
   year?: number
   kind: string
+  genre?: string
+  rating?: number
   posterUrl?: string | null
   to: RouteLocationRaw
 }
@@ -57,6 +59,8 @@ async function buildVaultRows(): Promise<void> {
         title: e.title,
         year: e.year ?? undefined,
         kind: e.kind === 'series' ? 'Series' : 'Film',
+        genre: e.genres?.[0],
+        rating: e.rating ?? undefined,
         posterUrl: e.posterUrl,
         to: (e.kind === 'series'
           ? { name: 'series', params: { id: e.id } }
@@ -84,6 +88,8 @@ async function buildGenreRows(): Promise<void> {
           title: m.title,
           year: m.year ?? undefined,
           kind: m.kind,
+          genre: m.genres?.[0],
+          rating: m.rating ?? undefined,
           posterUrl: m.posterUrl,
           to: { name: 'movie', params: { id: m.id } } as RouteLocationRaw,
         })),
@@ -92,6 +98,8 @@ async function buildGenreRows(): Promise<void> {
           title: s.title,
           year: s.year ?? undefined,
           kind: 'Series',
+          genre: s.genres?.[0],
+          rating: s.rating ?? undefined,
           posterUrl: s.posterUrl,
           to: { name: 'series', params: { id: s.id } } as RouteLocationRaw,
         })),
@@ -293,6 +301,8 @@ onUnmounted(() => {
           :title="m.title"
           :subtitle="m.year ? String(m.year) : undefined"
           :kind="m.kind"
+          :genre="m.genres?.[0]"
+          :rating="m.rating"
           :poster-url="m.posterUrl"
           :to="
             m.kind === 'series'
@@ -315,6 +325,8 @@ onUnmounted(() => {
           :title="c.title"
           :subtitle="c.year ? String(c.year) : undefined"
           :kind="c.kind"
+          :genre="c.genre"
+          :rating="c.rating"
           :poster-url="c.posterUrl"
           :to="c.to"
         />
@@ -333,6 +345,8 @@ onUnmounted(() => {
           :title="c.title"
           :subtitle="c.year ? String(c.year) : undefined"
           :kind="c.kind"
+          :genre="c.genre"
+          :rating="c.rating"
           :poster-url="c.posterUrl"
           :to="c.to"
         />

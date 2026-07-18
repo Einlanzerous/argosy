@@ -373,6 +373,7 @@ func (s *Store) seriesSummary(id, title string, year *int, prov, over []byte) ap
 		PosterUrl:   posterURL(s.artworkBase, o, p),
 		BackdropUrl: backdropURL(s.artworkBase, o, p),
 		Rating:      f32(effectiveRating(o, p)),
+		Genres:      effectiveGenres(o, p),
 	}
 }
 
@@ -386,5 +387,6 @@ func (s *Store) summary(id, kind, title string, year *int, prov, over []byte) ap
 		PosterUrl:   posterURL(s.artworkBase, o, p),
 		BackdropUrl: backdropURL(s.artworkBase, o, p),
 		Rating:      f32(effectiveRating(o, p)),
+		Genres:      effectiveGenres(o, p),
 	}
 }
