@@ -21,6 +21,7 @@ class VaultEntry {
     this.posterUrl,
     this.backdropUrl,
     this.rating,
+    this.genres = const [],
   });
 
   /// The vault membership id (for remove/reorder).
@@ -41,6 +42,9 @@ class VaultEntry {
 
   num? rating;
 
+  /// Effective genres, for card captions. Omitted when none.
+  List<String> genres;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is VaultEntry &&
     other.entryId == entryId &&
@@ -50,7 +54,8 @@ class VaultEntry {
     other.year == year &&
     other.posterUrl == posterUrl &&
     other.backdropUrl == backdropUrl &&
-    other.rating == rating;
+    other.rating == rating &&
+    _deepEquality.equals(other.genres, genres);
 
   @override
   int get hashCode =>
@@ -62,10 +67,11 @@ class VaultEntry {
     (year == null ? 0 : year!.hashCode) +
     (posterUrl == null ? 0 : posterUrl!.hashCode) +
     (backdropUrl == null ? 0 : backdropUrl!.hashCode) +
-    (rating == null ? 0 : rating!.hashCode);
+    (rating == null ? 0 : rating!.hashCode) +
+    (genres.hashCode);
 
   @override
-  String toString() => 'VaultEntry[entryId=$entryId, kind=$kind, id=$id, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, rating=$rating]';
+  String toString() => 'VaultEntry[entryId=$entryId, kind=$kind, id=$id, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, rating=$rating, genres=$genres]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -93,6 +99,7 @@ class VaultEntry {
     } else {
       json[r'rating'] = null;
     }
+      json[r'genres'] = this.genres;
     return json;
   }
 
@@ -129,6 +136,9 @@ class VaultEntry {
         rating: json[r'rating'] == null
             ? null
             : num.parse('${json[r'rating']}'),
+        genres: json[r'genres'] is Iterable
+            ? (json[r'genres'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
       );
     }
     return null;

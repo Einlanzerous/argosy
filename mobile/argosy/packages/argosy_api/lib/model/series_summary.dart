@@ -19,6 +19,7 @@ class SeriesSummary {
     this.posterUrl,
     this.backdropUrl,
     this.rating,
+    this.genres = const [],
   });
 
   String id;
@@ -35,6 +36,9 @@ class SeriesSummary {
   /// Effective provider rating, 0–10.
   num? rating;
 
+  /// Effective genres, for card captions. Omitted when none.
+  List<String> genres;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is SeriesSummary &&
     other.id == id &&
@@ -42,7 +46,8 @@ class SeriesSummary {
     other.year == year &&
     other.posterUrl == posterUrl &&
     other.backdropUrl == backdropUrl &&
-    other.rating == rating;
+    other.rating == rating &&
+    _deepEquality.equals(other.genres, genres);
 
   @override
   int get hashCode =>
@@ -52,10 +57,11 @@ class SeriesSummary {
     (year == null ? 0 : year!.hashCode) +
     (posterUrl == null ? 0 : posterUrl!.hashCode) +
     (backdropUrl == null ? 0 : backdropUrl!.hashCode) +
-    (rating == null ? 0 : rating!.hashCode);
+    (rating == null ? 0 : rating!.hashCode) +
+    (genres.hashCode);
 
   @override
-  String toString() => 'SeriesSummary[id=$id, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, rating=$rating]';
+  String toString() => 'SeriesSummary[id=$id, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, rating=$rating, genres=$genres]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -81,6 +87,7 @@ class SeriesSummary {
     } else {
       json[r'rating'] = null;
     }
+      json[r'genres'] = this.genres;
     return json;
   }
 
@@ -111,6 +118,9 @@ class SeriesSummary {
         rating: json[r'rating'] == null
             ? null
             : num.parse('${json[r'rating']}'),
+        genres: json[r'genres'] is Iterable
+            ? (json[r'genres'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
       );
     }
     return null;

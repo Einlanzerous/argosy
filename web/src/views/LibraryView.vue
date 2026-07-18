@@ -22,6 +22,8 @@ type Card = {
   title: string
   subtitle?: string
   kind: string
+  genre?: string
+  rating?: number
   posterUrl?: string | null
   backdropUrl?: string | null
   to: RouteLocationRaw
@@ -152,13 +154,6 @@ const backdropStyle = computed(() =>
   posterStyle(cards.value[0]?.backdropUrl ?? cards.value[0]?.posterUrl, libTitle.value),
 )
 
-function subtitleOf(year?: number | null, rating?: number | null): string | undefined {
-  const parts: string[] = []
-  if (year) parts.push(String(year))
-  if (rating) parts.push(`★ ${rating.toFixed(1)}`)
-  return parts.length ? parts.join('  ·  ') : undefined
-}
-
 async function load(): Promise<void> {
   loading.value = true
   const f: BrowseFilter = {
@@ -176,8 +171,10 @@ async function load(): Promise<void> {
       ...movies.map((m) => ({
         id: m.id,
         title: m.title,
-        subtitle: subtitleOf(m.year, m.rating),
+        subtitle: m.year ? String(m.year) : undefined,
         kind: m.kind,
+        genre: m.genres?.[0],
+        rating: m.rating ?? undefined,
         posterUrl: m.posterUrl,
         backdropUrl: m.backdropUrl,
         to: { name: 'movie', params: { id: m.id } } as RouteLocationRaw,
@@ -193,8 +190,10 @@ async function load(): Promise<void> {
       ...series.map((s) => ({
         id: s.id,
         title: s.title,
-        subtitle: subtitleOf(s.year, s.rating),
+        subtitle: s.year ? String(s.year) : undefined,
         kind: 'Series',
+        genre: s.genres?.[0],
+        rating: s.rating ?? undefined,
         posterUrl: s.posterUrl,
         backdropUrl: s.backdropUrl,
         to: { name: 'series', params: { id: s.id } } as RouteLocationRaw,
@@ -359,6 +358,8 @@ watch(
           :title="c.title"
           :subtitle="c.subtitle"
           :kind="c.kind"
+          :genre="c.genre"
+          :rating="c.rating"
           :poster-url="c.posterUrl"
           :to="c.to"
         />

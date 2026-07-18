@@ -162,6 +162,8 @@ watch(
         :title="r.title"
         :subtitle="r.year ? String(r.year) : undefined"
         :kind="r.kind"
+        :genre="r.genres?.[0]"
+        :rating="r.rating"
         :poster-url="r.posterUrl"
         :to="{ name: 'movie', params: { id: r.id } }"
       />

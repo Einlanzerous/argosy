@@ -125,6 +125,8 @@ watch(vaultId, load)
             :title="e.title"
             :subtitle="e.year ? String(e.year) : undefined"
             :kind="e.kind === 'series' ? 'Series' : 'Film'"
+            :genre="e.genres?.[0]"
+            :rating="e.rating"
             :poster-url="e.posterUrl"
             :to="entryTo(e)"
           />
