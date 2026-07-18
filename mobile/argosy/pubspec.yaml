@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # Kept in lockstep with the repo release (release-please bumps this line via the
 # `extra-files` entry in release-please-config.json). The `+N` build suffix is
 # the Android versionCode.
-version: 0.12.0 # x-release-please-version
+version: 0.13.0 # x-release-please-version
 
 # Pinned toolchain (see README): Flutter 3.44.2 (stable) / Dart 3.12.2.
 # Install is user-local under ~/dev-tools; `source ~/dev-tools/env.sh`.

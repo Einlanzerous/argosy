@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.0](https://github.com/Einlanzerous/argosy/compare/v0.12.0...v0.13.0) (2026-07-18)
+
+
+### Features
+
+* **player:** show episode title in now-playing header (ARGY-134) ([#141](https://github.com/Einlanzerous/argosy/issues/141)) ([f09a794](https://github.com/Einlanzerous/argosy/commit/f09a794aa6f8b51a7e78f768fbdbc9256b280f0f))
+* **web:** reveal-on-focus poster-card title plate with genre + rating (ARGY-149) ([#143](https://github.com/Einlanzerous/argosy/issues/143)) ([31915b6](https://github.com/Einlanzerous/argosy/commit/31915b622389868bf0324eaca79d128bab2f93d4))
+
 ## [0.12.0](https://github.com/Einlanzerous/argosy/compare/v0.11.0...v0.12.0) (2026-07-12)
 
 
