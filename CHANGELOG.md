@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2](https://github.com/Einlanzerous/argosy/compare/v0.13.1...v0.13.2) (2026-07-20)
+
+
+### Bug Fixes
+
+* **web:** align library search with title + inline Filters with kind toggle (ARGY-151) ([#146](https://github.com/Einlanzerous/argosy/issues/146)) ([982ea73](https://github.com/Einlanzerous/argosy/commit/982ea7365cba7e5a4b08fdeb6d4b856ecc2aa5db))
+
 ## [0.13.1](https://github.com/Einlanzerous/argosy/compare/v0.13.0...v0.13.1) (2026-07-20)
 
 
