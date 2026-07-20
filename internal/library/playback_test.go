@@ -36,6 +36,7 @@ func TestPlanPlayback(t *testing.T) {
 		name           string
 		video, audio   string
 		clientHEVC     bool
+		highBitDepth   bool
 		height         int
 		wantMethod     string
 		wantCodec      string
@@ -43,24 +44,53 @@ func TestPlanPlayback(t *testing.T) {
 	}{
 		// H.264 video is always copied; audio decides whether it's a clean remux
 		// or a copy-video/transcode-audio.
-		{"h264+aac remux", "h264", "aac", false, 1080, methodRemux, transcode.CodecH264, false},
-		{"h264+ac3 copy-video", "h264", "ac3", false, 1080, methodRemux, transcode.CodecH264, true},
+		{"h264+aac remux", "h264", "aac", false, false, 1080, methodRemux, transcode.CodecH264, false},
+		{"h264+ac3 copy-video", "h264", "ac3", false, false, 1080, methodRemux, transcode.CodecH264, true},
 		// HEVC: only copyable when the client negotiated it → true 4K passthrough.
-		{"hevc no-client transcodes to h264", "hevc", "aac", false, 2160, methodTranscode, transcode.CodecH264, false},
-		{"hevc+truehd client copies video, transcodes audio", "hevc", "truehd", true, 2160, methodRemux, transcode.CodecHEVC, true},
-		{"hevc+aac client clean copy", "hevc", "aac", true, 2160, methodRemux, transcode.CodecHEVC, false},
+		{"hevc no-client transcodes to h264", "hevc", "aac", false, false, 2160, methodTranscode, transcode.CodecH264, false},
+		{"hevc+truehd client copies video, transcodes audio", "hevc", "truehd", true, false, 2160, methodRemux, transcode.CodecHEVC, true},
+		{"hevc+aac client clean copy", "hevc", "aac", true, false, 2160, methodRemux, transcode.CodecHEVC, false},
 		// Re-encode path (mpeg2 isn't browser-playable): HEVC output only for
 		// >1080p capable clients, H.264 otherwise.
-		{"mpeg2 4k client → hevc encode", "mpeg2video", "aac", true, 2160, methodTranscode, transcode.CodecHEVC, false},
-		{"mpeg2 1080 client → h264 encode", "mpeg2video", "aac", true, 1080, methodTranscode, transcode.CodecH264, false},
-		{"mpeg2 4k no-client → h264 encode", "mpeg2video", "aac", false, 2160, methodTranscode, transcode.CodecH264, false},
+		{"mpeg2 4k client → hevc encode", "mpeg2video", "aac", true, false, 2160, methodTranscode, transcode.CodecHEVC, false},
+		{"mpeg2 1080 client → h264 encode", "mpeg2video", "aac", true, false, 1080, methodTranscode, transcode.CodecH264, false},
+		{"mpeg2 4k no-client → h264 encode", "mpeg2video", "aac", false, false, 2160, methodTranscode, transcode.CodecH264, false},
+		// High-bit-depth (10-bit) H.264/HEVC is never copied — re-encode to 8-bit
+		// so clients hardware-decode it instead of stuttering (ARGY-150). Target
+		// codec still follows the height/HEVC-client rule.
+		{"hevc 10-bit 1080 client → h264 encode", "hevc", "aac", true, true, 1080, methodTranscode, transcode.CodecH264, false},
+		{"hevc 10-bit 4k client → hevc encode (8-bit)", "hevc", "aac", true, true, 2160, methodTranscode, transcode.CodecHEVC, false},
+		{"h264 10-bit client → h264 encode", "h264", "aac", true, true, 1080, methodTranscode, transcode.CodecH264, false},
+		// VP9 10-bit stays a copy — broadly hardware-decoded, not part of the gate.
+		{"vp9 10-bit remux", "vp9", "opus", false, true, 2160, methodRemux, transcode.CodecH264, false},
 	}
 	for _, c := range cases {
-		p := planPlayback(c.video, c.audio, c.clientHEVC, c.height)
+		p := planPlayback(c.video, c.audio, c.clientHEVC, c.highBitDepth, c.height)
 		if p.method != c.wantMethod || p.videoCodec != c.wantCodec || p.transcodeAudio != c.wantTransAudio {
-			t.Errorf("%s: planPlayback(%q,%q,hevc=%v,%d) = {%s %s audio=%v}, want {%s %s audio=%v}",
-				c.name, c.video, c.audio, c.clientHEVC, c.height,
+			t.Errorf("%s: planPlayback(%q,%q,hevc=%v,10bit=%v,%d) = {%s %s audio=%v}, want {%s %s audio=%v}",
+				c.name, c.video, c.audio, c.clientHEVC, c.highBitDepth, c.height,
 				p.method, p.videoCodec, p.transcodeAudio, c.wantMethod, c.wantCodec, c.wantTransAudio)
+		}
+	}
+}
+
+func TestHighBitDepthFromTechnical(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{"10-bit hevc (24)", `{"streams":[{"codec_type":"video","codec_name":"hevc","profile":"Main 10","pix_fmt":"yuv420p10le"}]}`, true},
+		{"8-bit hevc (peaky)", `{"streams":[{"codec_type":"video","codec_name":"hevc","profile":"Main","pix_fmt":"yuv420p"}]}`, false},
+		{"8-bit h264", `{"streams":[{"codec_type":"video","codec_name":"h264","profile":"High","pix_fmt":"yuv420p"}]}`, false},
+		{"10-bit via profile only", `{"streams":[{"codec_type":"video","codec_name":"h264","profile":"High 10","pix_fmt":""}]}`, true},
+		{"p010 pix_fmt", `{"streams":[{"codec_type":"video","pix_fmt":"p010le"}]}`, true},
+		{"audio stream ignored", `{"streams":[{"codec_type":"audio","pix_fmt":"yuv420p10le"},{"codec_type":"video","pix_fmt":"yuv420p"}]}`, false},
+		{"empty", ``, false},
+	}
+	for _, c := range cases {
+		if got := highBitDepthFromTechnical([]byte(c.raw)); got != c.want {
+			t.Errorf("%s: highBitDepthFromTechnical = %v, want %v", c.name, got, c.want)
 		}
 	}
 }

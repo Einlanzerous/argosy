@@ -88,7 +88,15 @@ func (softwareEncoder) name() string { return EncoderSoftware }
 
 func (softwareEncoder) globalArgs() []string { return nil }
 
-func (softwareEncoder) scale(height int) string { return fmt.Sprintf("scale=-2:%d", height) }
+func (softwareEncoder) scale(height int) string {
+	// format=nv12 forces 8-bit 4:2:0 output. Without it libx264/libx265 preserve
+	// the source bit depth, so a 10-bit source (HEVC Main 10) would re-encode to
+	// 10-bit again — defeating the reason we transcode it: browser/mobile clients
+	// software-decode 10-bit and stutter, but hardware-decode 8-bit reliably (see
+	// planPlayback's high-bit-depth gate). The GPU backends already pin nv12; this
+	// keeps the software fallback consistent. Cheap repack for 8-bit sources.
+	return fmt.Sprintf("scale=-2:%d,format=nv12", height)
+}
 
 func (softwareEncoder) videoCodec(codec string) []string {
 	codec = resolveCodec(codec)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/httpx"
@@ -54,10 +55,52 @@ func videoHeightFromTechnical(technical []byte) int {
 	return 0
 }
 
+// highBitDepthFromTechnical reports whether the first video stream is >8-bit
+// (10/12-bit), read from the stored ffprobe JSON. Bit depth drives the copy-vs-
+// re-encode decision in planPlayback: clients that hardware-decode 8-bit fall
+// back to software decode on 10-bit and stutter (ARGY-150).
+func highBitDepthFromTechnical(technical []byte) bool {
+	var t struct {
+		Streams []struct {
+			CodecType        string `json:"codec_type"`
+			PixFmt           string `json:"pix_fmt"`
+			Profile          string `json:"profile"`
+			BitsPerRawSample string `json:"bits_per_raw_sample"`
+		} `json:"streams"`
+	}
+	if len(technical) > 0 {
+		_ = json.Unmarshal(technical, &t)
+	}
+	for _, s := range t.Streams {
+		if s.CodecType == "video" {
+			return isHighBitDepth(s.PixFmt, s.Profile, s.BitsPerRawSample)
+		}
+	}
+	return false
+}
+
+// isHighBitDepth decides >8-bit from ffprobe's pix_fmt (authoritative, always
+// present — e.g. yuv420p10le, p010le), with profile ("Main 10"/"High 10") and
+// bits_per_raw_sample as fallbacks for the rare case pix_fmt is unhelpful.
+func isHighBitDepth(pixFmt, profile, bitsPerRawSample string) bool {
+	pf := strings.ToLower(pixFmt)
+	for _, tag := range []string{"10le", "10be", "12le", "12be", "p010", "p012", "p016"} {
+		if strings.Contains(pf, tag) {
+			return true
+		}
+	}
+	p := strings.ToLower(profile)
+	if strings.Contains(p, "10") || strings.Contains(p, "12") {
+		return true
+	}
+	return bitsPerRawSample != "" && bitsPerRawSample != "8"
+}
+
 // transcodeSource is the resolved input for a transcode/remux decision.
 type transcodeSource struct {
 	path         string
 	height       int
+	highBitDepth bool // source is >8-bit (10/12); blocks the H.264/HEVC copy path
 	video, audio string
 	// audioTracks are the source's selectable audio streams (dub/sub); passed to
 	// the transcoder to emit multi-rendition HLS when there's more than one.
@@ -125,11 +168,12 @@ func (s *Store) itemSource(ctx context.Context, accountID, itemID string) (src t
 	}
 	video, audio := codecsFromTechnical(technical)
 	return transcodeSource{
-		path:        abs,
-		height:      videoHeightFromTechnical(technical),
-		video:       video,
-		audio:       audio,
-		audioTracks: audioTracksFromTechnical(technical),
+		path:         abs,
+		height:       videoHeightFromTechnical(technical),
+		highBitDepth: highBitDepthFromTechnical(technical),
+		video:        video,
+		audio:        audio,
+		audioTracks:  audioTracksFromTechnical(technical),
 	}, true, nil
 }
 
@@ -165,14 +209,15 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	// Decide the cheapest playable recipe: copy the video whenever the client can
 	// play it (true 4K for HEVC clients), transcoding only the audio if needed;
 	// otherwise re-encode (to HEVC for >1080p capable clients, else H.264).
-	plan := planPlayback(src.video, src.audio, clientHEVC, src.height)
+	plan := planPlayback(src.video, src.audio, clientHEVC, src.highBitDepth, src.height)
 	mode := transcode.MethodTranscode
 	if plan.method != methodTranscode {
 		mode = transcode.MethodRemux
 	}
 	h.logger.Info("transcode decision", "item", itemID, "method", mode, "codec", plan.videoCodec,
 		"transcodeAudio", plan.transcodeAudio, "reason", plan.reason, "container", filepath.Ext(src.path),
-		"video", src.video, "audio", src.audio, "height", src.height, "clientHevc", clientHEVC)
+		"video", src.video, "audio", src.audio, "height", src.height, "clientHevc", clientHEVC,
+		"highBitDepth", src.highBitDepth)
 
 	var startAt float64
 	if body.StartAt != nil && *body.StartAt > 0 {

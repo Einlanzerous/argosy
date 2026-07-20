@@ -68,16 +68,27 @@ type transcodePlan struct {
 }
 
 // planPlayback picks the cheapest HLS recipe given the source codecs, the source
-// height, and whether the client can play HEVC. The video stream is copied
-// whenever the client can play it as-is — H.264 always, HEVC when the client
-// negotiated it (clientHEVC) — which preserves native resolution/HDR (true 4K)
-// and avoids a video re-encode; only the audio is transcoded if it isn't
-// browser-friendly. Re-encodes target HEVC for >1080p capable clients (H.264's
-// 4K bitrate is impractical) and H.264 otherwise.
-func planPlayback(videoCodec, audioCodec string, clientHEVC bool, height int) transcodePlan {
+// height, whether the client can play HEVC, and whether the source is high bit
+// depth (10/12-bit). The video stream is copied whenever the client can play it
+// as-is — H.264 always, HEVC when the client negotiated it (clientHEVC) — which
+// preserves native resolution/HDR (true 4K) and avoids a video re-encode; only
+// the audio is transcoded if it isn't browser-friendly. Re-encodes target HEVC
+// for >1080p capable clients (H.264's 4K bitrate is impractical) and H.264
+// otherwise.
+//
+// Exception: high-bit-depth H.264/HEVC is never copied. MediaSource reports
+// Main 10 "supported", so clients negotiate a copy, then software-decode the
+// 10-bit stream (Firefox falls off the HW-decode path) and stutter on
+// higher-bitrate content — while the same client hardware-decodes 8-bit fine,
+// even at 4K (ARGY-150). Re-encoding drops it to 8-bit AND runs it through the
+// bitrate ladder, fixing both the decode cost and the uncapped peaks that also
+// choke remote (Tailscale) playback. VP9/AV1 10-bit stay copyable — those are
+// broadly hardware-decoded.
+func planPlayback(videoCodec, audioCodec string, clientHEVC, highBitDepth bool, height int) transcodePlan {
 	v := strings.ToLower(videoCodec)
 	audioOK := audioCodec == "" || directAudio[strings.ToLower(audioCodec)]
-	copyVideo := directVideo[v] || (clientHEVC && isHEVC(v))
+	highDepthBlocked := highBitDepth && (isHEVC(v) || v == "h264" || v == "avc1")
+	copyVideo := !highDepthBlocked && (directVideo[v] || (clientHEVC && isHEVC(v)))
 
 	if copyVideo {
 		p := transcodePlan{method: methodRemux, videoCodec: transcode.CodecH264, transcodeAudio: !audioOK}
@@ -104,6 +115,9 @@ func planPlayback(videoCodec, audioCodec string, clientHEVC bool, height int) tr
 		p.reason = "re-encoding " + videoCodec + " to HEVC (4K)"
 	} else {
 		p.reason = "re-encoding " + videoCodec + " to H.264"
+	}
+	if highDepthBlocked {
+		p.reason = "re-encoding 10-bit " + videoCodec + " to 8-bit " + p.videoCodec + " for reliable client decode"
 	}
 	return p
 }
