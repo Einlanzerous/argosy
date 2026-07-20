@@ -88,7 +88,7 @@ func TestSoftwareEncoderPieces(t *testing.T) {
 	if enc.globalArgs() != nil {
 		t.Errorf("software globalArgs = %v, want nil (no hwaccel)", enc.globalArgs())
 	}
-	if got := enc.scale(720); got != "scale=-2:720" {
+	if got := enc.scale(720); got != "scale=-2:720,format=nv12" {
 		t.Errorf("scale(720) = %q", got)
 	}
 	if got := strings.Join(enc.videoCodec(CodecH264), " "); !strings.Contains(got, "libx264") {
