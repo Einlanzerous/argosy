@@ -233,17 +233,30 @@ watch(
       </header>
 
       <div class="controls">
-        <div class="kinds">
+        <div class="left">
           <button
-            v-for="k in KINDS"
-            :key="k.key"
-            class="kind"
-            :class="{ on: scope === k.key }"
+            class="filters-toggle"
+            :class="{ on: panelOpen || activeCount > 0 }"
             type="button"
-            @click="setKind(k.key)"
+            @click="panelOpen = !panelOpen"
           >
-            {{ k.label }}
+            <span class="i">⚑</span> Filters
+            <span v-if="activeCount" class="fbadge">{{ activeCount }}</span>
+            <span class="caret">{{ panelOpen ? '▴' : '▾' }}</span>
           </button>
+          <button v-if="hasFilters" class="clear" type="button" @click="clearFilters">Clear</button>
+          <div class="kinds">
+            <button
+              v-for="k in KINDS"
+              :key="k.key"
+              class="kind"
+              :class="{ on: scope === k.key }"
+              type="button"
+              @click="setKind(k.key)"
+            >
+              {{ k.label }}
+            </button>
+          </div>
         </div>
         <div class="sorts">
           <span class="sort-label">Sort</span>
@@ -258,20 +271,6 @@ watch(
             {{ s.label }}
           </button>
         </div>
-      </div>
-
-      <div class="filterbar">
-        <button
-          class="filters-toggle"
-          :class="{ on: panelOpen || activeCount > 0 }"
-          type="button"
-          @click="panelOpen = !panelOpen"
-        >
-          <span class="i">⚑</span> Filters
-          <span v-if="activeCount" class="fbadge">{{ activeCount }}</span>
-          <span class="caret">{{ panelOpen ? '▴' : '▾' }}</span>
-        </button>
-        <button v-if="hasFilters" class="clear" type="button" @click="clearFilters">Clear</button>
       </div>
 
       <div v-show="panelOpen" class="panel">
@@ -411,7 +410,7 @@ watch(
 }
 .head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 24px;
   flex-wrap: wrap;
 }
@@ -463,10 +462,10 @@ h1 {
   gap: 14px;
   flex-wrap: wrap;
 }
-.filters {
+.controls .left {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .kinds {
@@ -537,12 +536,6 @@ h1 {
   background: var(--arg-accent-bg-2);
   border-color: rgba(201, 154, 78, 0.5);
   color: var(--arg-accent);
-}
-.filterbar {
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 .filters-toggle {
   display: inline-flex;
