@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/Einlanzerous/argosy/compare/v0.13.0...v0.13.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **player:** transcode 10-bit HEVC/H.264 instead of remux-copying it (ARGY-150) ([#144](https://github.com/Einlanzerous/argosy/issues/144)) ([21c72ad](https://github.com/Einlanzerous/argosy/commit/21c72ad1b628fe6c63c9723f6e997368a316e730))
+
 ## [0.13.0](https://github.com/Einlanzerous/argosy/compare/v0.12.0...v0.13.0) (2026-07-18)
 
 
