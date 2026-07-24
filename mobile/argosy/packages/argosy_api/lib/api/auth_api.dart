@@ -119,6 +119,63 @@ class AuthApi {
     }
   }
 
+  /// Create an account (service-to-service provisioning)
+  ///
+  /// Creates a new account with one initial admin profile named after the account. This is the Purser provisioning surface (ARGY-132): it is authorized by the static X-Provision-Token header rather than a bearer session, because a session is always scoped to an *existing* account. When `password` is omitted the server generates one and returns it exactly once as `generatedPassword` — only the bcrypt hash is stored. The route is registered only when ARGOSY_PROVISION_TOKEN is set, so an unconfigured server answers 404. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [AccountCreateRequest] accountCreateRequest (required):
+  Future<Response> createAccountWithHttpInfo(AccountCreateRequest accountCreateRequest, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/admin/accounts';
+
+    // ignore: prefer_final_locals
+    Object? postBody = accountCreateRequest;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Create an account (service-to-service provisioning)
+  ///
+  /// Creates a new account with one initial admin profile named after the account. This is the Purser provisioning surface (ARGY-132): it is authorized by the static X-Provision-Token header rather than a bearer session, because a session is always scoped to an *existing* account. When `password` is omitted the server generates one and returns it exactly once as `generatedPassword` — only the bcrypt hash is stored. The route is registered only when ARGOSY_PROVISION_TOKEN is set, so an unconfigured server answers 404. 
+  ///
+  /// Parameters:
+  ///
+  /// * [AccountCreateRequest] accountCreateRequest (required):
+  Future<AccountCreateResponse?> createAccount(AccountCreateRequest accountCreateRequest, { Future<void>? abortTrigger, }) async {
+    final response = await createAccountWithHttpInfo(accountCreateRequest, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AccountCreateResponse',) as AccountCreateResponse;
+    
+    }
+    return null;
+  }
+
   /// Create a profile (admin only)
   ///
   /// Note: This method returns the HTTP [Response].

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -45,6 +46,41 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("PUT /api/v1/preferences", requireAuth(store, handleSetPreferences(store)))
 	mux.Handle("GET /api/v1/user/preferences", requireAuth(store, handleGetUserPreferences(store)))
 	mux.Handle("PUT /api/v1/user/preferences", requireAuth(store, handleSetUserPreferences(store)))
+}
+
+// RegisterProvisioning wires the service-to-service account-creation endpoint
+// (ARGY-132, Purser). A bearer session can't authorize creating a *new*
+// account — it is always scoped to an existing one — so this route is gated
+// on the static provisioning token instead. Callers register it only when a
+// token is configured; otherwise the route doesn't exist and answers 404.
+func RegisterProvisioning(mux *http.ServeMux, store *Store, token string) {
+	mux.Handle("POST /api/v1/admin/accounts", requireProvisionToken(token, handleCreateAccount(store)))
+}
+
+func requireProvisionToken(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := r.Header.Get("X-Provision-Token")
+		if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+			httpx.Error(w, http.StatusUnauthorized, "invalid provisioning token")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func handleCreateAccount(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req api.AccountCreateRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		out, err := store.ProvisionAccount(r.Context(), req)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusCreated, out)
+	}
 }
 
 func handleGetPreferences(store *Store) http.HandlerFunc {
@@ -438,7 +474,7 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrInvalidInput):
 		httpx.Error(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrSelfDelete):
+	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrEmailTaken), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrSelfDelete):
 		httpx.Error(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrPasswordRequired), errors.Is(err, ErrWrongPassword):
 		httpx.Error(w, http.StatusForbidden, err.Error())

@@ -36,6 +36,9 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 	if pool != nil {
 		authStore := auth.NewStore(pool)
 		auth.RegisterRoutes(mux, authStore)
+		if cfg.ProvisionToken != "" {
+			auth.RegisterProvisioning(mux, authStore, cfg.ProvisionToken)
+		}
 		library.RegisterRoutes(mux, pool, authStore, cfg.ArtworkDir, "/artwork", logger, tc, caps, encoder, sweeper, subs, pres, hub, cfg.PreferredLanguages)
 
 		if scheduler != nil {

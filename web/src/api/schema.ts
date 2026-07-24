@@ -339,6 +339,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an account (service-to-service provisioning)
+         * @description Creates a new account with one initial admin profile named after the account. This is the Purser provisioning surface (ARGY-132): it is authorized by the static X-Provision-Token header rather than a bearer session, because a session is always scoped to an *existing* account. When `password` is omitted the server generates one and returns it exactly once as `generatedPassword` — only the bcrypt hash is stored. The route is registered only when ARGOSY_PROVISION_TOKEN is set, so an unconfigured server answers 404.
+         */
+        post: operations["createAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/libraries": {
         parameters: {
             query?: never;
@@ -1072,6 +1092,22 @@ export interface components {
             currentPassword: string;
             /** Format: password */
             newPassword: string;
+        };
+        AccountCreateRequest: {
+            /** @description Login email for the new account. Stored lowercased; must be unique. */
+            email: string;
+            /** @description Display name for the account and its initial admin profile. */
+            accountName: string;
+            /**
+             * Format: password
+             * @description Optional initial password. When omitted the server generates one and returns it once as `generatedPassword`.
+             */
+            password?: string;
+        };
+        AccountCreateResponse: {
+            account: components["schemas"]["Account"];
+            /** @description Present only when the request omitted `password`. Delivered exactly once — Argosy stores only the bcrypt hash. */
+            generatedPassword?: string;
         };
         LoginResponse: {
             account: components["schemas"]["Account"];
@@ -2165,6 +2201,33 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    createAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Account created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountCreateResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
         };
     };
     listLibraries: {

@@ -30,8 +30,10 @@ var (
 	// Profile-management conflicts (ARGY-65), surfaced as 400/409.
 	ErrInvalidInput = errors.New("invalid input")
 	ErrNameTaken    = errors.New("a profile with that name already exists")
-	ErrLastAdmin    = errors.New("the account must keep at least one admin")
-	ErrSelfDelete   = errors.New("you can't delete the profile you're signed in as")
+	// Account provisioning (ARGY-132), surfaced as 409.
+	ErrEmailTaken = errors.New("an account with that email already exists")
+	ErrLastAdmin  = errors.New("the account must keep at least one admin")
+	ErrSelfDelete = errors.New("you can't delete the profile you're signed in as")
 	// Device profile-switch (ARGY-85): escalating into an admin profile needs the
 	// account password. Both surface as 403 (never 401 — a bad switch password
 	// must not look like an expired token and sign the device out).
@@ -74,6 +76,10 @@ func (s *Store) CreateAccount(ctx context.Context, email, password, accountName 
 	if err := s.pool.QueryRow(ctx,
 		`INSERT INTO accounts (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id::text, name`,
 		accountName, email, string(hash)).Scan(&idStr, &name); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+			return api.Account{}, ErrEmailTaken
+		}
 		return api.Account{}, fmt.Errorf("insert account: %w", err)
 	}
 	if _, err := s.pool.Exec(ctx,
@@ -82,6 +88,36 @@ func (s *Store) CreateAccount(ctx context.Context, email, password, accountName 
 		return api.Account{}, fmt.Errorf("insert admin profile: %w", err)
 	}
 	return api.Account{Id: parseUUID(idStr), Name: name}, nil
+}
+
+// ProvisionAccount creates an account on behalf of the provisioning service
+// (ARGY-132, Purser). When the request carries no password a random one is
+// generated and returned in the response exactly once — only the bcrypt hash
+// is stored, so it is never retrievable again.
+func (s *Store) ProvisionAccount(ctx context.Context, req api.AccountCreateRequest) (api.AccountCreateResponse, error) {
+	accountName := strings.TrimSpace(req.AccountName)
+	if accountName == "" {
+		return api.AccountCreateResponse{}, fmt.Errorf("%w: accountName is required", ErrInvalidInput)
+	}
+	var password string
+	var generated *string
+	if req.Password != nil && *req.Password != "" {
+		if len(*req.Password) < minPasswordLen {
+			return api.AccountCreateResponse{}, fmt.Errorf("%w: the password must be at least %d characters", ErrInvalidInput, minPasswordLen)
+		}
+		password = *req.Password
+	} else {
+		p, err := generatePassword()
+		if err != nil {
+			return api.AccountCreateResponse{}, fmt.Errorf("generate password: %w", err)
+		}
+		password, generated = p, &p
+	}
+	acc, err := s.CreateAccount(ctx, req.Email, password, accountName)
+	if err != nil {
+		return api.AccountCreateResponse{}, err
+	}
+	return api.AccountCreateResponse{Account: acc, GeneratedPassword: generated}, nil
 }
 
 // Login verifies account credentials and returns the account with its profiles.
@@ -704,6 +740,17 @@ func scanDevice(r row) (api.Device, error) {
 
 func generateToken() (string, error) {
 	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// generatePassword mints a starter password for a provisioned account: 18
+// random bytes → 24 url-safe characters, short enough to hand to a human who
+// will type it once and then change it.
+func generatePassword() (string, error) {
+	b := make([]byte, 18)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}

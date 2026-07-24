@@ -744,3 +744,61 @@ func TestEmailLoginAndFirstProfileBootstrap(t *testing.T) {
 		t.Fatalf("profiles after bootstrap = %+v (err %v), want just Paul", profiles, err)
 	}
 }
+
+func TestProvisionAccount(t *testing.T) {
+	store, ctx := testStore(t)
+
+	// Generated password: returned once and immediately usable for login.
+	email := uniqueUsername() + "@example.com"
+	out, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: email, AccountName: "Provisioned Household"})
+	if err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	if out.GeneratedPassword == nil || *out.GeneratedPassword == "" {
+		t.Fatal("expected a generated password")
+	}
+	if len(*out.GeneratedPassword) < minPasswordLen {
+		t.Fatalf("generated password %q shorter than the account minimum", *out.GeneratedPassword)
+	}
+	login, err := store.Login(ctx, email, *out.GeneratedPassword)
+	if err != nil {
+		t.Fatalf("login with generated password: %v", err)
+	}
+	if login.Account.Id != out.Account.Id {
+		t.Fatalf("login account %v != provisioned account %v", login.Account.Id, out.Account.Id)
+	}
+	// The initial profile is an admin named after the account.
+	if len(login.Profiles) != 1 || login.Profiles[0].Role != api.Admin || login.Profiles[0].Name != "Provisioned Household" {
+		t.Fatalf("initial profiles = %+v, want one admin named after the account", login.Profiles)
+	}
+
+	// Supplied password: honored, and nothing is echoed back.
+	email2 := uniqueUsername() + "@example.com"
+	pw := "supplied-pass-123"
+	out2, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: email2, AccountName: "H2", Password: &pw})
+	if err != nil {
+		t.Fatalf("provision with password: %v", err)
+	}
+	if out2.GeneratedPassword != nil {
+		t.Fatal("supplied password must not be echoed as generatedPassword")
+	}
+	if _, err := store.Login(ctx, email2, pw); err != nil {
+		t.Fatalf("login with supplied password: %v", err)
+	}
+
+	// Validation and conflicts.
+	short := "short"
+	if _, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: uniqueUsername() + "@example.com", AccountName: "H", Password: &short}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("short password err = %v, want ErrInvalidInput", err)
+	}
+	if _, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: uniqueUsername() + "@example.com", AccountName: "  "}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("blank accountName err = %v, want ErrInvalidInput", err)
+	}
+	if _, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: "", AccountName: "H"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty email err = %v, want ErrInvalidInput", err)
+	}
+	// Duplicate email (case-insensitive) → ErrEmailTaken.
+	if _, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: strings.ToUpper(email), AccountName: "Dup"}); !errors.Is(err, ErrEmailTaken) {
+		t.Fatalf("duplicate email err = %v, want ErrEmailTaken", err)
+	}
+}

@@ -529,6 +529,42 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /api/v1/admin/accounts:
+    post:
+      tags: [auth]
+      operationId: createAccount
+      summary: Create an account (service-to-service provisioning)
+      description: >
+        Creates a new account with one initial admin profile named after the
+        account. This is the Purser provisioning surface (ARGY-132): it is
+        authorized by the static X-Provision-Token header rather than a bearer
+        session, because a session is always scoped to an *existing* account.
+        When `password` is omitted the server generates one and returns it
+        exactly once as `generatedPassword` — only the bcrypt hash is stored.
+        The route is registered only when ARGOSY_PROVISION_TOKEN is set, so an
+        unconfigured server answers 404.
+      security:
+        - provisionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountCreateRequest"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountCreateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/libraries:
     get:
       tags: [library]
@@ -1361,6 +1397,13 @@ components:
       type: http
       scheme: bearer
       description: Per-device token issued by registerDevice.
+    provisionToken:
+      type: apiKey
+      in: header
+      name: X-Provision-Token
+      description: >-
+        Static service-level provisioning secret (ARGOSY_PROVISION_TOKEN) for
+        machine-to-machine account creation (Purser, ARGY-132).
 
   responses:
     Unauthorized:
@@ -1577,6 +1620,36 @@ components:
           type: string
           format: password
           minLength: 8
+
+    AccountCreateRequest:
+      type: object
+      required: [email, accountName]
+      properties:
+        email:
+          type: string
+          description: Login email for the new account. Stored lowercased; must be unique.
+        accountName:
+          type: string
+          description: Display name for the account and its initial admin profile.
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: >-
+            Optional initial password. When omitted the server generates one
+            and returns it once as `generatedPassword`.
+
+    AccountCreateResponse:
+      type: object
+      required: [account]
+      properties:
+        account:
+          $ref: "#/components/schemas/Account"
+        generatedPassword:
+          type: string
+          description: >-
+            Present only when the request omitted `password`. Delivered exactly
+            once — Argosy stores only the bcrypt hash.
 
     LoginResponse:
       type: object

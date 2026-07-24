@@ -41,3 +41,32 @@ func TestRequireAdmin(t *testing.T) {
 		}
 	}
 }
+
+func TestRequireProvisionToken(t *testing.T) {
+	cases := []struct {
+		name       string
+		header     string
+		wantStatus int
+		wantCalled bool
+	}{
+		{"correct token passes", "sekrit", http.StatusOK, true},
+		{"wrong token unauthorized", "wrong", http.StatusUnauthorized, false},
+		{"missing header unauthorized", "", http.StatusUnauthorized, false},
+	}
+	for _, c := range cases {
+		called := false
+		h := requireProvisionToken("sekrit", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusOK)
+		}))
+		r := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts", nil)
+		if c.header != "" {
+			r.Header.Set("X-Provision-Token", c.header)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, r)
+		if rr.Code != c.wantStatus || called != c.wantCalled {
+			t.Errorf("%s: status=%d called=%v, want status=%d called=%v", c.name, rr.Code, called, c.wantStatus, c.wantCalled)
+		}
+	}
+}

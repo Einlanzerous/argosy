@@ -15,6 +15,8 @@ lib/auth/http_basic_auth.dart
 lib/auth/http_bearer_auth.dart
 lib/auth/oauth.dart
 lib/model/account.dart
+lib/model/account_create_request.dart
+lib/model/account_create_response.dart
 lib/model/add_vault_item_request.dart
 lib/model/continue_item.dart
 lib/model/create_library_request.dart
