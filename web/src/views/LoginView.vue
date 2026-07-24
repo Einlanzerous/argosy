@@ -79,7 +79,7 @@ function defaultDeviceName(): string {
     <div class="card">
       <!-- brand panel -->
       <div class="brand">
-        <img src="/argosy_logo_dark.png" alt="Argosy" />
+        <img src="/argosy_mark.svg" alt="Argosy" />
         <div>
           <div class="eyebrow">Owned media · self-hosted</div>
           <div class="pitch">Your library. Your hardware.<br />Every screen in sync.</div>

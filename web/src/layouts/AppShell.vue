@@ -37,7 +37,7 @@ function logout(): void {
     <!-- floating top bar -->
     <header class="bar">
       <div class="brand" :class="{ 'logo-only': !showBarSearch }">
-        <img class="logo" src="/argosy_logo_dark.png" alt="Argosy" @click="goHome" />
+        <img class="logo" src="/argosy_mark.svg" alt="Argosy" @click="goHome" />
         <button v-if="showBarSearch" class="bar-search" type="button" @click="openSearch">
           <span class="mag">⌕</span> Search the Manifest…
         </button>

@@ -353,7 +353,7 @@ onUnmounted(() => {
       </PosterRail>
 
       <div v-if="!loading && !recent.length && !continueItems.length" class="hold-empty">
-        <img src="/argosy_logo_dark.png" alt="" />
+        <img src="/argosy_mark.svg" alt="" />
         <h2>The hold is empty</h2>
         <p>
           Stevedore hasn't loaded any cargo yet. Point Argosy at your media folders and rebuild the
