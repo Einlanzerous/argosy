@@ -18,6 +18,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/config"
 	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/discovery"
+	"github.com/Einlanzerous/argosy/internal/library"
 	"github.com/Einlanzerous/argosy/internal/mediatool"
 	"github.com/Einlanzerous/argosy/internal/metadata"
 	"github.com/Einlanzerous/argosy/internal/presence"
@@ -126,7 +127,7 @@ func main() {
 		if budget == 0 {
 			budget = 10 << 30 // 10 GiB default high-water mark
 		}
-		sweeper = ballast.NewSweeper(cfg.TranscodeDir, budget, cfg.TranscodeIdleTimeout, tcManager, logger)
+		sweeper = ballast.NewSweeper(cfg.TranscodeDir, budget, cfg.TranscodeIdleTimeout, tcManager, logger, 0)
 	}
 
 	// Subtitle pipeline: embedded text tracks + OpenSubtitles, served as WebVTT.
@@ -139,6 +140,17 @@ func main() {
 			logger.Warn("subtitles: OpenSubtitles disabled — needs OPEN_SUBTITLES_USERNAME + OPEN_SUBTITLES_PASSWORD (download is quota'd per user)")
 		}
 		subs = subtitle.NewService(osClient, cfg.SubtitleDir, cfg.SubtitleLanguages, logger)
+	}
+
+	// Subtitle-cache reaper (ARGY-155): extracted VTTs live in one dir per media
+	// item and were previously never reclaimed. Reconcile the tree against live
+	// catalog ids hourly — a dir whose item was deleted (or re-created under a
+	// new id by a rescan) becomes an orphan and is removed. Budget 0: size
+	// eviction stays off; VTTs for items still in the catalog are kept.
+	var subSweeper *ballast.Sweeper
+	if subs != nil && pool != nil {
+		subSweeper = ballast.NewSweeper(cfg.SubtitleDir, 0, time.Hour,
+			library.LiveItems{Pool: pool, Logger: logger}, logger, time.Hour)
 	}
 
 	// Presence: live playback sessions (who's watching what, where, now) — driven
@@ -172,6 +184,9 @@ func main() {
 	}
 	if sweeper != nil {
 		go sweeper.Run(ctx)
+	}
+	if subSweeper != nil {
+		go subSweeper.Run(ctx)
 	}
 	if pres != nil {
 		go pres.Run(ctx)
