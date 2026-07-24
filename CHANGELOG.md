@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.0](https://github.com/Einlanzerous/argosy/compare/v0.16.0...v0.17.0) (2026-07-24)
+
+
+### Features
+
+* **auth:** admin create-account endpoint for Purser provisioning (ARGY-132) ([#161](https://github.com/Einlanzerous/argosy/issues/161)) ([7dc9754](https://github.com/Einlanzerous/argosy/commit/7dc9754780fd6a587c554db630fb8643c33b68e8))
+* **web:** move change-password behind a button + modal (ARGY-160) ([#159](https://github.com/Einlanzerous/argosy/issues/159)) ([7aea52d](https://github.com/Einlanzerous/argosy/commit/7aea52d741aecaab33582b55e467e1a866d9301e))
+
 ## [0.16.0](https://github.com/Einlanzerous/argosy/compare/v0.15.0...v0.16.0) (2026-07-24)
 
 
