@@ -7,6 +7,11 @@
 // sessions and, when the cache exceeds its high-water mark, evicts the
 // least-recently-used non-live sessions until it's back under budget. A session
 // the Manager still considers live is never purged.
+//
+// A second Sweeper instance (budget 0, long interval) reaps the subtitle VTT
+// cache the same way (ARGY-155): there "live" means the media item still exists
+// in the catalog, so extracted VTTs persist for the life of the item and are
+// reclaimed once a delete or rescan retires its id.
 package ballast
 
 import (
@@ -45,15 +50,19 @@ type Sweeper struct {
 
 // NewSweeper builds a Sweeper. budget<=0 disables size-based eviction (orphan
 // reclamation still runs). orphanGrace guards against racing a just-created dir.
-func NewSweeper(dir string, budget int64, orphanGrace time.Duration, live Live, logger *slog.Logger) *Sweeper {
+// interval<=0 sweeps every minute.
+func NewSweeper(dir string, budget int64, orphanGrace time.Duration, live Live, logger *slog.Logger, interval time.Duration) *Sweeper {
 	if orphanGrace <= 0 {
 		orphanGrace = 5 * time.Minute
+	}
+	if interval <= 0 {
+		interval = time.Minute
 	}
 	return &Sweeper{
 		dir:         dir,
 		budget:      budget,
 		orphanGrace: orphanGrace,
-		interval:    time.Minute,
+		interval:    interval,
 		live:        live,
 		logger:      logger,
 		clock:       time.Now,
@@ -88,6 +97,13 @@ func (s *Sweeper) Sweep() Stats {
 	live := map[string]bool{}
 	if s.live != nil {
 		live = s.live.LiveIDs()
+		// A nil live set means "unknown" (e.g. the DB-backed subtitle Live
+		// couldn't query) — skip the pass rather than treat every dir as an
+		// orphan and mass-purge the cache.
+		if live == nil {
+			s.logger.Warn("ballast: live set unavailable, skipping sweep", "dir", s.dir)
+			return Stats{BudgetBytes: s.budget}
+		}
 	}
 	dirents, err := os.ReadDir(s.dir)
 	if err != nil {

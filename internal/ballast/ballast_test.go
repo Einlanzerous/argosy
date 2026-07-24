@@ -45,7 +45,7 @@ func TestSweepReclaimsOrphans(t *testing.T) {
 	mkSession(t, root, "fresh", 1000, 0)               // recent, not live → within grace
 	mkSession(t, root, "live", 1000, 10*time.Minute)   // old but live → protected
 
-	s := NewSweeper(root, 0, time.Minute, fakeLive{ids: map[string]bool{"live": true}}, discardLogger())
+	s := NewSweeper(root, 0, time.Minute, fakeLive{ids: map[string]bool{"live": true}}, discardLogger(), 0)
 	s.Sweep()
 
 	if exists(root, "orphan") {
@@ -67,7 +67,7 @@ func TestSweepEvictsLRUOverBudget(t *testing.T) {
 	mkSession(t, root, "middle", 1000, 20*time.Second)
 	mkSession(t, root, "newest", 1000, 10*time.Second)
 
-	s := NewSweeper(root, 2500, time.Minute, fakeLive{ids: map[string]bool{}}, discardLogger())
+	s := NewSweeper(root, 2500, time.Minute, fakeLive{ids: map[string]bool{}}, discardLogger(), 0)
 	stats := s.Sweep()
 
 	if exists(root, "oldest") {
@@ -87,7 +87,7 @@ func TestSweepNeverEvictsLiveEvenOverBudget(t *testing.T) {
 	mkSession(t, root, "live2", 2000, 20*time.Second)
 
 	s := NewSweeper(root, 1000, time.Minute,
-		fakeLive{ids: map[string]bool{"live1": true, "live2": true}}, discardLogger())
+		fakeLive{ids: map[string]bool{"live1": true, "live2": true}}, discardLogger(), 0)
 	s.Sweep()
 
 	if !exists(root, "live1") || !exists(root, "live2") {
@@ -96,8 +96,23 @@ func TestSweepNeverEvictsLiveEvenOverBudget(t *testing.T) {
 }
 
 func TestSweepMissingDirIsNoError(t *testing.T) {
-	s := NewSweeper(filepath.Join(t.TempDir(), "does-not-exist"), 1000, time.Minute, fakeLive{}, discardLogger())
+	s := NewSweeper(filepath.Join(t.TempDir(), "does-not-exist"), 1000, time.Minute,
+		fakeLive{ids: map[string]bool{}}, discardLogger(), 0)
 	if got := s.Sweep(); got.SessionDirs != 0 {
 		t.Errorf("expected empty stats for missing dir, got %+v", got)
+	}
+}
+
+// A nil live set means "unknown" (the DB-backed subtitle Live failed to query);
+// the sweep must skip rather than treat every dir as an orphan (ARGY-155).
+func TestSweepSkipsWhenLiveSetUnknown(t *testing.T) {
+	root := t.TempDir()
+	mkSession(t, root, "would-be-orphan", 1000, 10*time.Minute)
+
+	s := NewSweeper(root, 0, time.Minute, fakeLive{ids: nil}, discardLogger(), 0)
+	s.Sweep()
+
+	if !exists(root, "would-be-orphan") {
+		t.Error("sweep purged a dir while the live set was unknown")
 	}
 }
