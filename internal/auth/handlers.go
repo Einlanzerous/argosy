@@ -25,6 +25,10 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("PATCH /api/v1/auth/devices/{deviceId}", requireAuth(store, handleRenameDevice(store)))
 	mux.Handle("POST /api/v1/auth/devices/switch", requireAuth(store, handleSwitchDeviceProfile(store)))
 	mux.Handle("GET /api/v1/auth/me", requireAuth(store, handleMe()))
+	// Self-serve change-password (ARGY-156). Any signed-in profile may rotate the
+	// account password — proving the current password is the credential that
+	// matters (it already grants admin via the profile-switch escalation).
+	mux.Handle("POST /api/v1/auth/password", requireAuth(store, handleChangePassword(store)))
 	// Profile management (ARGY-65): any signed-in profile may list; create/edit/
 	// delete are admin-gated.
 	mux.Handle("GET /api/v1/auth/profiles", requireAuth(store, handleListProfiles(store)))
@@ -268,6 +272,21 @@ func handleSwitchDeviceProfile(store *Store) http.HandlerFunc {
 			return
 		}
 		httpx.JSON(w, http.StatusOK, newSess)
+	}
+}
+
+func handleChangePassword(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		var req api.PasswordChangeRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		if err := store.ChangePassword(r.Context(), sess.AccountId.String(), req.CurrentPassword, req.NewPassword); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

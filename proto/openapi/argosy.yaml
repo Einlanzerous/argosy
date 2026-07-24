@@ -503,6 +503,32 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/auth/password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: Change the account password (self-serve)
+      description: >
+        Verifies the current account password and replaces it with a new one.
+        Device tokens are independent of the password, so existing devices stay
+        signed in. A wrong current password answers 403 (never 401 — it must
+        not look like an expired token and sign the device out).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChangeRequest"
+      responses:
+        "204":
+          description: Password changed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /api/v1/libraries:
     get:
       tags: [library]
@@ -1532,6 +1558,18 @@ components:
         password:
           type: string
           format: password
+
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
 
     LoginResponse:
       type: object

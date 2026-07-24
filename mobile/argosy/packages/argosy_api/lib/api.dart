@@ -59,6 +59,7 @@ part 'model/media_item_page.dart';
 part 'model/media_item_summary.dart';
 part 'model/model_library.dart';
 part 'model/on_deck_item.dart';
+part 'model/password_change_request.dart';
 part 'model/ping_response.dart';
 part 'model/play_state.dart';
 part 'model/playback_info.dart';

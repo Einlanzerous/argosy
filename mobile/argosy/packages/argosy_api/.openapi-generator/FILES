@@ -40,6 +40,7 @@ lib/model/media_item_page.dart
 lib/model/media_item_summary.dart
 lib/model/model_library.dart
 lib/model/on_deck_item.dart
+lib/model/password_change_request.dart
 lib/model/ping_response.dart
 lib/model/play_state.dart
 lib/model/playback_info.dart

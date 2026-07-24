@@ -39,6 +39,10 @@ var (
 	ErrWrongPassword    = errors.New("incorrect account password")
 )
 
+// minPasswordLen is the floor for a new account password (ARGY-156). Mirrored
+// by the PasswordChangeRequest minLength in the OpenAPI spec.
+const minPasswordLen = 8
+
 // Store is the auth data layer over the connection pool.
 type Store struct{ pool *pgxpool.Pool }
 
@@ -300,6 +304,29 @@ func (s *Store) SwitchDeviceProfile(ctx context.Context, sess api.Session, targe
 		UserId:    parseUUID(targetUserID),
 		Role:      api.Role(role),
 	}, nil
+}
+
+// ChangePassword verifies the current account password and replaces it with a
+// new bcrypt hash (ARGY-156). Device tokens live in devices.token_hash and are
+// independent of the password, so existing devices deliberately stay signed in.
+func (s *Store) ChangePassword(ctx context.Context, accountID, currentPassword, newPassword string) error {
+	if len(newPassword) < minPasswordLen {
+		return fmt.Errorf("%w: the new password must be at least %d characters", ErrInvalidInput, minPasswordLen)
+	}
+	ok, err := s.checkAccountPassword(ctx, accountID, currentPassword)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrWrongPassword
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	_, err = s.pool.Exec(ctx,
+		`UPDATE accounts SET password_hash = $1, updated_at = now() WHERE id = $2`, string(hash), accountID)
+	return err
 }
 
 // checkAccountPassword reports whether password matches the account's bcrypt hash.

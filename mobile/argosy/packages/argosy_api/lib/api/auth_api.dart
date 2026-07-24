@@ -70,6 +70,55 @@ class AuthApi {
     }
   }
 
+  /// Change the account password (self-serve)
+  ///
+  /// Verifies the current account password and replaces it with a new one. Device tokens are independent of the password, so existing devices stay signed in. A wrong current password answers 403 (never 401 — it must not look like an expired token and sign the device out). 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [PasswordChangeRequest] passwordChangeRequest (required):
+  Future<Response> changePasswordWithHttpInfo(PasswordChangeRequest passwordChangeRequest, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/password';
+
+    // ignore: prefer_final_locals
+    Object? postBody = passwordChangeRequest;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Change the account password (self-serve)
+  ///
+  /// Verifies the current account password and replaces it with a new one. Device tokens are independent of the password, so existing devices stay signed in. A wrong current password answers 403 (never 401 — it must not look like an expired token and sign the device out). 
+  ///
+  /// Parameters:
+  ///
+  /// * [PasswordChangeRequest] passwordChangeRequest (required):
+  Future<void> changePassword(PasswordChangeRequest passwordChangeRequest, { Future<void>? abortTrigger, }) async {
+    final response = await changePasswordWithHttpInfo(passwordChangeRequest, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Create a profile (admin only)
   ///
   /// Note: This method returns the HTTP [Response].
