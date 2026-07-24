@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw, RouteLocationRaw } from 'vue-router'
 import PosterCard from '@/components/PosterCard.vue'
 import { posterStyle } from '@/lib/poster'
-import { openSearch } from '@/lib/ui'
 import {
   getLibraries,
   getMovies,
@@ -227,9 +226,6 @@ watch(
           <h1>{{ libTitle }}</h1>
           <div class="count">{{ cards.length }} titles in the hold</div>
         </div>
-        <button class="search" type="button" @click="openSearch">
-          <span>⌕</span> Search the Manifest…
-        </button>
       </header>
 
       <div class="controls">
@@ -416,7 +412,6 @@ watch(
 }
 .title-block {
   flex: none;
-  width: 200px;
 }
 .eyebrow {
   font: 700 11px var(--arg-display);
@@ -433,26 +428,6 @@ h1 {
   margin-top: 4px;
   font: 500 13px var(--arg-body);
   color: var(--arg-dim);
-}
-.search {
-  flex: 1;
-  min-width: 280px;
-  max-width: 520px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 13px 18px;
-  border-radius: var(--arg-r-lg);
-  border: 1px solid var(--arg-line-3);
-  background: rgba(20, 20, 19, 0.7);
-  backdrop-filter: blur(8px);
-  color: #8a8a82;
-  font: 500 14.5px var(--arg-body);
-  cursor: text;
-  text-align: left;
-}
-.search:hover {
-  border-color: var(--arg-accent);
 }
 .controls {
   margin-top: 22px;

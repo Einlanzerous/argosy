@@ -13,8 +13,6 @@ const menuOpen = ref(false)
 // Home and Library are full-bleed (their own backdrops sit under the floating
 // bar); other screens get padded so content clears the fixed bar.
 const fullBleed = computed(() => ['home', 'library'].includes(String(route.name)))
-// The bar's pill search is hidden on Library, which has its own inline search.
-const showBarSearch = computed(() => String(route.name) !== 'library')
 const initial = computed(() => (session.profileName || 'Argosy').charAt(0).toUpperCase())
 const isAdmin = computed(() => session.session?.role === 'admin')
 
@@ -36,9 +34,9 @@ function logout(): void {
   <div class="app">
     <!-- floating top bar -->
     <header class="bar">
-      <div class="brand" :class="{ 'logo-only': !showBarSearch }">
+      <div class="brand">
         <img class="logo" src="/argosy_mark.svg" alt="Argosy" @click="goHome" />
-        <button v-if="showBarSearch" class="bar-search" type="button" @click="openSearch">
+        <button class="bar-search" type="button" @click="openSearch">
           <span class="mag">⌕</span> Search the Manifest…
         </button>
       </div>
@@ -114,9 +112,6 @@ function logout(): void {
   border: 1px solid var(--arg-line-2);
   background: rgba(20, 20, 19, 0.42);
   backdrop-filter: blur(10px);
-}
-.brand.logo-only {
-  padding: 7px 18px;
 }
 .logo {
   width: 104px;

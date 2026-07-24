@@ -52,6 +52,12 @@ body {
   padding: 0;
 }
 
+/* Keep the viewport width constant whether or not the page scrolls, so the
+   fixed top bar's right-edge icons don't shift when the scrollbar appears. */
+html {
+  overflow-y: scroll;
+}
+
 body {
   background: var(--arg-bg);
   color: var(--arg-cream);
