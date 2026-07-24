@@ -29,10 +29,11 @@ const (
 // only the API key; download is quota'd per user and requires a login JWT, so
 // Configured() reports true only when username+password are also present.
 type OpenSubtitles struct {
-	apiKey   string
-	username string
-	password string
-	http     *http.Client
+	apiKey     string
+	username   string
+	password   string
+	http       *http.Client
+	searchBase string // search base URL; overridable in tests
 
 	mu       sync.Mutex
 	token    string
@@ -44,11 +45,12 @@ type OpenSubtitles struct {
 // Configured().
 func NewOpenSubtitles(apiKey, username, password string) *OpenSubtitles {
 	return &OpenSubtitles{
-		apiKey:   apiKey,
-		username: username,
-		password: password,
-		http:     &http.Client{Timeout: 20 * time.Second},
-		dlBase:   defaultOSBaseURL,
+		apiKey:     apiKey,
+		username:   username,
+		password:   password,
+		http:       &http.Client{Timeout: 20 * time.Second},
+		searchBase: defaultOSBaseURL,
+		dlBase:     defaultOSBaseURL,
 	}
 }
 
@@ -102,7 +104,7 @@ func (c *OpenSubtitles) Search(ctx context.Context, q Query) ([]Subtitle, error)
 		return nil, fmt.Errorf("subtitle search: no usable identifier (tmdb/parent_tmdb/moviehash)")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, defaultOSBaseURL+"/subtitles?"+v.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.searchBase+"/subtitles?"+v.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
