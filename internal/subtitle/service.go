@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // maxExternalTracks caps how many OpenSubtitles candidates are surfaced per item
@@ -51,6 +53,15 @@ type Track struct {
 	Default  bool   `json:"default"`
 }
 
+// searchTTL bounds how often the same item re-queries OpenSubtitles — List runs
+// on every player open, and results barely change between openings.
+const searchTTL = time.Hour
+
+type searchCacheEntry struct {
+	tracks  []Track
+	expires time.Time
+}
+
 // Service resolves and produces WebVTT subtitle tracks. os may be nil when
 // OpenSubtitles isn't configured; embedded extraction still works.
 type Service struct {
@@ -58,6 +69,9 @@ type Service struct {
 	cacheDir string
 	langs    []string
 	logger   *slog.Logger
+
+	mu       sync.Mutex
+	searches map[string]searchCacheEntry
 }
 
 // NewService builds a subtitle service. os may be nil; langs defaults to ["en"].
@@ -65,24 +79,63 @@ func NewService(os *OpenSubtitles, cacheDir string, langs []string, logger *slog
 	if len(langs) == 0 {
 		langs = []string{"en"}
 	}
-	return &Service{os: os, cacheDir: cacheDir, langs: langs, logger: logger}
+	return &Service{os: os, cacheDir: cacheDir, langs: langs, logger: logger,
+		searches: map[string]searchCacheEntry{}}
 }
 
 // List returns the available subtitle tracks for an item: embedded text tracks
-// (from ffprobe) plus OpenSubtitles candidates when configured. A failed
-// external search degrades to embedded-only rather than erroring the whole list.
+// (from ffprobe), plus OpenSubtitles candidates only for wanted languages that
+// no embedded track covers (ARGY-153). A failed external search degrades to
+// embedded-only rather than erroring the whole list.
 func (s *Service) List(ctx context.Context, t Target) []Track {
 	tracks := embeddedTracks(t.Technical)
 	if s.os == nil || !s.os.Configured() {
 		return tracks
 	}
+	missing := missingLangs(tracks, s.langs)
+	if len(missing) == 0 {
+		return tracks
+	}
+	return append(tracks, s.externalTracks(ctx, t, missing)...)
+}
+
+// missingLangs returns the wanted languages no embedded track covers. Forced
+// tracks don't count as coverage — they carry only foreign-dialogue lines, not
+// full subtitles.
+func missingLangs(embedded []Track, wanted []string) []string {
+	covered := map[string]bool{}
+	for _, tr := range embedded {
+		if !tr.Forced {
+			covered[tr.Language] = true
+		}
+	}
+	missing := []string{}
+	for _, l := range wanted {
+		if c := langCode(l); !covered[c] {
+			missing = append(missing, c)
+		}
+	}
+	return missing
+}
+
+// externalTracks returns OpenSubtitles candidates for the given languages,
+// serving repeat player opens from a short-lived per-item cache instead of
+// re-querying (and re-hashing the file) every time.
+func (s *Service) externalTracks(ctx context.Context, t Target, langs []string) []Track {
+	key := t.ItemID + "|" + strings.Join(langs, ",")
+	s.mu.Lock()
+	if e, ok := s.searches[key]; ok && time.Now().Before(e.expires) {
+		s.mu.Unlock()
+		return e.tracks
+	}
+	s.mu.Unlock()
 
 	q := Query{
 		TMDBID:       t.TMDBID,
 		ParentTMDBID: t.ParentTMDBID,
 		Season:       t.Season,
 		Episode:      t.Episode,
-		Languages:    s.langs,
+		Languages:    langs,
 	}
 	if h, err := MovieHash(t.Path); err != nil {
 		s.logger.Warn("subtitle: moviehash failed", "item", t.ItemID, "err", err)
@@ -92,27 +145,47 @@ func (s *Service) List(ctx context.Context, t Target) []Track {
 
 	results, err := s.os.Search(ctx, q)
 	if err != nil {
+		// Not cached: a transient failure shouldn't suppress retries for an hour.
 		s.logger.Warn("subtitle: opensubtitles search failed", "item", t.ItemID, "err", err)
-		return tracks
+		return nil
 	}
+
+	wanted := map[string]bool{}
+	for _, l := range langs {
+		wanted[l] = true
+	}
+	external := []Track{}
 	seen := map[string]int{} // de-dupe identical labels with a counter suffix
-	for i, r := range results {
-		if i >= maxExternalTracks {
+	for _, r := range results {
+		if len(external) >= maxExternalTracks {
 			break
+		}
+		if !wanted[langCode(r.Language)] {
+			continue
 		}
 		label := externalLabel(r)
 		seen[label]++
 		if n := seen[label]; n > 1 {
 			label = fmt.Sprintf("%s (%d)", label, n)
 		}
-		tracks = append(tracks, Track{
+		external = append(external, Track{
 			ID:       "os:" + strconv.FormatInt(r.FileID, 10),
 			Source:   "opensubtitles",
 			Language: r.Language,
 			Label:    label,
 		})
 	}
-	return tracks
+
+	s.mu.Lock()
+	now := time.Now()
+	for k, e := range s.searches { // lazy prune, map stays household-sized
+		if now.After(e.expires) {
+			delete(s.searches, k)
+		}
+	}
+	s.searches[key] = searchCacheEntry{tracks: external, expires: now.Add(searchTTL)}
+	s.mu.Unlock()
+	return external
 }
 
 // VTT produces (or returns the cached) WebVTT file for a track and returns its
