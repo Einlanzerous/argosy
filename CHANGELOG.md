@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/Einlanzerous/argosy/compare/v0.15.0...v0.16.0) (2026-07-24)
+
+
+### Features
+
+* **brand:** swap in flat transparent logos, SVG on web; capitalize app name (ARGY-161) ([#157](https://github.com/Einlanzerous/argosy/issues/157)) ([1c84b44](https://github.com/Einlanzerous/argosy/commit/1c84b4484393753755b86d9e13b09d86b249a435))
+
 ## [0.15.0](https://github.com/Einlanzerous/argosy/compare/v0.14.0...v0.15.0) (2026-07-24)
 
 
