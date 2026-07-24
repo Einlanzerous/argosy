@@ -13,20 +13,47 @@ part of openapi.api;
 class DeviceRegistrationRequest {
   /// Returns a new [DeviceRegistrationRequest] instance.
   DeviceRegistrationRequest({
-    required this.username,
+    required this.email,
+    this.username,
     required this.password,
-    required this.userId,
+    this.userId,
+    this.newProfileName,
     required this.deviceName,
     this.platform,
     this.installId,
   });
 
-  String username;
+  /// The account email (ARGY-159). Matched case-insensitively.
+  String email;
+
+  /// Legacy alias for `email`, honored so pre-ARGY-159 clients can still pair. Ignored when `email` is present.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? username;
 
   String password;
 
-  /// The profile this device is bound to.
-  String userId;
+  /// The profile this device is bound to. Required unless the account has no profiles yet, in which case pass `newProfileName` instead.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? userId;
+
+  /// First-login bootstrap (ARGY-159): create this profile (viewer role) and bind the device to it. Only honored while the account has zero profiles; mutually exclusive with `userId`.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? newProfileName;
 
   String deviceName;
 
@@ -50,9 +77,11 @@ class DeviceRegistrationRequest {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is DeviceRegistrationRequest &&
+    other.email == email &&
     other.username == username &&
     other.password == password &&
     other.userId == userId &&
+    other.newProfileName == newProfileName &&
     other.deviceName == deviceName &&
     other.platform == platform &&
     other.installId == installId;
@@ -60,21 +89,37 @@ class DeviceRegistrationRequest {
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (username.hashCode) +
+    (email.hashCode) +
+    (username == null ? 0 : username!.hashCode) +
     (password.hashCode) +
-    (userId.hashCode) +
+    (userId == null ? 0 : userId!.hashCode) +
+    (newProfileName == null ? 0 : newProfileName!.hashCode) +
     (deviceName.hashCode) +
     (platform == null ? 0 : platform!.hashCode) +
     (installId == null ? 0 : installId!.hashCode);
 
   @override
-  String toString() => 'DeviceRegistrationRequest[username=$username, password=$password, userId=$userId, deviceName=$deviceName, platform=$platform, installId=$installId]';
+  String toString() => 'DeviceRegistrationRequest[email=$email, username=$username, password=$password, userId=$userId, newProfileName=$newProfileName, deviceName=$deviceName, platform=$platform, installId=$installId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'email'] = this.email;
+    if (this.username != null) {
       json[r'username'] = this.username;
+    } else {
+      json[r'username'] = null;
+    }
       json[r'password'] = this.password;
+    if (this.userId != null) {
       json[r'userId'] = this.userId;
+    } else {
+      json[r'userId'] = null;
+    }
+    if (this.newProfileName != null) {
+      json[r'newProfileName'] = this.newProfileName;
+    } else {
+      json[r'newProfileName'] = null;
+    }
       json[r'deviceName'] = this.deviceName;
     if (this.platform != null) {
       json[r'platform'] = this.platform;
@@ -100,21 +145,21 @@ class DeviceRegistrationRequest {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'username'), 'Required key "DeviceRegistrationRequest[username]" is missing from JSON.');
-        assert(json[r'username'] != null, 'Required key "DeviceRegistrationRequest[username]" has a null value in JSON.');
+        assert(json.containsKey(r'email'), 'Required key "DeviceRegistrationRequest[email]" is missing from JSON.');
+        assert(json[r'email'] != null, 'Required key "DeviceRegistrationRequest[email]" has a null value in JSON.');
         assert(json.containsKey(r'password'), 'Required key "DeviceRegistrationRequest[password]" is missing from JSON.');
         assert(json[r'password'] != null, 'Required key "DeviceRegistrationRequest[password]" has a null value in JSON.');
-        assert(json.containsKey(r'userId'), 'Required key "DeviceRegistrationRequest[userId]" is missing from JSON.');
-        assert(json[r'userId'] != null, 'Required key "DeviceRegistrationRequest[userId]" has a null value in JSON.');
         assert(json.containsKey(r'deviceName'), 'Required key "DeviceRegistrationRequest[deviceName]" is missing from JSON.');
         assert(json[r'deviceName'] != null, 'Required key "DeviceRegistrationRequest[deviceName]" has a null value in JSON.');
         return true;
       }());
 
       return DeviceRegistrationRequest(
-        username: mapValueOfType<String>(json, r'username')!,
+        email: mapValueOfType<String>(json, r'email')!,
+        username: mapValueOfType<String>(json, r'username'),
         password: mapValueOfType<String>(json, r'password')!,
-        userId: mapValueOfType<String>(json, r'userId')!,
+        userId: mapValueOfType<String>(json, r'userId'),
+        newProfileName: mapValueOfType<String>(json, r'newProfileName'),
         deviceName: mapValueOfType<String>(json, r'deviceName')!,
         platform: mapValueOfType<String>(json, r'platform'),
         installId: mapValueOfType<String>(json, r'installId'),
@@ -165,9 +210,8 @@ class DeviceRegistrationRequest {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'username',
+    'email',
     'password',
-    'userId',
     'deviceName',
   };
 }

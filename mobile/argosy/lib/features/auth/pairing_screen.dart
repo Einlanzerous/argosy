@@ -30,9 +30,10 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   _Step _step = _Step.code;
 
   final _server = TextEditingController();
-  final _username = TextEditingController();
+  final _email = TextEditingController();
   final _password = TextEditingController();
   final _deviceName = TextEditingController();
+  final _newProfile = TextEditingController();
 
   late final PinPairingController _pin;
 
@@ -64,9 +65,10 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
     _pin.removeListener(_onPinChanged);
     _pin.dispose();
     _server.dispose();
-    _username.dispose();
+    _email.dispose();
     _password.dispose();
     _deviceName.dispose();
+    _newProfile.dispose();
     super.dispose();
   }
 
@@ -116,28 +118,32 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   void _submitSignIn() => _run(() async {
     final profiles = await ref
         .read(authControllerProvider.notifier)
-        .login(_username.text.trim(), _password.text);
-    if (profiles.isEmpty) {
-      throw const ApiFailure('This account has no profiles yet.');
-    }
+        .login(_email.text.trim(), _password.text);
     if (!mounted) return;
+    // A freshly provisioned account has no profiles yet (ARGY-159): the pair
+    // step doubles as "create your profile" instead of dead-ending here.
     setState(() {
       _profiles = profiles;
-      _selectedProfileId = profiles.first.id;
+      _selectedProfileId = profiles.isEmpty ? null : profiles.first.id;
       if (_deviceName.text.isEmpty) _deviceName.text = _defaultDeviceName();
       _step = _Step.pair;
     });
   });
 
   void _submitPair() => _run(() async {
+    final firstProfile = _profiles.isEmpty ? _newProfile.text.trim() : null;
+    if (firstProfile != null && firstProfile.isEmpty) {
+      throw const ApiFailure('Pick a profile name to get started.');
+    }
     // On success the gate flips to authenticated and the router redirects
     // away from this screen automatically.
     await ref
         .read(authControllerProvider.notifier)
         .pairDevice(
-          username: _username.text.trim(),
+          email: _email.text.trim(),
           password: _password.text,
-          userId: _selectedProfileId!,
+          userId: firstProfile == null ? _selectedProfileId! : null,
+          newProfileName: firstProfile,
           deviceName: _deviceName.text.trim().isEmpty
               ? _defaultDeviceName()
               : _deviceName.text.trim(),
@@ -303,9 +309,10 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
           ),
           const SizedBox(height: 24),
           TextField(
-            controller: _username,
+            controller: _email,
             autocorrect: false,
             keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
             textInputAction: TextInputAction.next,
             decoration: const InputDecoration(labelText: 'Email'),
           ),
@@ -336,18 +343,31 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Name this device',
+            _profiles.isEmpty ? 'Create your profile' : 'Name this device',
             textAlign: TextAlign.center,
             style: text.displaySmall,
           ),
           const SizedBox(height: 8),
           Text(
-            "It'll join your Fleet so you can resume across screens.",
+            _profiles.isEmpty
+                ? "Pick the name you'll watch as — then this device joins "
+                      'your Fleet.'
+                : "It'll join your Fleet so you can resume across screens.",
             textAlign: TextAlign.center,
             style: text.bodyMedium,
           ),
           const SizedBox(height: 24),
-          if (_profiles.length > 1) ...[
+          if (_profiles.isEmpty) ...[
+            TextField(
+              controller: _newProfile,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Profile name',
+                hintText: 'e.g. Paul',
+              ),
+            ),
+            const SizedBox(height: 14),
+          ] else if (_profiles.length > 1) ...[
             _ProfilePicker(
               profiles: _profiles,
               selectedId: _selectedProfileId,

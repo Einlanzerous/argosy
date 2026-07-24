@@ -13,31 +13,49 @@ part of openapi.api;
 class LoginRequest {
   /// Returns a new [LoginRequest] instance.
   LoginRequest({
-    required this.username,
+    required this.email,
+    this.username,
     required this.password,
   });
 
-  String username;
+  /// The account email (ARGY-159). Matched case-insensitively.
+  String email;
+
+  /// Legacy alias for `email`, honored so pre-ARGY-159 clients can still sign in. Ignored when `email` is present.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? username;
 
   String password;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is LoginRequest &&
+    other.email == email &&
     other.username == username &&
     other.password == password;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (username.hashCode) +
+    (email.hashCode) +
+    (username == null ? 0 : username!.hashCode) +
     (password.hashCode);
 
   @override
-  String toString() => 'LoginRequest[username=$username, password=$password]';
+  String toString() => 'LoginRequest[email=$email, username=$username, password=$password]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'email'] = this.email;
+    if (this.username != null) {
       json[r'username'] = this.username;
+    } else {
+      json[r'username'] = null;
+    }
       json[r'password'] = this.password;
     return json;
   }
@@ -53,15 +71,16 @@ class LoginRequest {
       // Note 1: the values aren't checked for validity beyond being non-null.
       // Note 2: this code is stripped in release mode!
       assert(() {
-        assert(json.containsKey(r'username'), 'Required key "LoginRequest[username]" is missing from JSON.');
-        assert(json[r'username'] != null, 'Required key "LoginRequest[username]" has a null value in JSON.');
+        assert(json.containsKey(r'email'), 'Required key "LoginRequest[email]" is missing from JSON.');
+        assert(json[r'email'] != null, 'Required key "LoginRequest[email]" has a null value in JSON.');
         assert(json.containsKey(r'password'), 'Required key "LoginRequest[password]" is missing from JSON.');
         assert(json[r'password'] != null, 'Required key "LoginRequest[password]" has a null value in JSON.');
         return true;
       }());
 
       return LoginRequest(
-        username: mapValueOfType<String>(json, r'username')!,
+        email: mapValueOfType<String>(json, r'email')!,
+        username: mapValueOfType<String>(json, r'username'),
         password: mapValueOfType<String>(json, r'password')!,
       );
     }
@@ -110,7 +129,7 @@ class LoginRequest {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'username',
+    'email',
     'password',
   };
 }

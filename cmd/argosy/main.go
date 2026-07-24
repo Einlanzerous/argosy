@@ -67,18 +67,21 @@ func main() {
 		defer pool.Close()
 		logger.Info("database connected and migrated")
 
-		if cfg.AdminUsername != "" && cfg.AdminPassword != "" {
+		if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
 			store := auth.NewStore(pool)
-			switch exists, err := store.AccountExists(context.Background(), cfg.AdminUsername); {
+			// Keyed on "any account exists", not the configured email: once the
+			// household is provisioned, renaming a login (ARGY-159) must never
+			// cause a restart to re-create an admin account from the env.
+			switch exists, err := store.HasAccounts(context.Background()); {
 			case err != nil:
 				logger.Error("admin bootstrap check failed", "err", err)
 			case exists:
 				// already provisioned
 			default:
-				if _, err := store.CreateAccount(context.Background(), cfg.AdminUsername, cfg.AdminPassword, cfg.AdminUsername); err != nil {
+				if _, err := store.CreateAccount(context.Background(), cfg.AdminEmail, cfg.AdminPassword, cfg.AdminEmail); err != nil {
 					logger.Error("admin bootstrap failed", "err", err)
 				} else {
-					logger.Info("bootstrapped admin account", "username", cfg.AdminUsername)
+					logger.Info("bootstrapped admin account", "email", cfg.AdminEmail)
 				}
 			}
 		}

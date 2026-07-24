@@ -69,8 +69,9 @@ func TestStreamHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	userUUID := uuid.MustParse(userID)
 	reg, err := authStore.RegisterDevice(ctx, api.DeviceRegistrationRequest{
-		Username: username, Password: password, UserId: uuid.MustParse(userID), DeviceName: "test",
+		Email: username, Password: password, UserId: &userUUID, DeviceName: "test",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -124,8 +125,9 @@ func TestStreamHandler(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT id::text FROM users WHERE account_id = $1 LIMIT 1`, otherAcc.Id.String()).Scan(&otherUID); err != nil {
 		t.Fatal(err)
 	}
+	otherUUID := uuid.MustParse(otherUID)
 	otherReg, err := authStore.RegisterDevice(ctx, api.DeviceRegistrationRequest{
-		Username: otherUser, Password: password, UserId: uuid.MustParse(otherUID), DeviceName: "test",
+		Email: otherUser, Password: password, UserId: &otherUUID, DeviceName: "test",
 	})
 	if err != nil {
 		t.Fatal(err)

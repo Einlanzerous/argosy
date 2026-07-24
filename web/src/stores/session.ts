@@ -51,27 +51,30 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   // Step 1: authenticate the account and list its profiles.
-  async function login(username: string, password: string): Promise<UserProfile[]> {
+  async function login(email: string, password: string): Promise<UserProfile[]> {
     const { data, error } = await api.POST('/api/v1/auth/login', {
-      body: { username, password },
+      body: { email, password },
     })
     if (error || !data) throw new Error('Invalid email or password.')
     profiles.value = data.profiles
     return data.profiles
   }
 
-  // Step 2: bind this device to a profile and capture the bearer token.
+  // Step 2: bind this device to a profile and capture the bearer token. A
+  // freshly provisioned account has no profiles yet (ARGY-159): pass
+  // newProfileName instead of userId and the server creates the first profile
+  // in the same call.
   async function pairDevice(
-    username: string,
+    email: string,
     password: string,
-    userId: string,
+    target: { userId: string } | { newProfileName: string },
     name: string,
   ): Promise<void> {
     const { data, error } = await api.POST('/api/v1/auth/devices', {
       body: {
-        username,
+        email,
         password,
-        userId,
+        ...target,
         deviceName: name,
         platform: 'web',
         installId: getInstallId(),
@@ -81,10 +84,13 @@ export const useSessionStore = defineStore('session', () => {
     setToken(data.token)
     deviceName.value = name
     localStorage.setItem(DEVICE_KEY, name)
-    const picked = profiles.value.find((p) => p.id === userId)
+    const picked =
+      'userId' in target
+        ? profiles.value.find((p) => p.id === target.userId)?.name
+        : target.newProfileName
     if (picked) {
-      profileName.value = picked.name
-      localStorage.setItem(PROFILE_KEY, picked.name)
+      profileName.value = picked
+      localStorage.setItem(PROFILE_KEY, picked)
     }
     ready.value = false
     await restore()

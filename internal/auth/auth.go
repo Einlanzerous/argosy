@@ -49,24 +49,31 @@ type Store struct{ pool *pgxpool.Pool }
 // NewStore returns a Store backed by pool.
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
-// AccountExists reports whether an account with the given username exists.
-func (s *Store) AccountExists(ctx context.Context, username string) (bool, error) {
+// HasAccounts reports whether any account exists at all. The startup admin
+// bootstrap keys on this — not on a specific email — so renaming the admin's
+// login (ARGY-159) can never cause a restart to re-provision a fresh admin
+// account from the environment.
+func (s *Store) HasAccounts(ctx context.Context) (bool, error) {
 	var ok bool
-	err := s.pool.QueryRow(ctx, `SELECT exists(SELECT 1 FROM accounts WHERE username = $1)`, username).Scan(&ok)
+	err := s.pool.QueryRow(ctx, `SELECT exists(SELECT 1 FROM accounts)`).Scan(&ok)
 	return ok, err
 }
 
 // CreateAccount creates an account with a bcrypt-hashed password and an initial
 // admin profile, returning the account.
-func (s *Store) CreateAccount(ctx context.Context, username, password, accountName string) (api.Account, error) {
+func (s *Store) CreateAccount(ctx context.Context, email, password, accountName string) (api.Account, error) {
+	email = normalizeEmail(email)
+	if email == "" {
+		return api.Account{}, ErrInvalidInput
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return api.Account{}, fmt.Errorf("hash password: %w", err)
 	}
 	var idStr, name string
 	if err := s.pool.QueryRow(ctx,
-		`INSERT INTO accounts (name, username, password_hash) VALUES ($1, $2, $3) RETURNING id::text, name`,
-		accountName, username, string(hash)).Scan(&idStr, &name); err != nil {
+		`INSERT INTO accounts (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id::text, name`,
+		accountName, email, string(hash)).Scan(&idStr, &name); err != nil {
 		return api.Account{}, fmt.Errorf("insert account: %w", err)
 	}
 	if _, err := s.pool.Exec(ctx,
@@ -78,8 +85,8 @@ func (s *Store) CreateAccount(ctx context.Context, username, password, accountNa
 }
 
 // Login verifies account credentials and returns the account with its profiles.
-func (s *Store) Login(ctx context.Context, username, password string) (api.LoginResponse, error) {
-	accID, name, err := s.verify(ctx, username, password)
+func (s *Store) Login(ctx context.Context, email, password string) (api.LoginResponse, error) {
+	accID, name, err := s.verify(ctx, email, password)
 	if err != nil {
 		return api.LoginResponse{}, err
 	}
@@ -96,18 +103,42 @@ func (s *Store) Login(ctx context.Context, username, password string) (api.Login
 // RegisterDevice re-authenticates and binds a new device to a profile of the
 // account, returning the device and a one-time plaintext bearer token.
 func (s *Store) RegisterDevice(ctx context.Context, req api.DeviceRegistrationRequest) (api.DeviceRegistrationResponse, error) {
-	accID, _, err := s.verify(ctx, req.Username, req.Password)
+	accID, _, err := s.verify(ctx, credential(req.Email, req.Username), req.Password)
 	if err != nil {
 		return api.DeviceRegistrationResponse{}, err
 	}
-	userID := req.UserId.String()
-	var belongs bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT exists(SELECT 1 FROM users WHERE id = $1 AND account_id = $2)`, userID, accID).Scan(&belongs); err != nil {
-		return api.DeviceRegistrationResponse{}, err
-	}
-	if !belongs {
-		return api.DeviceRegistrationResponse{}, ErrForbidden
+	var userID string
+	switch {
+	case req.UserId != nil:
+		userID = req.UserId.String()
+		var belongs bool
+		if err := s.pool.QueryRow(ctx,
+			`SELECT exists(SELECT 1 FROM users WHERE id = $1 AND account_id = $2)`, userID, accID).Scan(&belongs); err != nil {
+			return api.DeviceRegistrationResponse{}, err
+		}
+		if !belongs {
+			return api.DeviceRegistrationResponse{}, ErrForbidden
+		}
+	case req.NewProfileName != nil && strings.TrimSpace(*req.NewProfileName) != "":
+		// First-login bootstrap (ARGY-159): a freshly provisioned account has no
+		// profiles yet, and the regular create-profile endpoint sits behind an
+		// admin device session it can't have. Allow creating the first profile
+		// right here — but only the first, so this can never become a back door
+		// for adding profiles with account credentials alone.
+		existing, err := s.profiles(ctx, accID)
+		if err != nil {
+			return api.DeviceRegistrationResponse{}, err
+		}
+		if len(existing) > 0 {
+			return api.DeviceRegistrationResponse{}, fmt.Errorf("%w: this account already has profiles; pick one instead", ErrInvalidInput)
+		}
+		profile, err := s.CreateProfile(ctx, accID, *req.NewProfileName, api.Viewer)
+		if err != nil {
+			return api.DeviceRegistrationResponse{}, err
+		}
+		userID = profile.Id.String()
+	default:
+		return api.DeviceRegistrationResponse{}, fmt.Errorf("%w: userId (or newProfileName for a first sign-in) is required", ErrInvalidInput)
 	}
 
 	token, err := generateToken()
@@ -446,10 +477,10 @@ func (s *Store) SetUserPreferences(ctx context.Context, userID string, p api.Use
 	return s.GetUserPreferences(ctx, userID)
 }
 
-func (s *Store) verify(ctx context.Context, username, password string) (id, name string, err error) {
+func (s *Store) verify(ctx context.Context, email, password string) (id, name string, err error) {
 	var hash string
 	err = s.pool.QueryRow(ctx,
-		`SELECT id::text, name, coalesce(password_hash, '') FROM accounts WHERE username = $1`, username).
+		`SELECT id::text, name, coalesce(password_hash, '') FROM accounts WHERE lower(email) = $1`, normalizeEmail(email)).
 		Scan(&id, &name, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", ErrInvalidCredentials
@@ -617,6 +648,23 @@ func (s *Store) hasOtherAdmin(ctx context.Context, accountID, excludeID string) 
 		`SELECT exists(SELECT 1 FROM users WHERE account_id = $1 AND role = 'admin' AND id <> $2)`,
 		accountID, excludeID).Scan(&ok)
 	return ok, err
+}
+
+// normalizeEmail canonicalizes a login identifier: emails are matched
+// case-insensitively and whitespace-tolerantly (ARGY-159). Legacy non-email
+// values pass through the same way — lowercase exact match.
+func normalizeEmail(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+
+// credential resolves the login identifier from a request that may still use
+// the deprecated `username` field (pre-ARGY-159 clients).
+func credential(email string, username *string) string {
+	if email != "" {
+		return email
+	}
+	if username != nil {
+		return *username
+	}
+	return ""
 }
 
 func validRole(r api.Role) bool { return r == api.Admin || r == api.Viewer }
