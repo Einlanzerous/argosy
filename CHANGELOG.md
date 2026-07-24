@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0](https://github.com/Einlanzerous/argosy/compare/v0.13.2...v0.14.0) (2026-07-24)
+
+
+### Features
+
+* **auth:** self-serve change-password endpoint + Settings form (ARGY-156) ([#153](https://github.com/Einlanzerous/argosy/issues/153)) ([d6083e3](https://github.com/Einlanzerous/argosy/commit/d6083e38d8a3e7beda263c34b2e67d864aa0fe37))
+* **player:** fold non-preferred languages behind "More options" in track pickers (ARGY-154) ([#151](https://github.com/Einlanzerous/argosy/issues/151)) ([9a511ac](https://github.com/Einlanzerous/argosy/commit/9a511ac7d1485f5b5aeb6d74c723b368ee833942))
+
+
+### Bug Fixes
+
+* **subtitle:** garbage-collect the extracted VTT cache against live catalog ids (ARGY-155) ([#152](https://github.com/Einlanzerous/argosy/issues/152)) ([2e38444](https://github.com/Einlanzerous/argosy/commit/2e384447dc5123ad1f6f70298fe09a3cf10694f9))
+* **subtitle:** prefer embedded tracks over OpenSubtitles and stop searching on every open (ARGY-153) ([#150](https://github.com/Einlanzerous/argosy/issues/150)) ([d48ba89](https://github.com/Einlanzerous/argosy/commit/d48ba89398c19777cdab0fd3f679629ab8a00d3f))
+* **web:** keep subtitle/audio picker within viewport on track-heavy files (ARGY-152) ([#148](https://github.com/Einlanzerous/argosy/issues/148)) ([8747bca](https://github.com/Einlanzerous/argosy/commit/8747bca78ab951755150043ae10bec707ca010f1))
+
 ## [0.13.2](https://github.com/Einlanzerous/argosy/compare/v0.13.1...v0.13.2) (2026-07-20)
 
 
