@@ -1013,17 +1013,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
             </button>
             <div v-if="audioMenuOpen" class="cc-menu">
               <div class="cc-head">Audio</div>
-              <button
-                v-for="t in audioTracks"
-                :key="t.id"
-                class="cc-item"
-                :class="{ sel: activeAudioTrack === t.id }"
-                type="button"
-                @click="selectAudio(t.id)"
-              >
-                <span class="cc-label">{{ t.label }}</span>
-                <span v-if="activeAudioTrack === t.id" class="cc-check">✓</span>
-              </button>
+              <div class="cc-scroll">
+                <button
+                  v-for="t in audioTracks"
+                  :key="t.id"
+                  class="cc-item"
+                  :class="{ sel: activeAudioTrack === t.id }"
+                  type="button"
+                  @click="selectAudio(t.id)"
+                >
+                  <span class="cc-label">{{ t.label }}</span>
+                  <span v-if="activeAudioTrack === t.id" class="cc-check">✓</span>
+                </button>
+              </div>
             </div>
           </div>
           <div v-if="subtitleTracks.length" class="cc-wrap">
@@ -1047,22 +1049,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 <span class="cc-label">Off</span>
                 <span v-if="!activeSubtitle" class="cc-check">✓</span>
               </button>
-              <button
-                v-for="t in subtitleTracks"
-                :key="t.id"
-                class="cc-item"
-                :class="{ sel: activeSubtitle === t.id }"
-                type="button"
-                @click="selectSubtitle(t.id)"
-              >
-                <span class="cc-label">
-                  {{ t.label }}
-                  <span class="cc-src">{{
-                    t.source === 'opensubtitles' ? 'OpenSubtitles' : 'Embedded'
-                  }}</span>
-                </span>
-                <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
-              </button>
+              <div class="cc-scroll">
+                <button
+                  v-for="t in subtitleTracks"
+                  :key="t.id"
+                  class="cc-item"
+                  :class="{ sel: activeSubtitle === t.id }"
+                  type="button"
+                  @click="selectSubtitle(t.id)"
+                >
+                  <span class="cc-label">
+                    {{ t.label }}
+                    <span class="cc-src">{{
+                      t.source === 'opensubtitles' ? 'OpenSubtitles' : 'Embedded'
+                    }}</span>
+                  </span>
+                  <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
+                </button>
+              </div>
 
               <div class="cc-head cc-style-head">Caption style</div>
               <div class="cc-style-row">
@@ -1606,6 +1610,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   bottom: calc(100% + 12px);
   right: 0;
   min-width: 248px;
+  /* Track-heavy files (20+ subtitle streams) must not push the menu past the
+     top of the viewport — cap it and let the track list scroll instead. */
+  max-height: min(60vh, 540px);
+  display: flex;
+  flex-direction: column;
   padding: 7px;
   border-radius: var(--arg-r-lg);
   /* Translucent so the media stays visible behind the picker. */
@@ -1614,6 +1623,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border: 1px solid var(--arg-line-2);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
   animation: argFade 0.16s ease;
+}
+/* Everything except the track list ("Off", headers, caption style) stays
+   pinned; only the tracks scroll. */
+.cc-menu > * {
+  flex: 0 0 auto;
+}
+.cc-menu > .cc-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .cc-head {
   padding: 6px 10px 8px;
