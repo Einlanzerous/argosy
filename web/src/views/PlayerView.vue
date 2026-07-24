@@ -99,7 +99,9 @@ const moreAudioTracks = computed(() =>
   audioTracks.value.filter((t) => !mainAudioTracks.value.includes(t)),
 )
 const visibleAudioTracks = computed(() =>
-  audioMoreOpen.value ? [...mainAudioTracks.value, ...moreAudioTracks.value] : mainAudioTracks.value,
+  audioMoreOpen.value
+    ? [...mainAudioTracks.value, ...moreAudioTracks.value]
+    : mainAudioTracks.value,
 )
 
 function toggleSubMenu(): void {
