@@ -190,5 +190,6 @@ func (h *handlers) getPlayback(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 		return
 	}
+	info.PreferredLanguages = &h.preferredLangs
 	httpx.JSON(w, http.StatusOK, info)
 }

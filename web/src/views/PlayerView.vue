@@ -62,6 +62,56 @@ const subMenuOpen = ref(false)
 const audioTracks = ref<{ id: number; label: string; lang: string }[]>([])
 const activeAudioTrack = ref(-1)
 const audioMenuOpen = ref(false)
+// Preferred-language fold (ARGY-154): the server reports the household's
+// preferred languages on PlaybackInfo; both pickers show matching tracks by
+// default and tuck the rest behind a "More options" expander. The active track
+// always stays in the default view, and a file with no preferred-language
+// tracks shows everything — the fold is a preference, not a filter.
+const preferredLangs = ref<string[]>([])
+const subMoreOpen = ref(false)
+const audioMoreOpen = ref(false)
+
+function isPreferredLang(lang: string | null | undefined): boolean {
+  if (!preferredLangs.value.length) return true
+  return preferredLangs.value.includes((lang ?? '').toLowerCase().split('-')[0])
+}
+const mainSubtitleTracks = computed(() => {
+  const main = subtitleTracks.value.filter(
+    (t) => isPreferredLang(t.language) || t.id === activeSubtitle.value,
+  )
+  return main.length ? main : subtitleTracks.value
+})
+const moreSubtitleTracks = computed(() =>
+  subtitleTracks.value.filter((t) => !mainSubtitleTracks.value.includes(t)),
+)
+const visibleSubtitleTracks = computed(() =>
+  subMoreOpen.value
+    ? [...mainSubtitleTracks.value, ...moreSubtitleTracks.value]
+    : mainSubtitleTracks.value,
+)
+const mainAudioTracks = computed(() => {
+  const main = audioTracks.value.filter(
+    (t) => isPreferredLang(t.lang) || t.id === activeAudioTrack.value,
+  )
+  return main.length ? main : audioTracks.value
+})
+const moreAudioTracks = computed(() =>
+  audioTracks.value.filter((t) => !mainAudioTracks.value.includes(t)),
+)
+const visibleAudioTracks = computed(() =>
+  audioMoreOpen.value
+    ? [...mainAudioTracks.value, ...moreAudioTracks.value]
+    : mainAudioTracks.value,
+)
+
+function toggleSubMenu(): void {
+  subMenuOpen.value = !subMenuOpen.value
+  subMoreOpen.value = false
+}
+function toggleAudioMenu(): void {
+  audioMenuOpen.value = !audioMenuOpen.value
+  audioMoreOpen.value = false
+}
 const preferredAudioLang = ref<string | null>(null)
 // This device's saved playback preferences (subtitle language/on-off), applied
 // when tracks load and updated when the viewer changes the subtitle (ARGY-37).
@@ -209,6 +259,7 @@ onMounted(async () => {
     getPreferences().catch(() => null),
   ])
   item.value = data ?? null
+  preferredLangs.value = playback?.preferredLanguages ?? []
   prefs.value = devicePrefs
   preferredAudioLang.value = devicePrefs?.audioLanguage ?? null
   if (devicePrefs) {
@@ -1007,7 +1058,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               class="ctrl icon-only on"
               type="button"
               title="Audio track"
-              @click="audioMenuOpen = !audioMenuOpen"
+              @click="toggleAudioMenu"
             >
               <span class="ic cc">{{ activeAudioLabelShort }}</span>
             </button>
@@ -1015,7 +1066,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               <div class="cc-head">Audio</div>
               <div class="cc-scroll">
                 <button
-                  v-for="t in audioTracks"
+                  v-for="t in visibleAudioTracks"
                   :key="t.id"
                   class="cc-item"
                   :class="{ sel: activeAudioTrack === t.id }"
@@ -1024,6 +1075,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 >
                   <span class="cc-label">{{ t.label }}</span>
                   <span v-if="activeAudioTrack === t.id" class="cc-check">✓</span>
+                </button>
+                <button
+                  v-if="moreAudioTracks.length"
+                  class="cc-item cc-more"
+                  type="button"
+                  @click="audioMoreOpen = !audioMoreOpen"
+                >
+                  <span class="cc-label">{{
+                    audioMoreOpen ? 'Fewer options' : `More options (${moreAudioTracks.length})`
+                  }}</span>
+                  <span class="cc-chev">{{ audioMoreOpen ? '▴' : '▾' }}</span>
                 </button>
               </div>
             </div>
@@ -1034,7 +1096,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               :class="{ on: activeSubtitle }"
               type="button"
               title="Subtitles"
-              @click="subMenuOpen = !subMenuOpen"
+              @click="toggleSubMenu"
             >
               <span class="ic cc">CC</span>
             </button>
@@ -1051,7 +1113,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               </button>
               <div class="cc-scroll">
                 <button
-                  v-for="t in subtitleTracks"
+                  v-for="t in visibleSubtitleTracks"
                   :key="t.id"
                   class="cc-item"
                   :class="{ sel: activeSubtitle === t.id }"
@@ -1065,6 +1127,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                     }}</span>
                   </span>
                   <span v-if="activeSubtitle === t.id" class="cc-check">✓</span>
+                </button>
+                <button
+                  v-if="moreSubtitleTracks.length"
+                  class="cc-item cc-more"
+                  type="button"
+                  @click="subMoreOpen = !subMoreOpen"
+                >
+                  <span class="cc-label">{{
+                    subMoreOpen ? 'Fewer options' : `More options (${moreSubtitleTracks.length})`
+                  }}</span>
+                  <span class="cc-chev">{{ subMoreOpen ? '▴' : '▾' }}</span>
                 </button>
               </div>
 
@@ -1712,6 +1785,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 }
 .cc-item.sel {
   background: var(--arg-accent-bg);
+}
+/* The preferred-language fold's expander row (ARGY-154): quieter than a real
+   track so it reads as a control, not a selectable option. */
+.cc-item.cc-more {
+  color: var(--arg-dim);
+  font-size: 12.5px;
+}
+.cc-chev {
+  color: var(--arg-dim);
+  font-size: 11px;
 }
 .cc-label {
   display: flex;

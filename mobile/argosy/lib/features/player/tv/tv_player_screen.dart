@@ -131,6 +131,7 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
       isTranscode: setup.isTranscode,
       hevc: setup.hevc,
       subtitles: setup.subtitles,
+      preferredLanguages: setup.preferredLanguages,
       prefs: setup.prefs,
     );
     _controller.onAdvance = _advanceToNext;

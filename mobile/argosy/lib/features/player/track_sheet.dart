@@ -29,10 +29,41 @@ class _TrackSheet extends StatefulWidget {
 class _TrackSheetState extends State<_TrackSheet> {
   PlaybackController get _c => widget.controller;
 
+  // Preferred-language fold (ARGY-154): only preferred-language tracks (plus
+  // the active one) show by default; the rest sit behind "More options".
+  bool _showAllSubs = false;
+  bool _showAllAudio = false;
+
+  bool _preferred(String? lang) {
+    final prefs = _c.preferredLanguages;
+    if (prefs.isEmpty) return true;
+    return prefs.contains((lang ?? '').toLowerCase().split('-').first);
+  }
+
+  /// Splits tracks into (default view, folded); a list with no preferred
+  /// match shows everything — the fold is a preference, not a filter.
+  (List<T>, List<T>) _fold<T>(List<T> tracks, bool Function(T) inDefault) {
+    final main = <T>[];
+    final more = <T>[];
+    for (final t in tracks) {
+      (inDefault(t) ? main : more).add(t);
+    }
+    if (main.isEmpty) return (tracks, <T>[]);
+    return (main, more);
+  }
+
   @override
   Widget build(BuildContext context) {
     final audio = _c.audioTracks;
     final audioLabels = _audioLabels(audio);
+    final (subsMain, subsMore) = _fold(
+      _c.subtitles,
+      (t) => _preferred(t.language) || _c.activeSubtitleId == t.id,
+    );
+    final (audioMain, audioMore) = _fold(
+      audio,
+      (a) => _preferred(a.language) || _c.activeAudioTrackId == a.id,
+    );
     return SafeArea(
       child: SingleChildScrollView(
         child: Column(
@@ -44,16 +75,22 @@ class _TrackSheetState extends State<_TrackSheet> {
               selected: _c.activeSubtitleId == null,
               onTap: () => _selectSubtitle(null),
             ),
-            for (final t in _c.subtitles)
+            for (final t in [...subsMain, if (_showAllSubs) ...subsMore])
               _option(
                 label: _subtitleLabel(t),
                 selected: _c.activeSubtitleId == t.id,
                 onTap: () => _selectSubtitle(t.id),
               ),
+            if (subsMore.isNotEmpty)
+              _moreOption(
+                count: subsMore.length,
+                open: _showAllSubs,
+                onTap: () => setState(() => _showAllSubs = !_showAllSubs),
+              ),
             if (audio.length > 1) ...[
               const SizedBox(height: 8),
               _header('Audio'),
-              for (final a in audio)
+              for (final a in [...audioMain, if (_showAllAudio) ...audioMore])
                 _option(
                   label: audioLabels[a.id] ?? 'Track ${a.id}',
                   selected: _c.activeAudioTrackId == a.id,
@@ -61,6 +98,12 @@ class _TrackSheetState extends State<_TrackSheet> {
                     _c.selectAudioTrack(a);
                     setState(() {});
                   },
+                ),
+              if (audioMore.isNotEmpty)
+                _moreOption(
+                  count: audioMore.length,
+                  open: _showAllAudio,
+                  onTap: () => setState(() => _showAllAudio = !_showAllAudio),
                 ),
             ],
             const SizedBox(height: 8),
@@ -132,6 +175,27 @@ class _TrackSheetState extends State<_TrackSheet> {
           ),
         ),
       );
+
+  /// The fold's expander row — dimmer than a real track so it reads as a
+  /// control, not a selectable option.
+  Widget _moreOption({
+    required int count,
+    required bool open,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      onTap: onTap,
+      title: Text(
+        open ? 'Fewer options' : 'More options ($count)',
+        style: const TextStyle(color: ArgosyColors.dim, fontSize: 14),
+      ),
+      trailing: Icon(
+        open ? Icons.expand_less : Icons.expand_more,
+        color: ArgosyColors.dim,
+        size: 20,
+      ),
+    );
+  }
 
   Widget _option({
     required String label,

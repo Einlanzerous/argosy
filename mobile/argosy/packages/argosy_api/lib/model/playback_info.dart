@@ -19,6 +19,7 @@ class PlaybackInfo {
     this.videoCodec,
     this.audioCodec,
     this.reason,
+    this.preferredLanguages = const [],
   });
 
   bool directPlay;
@@ -34,6 +35,9 @@ class PlaybackInfo {
 
   String? reason;
 
+  /// Household preferred audio/subtitle languages (normalized ISO-639-1, e.g. [\"en\",\"ja\"]). Pickers show matching tracks by default and fold the rest behind a \"More options\" expander (ARGY-154).
+  List<String> preferredLanguages;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is PlaybackInfo &&
     other.directPlay == directPlay &&
@@ -41,7 +45,8 @@ class PlaybackInfo {
     other.container == container &&
     other.videoCodec == videoCodec &&
     other.audioCodec == audioCodec &&
-    other.reason == reason;
+    other.reason == reason &&
+    _deepEquality.equals(other.preferredLanguages, preferredLanguages);
 
   @override
   int get hashCode =>
@@ -51,10 +56,11 @@ class PlaybackInfo {
     (container.hashCode) +
     (videoCodec == null ? 0 : videoCodec!.hashCode) +
     (audioCodec == null ? 0 : audioCodec!.hashCode) +
-    (reason == null ? 0 : reason!.hashCode);
+    (reason == null ? 0 : reason!.hashCode) +
+    (preferredLanguages.hashCode);
 
   @override
-  String toString() => 'PlaybackInfo[directPlay=$directPlay, method=$method, container=$container, videoCodec=$videoCodec, audioCodec=$audioCodec, reason=$reason]';
+  String toString() => 'PlaybackInfo[directPlay=$directPlay, method=$method, container=$container, videoCodec=$videoCodec, audioCodec=$audioCodec, reason=$reason, preferredLanguages=$preferredLanguages]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -76,6 +82,7 @@ class PlaybackInfo {
     } else {
       json[r'reason'] = null;
     }
+      json[r'preferredLanguages'] = this.preferredLanguages;
     return json;
   }
 
@@ -106,6 +113,9 @@ class PlaybackInfo {
         videoCodec: mapValueOfType<String>(json, r'videoCodec'),
         audioCodec: mapValueOfType<String>(json, r'audioCodec'),
         reason: mapValueOfType<String>(json, r'reason'),
+        preferredLanguages: json[r'preferredLanguages'] is Iterable
+            ? (json[r'preferredLanguages'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
       );
     }
     return null;

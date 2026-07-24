@@ -34,6 +34,7 @@ class PlaybackController extends ChangeNotifier {
     required this.isTranscode,
     required this.hevc,
     required this.subtitles,
+    required this.preferredLanguages,
     required this.prefs,
     this.notificationAuthor,
     this.artworkUrl,
@@ -67,6 +68,10 @@ class PlaybackController extends ChangeNotifier {
 
   /// Subtitle tracks available for the item (populated up front).
   final List<SubtitleTrack> subtitles;
+
+  /// Household preferred audio/subtitle languages (ARGY-154); the track sheet
+  /// shows matching tracks by default and folds the rest behind "More options".
+  final List<String> preferredLanguages;
 
   DevicePreferences? prefs;
 
