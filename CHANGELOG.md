@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/Einlanzerous/argosy/compare/v0.14.0...v0.15.0) (2026-07-24)
+
+
+### Features
+
+* **auth:** account identity is email + password; profiles are usernames (ARGY-159) ([#154](https://github.com/Einlanzerous/argosy/issues/154)) ([42e7119](https://github.com/Einlanzerous/argosy/commit/42e71199324b6c612d539d5d15efbcf27285fa34))
+
 ## [0.14.0](https://github.com/Einlanzerous/argosy/compare/v0.13.2...v0.14.0) (2026-07-24)
 
 
