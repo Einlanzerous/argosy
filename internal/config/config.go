@@ -80,9 +80,9 @@ type Config struct {
 // Load reads configuration from the environment, applying sensible defaults.
 func Load() Config {
 	return Config{
-		Addr:          getenv("ARGOSY_ADDR", ":8096"),
-		DatabaseURL:   resolveDatabaseURL(),
-		MediaDir:      getenv("ARGOSY_MEDIA_DIR", "/media"),
+		Addr:        getenv("ARGOSY_ADDR", ":8096"),
+		DatabaseURL: resolveDatabaseURL(),
+		MediaDir:    getenv("ARGOSY_MEDIA_DIR", "/media"),
 		// ARGOSY_ADMIN_USERNAME is the pre-ARGY-159 name, kept as a fallback so
 		// existing deployments don't need an env change to keep booting.
 		AdminEmail:    getenv("ARGOSY_ADMIN_EMAIL", os.Getenv("ARGOSY_ADMIN_USERNAME")),

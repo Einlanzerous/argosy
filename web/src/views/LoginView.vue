@@ -109,12 +109,7 @@ function defaultDeviceName(): string {
           <h1>Welcome aboard</h1>
           <p class="lede">Sign in to reach your library.</p>
           <label>Email</label>
-          <input
-            v-model="email"
-            type="email"
-            autocomplete="email"
-            placeholder="you@example.com"
-          />
+          <input v-model="email" type="email" autocomplete="email" placeholder="you@example.com" />
           <label>Password</label>
           <input
             v-model="password"
