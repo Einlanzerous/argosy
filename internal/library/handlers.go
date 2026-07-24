@@ -27,14 +27,22 @@ type handlers struct {
 	subs     *subtitle.Service
 	presence *presence.Registry
 	beacon   *beacon.Hub
+	// preferredLangs is the household's normalized preferred audio/subtitle
+	// language set, surfaced on PlaybackInfo so pickers can fold the rest
+	// behind "More options" (ARGY-154).
+	preferredLangs []string
 }
 
 // RegisterRoutes wires the auth-scoped browse endpoints and the public artwork
 // file server onto mux. artworkDir == "" disables artwork serving. tc may be nil
 // to disable the transcode (The Helm) endpoints; sweeper may be nil to disable
 // the cache-stats endpoint.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub) {
-	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs, presence: pres, beacon: hub}
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub, preferredLangs []string) {
+	normalized := make([]string, 0, len(preferredLangs))
+	for _, l := range preferredLangs {
+		normalized = append(normalized, subtitle.LangCode(l))
+	}
+	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs, presence: pres, beacon: hub, preferredLangs: normalized}
 	mw := auth.Middleware(authStore)
 
 	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))

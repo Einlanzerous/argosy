@@ -15,6 +15,7 @@ typedef PlayerSetup = ({
   PlayState? progress,
   DevicePreferences? prefs,
   List<SubtitleTrack> subtitles,
+  List<String> preferredLanguages,
   bool hevc,
 });
 
@@ -50,6 +51,9 @@ final playerSetupProvider =
     progress: await progressF,
     prefs: await prefsF,
     subtitles: await subsF ?? const [],
+    // Household preferred languages (ARGY-154): the track sheet shows matching
+    // tracks by default and folds the rest behind "More options".
+    preferredLanguages: playback?.preferredLanguages ?? const [],
     hevc: await hevcF,
   );
 });

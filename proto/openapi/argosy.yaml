@@ -1823,6 +1823,13 @@ components:
         videoCodec: { type: string, nullable: true }
         audioCodec: { type: string, nullable: true }
         reason: { type: string, nullable: true }
+        preferredLanguages:
+          type: array
+          items: { type: string }
+          description: >-
+            Household preferred audio/subtitle languages (normalized ISO-639-1,
+            e.g. ["en","ja"]). Pickers show matching tracks by default and fold
+            the rest behind a "More options" expander (ARGY-154).
 
     PlayState:
       type: object

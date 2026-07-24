@@ -1206,6 +1206,8 @@ export interface components {
             videoCodec?: string | null;
             audioCodec?: string | null;
             reason?: string | null;
+            /** @description Household preferred audio/subtitle languages (normalized ISO-639-1, e.g. ["en","ja"]). Pickers show matching tracks by default and fold the rest behind a "More options" expander (ARGY-154). */
+            preferredLanguages?: string[];
         };
         PlayState: {
             positionSeconds: number;
