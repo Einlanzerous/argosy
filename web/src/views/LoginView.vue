@@ -11,10 +11,11 @@ const router = useRouter()
 const route = useRoute()
 
 const step = ref<1 | 2>(1)
-const username = ref('')
+const email = ref('')
 const password = ref('')
 const deviceName = ref('')
 const selectedProfile = ref('')
+const newProfileName = ref('')
 const profileList = ref<UserProfile[]>([])
 const error = ref('')
 const busy = ref(false)
@@ -23,10 +24,11 @@ async function signIn(): Promise<void> {
   error.value = ''
   busy.value = true
   try {
-    const profiles = await session.login(username.value, password.value)
-    if (profiles.length === 0) throw new Error('This account has no profiles yet.')
+    const profiles = await session.login(email.value, password.value)
+    // A freshly provisioned account has no profiles yet (ARGY-159): step 2
+    // doubles as "create your profile" instead of dead-ending here.
     profileList.value = profiles
-    selectedProfile.value = profiles[0].id
+    selectedProfile.value = profiles[0]?.id ?? ''
     deviceName.value = defaultDeviceName()
     step.value = 2
   } catch (e) {
@@ -38,12 +40,18 @@ async function signIn(): Promise<void> {
 
 async function pair(): Promise<void> {
   error.value = ''
+  if (profileList.value.length === 0 && !newProfileName.value.trim()) {
+    error.value = 'Pick a profile name to get started.'
+    return
+  }
   busy.value = true
   try {
     await session.pairDevice(
-      username.value,
+      email.value,
       password.value,
-      selectedProfile.value,
+      profileList.value.length === 0
+        ? { newProfileName: newProfileName.value.trim() }
+        : { userId: selectedProfile.value },
       deviceName.value.trim() || defaultDeviceName(),
     )
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
@@ -102,10 +110,10 @@ function defaultDeviceName(): string {
           <p class="lede">Sign in to reach your library.</p>
           <label>Email</label>
           <input
-            v-model="username"
-            type="text"
-            autocomplete="username"
-            placeholder="you@argosy.local"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
           />
           <label>Password</label>
           <input
@@ -122,12 +130,22 @@ function defaultDeviceName(): string {
         </form>
 
         <form v-else class="fade" @submit.prevent="pair">
-          <h1>Name this device</h1>
+          <h1>{{ profileList.length === 0 ? 'Create your profile' : 'Name this device' }}</h1>
           <p class="lede">
-            It'll join your <span class="accent">Fleet</span> so you can resume across screens.
-            Revoke it anytime.
+            <template v-if="profileList.length === 0">
+              Pick the name you'll watch as — then this device joins your
+              <span class="accent">Fleet</span>.
+            </template>
+            <template v-else>
+              It'll join your <span class="accent">Fleet</span> so you can resume across screens.
+              Revoke it anytime.
+            </template>
           </p>
-          <template v-if="profileList.length > 1">
+          <template v-if="profileList.length === 0">
+            <label>Profile name</label>
+            <input v-model="newProfileName" type="text" placeholder="e.g. Paul" />
+          </template>
+          <template v-else-if="profileList.length > 1">
             <label>Profile</label>
             <select v-model="selectedProfile">
               <option v-for="p in profileList" :key="p.id" :value="p.id">{{ p.name }}</option>

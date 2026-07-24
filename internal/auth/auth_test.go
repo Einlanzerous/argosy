@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,10 +92,12 @@ func TestAuthFlow(t *testing.T) {
 	adminProfile := login.Profiles[0].Id
 
 	platform := "tv"
+	// Deliberately uses the deprecated `username` alias (empty email) to prove
+	// pre-ARGY-159 clients can still pair.
 	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
-		Username:   username,
+		Username:   &username,
 		Password:   password,
-		UserId:     adminProfile,
+		UserId:     &adminProfile,
 		DeviceName: "Test TV",
 		Platform:   &platform,
 	})
@@ -219,7 +222,7 @@ func TestDeviceInstallIdDedup(t *testing.T) {
 	reg := func(name string, installID *string) api.DeviceRegistrationResponse {
 		t.Helper()
 		r, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
-			Username: username, Password: password, UserId: profile,
+			Email: username, Password: password, UserId: &profile,
 			DeviceName: name, InstallId: installID,
 		})
 		if err != nil {
@@ -503,7 +506,7 @@ func TestProfileManagement(t *testing.T) {
 
 	// Bind a device to the (now viewer) bootstrap profile and confirm the count.
 	if _, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
-		Username: username, Password: password, UserId: admin.Id, DeviceName: "Old Phone",
+		Email: username, Password: password, UserId: &admin.Id, DeviceName: "Old Phone",
 	}); err != nil {
 		t.Fatalf("register device: %v", err)
 	}
@@ -571,7 +574,7 @@ func TestSwitchDeviceProfile(t *testing.T) {
 
 	// Pair a device on the admin profile.
 	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
-		Username: username, Password: password, UserId: adminID, DeviceName: "Phone",
+		Email: username, Password: password, UserId: &adminID, DeviceName: "Phone",
 	})
 	if err != nil {
 		t.Fatalf("register device: %v", err)
@@ -640,8 +643,9 @@ func TestChangePassword(t *testing.T) {
 	newPassword := "np-" + uniqueUsername()
 
 	// Pair a device first so we can prove rotation doesn't sign it out.
+	firstProfile := login.Profiles[0].Id
 	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
-		Username: username, Password: password, UserId: login.Profiles[0].Id, DeviceName: "Phone",
+		Email: username, Password: password, UserId: &firstProfile, DeviceName: "Phone",
 	})
 	if err != nil {
 		t.Fatalf("register device: %v", err)
@@ -670,5 +674,73 @@ func TestChangePassword(t *testing.T) {
 	// The device token predates the rotation and must still authenticate.
 	if _, err := store.AuthenticateDevice(ctx, reg.Token); err != nil {
 		t.Errorf("device token after rotation: %v", err)
+	}
+}
+
+// TestEmailLoginAndFirstProfileBootstrap covers ARGY-159: emails match
+// case-insensitively and whitespace-tolerantly, and a freshly provisioned
+// account (no profiles) creates its first profile inline during device
+// registration — but only the first.
+func TestEmailLoginAndFirstProfileBootstrap(t *testing.T) {
+	store, ctx := testStore(t)
+	email := uniqueUsername() + "@Example.COM"
+	password := "pw-" + uniqueUsername()
+	if _, err := store.CreateAccount(ctx, email, password, "Email Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	// Mixed case + stray whitespace still signs in (stored lowercased).
+	login, err := store.Login(ctx, "  "+strings.ToUpper(email)+" ", password)
+	if err != nil {
+		t.Fatalf("case-insensitive login: %v", err)
+	}
+
+	// CreateAccount seeds an admin profile, so bootstrap must be refused here.
+	name := "Paul"
+	if _, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+		Email: email, Password: password, NewProfileName: &name, DeviceName: "Phone",
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("bootstrap with existing profiles: got %v, want ErrInvalidInput", err)
+	}
+
+	// Strip the account down to zero profiles to simulate fresh provisioning
+	// (ARGY-132 will create accounts with no profile at all).
+	adminSess := api.Session{AccountId: login.Account.Id, UserId: login.Profiles[0].Id, Role: api.Admin}
+	extra, err := store.CreateProfile(ctx, login.Account.Id.String(), "Temp", api.Admin)
+	if err != nil {
+		t.Fatalf("create temp admin: %v", err)
+	}
+	tempSess := api.Session{AccountId: login.Account.Id, UserId: extra.Id, Role: api.Admin}
+	if err := store.DeleteProfile(ctx, tempSess, adminSess.UserId.String()); err != nil {
+		t.Fatalf("delete bootstrap admin: %v", err)
+	}
+	if _, err := store.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, extra.Id.String()); err != nil {
+		t.Fatalf("clear last profile: %v", err)
+	}
+
+	// Neither userId nor newProfileName → invalid.
+	if _, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+		Email: email, Password: password, DeviceName: "Phone",
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("no target: got %v, want ErrInvalidInput", err)
+	}
+
+	// First-profile bootstrap: profile is created (viewer) and the device bound.
+	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+		Email: email, Password: password, NewProfileName: &name, DeviceName: "Paul's phone",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap register: %v", err)
+	}
+	sess, err := store.AuthenticateDevice(ctx, reg.Token)
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if sess.Role != api.Viewer {
+		t.Errorf("bootstrap profile role = %v, want viewer", sess.Role)
+	}
+	profiles, err := store.ListProfiles(ctx, login.Account.Id.String())
+	if err != nil || len(profiles) != 1 || profiles[0].Name != "Paul" {
+		t.Fatalf("profiles after bootstrap = %+v (err %v), want just Paul", profiles, err)
 	}
 }

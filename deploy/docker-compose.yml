@@ -52,8 +52,8 @@ services:
       ARGOSY_DB_PASSWORD: "${POSTGRES_PASSWORD:-changeme}"
       ARGOSY_DB_NAME: "${POSTGRES_DB:-argosy}"
       ARGOSY_DB_SSLMODE: "disable"
-      # First-run admin bootstrap (created only if absent).
-      ARGOSY_ADMIN_USERNAME: "${ARGOSY_ADMIN_USERNAME:-admin}"
+      # First-run admin bootstrap (created only when no account exists yet).
+      ARGOSY_ADMIN_EMAIL: "${ARGOSY_ADMIN_EMAIL:-admin@argosy.dev}"
       ARGOSY_ADMIN_PASSWORD: "${ARGOSY_ADMIN_PASSWORD:-changeme}"
       # LAN discovery for PIN pairing (ARGY-123) can't work from a bridge
       # network — multicast never leaves the docker bridge — so keep the
