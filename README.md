@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/argosy_logo_dark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="assets/argosy_logo_light.png" />
-    <img alt="Argosy" src="assets/argosy_logo_light.png" width="420" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/argosy_mark_white.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/argosy_mark_black.svg" />
+    <img alt="Argosy" src="assets/argosy_mark_black.svg" width="420" />
   </picture>
 </p>
 

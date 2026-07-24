@@ -365,7 +365,7 @@ watch(
       </div>
 
       <div v-else-if="!loading" class="empty">
-        <img src="/argosy_logo_dark.png" alt="" />
+        <img src="/argosy_mark.svg" alt="" />
         <h2>The hold is empty</h2>
         <p>
           Stevedore hasn't loaded any cargo for this filter. Point Argosy at your media folders and
