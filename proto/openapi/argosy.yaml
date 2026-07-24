@@ -1551,10 +1551,17 @@ components:
 
     LoginRequest:
       type: object
-      required: [username, password]
+      required: [email, password]
       properties:
+        email:
+          type: string
+          description: The account email (ARGY-159). Matched case-insensitively.
         username:
           type: string
+          deprecated: true
+          description: >-
+            Legacy alias for `email`, honored so pre-ARGY-159 clients can still
+            sign in. Ignored when `email` is present.
         password:
           type: string
           format: password
@@ -1584,17 +1591,32 @@ components:
 
     DeviceRegistrationRequest:
       type: object
-      required: [username, password, userId, deviceName]
+      required: [email, password, deviceName]
       properties:
+        email:
+          type: string
+          description: The account email (ARGY-159). Matched case-insensitively.
         username:
           type: string
+          deprecated: true
+          description: >-
+            Legacy alias for `email`, honored so pre-ARGY-159 clients can still
+            pair. Ignored when `email` is present.
         password:
           type: string
           format: password
         userId:
           type: string
           format: uuid
-          description: The profile this device is bound to.
+          description: >-
+            The profile this device is bound to. Required unless the account has
+            no profiles yet, in which case pass `newProfileName` instead.
+        newProfileName:
+          type: string
+          description: >-
+            First-login bootstrap (ARGY-159): create this profile (viewer role)
+            and bind the device to it. Only honored while the account has zero
+            profiles; mutually exclusive with `userId`.
         deviceName:
           type: string
         platform:

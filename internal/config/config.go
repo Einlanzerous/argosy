@@ -21,9 +21,10 @@ type Config struct {
 	// MediaDir is the root the ingestion layer reads from. The storage
 	// abstraction (local FS vs. Pydio Cells) lands in Phase 1.
 	MediaDir string
-	// AdminUsername/AdminPassword, when both set, bootstrap an admin account on
-	// first startup if one with that username does not already exist.
-	AdminUsername string
+	// AdminEmail/AdminPassword, when both set, bootstrap an admin account on
+	// first startup if no account exists yet (ARGY-159: keyed on "any account",
+	// not the specific email, so renaming a login never re-triggers it).
+	AdminEmail    string
 	AdminPassword string
 	// TMDB credentials for metadata matching (either is sufficient).
 	TMDBReadToken string
@@ -79,10 +80,12 @@ type Config struct {
 // Load reads configuration from the environment, applying sensible defaults.
 func Load() Config {
 	return Config{
-		Addr:          getenv("ARGOSY_ADDR", ":8096"),
-		DatabaseURL:   resolveDatabaseURL(),
-		MediaDir:      getenv("ARGOSY_MEDIA_DIR", "/media"),
-		AdminUsername: os.Getenv("ARGOSY_ADMIN_USERNAME"),
+		Addr:        getenv("ARGOSY_ADDR", ":8096"),
+		DatabaseURL: resolveDatabaseURL(),
+		MediaDir:    getenv("ARGOSY_MEDIA_DIR", "/media"),
+		// ARGOSY_ADMIN_USERNAME is the pre-ARGY-159 name, kept as a fallback so
+		// existing deployments don't need an env change to keep booting.
+		AdminEmail:    getenv("ARGOSY_ADMIN_EMAIL", os.Getenv("ARGOSY_ADMIN_USERNAME")),
 		AdminPassword: os.Getenv("ARGOSY_ADMIN_PASSWORD"),
 		TMDBReadToken: os.Getenv("TMDB_API_READ_ACCESS_KEY"),
 		TMDBAPIKey:    os.Getenv("TMDB_API_KEY"),

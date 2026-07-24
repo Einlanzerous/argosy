@@ -132,7 +132,7 @@ make docker-build    # -> argosy:dev
 | `ARGOSY_DB_PASSWORD`  | _(unset)_ | DB password                                      |
 | `ARGOSY_DB_NAME`      | `argosy`  | DB name                                          |
 | `ARGOSY_DB_SSLMODE`   | `disable` | DB sslmode                                       |
-| `ARGOSY_ADMIN_USERNAME` | _(unset)_ | First-run admin bootstrap username             |
+| `ARGOSY_ADMIN_EMAIL` | _(unset)_ | First-run admin bootstrap email (`ARGOSY_ADMIN_USERNAME` still honored as a legacy fallback) |
 | `ARGOSY_ADMIN_PASSWORD` | _(unset)_ | First-run admin bootstrap password             |
 | `ARGOSY_SCAN_INTERVAL`  | _(unset)_ | Periodic library re-scan interval (e.g. `15m`)  |
 | `ARGOSY_ARTWORK_DIR`    | _(unset)_ | Cache dir for fetched poster/backdrop artwork   |
@@ -148,7 +148,7 @@ make docker-build    # -> argosy:dev
 | `ARGOSY_SUBTITLE_LANGUAGES` | _(unset)_ | Preferred subtitle languages (e.g. `en,ja`)  |
 | `OPEN_SUBTITLES_API_KEY` / `OPEN_SUBTITLES_USERNAME` / `OPEN_SUBTITLES_PASSWORD` | _(unset)_ | OpenSubtitles (all three required to enable download) |
 
-> When `ARGOSY_ADMIN_USERNAME` + `ARGOSY_ADMIN_PASSWORD` are set, an admin account is created on first startup if absent. Auth: `POST /api/v1/auth/login` → account + profiles; `POST /api/v1/auth/devices` issues a per-device bearer token; `GET /api/v1/auth/me`, `GET/DELETE /api/v1/auth/devices` (bearer).
+> When `ARGOSY_ADMIN_EMAIL` + `ARGOSY_ADMIN_PASSWORD` are set, an admin account is created on first startup if no account exists yet. Auth: `POST /api/v1/auth/login` → account + profiles; `POST /api/v1/auth/devices` issues a per-device bearer token; `GET /api/v1/auth/me`, `GET/DELETE /api/v1/auth/devices` (bearer).
 
 > No database is required to boot — without one the server still serves the API and web UI (handy for `make server-dev`). The dev stack sets the `ARGOSY_DB_*` parts; schema migrations (goose) run automatically on startup, and `make seed` loads a demo account + two profiles.
 

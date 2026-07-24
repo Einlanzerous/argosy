@@ -93,11 +93,11 @@ class AuthController extends Notifier<AuthStatus> {
   }
 
   /// Step 1 — authenticate the household account; returns its profiles to pick.
-  Future<List<UserProfile>> login(String username, String password) async {
+  Future<List<UserProfile>> login(String email, String password) async {
     try {
       final res = await ref
           .read(authApiProvider)
-          .login(LoginRequest(username: username, password: password));
+          .login(LoginRequest(email: email, password: password));
       return res?.profiles ?? const [];
     } catch (e) {
       throw mapApiError(e);
@@ -106,10 +106,14 @@ class AuthController extends Notifier<AuthStatus> {
 
   /// Step 2 — register this device against the chosen profile and persist the
   /// returned device token. Flips the gate to authenticated on success.
+  /// A freshly provisioned account has no profiles yet (ARGY-159): pass
+  /// [newProfileName] instead of [userId] and the server creates the first
+  /// profile in the same call.
   Future<void> pairDevice({
-    required String username,
+    required String email,
     required String password,
-    required String userId,
+    String? userId,
+    String? newProfileName,
     required String deviceName,
   }) async {
     try {
@@ -118,9 +122,10 @@ class AuthController extends Notifier<AuthStatus> {
           .read(authApiProvider)
           .registerDevice(
             DeviceRegistrationRequest(
-              username: username,
+              email: email,
               password: password,
               userId: userId,
+              newProfileName: newProfileName,
               deviceName: deviceName,
               platform: platform,
               installId: installId,

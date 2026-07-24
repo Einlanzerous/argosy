@@ -109,7 +109,7 @@ func handleLogin(store *Store) http.HandlerFunc {
 		if !decode(w, r, &req) {
 			return
 		}
-		resp, err := store.Login(r.Context(), req.Username, req.Password)
+		resp, err := store.Login(r.Context(), credential(req.Email, req.Username), req.Password)
 		if err != nil {
 			writeAuthError(w, err)
 			return

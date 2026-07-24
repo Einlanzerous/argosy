@@ -33,9 +33,10 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
   _Step _step = _Step.code;
 
   final _server = TextEditingController();
-  final _username = TextEditingController();
+  final _email = TextEditingController();
   final _password = TextEditingController();
   final _deviceName = TextEditingController(text: 'Living Room TV');
+  final _newProfile = TextEditingController();
 
   /// The field the on-screen keyboard currently edits.
   TextEditingController? _active;
@@ -77,9 +78,10 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
     _pin.removeListener(_onPinChanged);
     _pin.dispose();
     _server.dispose();
-    _username.dispose();
+    _email.dispose();
     _password.dispose();
     _deviceName.dispose();
+    _newProfile.dispose();
     super.dispose();
   }
 
@@ -164,7 +166,7 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
     setState(() {
       _error = null;
       _step = _Step.signIn;
-      _active = _username;
+      _active = _email;
       _pristine = true;
     });
   }
@@ -172,26 +174,30 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
   void _submitSignIn() => _run(() async {
     final profiles = await ref
         .read(authControllerProvider.notifier)
-        .login(_username.text.trim(), _password.text);
-    if (profiles.isEmpty) {
-      throw const ApiFailure('This account has no profiles yet.');
-    }
+        .login(_email.text.trim(), _password.text);
     if (!mounted) return;
+    // A freshly provisioned account has no profiles yet (ARGY-159): the pair
+    // step doubles as "create your profile" instead of dead-ending here.
     setState(() {
       _profiles = profiles;
-      _selectedProfileId = profiles.first.id;
-      _active = _deviceName;
+      _selectedProfileId = profiles.isEmpty ? null : profiles.first.id;
+      _active = profiles.isEmpty ? _newProfile : _deviceName;
       _pristine = true;
       _step = _Step.pair;
     });
   });
 
   void _submitPair() => _run(() async {
+    final firstProfile = _profiles.isEmpty ? _newProfile.text.trim() : null;
+    if (firstProfile != null && firstProfile.isEmpty) {
+      throw const ApiFailure('Pick a profile name to get started.');
+    }
     // On success the auth gate flips and the router leaves this screen.
     await ref.read(authControllerProvider.notifier).pairDevice(
-          username: _username.text.trim(),
+          email: _email.text.trim(),
           password: _password.text,
-          userId: _selectedProfileId!,
+          userId: firstProfile == null ? _selectedProfileId! : null,
+          newProfileName: firstProfile,
           deviceName: _deviceName.text.trim().isEmpty
               ? 'Living Room TV'
               : _deviceName.text.trim(),
@@ -329,10 +335,10 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
       _Step.signIn => [
           _TvField(
             label: 'Email',
-            value: _username.text,
-            active: _active == _username,
+            value: _email.text,
+            active: _active == _email,
             autofocus: true,
-            onFocused: () => _focus(_username),
+            onFocused: () => _focus(_email),
           ),
           const SizedBox(height: 12),
           _TvField(
@@ -348,11 +354,20 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
           _action('Sign in', _submitSignIn),
         ],
       _Step.pair => [
-          _ProfileRow(
-            profiles: _profiles,
-            selectedId: _selectedProfileId,
-            onSelect: (id) => setState(() => _selectedProfileId = id),
-          ),
+          if (_profiles.isEmpty)
+            _TvField(
+              label: 'Profile name',
+              value: _newProfile.text,
+              active: _active == _newProfile,
+              autofocus: true,
+              onFocused: () => _focus(_newProfile),
+            )
+          else
+            _ProfileRow(
+              profiles: _profiles,
+              selectedId: _selectedProfileId,
+              onSelect: (id) => setState(() => _selectedProfileId = id),
+            ),
           const SizedBox(height: 18),
           _TvField(
             label: 'Device name',

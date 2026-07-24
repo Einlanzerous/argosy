@@ -1057,7 +1057,13 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         LoginRequest: {
-            username: string;
+            /** @description The account email (ARGY-159). Matched case-insensitively. */
+            email: string;
+            /**
+             * @deprecated
+             * @description Legacy alias for `email`, honored so pre-ARGY-159 clients can still sign in. Ignored when `email` is present.
+             */
+            username?: string;
             /** Format: password */
             password: string;
         };
@@ -1072,14 +1078,22 @@ export interface components {
             profiles: components["schemas"]["UserProfile"][];
         };
         DeviceRegistrationRequest: {
-            username: string;
+            /** @description The account email (ARGY-159). Matched case-insensitively. */
+            email: string;
+            /**
+             * @deprecated
+             * @description Legacy alias for `email`, honored so pre-ARGY-159 clients can still pair. Ignored when `email` is present.
+             */
+            username?: string;
             /** Format: password */
             password: string;
             /**
              * Format: uuid
-             * @description The profile this device is bound to.
+             * @description The profile this device is bound to. Required unless the account has no profiles yet, in which case pass `newProfileName` instead.
              */
-            userId: string;
+            userId?: string;
+            /** @description First-login bootstrap (ARGY-159): create this profile (viewer role) and bind the device to it. Only honored while the account has zero profiles; mutually exclusive with `userId`. */
+            newProfileName?: string;
             deviceName: string;
             /** @description Client platform/type label (e.g. "web", "tv", "phone"); shown in the Fleet. */
             platform?: string;
