@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/Einlanzerous/argosy/compare/v0.17.0...v0.17.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **web:** stable nav bar across pages; Browse uses shared logo+search (ARGY-162) ([#162](https://github.com/Einlanzerous/argosy/issues/162)) ([3f596a4](https://github.com/Einlanzerous/argosy/commit/3f596a42a2ff6d0a1bddb5b24dfc0c11cf983dda))
+
 ## [0.17.0](https://github.com/Einlanzerous/argosy/compare/v0.16.0...v0.17.0) (2026-07-24)
 
 
