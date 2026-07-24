@@ -69,13 +69,33 @@ async function setAutoAdvance(v: boolean): Promise<void> {
 
 // Self-serve change-password (ARGY-156). Any profile may rotate the household
 // password by proving the current one; device tokens are independent of the
-// password, so no device is signed out.
+// password, so no device is signed out. The form lives in a modal (ARGY-160)
+// so its inputs only exist while deliberately opened — password managers
+// otherwise fire their save/update prompts on every Settings visit.
+const pwOpen = ref(false)
 const curPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const pwBusy = ref(false)
 const pwError = ref('')
 const pwSuccess = ref(false)
+
+function openPwModal(): void {
+  curPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  pwError.value = ''
+  pwSuccess.value = false
+  pwOpen.value = true
+}
+
+function closePwModal(): void {
+  pwOpen.value = false
+  curPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  pwError.value = ''
+}
 const PW_MIN = 8
 const pwTooShort = computed(() => newPassword.value !== '' && newPassword.value.length < PW_MIN)
 const pwMismatch = computed(
@@ -98,10 +118,8 @@ async function changePassword(): Promise<void> {
   })
   pwBusy.value = false
   if (response.ok) {
+    closePwModal()
     pwSuccess.value = true
-    curPassword.value = ''
-    newPassword.value = ''
-    confirmPassword.value = ''
     return
   }
   if (response.status === 403) pwError.value = 'The current password is incorrect.'
@@ -241,35 +259,8 @@ onUnmounted(() => {
             stay signed in.
           </p>
         </div>
+        <button class="pwopen" type="button" @click="openPwModal">Change password…</button>
       </div>
-      <form class="pwform" @submit.prevent="changePassword">
-        <input
-          v-model="curPassword"
-          type="password"
-          autocomplete="current-password"
-          placeholder="Current password"
-        />
-        <input
-          v-model="newPassword"
-          type="password"
-          autocomplete="new-password"
-          placeholder="New password"
-        />
-        <input
-          v-model="confirmPassword"
-          type="password"
-          autocomplete="new-password"
-          placeholder="Confirm new password"
-        />
-        <button type="submit" :disabled="pwBusy || !pwReady">
-          {{ pwBusy ? 'Changing…' : 'Change password' }}
-        </button>
-      </form>
-      <p v-if="pwTooShort" class="message err-msg">
-        The new password must be at least {{ PW_MIN }} characters.
-      </p>
-      <p v-else-if="pwMismatch" class="message err-msg">The new passwords don't match.</p>
-      <p v-if="pwError" class="message err-msg">{{ pwError }}</p>
       <p v-if="pwSuccess" class="message">Password changed.</p>
     </section>
 
@@ -350,6 +341,50 @@ onUnmounted(() => {
       </form>
       <p v-if="addError" class="message err-msg">{{ addError }}</p>
     </section>
+
+    <!-- Change-password modal (ARGY-160): the inputs only exist while this is
+         open, so password managers stay quiet on ordinary Settings visits. -->
+    <div v-if="pwOpen" class="scrim" @click.self="closePwModal">
+      <form class="modal" @submit.prevent="changePassword" @keydown.esc="closePwModal">
+        <h3>Change password</h3>
+        <p class="modal-body">
+          Prove the current password to set a new one. Devices already in the Fleet stay signed in.
+        </p>
+        <input
+          v-model="curPassword"
+          class="field"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Current password"
+          autofocus
+        />
+        <input
+          v-model="newPassword"
+          class="field"
+          type="password"
+          autocomplete="new-password"
+          placeholder="New password"
+        />
+        <input
+          v-model="confirmPassword"
+          class="field"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Confirm new password"
+        />
+        <p v-if="pwTooShort" class="error">
+          The new password must be at least {{ PW_MIN }} characters.
+        </p>
+        <p v-else-if="pwMismatch" class="error">The new passwords don't match.</p>
+        <p v-if="pwError" class="error">{{ pwError }}</p>
+        <div class="modal-actions">
+          <button class="btn" type="button" @click="closePwModal">Cancel</button>
+          <button class="btn primary" type="submit" :disabled="pwBusy || !pwReady">
+            {{ pwBusy ? 'Changing…' : 'Change password' }}
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </template>
 
@@ -557,36 +592,96 @@ h2 {
 .err-msg {
   color: #e9836c;
 }
-.pwform {
-  margin-top: 18px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.pwform input {
-  flex: 1;
-  min-width: 180px;
-  padding: 10px 12px;
-  border-radius: var(--arg-r-sm);
+.pwopen {
+  flex: none;
+  padding: 12px 18px;
   border: 1px solid var(--arg-line-2);
+  border-radius: var(--arg-r);
   background: transparent;
   color: var(--arg-cream);
-  font: 500 13px var(--arg-body);
-  outline: none;
-}
-.pwform input:focus {
-  border-color: var(--arg-accent);
-}
-.pwform button {
-  padding: 10px 18px;
-  border-radius: var(--arg-r-sm);
-  border: none;
-  background: var(--arg-accent);
-  color: var(--arg-bg);
   font: 700 13px var(--arg-display);
   cursor: pointer;
 }
-.pwform button:disabled {
+.pwopen:hover {
+  border-color: var(--arg-accent);
+  color: var(--arg-accent);
+}
+/* Change-password modal (ARGY-160) — same idiom as the Profiles editor. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 12, 11, 0.6);
+  backdrop-filter: blur(3px);
+}
+.modal {
+  width: min(420px, calc(100vw - 48px));
+  padding: 22px;
+  border-radius: var(--arg-r-lg);
+  border: 1px solid var(--arg-line);
+  background: var(--arg-panel);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.modal h3 {
+  margin: 0;
+  font: 700 17px var(--arg-display);
+}
+.modal-body {
+  margin: 12px 0 0;
+  font: 400 13.5px/1.5 var(--arg-body);
+  color: var(--arg-dim);
+}
+.field {
+  margin-top: 12px;
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--arg-r-sm);
+  border: 1px solid var(--arg-line-2);
+  background: var(--arg-bg-2);
+  color: var(--arg-cream);
+  font: 500 14px var(--arg-body);
+}
+.field:focus {
+  outline: none;
+  border-color: var(--arg-accent);
+}
+.error {
+  margin: 14px 0 0;
+  font: 500 12.5px var(--arg-body);
+  color: var(--arg-danger);
+}
+.modal-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.btn {
+  padding: 9px 16px;
+  border-radius: var(--arg-r-sm);
+  border: 1px solid var(--arg-line-2);
+  background: transparent;
+  color: var(--arg-dim);
+  font: 600 12.5px var(--arg-body);
+  cursor: pointer;
+}
+.btn:hover {
+  border-color: var(--arg-line);
+  color: var(--arg-cream);
+}
+.btn.primary {
+  border-color: transparent;
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+}
+.btn.primary:hover {
+  background: var(--arg-accent-hi);
+  color: var(--arg-bg);
+}
+.btn:disabled {
   opacity: 0.5;
   cursor: default;
 }
