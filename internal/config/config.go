@@ -26,6 +26,10 @@ type Config struct {
 	// not the specific email, so renaming a login never re-triggers it).
 	AdminEmail    string
 	AdminPassword string
+	// ProvisionToken, when set, enables POST /api/v1/admin/accounts for
+	// machine-to-machine account creation (Purser, ARGY-132). Requests must
+	// present it in the X-Provision-Token header. Empty disables the route.
+	ProvisionToken string
 	// TMDB credentials for metadata matching (either is sufficient).
 	TMDBReadToken string
 	TMDBAPIKey    string
@@ -85,12 +89,13 @@ func Load() Config {
 		MediaDir:    getenv("ARGOSY_MEDIA_DIR", "/media"),
 		// ARGOSY_ADMIN_USERNAME is the pre-ARGY-159 name, kept as a fallback so
 		// existing deployments don't need an env change to keep booting.
-		AdminEmail:    getenv("ARGOSY_ADMIN_EMAIL", os.Getenv("ARGOSY_ADMIN_USERNAME")),
-		AdminPassword: os.Getenv("ARGOSY_ADMIN_PASSWORD"),
-		TMDBReadToken: os.Getenv("TMDB_API_READ_ACCESS_KEY"),
-		TMDBAPIKey:    os.Getenv("TMDB_API_KEY"),
-		ArtworkDir:    getenv("ARGOSY_ARTWORK_DIR", "artwork"),
-		ScanInterval:  parseDuration(os.Getenv("ARGOSY_SCAN_INTERVAL")),
+		AdminEmail:     getenv("ARGOSY_ADMIN_EMAIL", os.Getenv("ARGOSY_ADMIN_USERNAME")),
+		AdminPassword:  os.Getenv("ARGOSY_ADMIN_PASSWORD"),
+		ProvisionToken: os.Getenv("ARGOSY_PROVISION_TOKEN"),
+		TMDBReadToken:  os.Getenv("TMDB_API_READ_ACCESS_KEY"),
+		TMDBAPIKey:     os.Getenv("TMDB_API_KEY"),
+		ArtworkDir:     getenv("ARGOSY_ARTWORK_DIR", "artwork"),
+		ScanInterval:   parseDuration(os.Getenv("ARGOSY_SCAN_INTERVAL")),
 
 		TranscodeDir:         getenv("ARGOSY_TRANSCODE_DIR", filepath.Join(os.TempDir(), "argosy-transcode")),
 		TranscodeIdleTimeout: parseDuration(os.Getenv("ARGOSY_TRANSCODE_IDLE_TIMEOUT")),

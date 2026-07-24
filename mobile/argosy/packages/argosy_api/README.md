@@ -70,6 +70,7 @@ Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 *AuthApi* | [**approveLink**](doc//AuthApi.md#approvelink) | **POST** /api/v1/auth/link/{code}/approve | Approve a pairing code from a signed-in session
 *AuthApi* | [**changePassword**](doc//AuthApi.md#changepassword) | **POST** /api/v1/auth/password | Change the account password (self-serve)
+*AuthApi* | [**createAccount**](doc//AuthApi.md#createaccount) | **POST** /api/v1/admin/accounts | Create an account (service-to-service provisioning)
 *AuthApi* | [**createProfile**](doc//AuthApi.md#createprofile) | **POST** /api/v1/auth/profiles | Create a profile (admin only)
 *AuthApi* | [**deleteProfile**](doc//AuthApi.md#deleteprofile) | **DELETE** /api/v1/auth/profiles/{userId} | Delete a profile (admin only)
 *AuthApi* | [**getCurrentSession**](doc//AuthApi.md#getcurrentsession) | **GET** /api/v1/auth/me | Resolve the current (account, profile, device) from the token
@@ -134,6 +135,8 @@ Class | Method | HTTP request | Description
 ## Documentation For Models
 
  - [Account](doc//Account.md)
+ - [AccountCreateRequest](doc//AccountCreateRequest.md)
+ - [AccountCreateResponse](doc//AccountCreateResponse.md)
  - [AddVaultItemRequest](doc//AddVaultItemRequest.md)
  - [ContinueItem](doc//ContinueItem.md)
  - [CreateLibraryRequest](doc//CreateLibraryRequest.md)
@@ -201,6 +204,12 @@ Authentication schemes defined for the API:
 ### bearerAuth
 
 - **Type**: HTTP Bearer authentication
+
+### provisionToken
+
+- **Type**: API key
+- **API key parameter name**: X-Provision-Token
+- **Location**: HTTP header
 
 
 ## Author

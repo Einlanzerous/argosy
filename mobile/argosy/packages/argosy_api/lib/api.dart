@@ -34,6 +34,8 @@ part 'api/system_api.dart';
 part 'api/transcode_api.dart';
 
 part 'model/account.dart';
+part 'model/account_create_request.dart';
+part 'model/account_create_response.dart';
 part 'model/add_vault_item_request.dart';
 part 'model/continue_item.dart';
 part 'model/create_library_request.dart';
