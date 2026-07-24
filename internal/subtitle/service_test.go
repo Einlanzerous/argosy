@@ -107,7 +107,7 @@ const engEmbeddedTechnical = `{"streams":[
 ]}`
 
 func TestListSkipsSearchWhenEmbeddedCovers(t *testing.T) {
-	s, hits := osTestService(t, []string{"en"}, func(w http.ResponseWriter, _ *http.Request) {
+	s, hits := osTestService(t, []string{"en"}, func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("OpenSubtitles search should not fire when embedded covers all wanted languages")
 	})
 	tracks := s.List(context.Background(), Target{ItemID: "item1", TMDBID: 42,
@@ -126,7 +126,7 @@ func TestListSearchesOnlyMissingLangsAndFiltersResults(t *testing.T) {
 			t.Errorf("search languages = %q, want %q (en is embedded-covered)", got, "ja")
 		}
 		// The API answering with an en result anyway must not produce a duplicate.
-		fmt.Fprint(w, osSearchBody("ja", "en"))
+		_, _ = fmt.Fprint(w, osSearchBody("ja", "en"))
 	})
 	tracks := s.List(context.Background(), Target{ItemID: "item2", TMDBID: 42,
 		Technical: []byte(engEmbeddedTechnical)})
@@ -140,7 +140,7 @@ func TestListSearchesOnlyMissingLangsAndFiltersResults(t *testing.T) {
 
 func TestListCachesSearchPerItem(t *testing.T) {
 	s, hits := osTestService(t, []string{"ja"}, func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, osSearchBody("ja"))
+		_, _ = fmt.Fprint(w, osSearchBody("ja"))
 	})
 	target := Target{ItemID: "item3", TMDBID: 42, Technical: []byte(engEmbeddedTechnical)}
 	for range 3 {
