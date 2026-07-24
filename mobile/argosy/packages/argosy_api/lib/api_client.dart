@@ -235,6 +235,8 @@ class ApiClient {
           return ModelLibrary.fromJson(value);
         case 'OnDeckItem':
           return OnDeckItem.fromJson(value);
+        case 'PasswordChangeRequest':
+          return PasswordChangeRequest.fromJson(value);
         case 'PingResponse':
           return PingResponse.fromJson(value);
         case 'PlayState':

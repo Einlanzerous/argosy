@@ -622,3 +622,53 @@ func TestSwitchDeviceProfile(t *testing.T) {
 		t.Errorf("switch to foreign id: got %v, want ErrNotFound", err)
 	}
 }
+
+// TestChangePassword covers ARGY-156: self-serve rotation verifies the current
+// password, enforces a minimum length, and leaves device tokens signed in.
+func TestChangePassword(t *testing.T) {
+	store, ctx := testStore(t)
+	username := uniqueUsername()
+	password := "pw-" + uniqueUsername()
+	if _, err := store.CreateAccount(ctx, username, password, "Rotate Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	login, err := store.Login(ctx, username, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accountID := login.Account.Id.String()
+	newPassword := "np-" + uniqueUsername()
+
+	// Pair a device first so we can prove rotation doesn't sign it out.
+	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+		Username: username, Password: password, UserId: login.Profiles[0].Id, DeviceName: "Phone",
+	})
+	if err != nil {
+		t.Fatalf("register device: %v", err)
+	}
+
+	if err := store.ChangePassword(ctx, accountID, "wrong", newPassword); !errors.Is(err, ErrWrongPassword) {
+		t.Errorf("wrong current password: got %v, want ErrWrongPassword", err)
+	}
+	if err := store.ChangePassword(ctx, accountID, password, "short"); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("too-short new password: got %v, want ErrInvalidInput", err)
+	}
+	// Neither failed attempt may have touched the hash.
+	if _, err := store.Login(ctx, username, password); err != nil {
+		t.Fatalf("login with old password after failed attempts: %v", err)
+	}
+
+	if err := store.ChangePassword(ctx, accountID, password, newPassword); err != nil {
+		t.Fatalf("change password: %v", err)
+	}
+	if _, err := store.Login(ctx, username, password); !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("login with old password: got %v, want ErrInvalidCredentials", err)
+	}
+	if _, err := store.Login(ctx, username, newPassword); err != nil {
+		t.Errorf("login with new password: %v", err)
+	}
+	// The device token predates the rotation and must still authenticate.
+	if _, err := store.AuthenticateDevice(ctx, reg.Token); err != nil {
+		t.Errorf("device token after rotation: %v", err)
+	}
+}

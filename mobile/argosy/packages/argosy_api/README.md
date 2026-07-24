@@ -69,6 +69,7 @@ All URIs are relative to *http://localhost*
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 *AuthApi* | [**approveLink**](doc//AuthApi.md#approvelink) | **POST** /api/v1/auth/link/{code}/approve | Approve a pairing code from a signed-in session
+*AuthApi* | [**changePassword**](doc//AuthApi.md#changepassword) | **POST** /api/v1/auth/password | Change the account password (self-serve)
 *AuthApi* | [**createProfile**](doc//AuthApi.md#createprofile) | **POST** /api/v1/auth/profiles | Create a profile (admin only)
 *AuthApi* | [**deleteProfile**](doc//AuthApi.md#deleteprofile) | **DELETE** /api/v1/auth/profiles/{userId} | Delete a profile (admin only)
 *AuthApi* | [**getCurrentSession**](doc//AuthApi.md#getcurrentsession) | **GET** /api/v1/auth/me | Resolve the current (account, profile, device) from the token
@@ -158,6 +159,7 @@ Class | Method | HTTP request | Description
  - [MediaItemSummary](doc//MediaItemSummary.md)
  - [ModelLibrary](doc//ModelLibrary.md)
  - [OnDeckItem](doc//OnDeckItem.md)
+ - [PasswordChangeRequest](doc//PasswordChangeRequest.md)
  - [PingResponse](doc//PingResponse.md)
  - [PlayState](doc//PlayState.md)
  - [PlaybackInfo](doc//PlaybackInfo.md)

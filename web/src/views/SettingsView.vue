@@ -67,6 +67,47 @@ async function setAutoAdvance(v: boolean): Promise<void> {
   await putPreferences(next).catch(() => {})
 }
 
+// Self-serve change-password (ARGY-156). Any profile may rotate the household
+// password by proving the current one; device tokens are independent of the
+// password, so no device is signed out.
+const curPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const pwBusy = ref(false)
+const pwError = ref('')
+const pwSuccess = ref(false)
+const PW_MIN = 8
+const pwTooShort = computed(() => newPassword.value !== '' && newPassword.value.length < PW_MIN)
+const pwMismatch = computed(
+  () => confirmPassword.value !== '' && newPassword.value !== confirmPassword.value,
+)
+const pwReady = computed(
+  () =>
+    curPassword.value !== '' &&
+    newPassword.value.length >= PW_MIN &&
+    newPassword.value === confirmPassword.value,
+)
+
+async function changePassword(): Promise<void> {
+  if (!pwReady.value || pwBusy.value) return
+  pwBusy.value = true
+  pwError.value = ''
+  pwSuccess.value = false
+  const { error, response } = await api.POST('/api/v1/auth/password', {
+    body: { currentPassword: curPassword.value, newPassword: newPassword.value },
+  })
+  pwBusy.value = false
+  if (response.ok) {
+    pwSuccess.value = true
+    curPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+    return
+  }
+  if (response.status === 403) pwError.value = 'The current password is incorrect.'
+  else pwError.value = (error as { error?: string })?.error ?? 'Could not change the password.'
+}
+
 async function addLibrary(): Promise<void> {
   const name = newName.value.trim()
   const path = newPath.value.trim()
@@ -189,6 +230,47 @@ onUnmounted(() => {
           <span class="knob" />
         </button>
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Account password</h2>
+          <p>
+            Change the password used to sign in and pair new devices. Devices already in the Fleet
+            stay signed in.
+          </p>
+        </div>
+      </div>
+      <form class="pwform" @submit.prevent="changePassword">
+        <input
+          v-model="curPassword"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Current password"
+        />
+        <input
+          v-model="newPassword"
+          type="password"
+          autocomplete="new-password"
+          placeholder="New password"
+        />
+        <input
+          v-model="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Confirm new password"
+        />
+        <button type="submit" :disabled="pwBusy || !pwReady">
+          {{ pwBusy ? 'Changing…' : 'Change password' }}
+        </button>
+      </form>
+      <p v-if="pwTooShort" class="message err-msg">
+        The new password must be at least {{ PW_MIN }} characters.
+      </p>
+      <p v-else-if="pwMismatch" class="message err-msg">The new passwords don't match.</p>
+      <p v-if="pwError" class="message err-msg">{{ pwError }}</p>
+      <p v-if="pwSuccess" class="message">Password changed.</p>
     </section>
 
     <section class="panel">
@@ -474,6 +556,39 @@ h2 {
 }
 .err-msg {
   color: #e9836c;
+}
+.pwform {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pwform input {
+  flex: 1;
+  min-width: 180px;
+  padding: 10px 12px;
+  border-radius: var(--arg-r-sm);
+  border: 1px solid var(--arg-line-2);
+  background: transparent;
+  color: var(--arg-cream);
+  font: 500 13px var(--arg-body);
+  outline: none;
+}
+.pwform input:focus {
+  border-color: var(--arg-accent);
+}
+.pwform button {
+  padding: 10px 18px;
+  border-radius: var(--arg-r-sm);
+  border: none;
+  background: var(--arg-accent);
+  color: var(--arg-bg);
+  font: 700 13px var(--arg-display);
+  cursor: pointer;
+}
+.pwform button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .layout-opts {
   margin-top: 16px;
