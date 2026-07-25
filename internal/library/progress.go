@@ -300,7 +300,7 @@ func (s *Store) ContinueWatching(ctx context.Context, accountID, userID, current
 // ---- handlers ----
 
 func (h *handlers) getProgress(w http.ResponseWriter, r *http.Request) {
-	ps, err := h.store.GetProgress(r.Context(), accountOf(r), userOf(r), r.PathValue("itemId"))
+	ps, err := h.store.GetProgress(r.Context(), catalogOf(r), userOf(r), r.PathValue("itemId"))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -324,7 +324,7 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 	}
 	itemID := r.PathValue("itemId")
 	sess, _ := auth.SessionFromContext(r.Context())
-	ps, err := h.store.SetProgress(r.Context(), accountOf(r), userOf(r), sess.DeviceId.String(), itemID, float64(body.PositionSeconds), dur)
+	ps, err := h.store.SetProgress(r.Context(), catalogOf(r), userOf(r), sess.DeviceId.String(), itemID, float64(body.PositionSeconds), dur)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -386,7 +386,7 @@ func (h *handlers) setWatched(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	itemID := r.PathValue("itemId")
-	ps, err := h.store.SetWatched(r.Context(), accountOf(r), userOf(r), itemID, body.Watched)
+	ps, err := h.store.SetWatched(r.Context(), catalogOf(r), userOf(r), itemID, body.Watched)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -410,7 +410,7 @@ func (h *handlers) setSeriesWatched(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	res, err := h.store.SetSeriesWatched(r.Context(), accountOf(r), userOf(r), r.PathValue("seriesId"), body.Watched)
+	res, err := h.store.SetSeriesWatched(r.Context(), catalogOf(r), userOf(r), r.PathValue("seriesId"), body.Watched)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -427,7 +427,7 @@ func (h *handlers) setSeasonWatched(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	res, err := h.store.SetSeasonWatched(r.Context(), accountOf(r), userOf(r), r.PathValue("seasonId"), body.Watched)
+	res, err := h.store.SetSeasonWatched(r.Context(), catalogOf(r), userOf(r), r.PathValue("seasonId"), body.Watched)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -440,7 +440,7 @@ func (h *handlers) setSeasonWatched(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) listContinue(w http.ResponseWriter, r *http.Request) {
-	items, err := h.store.ContinueWatching(r.Context(), accountOf(r), userOf(r), deviceOf(r), 20)
+	items, err := h.store.ContinueWatching(r.Context(), catalogOf(r), userOf(r), deviceOf(r), 20)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -453,7 +453,7 @@ func (h *handlers) listOnDeck(w http.ResponseWriter, r *http.Request) {
 	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
 		limit = v
 	}
-	items, err := h.store.OnDeck(r.Context(), accountOf(r), userOf(r), limit)
+	items, err := h.store.OnDeck(r.Context(), catalogOf(r), userOf(r), limit)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -465,7 +465,7 @@ func (h *handlers) listOnDeck(w http.ResponseWriter, r *http.Request) {
 // follows the requested one in its series, or 404 when there's nothing after it
 // (last episode, or the item isn't a series episode).
 func (h *handlers) getNextEpisode(w http.ResponseWriter, r *http.Request) {
-	next, err := h.store.NextEpisode(r.Context(), accountOf(r), r.PathValue("itemId"))
+	next, err := h.store.NextEpisode(r.Context(), catalogOf(r), r.PathValue("itemId"))
 	if err != nil {
 		h.fail(w, err)
 		return

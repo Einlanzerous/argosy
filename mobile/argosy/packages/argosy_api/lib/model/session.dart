@@ -17,6 +17,7 @@ class Session {
     required this.userId,
     required this.deviceId,
     required this.role,
+    this.isOwner,
   });
 
   String accountId;
@@ -27,12 +28,22 @@ class Session {
 
   Role role;
 
+  /// True when this session's account owns the instance (ARGY-167). The owner's libraries are the server's catalog; only the owner may register or delete library roots and trigger scans. `role` is unrelated — it is the admin/viewer role *within* a household. Optional so a newer client can still parse an older server's response; treat absent as false. 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? isOwner;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is Session &&
     other.accountId == accountId &&
     other.userId == userId &&
     other.deviceId == deviceId &&
-    other.role == role;
+    other.role == role &&
+    other.isOwner == isOwner;
 
   @override
   int get hashCode =>
@@ -40,10 +51,11 @@ class Session {
     (accountId.hashCode) +
     (userId.hashCode) +
     (deviceId.hashCode) +
-    (role.hashCode);
+    (role.hashCode) +
+    (isOwner == null ? 0 : isOwner!.hashCode);
 
   @override
-  String toString() => 'Session[accountId=$accountId, userId=$userId, deviceId=$deviceId, role=$role]';
+  String toString() => 'Session[accountId=$accountId, userId=$userId, deviceId=$deviceId, role=$role, isOwner=$isOwner]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -51,6 +63,11 @@ class Session {
       json[r'userId'] = this.userId;
       json[r'deviceId'] = this.deviceId;
       json[r'role'] = this.role;
+    if (this.isOwner != null) {
+      json[r'isOwner'] = this.isOwner;
+    } else {
+      json[r'isOwner'] = null;
+    }
     return json;
   }
 
@@ -81,6 +98,7 @@ class Session {
         userId: mapValueOfType<String>(json, r'userId')!,
         deviceId: mapValueOfType<String>(json, r'deviceId')!,
         role: Role.fromJson(json[r'role'])!,
+        isOwner: mapValueOfType<bool>(json, r'isOwner'),
       );
     }
     return null;

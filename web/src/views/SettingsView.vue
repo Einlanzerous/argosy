@@ -17,9 +17,10 @@ import type { components } from '@/api/schema'
 type ScanStatus = components['schemas']['ScanStatus']
 
 const sessionStore = useSessionStore()
-// Triggering a re-scan is admin-only (the server enforces it too); viewers see
-// status but not the control.
-const isAdmin = computed(() => sessionStore.session?.role === 'admin')
+// Library roots and Manifest rebuilds belong to the account that owns this
+// server, not to every household admin (ARGY-167). The server enforces it; the
+// panels below are hidden for everyone else because their endpoints would 403.
+const canManageServer = computed(() => sessionStore.canManageServer)
 const status = ref<ScanStatus | null>(null)
 const message = ref('')
 const triggering = ref(false)
@@ -179,8 +180,10 @@ async function rebuild(): Promise<void> {
 
 onMounted(() => {
   setPage('Settings')
-  void refresh()
-  void loadLibraries()
+  if (canManageServer.value) {
+    void refresh()
+    void loadLibraries()
+  }
   void loadUserPrefs()
   void loadDevicePrefs()
 })
@@ -264,14 +267,13 @@ onUnmounted(() => {
       <p v-if="pwSuccess" class="message">Password changed.</p>
     </section>
 
-    <section class="panel">
+    <section v-if="canManageServer" class="panel">
       <div class="panel-head">
         <div>
           <h2>Library scan</h2>
           <p>Stevedore re-sweeps your media so the Manifest stays current.</p>
         </div>
         <button
-          v-if="isAdmin"
           class="rebuild"
           type="button"
           :disabled="triggering || status?.running"
@@ -279,7 +281,6 @@ onUnmounted(() => {
         >
           <span>⟲</span> {{ status?.running ? 'Rebuilding…' : 'Rebuild the Manifest' }}
         </button>
-        <span v-else class="viewer-note">Only an admin can rebuild the Manifest.</span>
       </div>
 
       <div class="state">
@@ -306,7 +307,7 @@ onUnmounted(() => {
       <p v-else class="hint">No libraries registered yet.</p>
     </section>
 
-    <section v-if="isAdmin" class="panel">
+    <section v-if="canManageServer" class="panel">
       <div class="panel-head">
         <div>
           <h2>Libraries</h2>

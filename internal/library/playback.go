@@ -181,7 +181,7 @@ func (s *Store) Playback(ctx context.Context, accountID, itemID string) (*api.Pl
 }
 
 func (h *handlers) getPlayback(w http.ResponseWriter, r *http.Request) {
-	info, err := h.store.Playback(r.Context(), accountOf(r), r.PathValue("itemId"))
+	info, err := h.store.Playback(r.Context(), catalogOf(r), r.PathValue("itemId"))
 	if err != nil {
 		h.fail(w, err)
 		return

@@ -1266,6 +1266,8 @@ export interface components {
             /** Format: uuid */
             deviceId: string;
             role: components["schemas"]["Role"];
+            /** @description True when this session's account owns the instance (ARGY-167). The owner's libraries are the server's catalog; only the owner may register or delete library roots and trigger scans. `role` is unrelated — it is the admin/viewer role *within* a household. Optional so a newer client can still parse an older server's response; treat absent as false. */
+            isOwner?: boolean;
         };
         ScanLibraryResult: {
             /** Format: uuid */

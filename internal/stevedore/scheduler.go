@@ -155,6 +155,14 @@ func (s *Scheduler) scanOnce(ctx context.Context) Status {
 
 type libraryRow struct{ id, name, root string }
 
+// libraries returns every library root on the instance. This is deliberately
+// NOT scoped to the owner (ARGY-167): a sweep's job is to keep the database
+// consistent with what's on disk, and scanning a stray non-owner library is
+// harmless — nothing browses it, since every client resolves the catalog to the
+// owner's account. Scoping it here would instead add a silent-failure mode where
+// a missing ownership row quietly stops all scanning and the catalog goes stale.
+// The cross-account exposure the old query enabled is closed at the routes
+// instead: both POST /scan and GET /scan/status are owner-only.
 func (s *Scheduler) libraries(ctx context.Context) ([]libraryRow, error) {
 	rows, err := s.pool.Query(ctx, `SELECT id::text, name, root_path FROM libraries ORDER BY created_at`)
 	if err != nil {

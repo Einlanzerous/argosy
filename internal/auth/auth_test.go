@@ -703,8 +703,9 @@ func TestEmailLoginAndFirstProfileBootstrap(t *testing.T) {
 		t.Fatalf("bootstrap with existing profiles: got %v, want ErrInvalidInput", err)
 	}
 
-	// Strip the account down to zero profiles to simulate fresh provisioning
-	// (ARGY-132 will create accounts with no profile at all).
+	// Strip the account down to zero profiles to simulate fresh provisioning.
+	// Profile-less accounts do occur in practice — the prod accounts created
+	// during the ARGY-159 ops backfill reached first login this way.
 	adminSess := api.Session{AccountId: login.Account.Id, UserId: login.Profiles[0].Id, Role: api.Admin}
 	extra, err := store.CreateProfile(ctx, login.Account.Id.String(), "Temp", api.Admin)
 	if err != nil {
@@ -725,7 +726,10 @@ func TestEmailLoginAndFirstProfileBootstrap(t *testing.T) {
 		t.Fatalf("no target: got %v, want ErrInvalidInput", err)
 	}
 
-	// First-profile bootstrap: profile is created (viewer) and the device bound.
+	// First-profile bootstrap: the profile is created and the device bound. The
+	// role is household *admin* (ARGY-167) — it's the only profile, so a viewer
+	// would leave the household unable to ever add another. It confers no power
+	// over the server's catalog; that follows accounts.is_owner.
 	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
 		Email: email, Password: password, NewProfileName: &name, DeviceName: "Paul's phone",
 	})
@@ -736,8 +740,11 @@ func TestEmailLoginAndFirstProfileBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
-	if sess.Role != api.Viewer {
-		t.Errorf("bootstrap profile role = %v, want viewer", sess.Role)
+	if sess.Role != api.Admin {
+		t.Errorf("bootstrap profile role = %v, want admin (its own household)", sess.Role)
+	}
+	if IsOwnerSession(sess) {
+		t.Error("bootstrapped member session claims instance ownership")
 	}
 	profiles, err := store.ListProfiles(ctx, login.Account.Id.String())
 	if err != nil || len(profiles) != 1 || profiles[0].Name != "Paul" {

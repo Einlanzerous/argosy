@@ -324,8 +324,11 @@ class _HoldEmpty extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),
           child: Text(
-            "Stevedore hasn't loaded any cargo yet. Point Argosy at your media "
-            'folders and pull to refresh.',
+            // Neutral for both audiences (ARGY-167): a member household can't
+            // add media to someone else's server, and library roots aren't
+            // manageable from mobile at all — so don't send anyone here.
+            "Stevedore hasn't loaded any cargo yet. Once media is added to this "
+            'server, pull to refresh.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),

@@ -23,10 +23,14 @@ import {
 } from '@/lib/playback'
 import { listVaults, getVault } from '@/lib/vaults'
 import { subscribeBeacon } from '@/lib/beacon'
+import { useSessionStore } from '@/stores/session'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
 
 type MovieDetail = components['schemas']['MediaItemDetail']
+
+// Empty-state copy differs for the server's owner vs a member household.
+const session = useSessionStore()
 
 type GenreCard = {
   id: string
@@ -355,13 +359,22 @@ onUnmounted(() => {
       <div v-if="!loading && !recent.length && !continueItems.length" class="hold-empty">
         <img src="/argosy_mark.svg" alt="" />
         <h2>The hold is empty</h2>
-        <p>
-          Stevedore hasn't loaded any cargo yet. Point Argosy at your media folders and rebuild the
-          Manifest from Settings.
+        <!-- Only the owner can do anything about an empty hold; telling a member
+             to go point Argosy at media folders on someone else's server was the
+             confusing dead end in ARGY-167. -->
+        <template v-if="session.canManageServer">
+          <p>
+            Stevedore hasn't loaded any cargo yet. Point Argosy at your media folders and rebuild
+            the Manifest from Settings.
+          </p>
+          <RouterLink class="play" :to="{ name: 'settings' }"
+            ><span>⟲</span> Go to Settings</RouterLink
+          >
+        </template>
+        <p v-else>
+          Stevedore hasn't loaded any cargo yet. Once this server's crew adds media, it shows up
+          here.
         </p>
-        <RouterLink class="play" :to="{ name: 'settings' }"
-          ><span>⟲</span> Go to Settings</RouterLink
-        >
       </div>
     </div>
   </div>

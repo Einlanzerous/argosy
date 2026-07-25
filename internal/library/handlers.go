@@ -46,8 +46,11 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mw := auth.Middleware(authStore)
 
 	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))
-	mux.Handle("POST /api/v1/libraries", mw(auth.RequireAdmin(http.HandlerFunc(h.createLibrary))))
-	mux.Handle("DELETE /api/v1/libraries/{libraryId}", mw(auth.RequireAdmin(http.HandlerFunc(h.deleteLibrary))))
+	// Registering or removing a library root re-shapes the server's catalog, so
+	// it belongs to the account that owns the instance — not to every household
+	// admin (ARGY-167).
+	mux.Handle("POST /api/v1/libraries", mw(auth.RequireOwner(http.HandlerFunc(h.createLibrary))))
+	mux.Handle("DELETE /api/v1/libraries/{libraryId}", mw(auth.RequireOwner(http.HandlerFunc(h.deleteLibrary))))
 	mux.Handle("GET /api/v1/libraries/{libraryId}/movies", mw(http.HandlerFunc(h.listMovies)))
 	mux.Handle("GET /api/v1/libraries/{libraryId}/series", mw(http.HandlerFunc(h.listSeries)))
 	mux.Handle("GET /api/v1/series/{seriesId}", mw(http.HandlerFunc(h.getSeries)))
@@ -113,13 +116,15 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 }
 
 func (h *handlers) listLibraries(w http.ResponseWriter, r *http.Request) {
-	libs, err := h.store.ListLibraries(r.Context(), accountOf(r))
+	libs, err := h.store.ListLibraries(r.Context(), catalogOf(r))
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
-	// The server-side path is admin-only; hide it from viewers.
-	if !isAdmin(r) {
+	// The server-side path belongs to whoever runs the box: only an admin on the
+	// owning account sees it. A household admin elsewhere is still just a viewer
+	// of this catalog and has no business knowing the filesystem layout.
+	if !isOwnerAdmin(r) {
 		for i := range libs {
 			libs[i].RootPath = nil
 		}
@@ -144,7 +149,7 @@ func (h *handlers) createLibrary(w http.ResponseWriter, r *http.Request) {
 	if req.Kind != nil {
 		kind = string(*req.Kind)
 	}
-	lib, err := h.store.CreateLibrary(r.Context(), accountOf(r), req.Name, req.Path, kind)
+	lib, err := h.store.CreateLibrary(r.Context(), catalogOf(r), req.Name, req.Path, kind)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -153,7 +158,7 @@ func (h *handlers) createLibrary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) deleteLibrary(w http.ResponseWriter, r *http.Request) {
-	removed, err := h.store.DeleteLibrary(r.Context(), accountOf(r), r.PathValue("libraryId"))
+	removed, err := h.store.DeleteLibrary(r.Context(), catalogOf(r), r.PathValue("libraryId"))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -167,7 +172,7 @@ func (h *handlers) deleteLibrary(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
-	page, err := h.store.ListMovies(r.Context(), accountOf(r), r.PathValue("libraryId"), userOf(r), limit, offset, r.URL.Query().Get("sort"), parseFilter(r))
+	page, err := h.store.ListMovies(r.Context(), catalogOf(r), r.PathValue("libraryId"), userOf(r), limit, offset, r.URL.Query().Get("sort"), parseFilter(r))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -177,7 +182,7 @@ func (h *handlers) listMovies(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) listSeries(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
-	page, err := h.store.ListSeries(r.Context(), accountOf(r), r.PathValue("libraryId"), userOf(r), limit, offset, r.URL.Query().Get("sort"), parseFilter(r))
+	page, err := h.store.ListSeries(r.Context(), catalogOf(r), r.PathValue("libraryId"), userOf(r), limit, offset, r.URL.Query().Get("sort"), parseFilter(r))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -193,7 +198,7 @@ func (h *handlers) listRecent(w http.ResponseWriter, r *http.Request) {
 	if limit > 100 {
 		limit = 100
 	}
-	items, err := h.store.ListRecent(r.Context(), accountOf(r), limit)
+	items, err := h.store.ListRecent(r.Context(), catalogOf(r), limit)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -206,7 +211,7 @@ func (h *handlers) search(w http.ResponseWriter, r *http.Request) {
 	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
 		limit = v
 	}
-	res, err := h.store.Search(r.Context(), accountOf(r), r.URL.Query().Get("q"), limit)
+	res, err := h.store.Search(r.Context(), catalogOf(r), r.URL.Query().Get("q"), limit)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -219,7 +224,7 @@ func (h *handlers) listFacets(w http.ResponseWriter, r *http.Request) {
 	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
 		limit = v
 	}
-	facets, err := h.store.Facets(r.Context(), accountOf(r), limit)
+	facets, err := h.store.Facets(r.Context(), catalogOf(r), limit)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -228,7 +233,7 @@ func (h *handlers) listFacets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {
-	d, err := h.store.GetSeries(r.Context(), accountOf(r), userOf(r), r.PathValue("seriesId"))
+	d, err := h.store.GetSeries(r.Context(), catalogOf(r), userOf(r), r.PathValue("seriesId"))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -241,7 +246,7 @@ func (h *handlers) getSeries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) getItem(w http.ResponseWriter, r *http.Request) {
-	d, err := h.store.GetItem(r.Context(), accountOf(r), r.PathValue("itemId"))
+	d, err := h.store.GetItem(r.Context(), catalogOf(r), r.PathValue("itemId"))
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -253,14 +258,31 @@ func (h *handlers) getItem(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, d)
 }
 
+// accountOf is the caller's own household account. Use it for data that belongs
+// to the person signed in — vaults, transcode-session ownership, Fleet — never
+// for media lookups.
 func accountOf(r *http.Request) string {
 	sess, _ := auth.SessionFromContext(r.Context())
 	return sess.AccountId.String()
 }
 
-func isAdmin(r *http.Request) bool {
+// catalogOf is the account whose libraries this request browses: the instance
+// owner's (ARGY-167). Every media lookup scopes to this, which is what lets a
+// household see the server's catalog instead of its own empty one. Falls back to
+// the caller's account if the middleware didn't resolve one, matching the
+// pre-ARGY-167 single-account behavior rather than serving nothing.
+func catalogOf(r *http.Request) string {
+	if id, ok := auth.CatalogAccountFromContext(r.Context()); ok {
+		return id
+	}
+	return accountOf(r)
+}
+
+// isOwnerAdmin reports whether the caller may re-shape the server's catalog:
+// an admin profile on the instance-owning account.
+func isOwnerAdmin(r *http.Request) bool {
 	sess, _ := auth.SessionFromContext(r.Context())
-	return sess.Role == api.Admin
+	return auth.IsOwnerSession(sess) && sess.Role == api.Admin
 }
 
 func pagination(r *http.Request) (limit, offset int) {
