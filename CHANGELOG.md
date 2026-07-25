@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/Einlanzerous/argosy/compare/v0.18.0...v0.19.0) (2026-07-25)
+
+
+### Features
+
+* **auth:** instance ownership so members browse the owner's catalog (ARGY-167) ([#167](https://github.com/Einlanzerous/argosy/issues/167)) ([1784443](https://github.com/Einlanzerous/argosy/commit/1784443d54eda83a0d914b017f1a14175ddeb2eb))
+
 ## [0.18.0](https://github.com/Einlanzerous/argosy/compare/v0.17.1...v0.18.0) (2026-07-25)
 
 
