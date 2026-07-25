@@ -797,8 +797,44 @@ func TestProvisionAccount(t *testing.T) {
 	if _, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: "", AccountName: "H"}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("empty email err = %v, want ErrInvalidInput", err)
 	}
-	// Duplicate email (case-insensitive) → ErrEmailTaken.
-	if _, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: strings.ToUpper(email), AccountName: "Dup"}); !errors.Is(err, ErrEmailTaken) {
+	// Duplicate email (case-insensitive) → ErrEmailTaken, carrying the existing
+	// account so the caller can record its real id (ARGY-163).
+	_, err = store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: strings.ToUpper(email), AccountName: "Dup"})
+	if !errors.Is(err, ErrEmailTaken) {
 		t.Fatalf("duplicate email err = %v, want ErrEmailTaken", err)
+	}
+	var taken *EmailTakenError
+	if !errors.As(err, &taken) {
+		t.Fatalf("duplicate email err = %v, want *EmailTakenError", err)
+	}
+	if taken.Account.Id != out.Account.Id || taken.Account.Name != "Provisioned Household" {
+		t.Fatalf("conflict account = %+v, want the original %v", taken.Account, out.Account.Id)
+	}
+}
+
+func TestAccountByEmail(t *testing.T) {
+	store, ctx := testStore(t)
+
+	email := uniqueUsername() + "@example.com"
+	out, err := store.ProvisionAccount(ctx, api.AccountCreateRequest{Email: email, AccountName: "Lookup Household"})
+	if err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+
+	// Found, case-insensitively.
+	acc, err := store.AccountByEmail(ctx, strings.ToUpper(email))
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if acc.Id != out.Account.Id || acc.Name != "Lookup Household" {
+		t.Fatalf("lookup = %+v, want %v", acc, out.Account)
+	}
+
+	// Missing → ErrNotFound; blank → ErrInvalidInput. Neither creates anything.
+	if _, err := store.AccountByEmail(ctx, uniqueUsername()+"@example.com"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing email err = %v, want ErrNotFound", err)
+	}
+	if _, err := store.AccountByEmail(ctx, "  "); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("blank email err = %v, want ErrInvalidInput", err)
 	}
 }

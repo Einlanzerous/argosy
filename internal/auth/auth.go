@@ -41,6 +41,14 @@ var (
 	ErrWrongPassword    = errors.New("incorrect account password")
 )
 
+// EmailTakenError is ErrEmailTaken carrying the account that owns the email
+// (ARGY-163), so a provisioning caller that hits the conflict can record the
+// existing account's real id instead of falling back to the email.
+type EmailTakenError struct{ Account api.Account }
+
+func (e *EmailTakenError) Error() string { return ErrEmailTaken.Error() }
+func (e *EmailTakenError) Unwrap() error { return ErrEmailTaken }
+
 // minPasswordLen is the floor for a new account password (ARGY-156). Mirrored
 // by the PasswordChangeRequest minLength in the OpenAPI spec.
 const minPasswordLen = 8
@@ -78,6 +86,9 @@ func (s *Store) CreateAccount(ctx context.Context, email, password, accountName 
 		accountName, email, string(hash)).Scan(&idStr, &name); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+			if existing, lookupErr := s.AccountByEmail(ctx, email); lookupErr == nil {
+				return api.Account{}, &EmailTakenError{Account: existing}
+			}
 			return api.Account{}, ErrEmailTaken
 		}
 		return api.Account{}, fmt.Errorf("insert account: %w", err)
@@ -86,6 +97,26 @@ func (s *Store) CreateAccount(ctx context.Context, email, password, accountName 
 		`INSERT INTO users (account_id, name, role) VALUES ($1, $2, 'admin')`,
 		idStr, accountName); err != nil {
 		return api.Account{}, fmt.Errorf("insert admin profile: %w", err)
+	}
+	return api.Account{Id: parseUUID(idStr), Name: name}, nil
+}
+
+// AccountByEmail returns the account owning email, or ErrNotFound. This is the
+// read-only reconcile surface for provisioning callers (ARGY-163): it answers
+// "does this person have an account?" without creating anything.
+func (s *Store) AccountByEmail(ctx context.Context, email string) (api.Account, error) {
+	email = normalizeEmail(email)
+	if email == "" {
+		return api.Account{}, fmt.Errorf("%w: email is required", ErrInvalidInput)
+	}
+	var idStr, name string
+	err := s.pool.QueryRow(ctx,
+		`SELECT id::text, name FROM accounts WHERE lower(email) = $1`, email).Scan(&idStr, &name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.Account{}, ErrNotFound
+	}
+	if err != nil {
+		return api.Account{}, fmt.Errorf("lookup account: %w", err)
 	}
 	return api.Account{Id: parseUUID(idStr), Name: name}, nil
 }

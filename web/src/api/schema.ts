@@ -346,7 +346,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Look up an account by email (service-to-service provisioning)
+         * @description Read-only companion to createAccount (ARGY-163): answers whether an account exists for the given email without creating or changing anything, so a reconcile pass can run record-only. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set.
+         */
+        get: operations["lookupAccount"];
         put?: never;
         /**
          * Create an account (service-to-service provisioning)
@@ -1108,6 +1112,14 @@ export interface components {
             account: components["schemas"]["Account"];
             /** @description Present only when the request omitted `password`. Delivered exactly once — Argosy stores only the bcrypt hash. */
             generatedPassword?: string;
+        };
+        AccountLookupResponse: {
+            account: components["schemas"]["Account"];
+        };
+        /** @description The createAccount conflict body — the standard error message plus the existing account that owns the email (ARGY-163). */
+        AccountConflictError: {
+            error: string;
+            account: components["schemas"]["Account"];
         };
         LoginResponse: {
             account: components["schemas"]["Account"];
@@ -2203,6 +2215,32 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    lookupAccount: {
+        parameters: {
+            query: {
+                /** @description The account email. Matched case-insensitively. */
+                email: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account owning that email */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountLookupResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     createAccount: {
         parameters: {
             query?: never;
@@ -2227,7 +2265,15 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            409: components["responses"]["Conflict"];
+            /** @description An account with that email already exists. The body carries the existing account so the caller can record its real id (ARGY-163). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountConflictError"];
+                };
+            };
         };
     };
     listLibraries: {
