@@ -15,6 +15,10 @@ import {
   type WatchedState,
 } from '@/lib/manifest'
 import { setPage } from '@/lib/page'
+import { useSessionStore } from '@/stores/session'
+
+// Empty-state copy differs for the server's owner vs a member household.
+const session = useSessionStore()
 
 type Card = {
   id: string
@@ -363,11 +367,14 @@ watch(
       <div v-else-if="!loading" class="empty">
         <img src="/argosy_mark.svg" alt="" />
         <h2>The hold is empty</h2>
-        <p>
-          Stevedore hasn't loaded any cargo for this filter. Point Argosy at your media folders and
-          we'll rebuild the Manifest.
-        </p>
-        <RouterLink class="scan" :to="{ name: 'settings' }">Scan library</RouterLink>
+        <template v-if="session.canManageServer">
+          <p>
+            Stevedore hasn't loaded any cargo for this filter. Point Argosy at your media folders
+            and we'll rebuild the Manifest.
+          </p>
+          <RouterLink class="scan" :to="{ name: 'settings' }">Scan library</RouterLink>
+        </template>
+        <p v-else>Nothing here matches that filter — try widening it.</p>
       </div>
     </div>
   </div>

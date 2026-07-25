@@ -15,7 +15,13 @@ import (
 
 type ctxKey int
 
-const sessionKey ctxKey = iota
+const (
+	sessionKey ctxKey = iota
+	// catalogKey holds the account whose libraries this request browses — the
+	// instance owner's (ARGY-167). Resolved once per request by Middleware so
+	// catalog handlers can read it as cheaply as the session.
+	catalogKey
+)
 
 // RegisterRoutes wires the auth endpoints (the OpenAPI auth surface) onto mux.
 func RegisterRoutes(mux *http.ServeMux, store *Store) {
@@ -424,7 +430,16 @@ func Middleware(store *Store) func(http.Handler) http.Handler {
 				httpx.Error(w, http.StatusUnauthorized, "invalid or revoked token")
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionKey, sess)))
+			// Resolve the catalog account (the instance owner's) alongside the
+			// session so browse handlers never have to hit the database for it.
+			catalog, err := store.CatalogAccountID(r.Context(), sess.AccountId.String())
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, "internal error")
+				return
+			}
+			ctx := context.WithValue(r.Context(), sessionKey, sess)
+			ctx = context.WithValue(ctx, catalogKey, catalog)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -457,10 +472,51 @@ func RequireAdmin(next http.Handler) http.Handler {
 	})
 }
 
+// RequireOwner wraps next so only a session belonging to the instance-owning
+// account reaches it; anyone else gets 403. This gates the *server's* powers —
+// registering/deleting library roots and triggering scans — as distinct from
+// RequireAdmin, which gates powers *within* a household. Like RequireAdmin it
+// must be composed inside Middleware: mw(auth.RequireOwner(handler)).
+//
+// Household admin is still required on top: a viewer profile on the owner's
+// account can browse the catalog but not re-shape it.
+func RequireOwner(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sess, ok := SessionFromContext(r.Context())
+		if !ok {
+			httpx.Error(w, http.StatusUnauthorized, "missing session")
+			return
+		}
+		if sess.IsOwner == nil || !*sess.IsOwner {
+			httpx.Error(w, http.StatusForbidden, "only the account that owns this server can do that")
+			return
+		}
+		if sess.Role != api.Admin {
+			httpx.Error(w, http.StatusForbidden, "admin role required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // SessionFromContext returns the authenticated session set by requireAuth.
 func SessionFromContext(ctx context.Context) (api.Session, bool) {
 	sess, ok := ctx.Value(sessionKey).(api.Session)
 	return sess, ok
+}
+
+// CatalogAccountFromContext returns the account whose libraries this request
+// browses — the instance owner's — as resolved by Middleware (ARGY-167). Use it
+// for every media lookup; use SessionFromContext().AccountId for household data
+// (vaults, devices, transcode-session ownership).
+func CatalogAccountFromContext(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(catalogKey).(string)
+	return id, ok
+}
+
+// IsOwnerSession reports whether sess belongs to the instance-owning account.
+func IsOwnerSession(sess api.Session) bool {
+	return sess.IsOwner != nil && *sess.IsOwner
 }
 
 func bearerToken(r *http.Request) string {

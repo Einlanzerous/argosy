@@ -54,7 +54,11 @@ func (e *EmailTakenError) Unwrap() error { return ErrEmailTaken }
 const minPasswordLen = 8
 
 // Store is the auth data layer over the connection pool.
-type Store struct{ pool *pgxpool.Pool }
+type Store struct {
+	pool *pgxpool.Pool
+	// owner memoizes which account owns the instance (ARGY-167); see owner.go.
+	owner ownerCache
+}
 
 // NewStore returns a Store backed by pool.
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
@@ -93,10 +97,20 @@ func (s *Store) CreateAccount(ctx context.Context, email, password, accountName 
 		}
 		return api.Account{}, fmt.Errorf("insert account: %w", err)
 	}
+	// The seed profile is a household admin: every account manages its own
+	// profiles, devices and Fleet. This is deliberately NOT instance ownership —
+	// server powers (library roots, scans) key off accounts.is_owner instead
+	// (ARGY-167), so a provisioned member administers their household without
+	// being able to touch the catalog.
 	if _, err := s.pool.Exec(ctx,
 		`INSERT INTO users (account_id, name, role) VALUES ($1, $2, 'admin')`,
 		idStr, accountName); err != nil {
 		return api.Account{}, fmt.Errorf("insert admin profile: %w", err)
+	}
+	// A self-hosted install has no owner until now; the first account claims it.
+	// No-op once an owner exists, so provisioned members never take over.
+	if err := s.claimOwnershipIfUnowned(ctx, idStr); err != nil {
+		return api.Account{}, fmt.Errorf("claim instance ownership: %w", err)
 	}
 	return api.Account{Id: parseUUID(idStr), Name: name}, nil
 }
@@ -199,7 +213,13 @@ func (s *Store) RegisterDevice(ctx context.Context, req api.DeviceRegistrationRe
 		if len(existing) > 0 {
 			return api.DeviceRegistrationResponse{}, fmt.Errorf("%w: this account already has profiles; pick one instead", ErrInvalidInput)
 		}
-		profile, err := s.CreateProfile(ctx, accID, *req.NewProfileName, api.Viewer)
+		// The first profile administers its own household, matching the seed
+		// profile CreateAccount makes — otherwise the household has no admin at
+		// all and can never add a second profile. This was deliberately a viewer
+		// while `admin` also conferred power over the server's libraries; once
+		// that moved to instance ownership (ARGY-167) household admin is safe to
+		// hand to the person whose account it is.
+		profile, err := s.CreateProfile(ctx, accID, *req.NewProfileName, api.Admin)
 		if err != nil {
 			return api.DeviceRegistrationResponse{}, err
 		}
@@ -247,11 +267,14 @@ func (s *Store) RegisterDevice(ctx context.Context, req api.DeviceRegistrationRe
 func (s *Store) AuthenticateDevice(ctx context.Context, token string) (api.Session, error) {
 	var accID, devID, role string
 	var userID *string
+	var isOwner bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT d.account_id::text, d.id::text, d.user_id::text, coalesce(u.role, 'viewer')
-		 FROM devices d LEFT JOIN users u ON u.id = d.user_id
+		`SELECT d.account_id::text, d.id::text, d.user_id::text, coalesce(u.role, 'viewer'), a.is_owner
+		 FROM devices d
+		 JOIN accounts a ON a.id = d.account_id
+		 LEFT JOIN users u ON u.id = d.user_id
 		 WHERE d.token_hash = $1 AND d.revoked_at IS NULL`, hashToken(token)).
-		Scan(&accID, &devID, &userID, &role)
+		Scan(&accID, &devID, &userID, &role, &isOwner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.Session{}, ErrInvalidCredentials
 	}
@@ -260,7 +283,7 @@ func (s *Store) AuthenticateDevice(ctx context.Context, token string) (api.Sessi
 	}
 	_, _ = s.pool.Exec(ctx, `UPDATE devices SET last_seen_at = now() WHERE id = $1`, devID)
 
-	sess := api.Session{AccountId: parseUUID(accID), DeviceId: parseUUID(devID), Role: api.Role(role)}
+	sess := api.Session{AccountId: parseUUID(accID), DeviceId: parseUUID(devID), Role: api.Role(role), IsOwner: &isOwner}
 	if userID != nil {
 		sess.UserId = parseUUID(*userID)
 	}

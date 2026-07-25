@@ -180,10 +180,13 @@ func (s *Store) itemSource(ctx context.Context, accountID, itemID string) (src t
 // startTranscode begins (or joins) an HLS transcode session for an item and
 // returns the session + its playlist URL.
 func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
+	// Two different scopes: the item is resolved against the server's catalog
+	// (the owner's libraries), while the session is owned by the caller's own
+	// household so one member can't list or kill another's transcode.
 	account := accountOf(r)
 	itemID := r.PathValue("itemId")
 
-	src, ok, err := h.store.itemSource(r.Context(), account, itemID)
+	src, ok, err := h.store.itemSource(r.Context(), catalogOf(r), itemID)
 	if errors.Is(err, ErrPathTraversal) {
 		httpx.Error(w, http.StatusForbidden, "forbidden")
 		return

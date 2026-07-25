@@ -22,6 +22,18 @@ export const useSessionStore = defineStore('session', () => {
 
   const isAuthenticated = computed(() => session.value !== null)
 
+  // Household admin: manage this account's own profiles, devices and Fleet.
+  const isAdmin = computed(() => session.value?.role === 'admin')
+
+  // Two orthogonal permissions (ARGY-167). `role` is scoped to a household;
+  // `isOwner` says whether this account owns the server whose catalog everyone
+  // browses. Only an admin on the owning account may register library roots or
+  // rebuild the Manifest — a member household administers itself but never
+  // re-shapes the shared library. The server enforces both; this just keeps the
+  // controls out of the UI for people who'd only get a 403.
+  const isInstanceOwner = computed(() => session.value?.isOwner === true)
+  const canManageServer = computed(() => isInstanceOwner.value && isAdmin.value)
+
   // Validate any persisted token against the server on first load. Only a real
   // 401 invalidates the token — a transient failure (server restart/deploy, a
   // proxy 5xx, a network blip) must NOT log the user out, so we keep the token
@@ -112,6 +124,9 @@ export const useSessionStore = defineStore('session', () => {
     deviceName,
     ready,
     isAuthenticated,
+    isAdmin,
+    isInstanceOwner,
+    canManageServer,
     restore,
     login,
     pairDevice,

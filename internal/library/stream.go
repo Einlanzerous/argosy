@@ -95,7 +95,15 @@ func streamHandler(store *Store, authStore *auth.Store, logger *slog.Logger) htt
 			httpx.Error(w, http.StatusUnauthorized, "invalid or revoked token")
 			return
 		}
-		fileAbs, ok, err := store.ItemFilePath(r.Context(), sess.AccountId.String(), r.PathValue("itemId"))
+		// Inline auth bypasses Middleware, so resolve the catalog account here
+		// (ARGY-167) — scoping to sess.AccountId would 404 every member's stream.
+		catalog, err := authStore.CatalogAccountID(r.Context(), sess.AccountId.String())
+		if err != nil {
+			logger.Error("stream: resolve catalog account failed", "err", err)
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		fileAbs, ok, err := store.ItemFilePath(r.Context(), catalog, r.PathValue("itemId"))
 		if errors.Is(err, ErrPathTraversal) {
 			httpx.Error(w, http.StatusForbidden, "forbidden")
 			return

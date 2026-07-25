@@ -64,7 +64,7 @@ func (s *Store) subtitleTarget(ctx context.Context, accountID, itemID string) (s
 // listSubtitles returns the available subtitle tracks for an item (embedded text
 // tracks + OpenSubtitles candidates).
 func (h *handlers) listSubtitles(w http.ResponseWriter, r *http.Request) {
-	t, ok, err := h.store.subtitleTarget(r.Context(), accountOf(r), r.PathValue("itemId"))
+	t, ok, err := h.store.subtitleTarget(r.Context(), catalogOf(r), r.PathValue("itemId"))
 	if errors.Is(err, ErrPathTraversal) {
 		httpx.Error(w, http.StatusForbidden, "forbidden")
 		return
@@ -95,7 +95,15 @@ func subtitleFileHandler(store *Store, subs *subtitle.Service, authStore *auth.S
 			httpx.Error(w, http.StatusUnauthorized, "invalid or revoked token")
 			return
 		}
-		t, ok, err := store.subtitleTarget(r.Context(), sess.AccountId.String(), r.PathValue("itemId"))
+		// Inline auth bypasses Middleware — resolve the catalog account here too
+		// (ARGY-167), or a member's captions 404 while the video plays.
+		catalog, err := authStore.CatalogAccountID(r.Context(), sess.AccountId.String())
+		if err != nil {
+			logger.Error("subtitle: resolve catalog account failed", "err", err)
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		t, ok, err := store.subtitleTarget(r.Context(), catalog, r.PathValue("itemId"))
 		if errors.Is(err, ErrPathTraversal) {
 			httpx.Error(w, http.StatusForbidden, "forbidden")
 			return

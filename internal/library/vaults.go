@@ -442,7 +442,7 @@ func (h *handlers) addVaultItem(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "exactly one of movieId or seriesId is required")
 		return
 	}
-	entry, err := h.store.AddVaultItem(r.Context(), accountOf(r), vaultID, movieID, seriesID)
+	entry, err := h.store.AddVaultItem(r.Context(), catalogOf(r), vaultID, movieID, seriesID)
 	if err != nil {
 		h.fail(w, err)
 		return

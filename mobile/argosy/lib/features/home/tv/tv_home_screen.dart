@@ -581,7 +581,7 @@ class _Empty extends StatelessWidget {
           ),
           SizedBox(height: 10),
           Text(
-            'Point Argosy at your media folders, then refresh from a phone or the web.',
+            'Once media is added to this server, it shows up here.',
             style: TextStyle(
               fontFamily: 'HankenGrotesk',
               fontSize: 18,

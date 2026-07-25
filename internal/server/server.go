@@ -44,10 +44,12 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 		if scheduler != nil {
 			mw := auth.Middleware(authStore)
 			sh := &scanHandlers{sched: scheduler}
-			// Triggering a library re-scan mutates the shared Manifest — admin only;
-			// anyone authenticated may read scan status.
-			mux.Handle("POST /api/v1/scan", mw(auth.RequireAdmin(http.HandlerFunc(sh.trigger))))
-			mux.Handle("GET /api/v1/scan/status", mw(http.HandlerFunc(sh.status)))
+			// Triggering a re-scan re-reads the server's media roots, so it belongs
+			// to the instance owner rather than to any household admin (ARGY-167).
+			// Scan status names those roots, so it is owner-only too — a member has
+			// no reason to see the server's library layout.
+			mux.Handle("POST /api/v1/scan", mw(auth.RequireOwner(http.HandlerFunc(sh.trigger))))
+			mux.Handle("GET /api/v1/scan/status", mw(auth.RequireOwner(http.HandlerFunc(sh.status))))
 		}
 	}
 
