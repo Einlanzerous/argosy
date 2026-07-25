@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.18.0](https://github.com/Einlanzerous/argosy/compare/v0.17.1...v0.18.0) (2026-07-25)
+
+
+### Features
+
+* **auth:** account lookup endpoint + existing account in create 409 (ARGY-163) ([#166](https://github.com/Einlanzerous/argosy/issues/166)) ([cd9a4ca](https://github.com/Einlanzerous/argosy/commit/cd9a4ca2234a03ccd55801dc523be4061cb6454a))
+
+
+### Bug Fixes
+
+* **web:** recover browser Back after deploys (ARGY-164) ([#164](https://github.com/Einlanzerous/argosy/issues/164)) ([bb1436e](https://github.com/Einlanzerous/argosy/commit/bb1436e789662a936003b62413180185c047b03f))
+
 ## [0.17.1](https://github.com/Einlanzerous/argosy/compare/v0.17.0...v0.17.1) (2026-07-24)
 
 
