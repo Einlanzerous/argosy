@@ -897,7 +897,9 @@ function goBack(): void {
   if (!target) {
     // Last episode (no next) or unknown context: fall back to the entry point.
     // advance() uses router.replace, so this won't resurface an earlier episode.
-    if (window.history.length > 1) router.back()
+    // history.state.back (not history.length) is the "came from in-app" signal —
+    // a deep-linked player has no in-app history and should land on Home.
+    if (window.history.state?.back != null) router.back()
     else void router.push({ name: 'home' })
     return
   }

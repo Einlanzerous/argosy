@@ -8,8 +8,12 @@ const props = defineProps<{ fallback?: string }>()
 const router = useRouter()
 
 function back(): void {
-  if (window.history.length > 1) router.back()
-  else router.push({ name: props.fallback ?? 'home' })
+  // history.length counts entries from before the app too (a fresh tab starts
+  // above 1), so it can't tell "navigated here in-app" from a deep link. Vue
+  // Router records the previous in-app location in history.state.back — null
+  // means this page is the entry point and back should go to the fallback.
+  if (window.history.state?.back != null) router.back()
+  else void router.push({ name: props.fallback ?? 'home' })
 }
 </script>
 
