@@ -76,6 +76,25 @@ function isStaleChunkError(err: unknown): boolean {
   )
 }
 
+// vue-router rejects push()/replace() for the same errors it hands to onError —
+// a stale-chunk import failure among them. Almost every call site fires
+// navigation as `void router.push(...)`, so each failure ALSO surfaced as an
+// "Uncaught (in promise) TypeError: error loading dynamically imported module"
+// in the user's console (ARGY-168), on top of the MIME complaint. onError below
+// is the single place that decides what such a failure means, so swallow the
+// duplicate rejection centrally instead of adding .catch() to sixteen callers.
+// Anything we don't recognise is still surfaced, just not as an unhandled one.
+const rawPush = router.push.bind(router)
+const rawReplace = router.replace.bind(router)
+
+function absorbHandledFailure(err: unknown): undefined {
+  if (!isStaleChunkError(err)) console.error('[router] navigation failed', err)
+  return undefined
+}
+
+router.push = ((to) => rawPush(to).catch(absorbHandledFailure)) as typeof router.push
+router.replace = ((to) => rawReplace(to).catch(absorbHandledFailure)) as typeof router.replace
+
 router.onError((err, to) => {
   if (!isStaleChunkError(err)) return
   if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === to.fullPath) return
