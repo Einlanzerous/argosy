@@ -80,6 +80,7 @@ Class | Method | HTTP request | Description
 *AuthApi* | [**listDevices**](doc//AuthApi.md#listdevices) | **GET** /api/v1/auth/devices | List devices in the current account (the Fleet)
 *AuthApi* | [**listProfiles**](doc//AuthApi.md#listprofiles) | **GET** /api/v1/auth/profiles | List the current account's profiles
 *AuthApi* | [**login**](doc//AuthApi.md#login) | **POST** /api/v1/auth/login | Authenticate an account and list its profiles
+*AuthApi* | [**lookupAccount**](doc//AuthApi.md#lookupaccount) | **GET** /api/v1/admin/accounts | Look up an account by email (service-to-service provisioning)
 *AuthApi* | [**registerDevice**](doc//AuthApi.md#registerdevice) | **POST** /api/v1/auth/devices | Register a device for a profile and issue a device token
 *AuthApi* | [**renameDevice**](doc//AuthApi.md#renamedevice) | **PATCH** /api/v1/auth/devices/{deviceId} | Rename a device in the Fleet
 *AuthApi* | [**revokeDevice**](doc//AuthApi.md#revokedevice) | **DELETE** /api/v1/auth/devices/{deviceId} | Revoke a device token (\"retire from the Fleet\")
@@ -135,8 +136,10 @@ Class | Method | HTTP request | Description
 ## Documentation For Models
 
  - [Account](doc//Account.md)
+ - [AccountConflictError](doc//AccountConflictError.md)
  - [AccountCreateRequest](doc//AccountCreateRequest.md)
  - [AccountCreateResponse](doc//AccountCreateResponse.md)
+ - [AccountLookupResponse](doc//AccountLookupResponse.md)
  - [AddVaultItemRequest](doc//AddVaultItemRequest.md)
  - [ContinueItem](doc//ContinueItem.md)
  - [CreateLibraryRequest](doc//CreateLibraryRequest.md)

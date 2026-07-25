@@ -625,6 +625,67 @@ class AuthApi {
     return null;
   }
 
+  /// Look up an account by email (service-to-service provisioning)
+  ///
+  /// Read-only companion to createAccount (ARGY-163): answers whether an account exists for the given email without creating or changing anything, so a reconcile pass can run record-only. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] email (required):
+  ///   The account email. Matched case-insensitively.
+  Future<Response> lookupAccountWithHttpInfo(String email, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/admin/accounts';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+      queryParams.addAll(_queryParams('', 'email', email));
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Look up an account by email (service-to-service provisioning)
+  ///
+  /// Read-only companion to createAccount (ARGY-163): answers whether an account exists for the given email without creating or changing anything, so a reconcile pass can run record-only. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] email (required):
+  ///   The account email. Matched case-insensitively.
+  Future<AccountLookupResponse?> lookupAccount(String email, { Future<void>? abortTrigger, }) async {
+    final response = await lookupAccountWithHttpInfo(email, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AccountLookupResponse',) as AccountLookupResponse;
+    
+    }
+    return null;
+  }
+
   /// Register a device for a profile and issue a device token
   ///
   /// Re-authenticates with account credentials and binds a new device to the chosen profile, returning a bearer token used for all subsequent calls. 

@@ -563,7 +563,45 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >-
+            An account with that email already exists. The body carries the
+            existing account so the caller can record its real id (ARGY-163).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountConflictError"
+    get:
+      tags: [auth]
+      operationId: lookupAccount
+      summary: Look up an account by email (service-to-service provisioning)
+      description: >
+        Read-only companion to createAccount (ARGY-163): answers whether an
+        account exists for the given email without creating or changing
+        anything, so a reconcile pass can run record-only. Gated on the same
+        X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is
+        set.
+      security:
+        - provisionToken: []
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The account email. Matched case-insensitively.
+      responses:
+        "200":
+          description: The account owning that email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountLookupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/libraries:
     get:
@@ -1650,6 +1688,25 @@ components:
           description: >-
             Present only when the request omitted `password`. Delivered exactly
             once — Argosy stores only the bcrypt hash.
+
+    AccountLookupResponse:
+      type: object
+      required: [account]
+      properties:
+        account:
+          $ref: "#/components/schemas/Account"
+
+    AccountConflictError:
+      type: object
+      description: >-
+        The createAccount conflict body — the standard error message plus the
+        existing account that owns the email (ARGY-163).
+      required: [error, account]
+      properties:
+        error:
+          type: string
+        account:
+          $ref: "#/components/schemas/Account"
 
     LoginResponse:
       type: object

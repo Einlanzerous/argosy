@@ -55,6 +55,7 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 // token is configured; otherwise the route doesn't exist and answers 404.
 func RegisterProvisioning(mux *http.ServeMux, store *Store, token string) {
 	mux.Handle("POST /api/v1/admin/accounts", requireProvisionToken(token, handleCreateAccount(store)))
+	mux.Handle("GET /api/v1/admin/accounts", requireProvisionToken(token, handleLookupAccount(store)))
 }
 
 func requireProvisionToken(token string, next http.Handler) http.Handler {
@@ -80,6 +81,20 @@ func handleCreateAccount(store *Store) http.HandlerFunc {
 			return
 		}
 		httpx.JSON(w, http.StatusCreated, out)
+	}
+}
+
+// handleLookupAccount is the read-only companion to handleCreateAccount
+// (ARGY-163): a reconcile pass asks "does this email have an account?" and
+// must never create one as a side effect.
+func handleLookupAccount(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		acc, err := store.AccountByEmail(r.Context(), r.URL.Query().Get("email"))
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, api.AccountLookupResponse{Account: acc})
 	}
 }
 
@@ -465,7 +480,11 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 
 func writeAuthError(w http.ResponseWriter, err error) {
+	var emailTaken *EmailTakenError
 	switch {
+	case errors.As(err, &emailTaken):
+		// The account-create conflict carries the existing account (ARGY-163).
+		httpx.JSON(w, http.StatusConflict, api.AccountConflictError{Error: err.Error(), Account: emailTaken.Account})
 	case errors.Is(err, ErrInvalidCredentials):
 		httpx.Error(w, http.StatusUnauthorized, "invalid credentials")
 	case errors.Is(err, ErrForbidden):
