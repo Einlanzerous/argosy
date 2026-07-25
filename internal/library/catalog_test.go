@@ -17,7 +17,7 @@ import (
 // design, which is the whole point of the ticket. Claims ownership for a new
 // account when the test database has none yet (a fresh CI database), retrying
 // once in case a sibling package won the claim concurrently.
-func ownerAccountID(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
+func ownerAccountID(ctx context.Context, t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 	for range 2 {
 		var id string

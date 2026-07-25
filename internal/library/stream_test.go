@@ -63,7 +63,7 @@ func TestStreamHandler(t *testing.T) {
 	var libID, itemID string
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO libraries (account_id, name, kind, root_path) VALUES ($1,$2,'mixed',$3) RETURNING id::text`,
-		ownerAccountID(t, ctx, pool), "lib_"+suffix, dir).Scan(&libID); err != nil {
+		ownerAccountID(ctx, t, pool), "lib_"+suffix, dir).Scan(&libID); err != nil {
 		t.Fatal(err)
 	}
 	if err := pool.QueryRow(ctx,

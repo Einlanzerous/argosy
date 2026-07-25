@@ -278,11 +278,6 @@ func catalogOf(r *http.Request) string {
 	return accountOf(r)
 }
 
-func isAdmin(r *http.Request) bool {
-	sess, _ := auth.SessionFromContext(r.Context())
-	return sess.Role == api.Admin
-}
-
 // isOwnerAdmin reports whether the caller may re-shape the server's catalog:
 // an admin profile on the instance-owning account.
 func isOwnerAdmin(r *http.Request) bool {
