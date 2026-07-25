@@ -60,6 +60,33 @@ export const router = createRouter({
   ],
 })
 
+// A deploy atomically swaps every content-hashed asset the embedded SPA serves,
+// so a session opened before it can navigate into a lazy route whose chunk now
+// 404s — the import rejects and the navigation silently aborts, which reads as
+// "the Back button is dead" (ARGY-164). Recover by hard-loading the target URL:
+// the fresh index references live chunks. The sessionStorage latch stops a
+// reload loop when the target is broken even when freshly served; a successful
+// navigation clears it so the *next* deploy can trigger a reload again.
+const CHUNK_RELOAD_KEY = 'argosy.chunkReload'
+
+function isStaleChunkError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /dynamically imported module|Importing a module script|error loading|Unable to preload CSS/i.test(
+    msg,
+  )
+}
+
+router.onError((err, to) => {
+  if (!isStaleChunkError(err)) return
+  if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === to.fullPath) return
+  sessionStorage.setItem(CHUNK_RELOAD_KEY, to.fullPath)
+  window.location.assign(to.fullPath)
+})
+
+router.afterEach(() => {
+  sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+})
+
 router.beforeEach(async (to) => {
   const session = useSessionStore()
   if (!session.ready) await session.restore()
