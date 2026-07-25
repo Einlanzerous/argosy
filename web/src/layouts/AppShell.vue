@@ -36,16 +36,21 @@ function logout(): void {
     <header class="bar">
       <div class="brand">
         <img class="logo" src="/argosy_mark.svg" alt="Argosy" @click="goHome" />
-        <button class="bar-search" type="button" @click="openSearch">
-          <span class="mag">⌕</span> Search the Manifest…
+        <button
+          class="bar-search"
+          type="button"
+          aria-label="Search the Manifest"
+          @click="openSearch"
+        >
+          <span class="mag">⌕</span> <span class="label">Search the Manifest…</span>
         </button>
       </div>
       <div class="bar-right">
-        <button class="pill" type="button" @click="nav('library')">
-          <span class="i">▤</span> Browse
+        <button class="pill" type="button" aria-label="Browse" @click="nav('library')">
+          <span class="i">▤</span> <span class="label">Browse</span>
         </button>
-        <button class="pill" type="button" @click="nav('vaults')">
-          <span class="i">▣</span> Vaults
+        <button class="pill" type="button" aria-label="Vaults" @click="nav('vaults')">
+          <span class="i">▣</span> <span class="label">Vaults</span>
         </button>
         <div class="profile">
           <button class="avatar" type="button" @click="menuOpen = !menuOpen">{{ initial }}</button>
@@ -254,5 +259,78 @@ main {
 }
 .inner {
   padding: 96px 40px 90px;
+}
+
+/* Phones (ARGY-166). The desktop bar is one non-wrapping flex row whose
+   min-content width is ~590px, so on a phone the right-hand group overflowed
+   past the fixed bar's right edge — and since the bar is `position: fixed`
+   there's no horizontal scroll to reach it, so Browse, Vaults and the profile
+   avatar were simply unreachable. That stranded Settings, Fleet, Profiles and
+   Log out, which live only behind the avatar.
+
+   Collapse to: [ship mark] [⌕]  …  [Browse] [Vaults] [avatar]. */
+@media (max-width: 720px) {
+  .bar {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .brand {
+    /* Let the brand pill absorb the squeeze instead of shoving the controls
+       off-screen; without min-width:0 a flex item won't shrink below content. */
+    min-width: 0;
+    gap: 4px;
+    padding: 5px 6px 5px 10px;
+  }
+  /* Mark only, no wordmark. argosy_mark.svg is a 630x175 lockup, so crop rather
+     than ship a second asset: `cover` in a 30x26 box scales by height (26/175)
+     and reveals source x 0..202 — the ship, ending before the ARGOSY wordmark. */
+  .logo {
+    width: 30px;
+    height: 26px;
+    object-fit: cover;
+    object-position: left center;
+  }
+  .bar-search {
+    width: auto;
+    margin-left: 2px;
+    padding: 8px 10px;
+    border-left: none;
+  }
+  .bar-search .label {
+    display: none;
+  }
+  .mag {
+    font-size: 19px;
+  }
+  .bar-right {
+    gap: 8px;
+  }
+  .pill {
+    padding: 9px 13px;
+    gap: 6px;
+  }
+  .avatar {
+    flex: none;
+  }
+  .inner {
+    padding: 82px 16px 72px;
+  }
+}
+
+/* Only the very narrowest phones drop the Browse/Vaults labels — ▤ and ▣ don't
+   say much on their own, and measured at 360px the labelled pills still leave
+   ~20px of slack, so every mainstream phone keeps its words. The avatar is never
+   what gets dropped: it is the sole route to Settings, Fleet, Profiles and Log
+   out, which is exactly what made the original overflow a dead end. */
+@media (max-width: 350px) {
+  .pill .label {
+    display: none;
+  }
+  .pill {
+    padding: 9px 11px;
+  }
+  .pill .i {
+    font-size: 15px;
+  }
 }
 </style>
