@@ -186,6 +186,16 @@ onUnmounted(() => {
   text-align: center;
   animation: argRise 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+/* The search icon is the only way into search on a phone (ARGY-166), so the
+   overlay it opens has to be usable there: 40px of scrim padding each side left
+   too little room for the field on a 360px screen. */
+@media (max-width: 720px) {
+  .scrim {
+    align-items: flex-start;
+    padding: 64px 14px 24px;
+  }
+}
 .eyebrow {
   font: 700 11px var(--arg-display);
   letter-spacing: 0.22em;
