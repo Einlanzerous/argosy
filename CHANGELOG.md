@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github.com/Einlanzerous/argosy/compare/v0.19.0...v0.19.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* **web:** make the top bar usable on phones (ARGY-166) ([#169](https://github.com/Einlanzerous/argosy/issues/169)) ([119c6f3](https://github.com/Einlanzerous/argosy/commit/119c6f3face73f48b560be3cf00782e860f05a84))
+
 ## [0.19.0](https://github.com/Einlanzerous/argosy/compare/v0.18.0...v0.19.0) (2026-07-25)
 
 
