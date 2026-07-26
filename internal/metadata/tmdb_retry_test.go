@@ -187,10 +187,10 @@ func TestTMDBMatchRunAgainst429Stub(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
-		switch {
-		case r.URL.Path == "/search/movie":
+		switch r.URL.Path {
+		case "/search/movie":
 			_, _ = w.Write([]byte(`{"results":[{"id":7,"title":"Stub Film","poster_path":"/p.jpg"}]}`))
-		case r.URL.Path == "/movie/7/credits":
+		case "/movie/7/credits":
 			_, _ = w.Write([]byte(`{"cast":[{"name":"Someone"}]}`))
 		default: // artwork
 			_, _ = w.Write([]byte("img"))
