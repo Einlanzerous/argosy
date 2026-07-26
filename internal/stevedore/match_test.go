@@ -36,6 +36,32 @@ func (fakeProvider) SeriesCredits(_ context.Context, _ int64) ([]string, error) 
 	return []string{"Grace Hopper"}, nil
 }
 
+// downloadingProvider also implements metadata.ImageDownloader, recording
+// what the matcher asks it to fetch.
+type downloadingProvider struct {
+	fakeProvider
+	got []string
+}
+
+func (d *downloadingProvider) DownloadImage(_ context.Context, rawURL, _ string) error {
+	d.got = append(d.got, rawURL)
+	return nil
+}
+
+// TestMatcherPrefersProviderDownloader pins the ARGY-141 wiring: when the
+// provider can download artwork itself (paced + retried), the matcher must
+// route image fetches through it instead of its own plain client.
+func TestMatcherPrefersProviderDownloader(t *testing.T) {
+	p := &downloadingProvider{}
+	m := NewMatcher(nil, p, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := m.download(context.Background(), "http://x/p.jpg", "/dev/null"); err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	if len(p.got) != 1 || p.got[0] != "http://x/p.jpg" {
+		t.Errorf("provider downloader saw %v, want the requested URL", p.got)
+	}
+}
+
 func TestMatchLibrary(t *testing.T) {
 	dsn := testdb.DSN(t)
 	ctx := context.Background()

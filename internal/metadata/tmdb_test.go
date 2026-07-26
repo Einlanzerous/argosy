@@ -22,9 +22,7 @@ func TestTMDBSearchMovie(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tm := NewTMDB("test-token", "")
-	tm.baseURL = srv.URL
-	tm.imageBase = "https://img"
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL, ImageBaseURL: "https://img"})
 
 	m, err := tm.SearchMovie(context.Background(), "Big Buck Bunny", 2008)
 	if err != nil {
@@ -58,9 +56,7 @@ func TestTMDBSeasonEpisodes(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tm := NewTMDB("test-token", "")
-	tm.baseURL = srv.URL
-	tm.imageBase = "https://img"
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL, ImageBaseURL: "https://img"})
 
 	eps, err := tm.SeasonEpisodes(context.Background(), 222, 1)
 	if err != nil {
@@ -91,8 +87,7 @@ func TestTMDBMovieCredits(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tm := NewTMDB("test-token", "")
-	tm.baseURL = srv.URL
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL})
 
 	cast, err := tm.MovieCredits(context.Background(), 12345)
 	if err != nil {
@@ -130,8 +125,7 @@ func TestTMDBSeriesCreditsCap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tm := NewTMDB("test-token", "")
-	tm.baseURL = srv.URL
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL})
 
 	got, err := tm.SeriesCredits(context.Background(), 222)
 	if err != nil {
@@ -148,8 +142,7 @@ func TestTMDBNoResults(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tm := NewTMDB("test-token", "")
-	tm.baseURL = srv.URL
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL})
 	m, err := tm.SearchSeries(context.Background(), "Nonexistent Show")
 	if err != nil {
 		t.Fatalf("search: %v", err)
@@ -160,10 +153,10 @@ func TestTMDBNoResults(t *testing.T) {
 }
 
 func TestTMDBConfigured(t *testing.T) {
-	if NewTMDB("", "").Configured() {
+	if NewTMDB("", "", TMDBOptions{}).Configured() {
 		t.Error("empty creds should be unconfigured")
 	}
-	if !NewTMDB("", "apikey").Configured() {
+	if !NewTMDB("", "apikey", TMDBOptions{}).Configured() {
 		t.Error("api key should be configured")
 	}
 }

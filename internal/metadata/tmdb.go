@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -30,27 +33,79 @@ const (
 	// to make a search land the right film without bloating provider_metadata or
 	// the search_vector with deep-bench extras.
 	castLimit = 15
+	// defaultTMDBRate is the sustained request ceiling (req/s) shared by every
+	// caller, artwork downloads included. TMDB's practical limit is ~50 req/s;
+	// 25 leaves headroom for other consumers of the same API key (ARGY-141).
+	defaultTMDBRate = 25.0
+	// tmdbMaxRetries is how many times a request is retried after a 429, 5xx,
+	// or transport error before the item is failed.
+	tmdbMaxRetries = 5
+	// tmdbBaseBackoff seeds the exponential backoff used when the server sends
+	// no Retry-After; tmdbMaxBackoff caps its growth.
+	tmdbBaseBackoff = 500 * time.Millisecond
+	tmdbMaxBackoff  = 30 * time.Second
 )
 
+// TMDBOptions tunes the shared client beyond credentials; zero values keep
+// production defaults.
+type TMDBOptions struct {
+	// BaseURL overrides the API endpoint so tests and the matcher-scale stub
+	// (ARGY-139) can stand in for the real service (env: TMDB_BASE_URL).
+	BaseURL string
+	// ImageBaseURL overrides the artwork CDN root (env: TMDB_IMAGE_BASE_URL).
+	ImageBaseURL string
+	// RequestsPerSecond caps the sustained request rate across all endpoints
+	// and artwork downloads (env: ARGOSY_TMDB_RATE). Zero = defaultTMDBRate.
+	RequestsPerSecond float64
+}
+
 // TMDB is a Provider backed by themoviedb.org. Auth uses the v4 read access
-// token (Bearer) when set, otherwise the v3 api_key query parameter.
+// token (Bearer) when set, otherwise the v3 api_key query parameter. Every
+// request — API and artwork alike — goes through one shared token bucket and
+// a 429/5xx retry envelope so a full-library match can't trip TMDB's rate
+// limit into permanently failed items (ARGY-141).
 type TMDB struct {
 	readToken string
 	apiKey    string
 	baseURL   string
 	imageBase string
 	http      *http.Client
+	imageHTTP *http.Client // longer timeout: images are bigger than JSON
+	limiter   *rate.Limiter
+	// retry knobs, private so tests can shrink the waits.
+	retries     int
+	baseBackoff time.Duration
+	maxBackoff  time.Duration
 }
 
 // NewTMDB returns a TMDB provider. Either credential may be empty as long as
 // the other is set.
-func NewTMDB(readToken, apiKey string) *TMDB {
+func NewTMDB(readToken, apiKey string, opts TMDBOptions) *TMDB {
+	baseURL := defaultTMDBBaseURL
+	if opts.BaseURL != "" {
+		baseURL = opts.BaseURL
+	}
+	imageBase := defaultTMDBImageBase
+	if opts.ImageBaseURL != "" {
+		imageBase = opts.ImageBaseURL
+	}
+	rps := defaultTMDBRate
+	if opts.RequestsPerSecond > 0 {
+		rps = opts.RequestsPerSecond
+	}
 	return &TMDB{
 		readToken: readToken,
 		apiKey:    apiKey,
-		baseURL:   defaultTMDBBaseURL,
-		imageBase: defaultTMDBImageBase,
+		baseURL:   baseURL,
+		imageBase: imageBase,
 		http:      &http.Client{Timeout: 15 * time.Second},
+		imageHTTP: &http.Client{Timeout: 30 * time.Second},
+		// Burst of one second's tokens: brief spikes are fine, the sustained
+		// rate is what TMDB actually polices.
+		limiter:     rate.NewLimiter(rate.Limit(rps), int(max(rps, 1))),
+		retries:     tmdbMaxRetries,
+		baseBackoff: tmdbBaseBackoff,
+		maxBackoff:  tmdbMaxBackoff,
 	}
 }
 
@@ -223,9 +278,9 @@ func (t *TMDB) get(ctx context.Context, path string, q url.Values, out any) erro
 	if t.readToken != "" {
 		req.Header.Set("Authorization", "Bearer "+t.readToken)
 	}
-	resp, err := t.http.Do(req)
+	resp, err := t.doPaced(t.http, req)
 	if err != nil {
-		return err
+		return fmt.Errorf("tmdb %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -235,6 +290,70 @@ func (t *TMDB) get(ctx context.Context, path string, q url.Values, out any) erro
 		return fmt.Errorf("decode tmdb response: %w", err)
 	}
 	return nil
+}
+
+// doPaced sends req through the shared token bucket, retrying 429 (honoring
+// Retry-After when present), 5xx, and transport errors with exponential
+// backoff + jitter. Other statuses (404, 401, …) are returned to the caller
+// as-is — retrying them would never succeed. Caller owns resp.Body on success.
+func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+	var lastErr error
+	var delay time.Duration
+	for attempt := 0; attempt <= t.retries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+		if err := t.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req.Clone(ctx))
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, err
+			}
+			lastErr = err
+			delay = t.backoffDelay(attempt)
+			continue
+		}
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			delay = t.backoffDelay(attempt)
+			if ra := retryAfter(resp.Header.Get("Retry-After")); ra >= 0 {
+				delay = ra
+			}
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+			_ = resp.Body.Close()
+			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			continue
+		}
+		return resp, nil
+	}
+	return nil, fmt.Errorf("giving up after %d attempts: %w", t.retries+1, lastErr)
+}
+
+// backoffDelay returns the exponential backoff for a (0-based) failed attempt,
+// capped at maxBackoff, with up to 50% random jitter shaved off so a fleet of
+// stalled requests doesn't retry in lockstep.
+func (t *TMDB) backoffDelay(attempt int) time.Duration {
+	d := min(t.baseBackoff<<attempt, t.maxBackoff)
+	return d/2 + rand.N(d/2+1)
+}
+
+// retryAfter parses a Retry-After header in delta-seconds form. Returns -1
+// when absent or unparsable (callers fall back to exponential backoff).
+func retryAfter(v string) time.Duration {
+	if v == "" {
+		return -1
+	}
+	secs, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || secs < 0 {
+		return -1
+	}
+	return time.Duration(secs) * time.Second
 }
 
 func yearOf(date string) int {
@@ -248,7 +367,32 @@ func yearOf(date string) int {
 	return y
 }
 
-// DownloadImage fetches url into dest, creating parent directories.
+// DownloadImage fetches url into dest through the shared token bucket and
+// retry envelope, creating parent directories. Artwork fetches dominate a full
+// match run (poster + backdrop per title, a still per episode), so they must
+// share the API's pacing rather than run unthrottled beside it.
+func (t *TMDB) DownloadImage(ctx context.Context, rawURL, dest string) error {
+	if strings.TrimSpace(rawURL) == "" {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := t.doPaced(t.imageHTTP, req)
+	if err != nil {
+		return fmt.Errorf("download %s: %w", rawURL, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download %s: status %d", rawURL, resp.StatusCode)
+	}
+	return saveImage(resp.Body, dest)
+}
+
+// DownloadImage fetches url into dest, creating parent directories. Plain
+// (unpaced) fallback for providers without their own download path; TMDB
+// callers go through the method above.
 func DownloadImage(ctx context.Context, client *http.Client, rawURL, dest string) error {
 	if strings.TrimSpace(rawURL) == "" {
 		return nil
@@ -265,6 +409,11 @@ func DownloadImage(ctx context.Context, client *http.Client, rawURL, dest string
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download %s: status %d", rawURL, resp.StatusCode)
 	}
+	return saveImage(resp.Body, dest)
+}
+
+// saveImage streams body into dest, creating parent directories.
+func saveImage(body io.Reader, dest string) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
@@ -273,6 +422,6 @@ func DownloadImage(ctx context.Context, client *http.Client, rawURL, dest string
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	_, err = io.Copy(f, resp.Body)
+	_, err = io.Copy(f, body)
 	return err
 }
