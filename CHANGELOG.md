@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0](https://github.com/Einlanzerous/argosy/compare/v0.19.1...v0.20.0) (2026-07-26)
+
+
+### Features
+
+* **auth:** account lifecycle admin — owner-gated manage + audit log (ARGY-86) ([#176](https://github.com/Einlanzerous/argosy/issues/176)) ([398cc80](https://github.com/Einlanzerous/argosy/commit/398cc806de850c295659b95a8b8146a14f902215))
+* **dev:** adopt graphify knowledge graph (ARGY-75) ([#175](https://github.com/Einlanzerous/argosy/issues/175)) ([e975571](https://github.com/Einlanzerous/argosy/commit/e975571417048dd04581b4162d08fe485e5650eb))
+* **metadata:** TMDB rate limiting + 429 backoff/retry (ARGY-141) ([#174](https://github.com/Einlanzerous/argosy/issues/174)) ([8eaf330](https://github.com/Einlanzerous/argosy/commit/8eaf33043e27339c2ce5b56562bfd3cde272aa0c))
+
+
+### Bug Fixes
+
+* **web:** serve the SPA shell no-store and 404 stale chunks (ARGY-168) ([#171](https://github.com/Einlanzerous/argosy/issues/171)) ([03a424e](https://github.com/Einlanzerous/argosy/commit/03a424ee473d9a2f93656fc64c78a8800ad208fd))
+
 ## [0.19.1](https://github.com/Einlanzerous/argosy/compare/v0.19.0...v0.19.1) (2026-07-25)
 
 
