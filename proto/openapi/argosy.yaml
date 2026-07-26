@@ -529,6 +529,129 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /api/v1/auth/accounts:
+    get:
+      tags: [auth]
+      operationId: listAccounts
+      summary: List every account on this instance (owner only)
+      description: >
+        Account lifecycle surface (ARGY-86). Listing and managing *accounts* is
+        an instance-level power — accounts are the server's households, not
+        anything inside the caller's own — so it is gated on instance ownership
+        (ARGY-167), not household admin.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/auth/accounts/{accountId}:
+    patch:
+      tags: [auth]
+      operationId: updateAccount
+      summary: Disable or re-enable an account (owner only)
+      description: >
+        A disabled account keeps all its data but can no longer sign in, and
+        its paired devices stop authenticating immediately. The instance
+        owner's account can't be disabled — that would brick the server.
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountUpdateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [auth]
+      operationId: deleteAccount
+      summary: Delete an account and everything it owns (owner only)
+      description: >
+        Removes the account with its profiles, devices, watch history, vaults
+        and preferences (DB cascade). The instance owner's account can't be
+        deleted. Prefer disabling unless the person is truly gone — deletion
+        is unrecoverable.
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Account deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/auth/accounts/{accountId}/password-reset:
+    post:
+      tags: [auth]
+      operationId: resetAccountPassword
+      summary: Reset an account's password to a fresh generated one (owner only)
+      description: >
+        Server-generates a new password and returns it exactly once — the same
+        contract as provisioning (only the bcrypt hash is stored). There is no
+        way to *choose* a password for someone else. The owner account itself
+        is refused: rotate your own password through the self-serve
+        change-password flow, which proves the current one.
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/admin/accounts:
     post:
       tags: [auth]
@@ -602,6 +725,37 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [auth]
+      operationId: deprovisionAccount
+      summary: Delete an account by email (service-to-service deprovisioning)
+      description: >
+        The teardown companion to createAccount (ARGY-86): lets the
+        provisioning service remove the account it created when a member is
+        offboarded, taking profiles, devices, history and preferences with it
+        (DB cascade). The instance owner's account is refused with 409. Gated
+        on the same X-Provision-Token, and registered only when
+        ARGOSY_PROVISION_TOKEN is set.
+      security:
+        - provisionToken: []
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The account email. Matched case-insensitively.
+      responses:
+        "204":
+          description: Account deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/libraries:
     get:
@@ -1707,6 +1861,47 @@ components:
           type: string
         account:
           $ref: "#/components/schemas/Account"
+
+    AccountSummary:
+      type: object
+      description: One row of the owner's account-management list (ARGY-86).
+      required: [id, email, name, isOwner, disabled, profileCount, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        isOwner:
+          type: boolean
+          description: Whether this account owns the instance (ARGY-167).
+        disabled:
+          type: boolean
+          description: Disabled accounts can't sign in and their devices stop authenticating.
+        profileCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    AccountUpdateRequest:
+      type: object
+      required: [disabled]
+      properties:
+        disabled:
+          type: boolean
+
+    PasswordResetResponse:
+      type: object
+      required: [generatedPassword]
+      properties:
+        generatedPassword:
+          type: string
+          description: >-
+            The fresh password, delivered exactly once — only the bcrypt hash
+            is stored, so it is never retrievable again.
 
     LoginResponse:
       type: object

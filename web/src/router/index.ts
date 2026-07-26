@@ -50,6 +50,13 @@ export const router = createRouter({
           name: 'profiles',
           component: () => import('@/views/ProfilesView.vue'),
         },
+        // Instance-wide account lifecycle (ARGY-86). Owner-gated in the UI and
+        // on the server; anyone else reaching it directly just sees a note.
+        {
+          path: 'accounts',
+          name: 'accounts',
+          component: () => import('@/views/AccountsView.vue'),
+        },
         // Approve a TV pairing code (ARGY-112). Auth-gated like the rest of the
         // shell, so the household member is signed in when they approve.
         { path: 'link', name: 'link', component: () => import('@/views/LinkView.vue') },

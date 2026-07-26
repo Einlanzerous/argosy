@@ -72,22 +72,27 @@ Class | Method | HTTP request | Description
 *AuthApi* | [**changePassword**](doc//AuthApi.md#changepassword) | **POST** /api/v1/auth/password | Change the account password (self-serve)
 *AuthApi* | [**createAccount**](doc//AuthApi.md#createaccount) | **POST** /api/v1/admin/accounts | Create an account (service-to-service provisioning)
 *AuthApi* | [**createProfile**](doc//AuthApi.md#createprofile) | **POST** /api/v1/auth/profiles | Create a profile (admin only)
+*AuthApi* | [**deleteAccount**](doc//AuthApi.md#deleteaccount) | **DELETE** /api/v1/auth/accounts/{accountId} | Delete an account and everything it owns (owner only)
 *AuthApi* | [**deleteProfile**](doc//AuthApi.md#deleteprofile) | **DELETE** /api/v1/auth/profiles/{userId} | Delete a profile (admin only)
+*AuthApi* | [**deprovisionAccount**](doc//AuthApi.md#deprovisionaccount) | **DELETE** /api/v1/admin/accounts | Delete an account by email (service-to-service deprovisioning)
 *AuthApi* | [**getCurrentSession**](doc//AuthApi.md#getcurrentsession) | **GET** /api/v1/auth/me | Resolve the current (account, profile, device) from the token
 *AuthApi* | [**getDevicePreferences**](doc//AuthApi.md#getdevicepreferences) | **GET** /api/v1/preferences | Get the calling device's playback preferences
 *AuthApi* | [**getLinkStatus**](doc//AuthApi.md#getlinkstatus) | **GET** /api/v1/auth/link/{code} | Poll a pairing code; returns the device token once approved
 *AuthApi* | [**getUserPreferences**](doc//AuthApi.md#getuserpreferences) | **GET** /api/v1/user/preferences | Get the calling profile's account-wide preferences
+*AuthApi* | [**listAccounts**](doc//AuthApi.md#listaccounts) | **GET** /api/v1/auth/accounts | List every account on this instance (owner only)
 *AuthApi* | [**listDevices**](doc//AuthApi.md#listdevices) | **GET** /api/v1/auth/devices | List devices in the current account (the Fleet)
 *AuthApi* | [**listProfiles**](doc//AuthApi.md#listprofiles) | **GET** /api/v1/auth/profiles | List the current account's profiles
 *AuthApi* | [**login**](doc//AuthApi.md#login) | **POST** /api/v1/auth/login | Authenticate an account and list its profiles
 *AuthApi* | [**lookupAccount**](doc//AuthApi.md#lookupaccount) | **GET** /api/v1/admin/accounts | Look up an account by email (service-to-service provisioning)
 *AuthApi* | [**registerDevice**](doc//AuthApi.md#registerdevice) | **POST** /api/v1/auth/devices | Register a device for a profile and issue a device token
 *AuthApi* | [**renameDevice**](doc//AuthApi.md#renamedevice) | **PATCH** /api/v1/auth/devices/{deviceId} | Rename a device in the Fleet
+*AuthApi* | [**resetAccountPassword**](doc//AuthApi.md#resetaccountpassword) | **POST** /api/v1/auth/accounts/{accountId}/password-reset | Reset an account's password to a fresh generated one (owner only)
 *AuthApi* | [**revokeDevice**](doc//AuthApi.md#revokedevice) | **DELETE** /api/v1/auth/devices/{deviceId} | Revoke a device token (\"retire from the Fleet\")
 *AuthApi* | [**setDevicePreferences**](doc//AuthApi.md#setdevicepreferences) | **PUT** /api/v1/preferences | Update the calling device's playback preferences
 *AuthApi* | [**setUserPreferences**](doc//AuthApi.md#setuserpreferences) | **PUT** /api/v1/user/preferences | Update the calling profile's account-wide preferences
 *AuthApi* | [**startLink**](doc//AuthApi.md#startlink) | **POST** /api/v1/auth/link/start | Begin code-pairing — mint a short code for the new device to display
 *AuthApi* | [**switchDeviceProfile**](doc//AuthApi.md#switchdeviceprofile) | **POST** /api/v1/auth/devices/switch | Re-bind the calling device to another profile (in-place switch)
+*AuthApi* | [**updateAccount**](doc//AuthApi.md#updateaccount) | **PATCH** /api/v1/auth/accounts/{accountId} | Disable or re-enable an account (owner only)
 *AuthApi* | [**updateProfile**](doc//AuthApi.md#updateprofile) | **PATCH** /api/v1/auth/profiles/{userId} | Rename a profile or change its role (admin only)
 *LibraryApi* | [**addVaultItem**](doc//LibraryApi.md#addvaultitem) | **POST** /api/v1/vaults/{vaultId}/items | Add a film or series to a vault
 *LibraryApi* | [**beaconStream**](doc//LibraryApi.md#beaconstream) | **GET** /api/v1/beacon | SSE stream of the current user's live play-state events (Beacon)
@@ -140,6 +145,8 @@ Class | Method | HTTP request | Description
  - [AccountCreateRequest](doc//AccountCreateRequest.md)
  - [AccountCreateResponse](doc//AccountCreateResponse.md)
  - [AccountLookupResponse](doc//AccountLookupResponse.md)
+ - [AccountSummary](doc//AccountSummary.md)
+ - [AccountUpdateRequest](doc//AccountUpdateRequest.md)
  - [AddVaultItemRequest](doc//AddVaultItemRequest.md)
  - [ContinueItem](doc//ContinueItem.md)
  - [CreateLibraryRequest](doc//CreateLibraryRequest.md)
@@ -166,6 +173,7 @@ Class | Method | HTTP request | Description
  - [ModelLibrary](doc//ModelLibrary.md)
  - [OnDeckItem](doc//OnDeckItem.md)
  - [PasswordChangeRequest](doc//PasswordChangeRequest.md)
+ - [PasswordResetResponse](doc//PasswordResetResponse.md)
  - [PingResponse](doc//PingResponse.md)
  - [PlayState](doc//PlayState.md)
  - [PlaybackInfo](doc//PlaybackInfo.md)

@@ -193,6 +193,10 @@ class ApiClient {
           return AccountCreateResponse.fromJson(value);
         case 'AccountLookupResponse':
           return AccountLookupResponse.fromJson(value);
+        case 'AccountSummary':
+          return AccountSummary.fromJson(value);
+        case 'AccountUpdateRequest':
+          return AccountUpdateRequest.fromJson(value);
         case 'AddVaultItemRequest':
           return AddVaultItemRequest.fromJson(value);
         case 'ContinueItem':
@@ -245,6 +249,8 @@ class ApiClient {
           return OnDeckItem.fromJson(value);
         case 'PasswordChangeRequest':
           return PasswordChangeRequest.fromJson(value);
+        case 'PasswordResetResponse':
+          return PasswordResetResponse.fromJson(value);
         case 'PingResponse':
           return PingResponse.fromJson(value);
         case 'PlayState':

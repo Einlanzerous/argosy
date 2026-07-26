@@ -70,6 +70,14 @@ function logout(): void {
               <button v-if="isAdmin" class="menu-item" type="button" @click="nav('profiles')">
                 <span class="mi">☻</span> Profiles
               </button>
+              <button
+                v-if="session.canManageServer"
+                class="menu-item"
+                type="button"
+                @click="nav('accounts')"
+              >
+                <span class="mi">⚿</span> Accounts
+              </button>
               <button class="menu-item danger" type="button" @click="logout">
                 <span class="mi">⎋</span> Log out
               </button>
