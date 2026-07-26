@@ -38,5 +38,14 @@ node_modules/
 /*.jpg
 /*.jpeg
 
-# Local agent workspace
-.claude/
+# Local agent workspace — except settings.json (carries the graphify grep-nudge hook)
+.claude/*
+!.claude/settings.json
+
+# Knowledge graph — large generated files stay local; cache + report are committed
+graphify-out/graph.html
+graphify-out/graph.json
+graphify-out/manifest.json
+graphify-out/cost.json
+graphify-out/.graphify_*
+graphify-out/20*/
