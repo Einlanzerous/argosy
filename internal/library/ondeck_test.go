@@ -2,20 +2,17 @@ package library
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/db"
+	"github.com/Einlanzerous/argosy/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestOnDeck(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run on-deck store tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)

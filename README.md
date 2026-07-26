@@ -90,7 +90,7 @@ make build
 # Or run the server alone (serves a "not built yet" placeholder until the web is built)
 make server-dev
 
-# Front-end dev with HMR (proxies API to the Go server on :8096)
+# Front-end dev with HMR (proxies API to the dev-stack server on :8097)
 make web-dev            # http://localhost:5173
 ```
 
@@ -104,14 +104,22 @@ A one-command local stack (PostgreSQL + the Go server with hot-reload via `air`,
 
 ```bash
 cp deploy/.env.example deploy/.env   # optional: override ports / media path
-make compose-up                      # Postgres + server (hot-reload) on :8096
-make compose-web                     # ...also the Vite dev server on :5173 (HMR)
+bun run dev                          # stack + Vite dev server, one command
+bun run dev:down                     # stop it (run this when you're done!)
+
+# ...or the individual pieces:
+make compose-up                      # Postgres + server (hot-reload) on :8097
+make compose-web                     # ...also the containerized Vite dev server on :5173 (HMR)
 make compose-logs                    # tail logs
 make compose-down                    # stop
 make compose-reset                   # stop and delete volumes (drops the DB)
 ```
 
-Defaults avoid the `construct-server` stack: server on `:8096`, Postgres published on host `:5433` (the server reaches it in-network on `5432`). Point `ARGOSY_MEDIA_DIR_HOST` at your library — it's mounted read-only at `/media`.
+**Ports:** the dev API is on **`:8097`** and the web dev server on **`:5173`** — `:8096` is the *production* container's host port; don't confuse the two. Postgres is published on host `:5433` (the server reaches it in-network on `5432`).
+
+**Sign-in:** a fresh stack bootstraps an admin account, `admin@argosy.dev` / `changeme` (override with `ARGOSY_ADMIN_EMAIL` / `ARGOSY_ADMIN_PASSWORD` in `deploy/.env`). `make seed` adds a second household, `demo@argosy.dev` / `changeme`. The login form requires a syntactically valid email — accounts with legacy non-email usernames can't be entered there.
+
+The dev stack is opt-in and meant to be transient — the web container is already gated behind the `webdev` compose profile. Stop it (`bun run dev:down`) when you're not using it, so a stale build doesn't sit on `:8097`/`:5173` masquerading as something current. Point `ARGOSY_MEDIA_DIR_HOST` at your library — it's mounted read-only at `/media`.
 
 The production single-artifact image (SPA embedded into the Go binary + ffmpeg) is built from `deploy/Dockerfile`:
 

@@ -5,13 +5,13 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/mediasource"
+	"github.com/Einlanzerous/argosy/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -33,10 +33,7 @@ func (f *fakeSource) Open(_ context.Context, rel string) (io.ReadCloser, error) 
 }
 
 func TestScan(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run scanner tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -112,10 +109,7 @@ func TestScan(t *testing.T) {
 // (renamed or deleted) are removed, along with the episodes/seasons/series and
 // play_state they leave behind — and an empty source never wipes the library.
 func TestScanPrune(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run scanner tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)

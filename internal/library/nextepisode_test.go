@@ -2,12 +2,12 @@ package library
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/db"
+	"github.com/Einlanzerous/argosy/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,10 +15,7 @@ import (
 // next playable episode after a given one, across season boundaries, skipping
 // episodes with no linked media file, and stopping at the end of the series.
 func TestNextEpisode(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run next-episode store tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)

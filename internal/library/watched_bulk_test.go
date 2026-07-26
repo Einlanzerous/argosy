@@ -2,12 +2,12 @@ package library
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/db"
+	"github.com/Einlanzerous/argosy/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,10 +16,7 @@ import (
 // other seasons untouched, drops the marked episodes off Continue Watching, and
 // unwatching clears the flag again. Series-level marking spans all seasons.
 func TestBulkWatched(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run bulk-watched tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)

@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -11,15 +10,13 @@ import (
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/db"
+	"github.com/Einlanzerous/argosy/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testStore(t *testing.T) (*Store, context.Context) {
 	t.Helper()
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run auth tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)
