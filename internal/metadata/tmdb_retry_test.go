@@ -2,6 +2,8 @@ package metadata
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,9 +17,13 @@ import (
 )
 
 // newTestTMDB returns a client pointed at srv with retry waits shrunk so
-// failure-path tests don't sleep for real.
+// failure-path tests don't sleep for real, and retry warnings discarded.
 func newTestTMDB(srv *httptest.Server) *TMDB {
-	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL, ImageBaseURL: srv.URL})
+	tm := NewTMDB("test-token", "", TMDBOptions{
+		BaseURL:      srv.URL,
+		ImageBaseURL: srv.URL,
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
 	tm.baseBackoff = time.Millisecond
 	tm.maxBackoff = 5 * time.Millisecond
 	return tm
@@ -159,6 +165,89 @@ func TestTMDBDownloadImageRetriesAndShares429Handling(t *testing.T) {
 	}
 	if got := calls.Load(); got != 2 {
 		t.Errorf("server saw %d requests, want 2", got)
+	}
+}
+
+func TestRetryAfterParsing(t *testing.T) {
+	cases := []struct {
+		in   string
+		want time.Duration
+	}{
+		{"", -1},
+		{"0", 0},
+		{"7", 7 * time.Second},
+		{" 3 ", 3 * time.Second},
+		{"-5", -1},
+		{"garbage", -1},
+		{"1.5", -1},
+		{"Wed, 21 Oct 2026 07:28:00 GMT", -1}, // HTTP-date form → backoff fallback
+	}
+	for _, c := range cases {
+		if got := retryAfter(c.in); got != c.want {
+			t.Errorf("retryAfter(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestTMDBRetryAfterCappedAtMaxBackoff(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			// An hour-long Retry-After from a misbehaving CDN must not be
+			// honored verbatim — the test would time out if it were.
+			w.Header().Set("Retry-After", "3600")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`{"results":[{"id":3,"title":"Ok"}]}`))
+	}))
+	defer srv.Close()
+
+	tm := newTestTMDB(srv) // maxBackoff = 5ms
+	done := make(chan error, 1)
+	go func() {
+		_, err := tm.SearchMovie(context.Background(), "Ok", 0)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("search: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("retry stalled — Retry-After was honored past maxBackoff")
+	}
+}
+
+func TestTMDBBackoffCancellable(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	tm := newTestTMDB(srv)
+	tm.baseBackoff = time.Hour // park the retry in its backoff wait
+	tm.maxBackoff = time.Hour
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := tm.SearchMovie(ctx, "Nope", 0)
+		done <- err
+	}()
+	// Let the first attempt fail and the backoff start, then cancel.
+	for calls.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected a cancellation error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancel did not interrupt the backoff wait")
 	}
 }
 

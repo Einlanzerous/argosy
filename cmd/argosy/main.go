@@ -94,7 +94,7 @@ func main() {
 	var scheduler *stevedore.Scheduler
 	if pool != nil {
 		var provider metadata.Provider
-		if tmdb := metadata.NewTMDB(cfg.TMDBReadToken, cfg.TMDBAPIKey, tmdbOptions(cfg)); tmdb.Configured() {
+		if tmdb := metadata.NewTMDB(cfg.TMDBReadToken, cfg.TMDBAPIKey, tmdbOptions(cfg, logger)); tmdb.Configured() {
 			provider = tmdb
 		}
 		scheduler = stevedore.NewScheduler(pool, logger, cfg.ArtworkDir, provider, cfg.ScanInterval)

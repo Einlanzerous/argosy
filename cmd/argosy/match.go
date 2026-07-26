@@ -13,11 +13,12 @@ import (
 )
 
 // tmdbOptions maps the config's TMDB tuning knobs onto client options.
-func tmdbOptions(cfg config.Config) metadata.TMDBOptions {
+func tmdbOptions(cfg config.Config, logger *slog.Logger) metadata.TMDBOptions {
 	return metadata.TMDBOptions{
 		BaseURL:           cfg.TMDBBaseURL,
 		ImageBaseURL:      cfg.TMDBImageBaseURL,
 		RequestsPerSecond: cfg.TMDBRate,
+		Logger:            logger,
 	}
 }
 
@@ -33,7 +34,7 @@ func runMatch(cfg config.Config, logger *slog.Logger, args []string) {
 		logger.Error("no database configured")
 		os.Exit(1)
 	}
-	provider := metadata.NewTMDB(cfg.TMDBReadToken, cfg.TMDBAPIKey, tmdbOptions(cfg))
+	provider := metadata.NewTMDB(cfg.TMDBReadToken, cfg.TMDBAPIKey, tmdbOptions(cfg, logger))
 	if !provider.Configured() {
 		logger.Error("no TMDB credentials (set TMDB_API_READ_ACCESS_KEY or TMDB_API_KEY)")
 		os.Exit(1)

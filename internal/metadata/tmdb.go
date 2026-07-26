@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
@@ -57,6 +58,9 @@ type TMDBOptions struct {
 	// RequestsPerSecond caps the sustained request rate across all endpoints
 	// and artwork downloads (env: ARGOSY_TMDB_RATE). Zero = defaultTMDBRate.
 	RequestsPerSecond float64
+	// Logger receives a Warn per retried request, the only operator-visible
+	// signal that TMDB is throttling a run. Nil falls back to slog.Default().
+	Logger *slog.Logger
 }
 
 // TMDB is a Provider backed by themoviedb.org. Auth uses the v4 read access
@@ -72,6 +76,7 @@ type TMDB struct {
 	http      *http.Client
 	imageHTTP *http.Client // longer timeout: images are bigger than JSON
 	limiter   *rate.Limiter
+	logger    *slog.Logger
 	// retry knobs, private so tests can shrink the waits.
 	retries     int
 	baseBackoff time.Duration
@@ -93,6 +98,10 @@ func NewTMDB(readToken, apiKey string, opts TMDBOptions) *TMDB {
 	if opts.RequestsPerSecond > 0 {
 		rps = opts.RequestsPerSecond
 	}
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &TMDB{
 		readToken: readToken,
 		apiKey:    apiKey,
@@ -103,6 +112,7 @@ func NewTMDB(readToken, apiKey string, opts TMDBOptions) *TMDB {
 		// Burst of one second's tokens: brief spikes are fine, the sustained
 		// rate is what TMDB actually polices.
 		limiter:     rate.NewLimiter(rate.Limit(rps), int(max(rps, 1))),
+		logger:      logger,
 		retries:     tmdbMaxRetries,
 		baseBackoff: tmdbBaseBackoff,
 		maxBackoff:  tmdbMaxBackoff,
@@ -318,16 +328,23 @@ func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, 
 			}
 			lastErr = err
 			delay = t.backoffDelay(attempt)
+			t.logger.Warn("tmdb request failed, retrying", "url", req.URL.Path, "attempt", attempt+1, "delay", delay, "err", err)
 			continue
 		}
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			// Cap Retry-After at maxBackoff: match runs are strictly sequential,
+			// so honoring an hour-long value from a misbehaving CDN would park
+			// the whole ingest, not one item. Burning a retry early is cheaper.
 			delay = t.backoffDelay(attempt)
 			if ra := retryAfter(resp.Header.Get("Retry-After")); ra >= 0 {
-				delay = ra
+				delay = min(ra, t.maxBackoff)
 			}
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+			// Drain fully (within reason) so the transport can reuse the
+			// connection; proxy 5xx pages can run to a few tens of KB.
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			t.logger.Warn("tmdb request throttled/failed, retrying", "url", req.URL.Path, "status", resp.StatusCode, "attempt", attempt+1, "delay", delay)
 			continue
 		}
 		return resp, nil
@@ -340,11 +357,18 @@ func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, 
 // stalled requests doesn't retry in lockstep.
 func (t *TMDB) backoffDelay(attempt int) time.Duration {
 	d := min(t.baseBackoff<<attempt, t.maxBackoff)
+	// The shift overflows int64 around attempt 34, making d negative and
+	// rand.N panic. Unreachable at today's retry cap, but guard it so a
+	// future configurable retry count can't turn it into a footgun.
+	if d <= 0 {
+		d = t.maxBackoff
+	}
 	return d/2 + rand.N(d/2+1)
 }
 
-// retryAfter parses a Retry-After header in delta-seconds form. Returns -1
-// when absent or unparsable (callers fall back to exponential backoff).
+// retryAfter parses a Retry-After header in delta-seconds form (the only form
+// TMDB sends). The RFC 7231 HTTP-date form returns -1 like any unparsable
+// value, so callers fall back to exponential backoff.
 func retryAfter(v string) time.Duration {
 	if v == "" {
 		return -1
@@ -390,9 +414,9 @@ func (t *TMDB) DownloadImage(ctx context.Context, rawURL, dest string) error {
 	return saveImage(resp.Body, dest)
 }
 
-// DownloadImage fetches url into dest, creating parent directories. Plain
-// (unpaced) fallback for providers without their own download path; TMDB
-// callers go through the method above.
+// DownloadImage is the plain, unpaced fallback for providers without their
+// own download path — no limiter, no retries. TMDB artwork goes through the
+// method above instead.
 func DownloadImage(ctx context.Context, client *http.Client, rawURL, dest string) error {
 	if strings.TrimSpace(rawURL) == "" {
 		return nil
