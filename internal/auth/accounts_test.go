@@ -3,9 +3,13 @@ package auth
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/google/uuid"
 )
 
 // seedMember provisions a member account (never the owner — ownerSession has
@@ -114,7 +118,9 @@ func TestAccountLifecycle(t *testing.T) {
 		t.Errorf("device auth after re-enable: %v", err)
 	}
 
-	// Password reset: the old password stops working, the returned one signs in.
+	// Password reset: the old password stops working, the returned one signs
+	// in, and the account's devices are revoked — a leaked password may
+	// already have paired one.
 	reset, err := store.ResetAccountPassword(ctx, sess, memberID)
 	if err != nil || reset.GeneratedPassword == "" {
 		t.Fatalf("reset password = %+v, %v", reset, err)
@@ -124,6 +130,9 @@ func TestAccountLifecycle(t *testing.T) {
 	}
 	if _, err := store.Login(ctx, email, reset.GeneratedPassword); err != nil {
 		t.Errorf("new password after reset: %v", err)
+	}
+	if _, err := store.AuthenticateDevice(ctx, reg.Token); !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("device auth after reset = %v, want ErrInvalidCredentials (devices revoked)", err)
 	}
 
 	// Delete: the account and its cascade are gone.
@@ -172,6 +181,97 @@ func TestAccountLifecycleOwnerGuard(t *testing.T) {
 	// A random id that exists nowhere answers not-found, not a guard error.
 	if _, err := store.SetAccountDisabled(ctx, sess, "00000000-0000-0000-0000-000000000000", true); !errors.Is(err, ErrNotFound) {
 		t.Errorf("disable missing account = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDeleteAccountWithLibraries covers the legacy-data guard: ARGY-167 never
+// moved libraries.account_id, so a pre-existing member can still own library
+// rows, and deleting it would cascade catalog items away.
+func TestDeleteAccountWithLibraries(t *testing.T) {
+	store, ctx := testStore(t)
+	sess, _ := ownerSession(ctx, t, store)
+	member, email, _, _ := seedMember(ctx, t, store)
+	memberID := member.Id.String()
+
+	if _, err := store.pool.Exec(ctx,
+		`INSERT INTO libraries (account_id, name, root_path) VALUES ($1, 'legacy', '/legacy')`, memberID); err != nil {
+		t.Fatalf("seed legacy library: %v", err)
+	}
+	if err := store.DeleteAccount(ctx, sessionActor(sess), memberID); !errors.Is(err, ErrAccountHasLibraries) {
+		t.Fatalf("delete with libraries = %v, want ErrAccountHasLibraries", err)
+	}
+	if _, err := store.AccountByEmail(ctx, email); err != nil {
+		t.Fatalf("account should survive the refused delete: %v", err)
+	}
+	if _, err := store.pool.Exec(ctx, `DELETE FROM libraries WHERE account_id = $1`, memberID); err != nil {
+		t.Fatalf("clear libraries: %v", err)
+	}
+	if err := store.DeleteAccount(ctx, sessionActor(sess), memberID); err != nil {
+		t.Fatalf("delete after clearing libraries: %v", err)
+	}
+}
+
+// TestAuditSurvivesCanceledContext pins the WithoutCancel fix: the client can
+// disconnect (canceling the request context) between the mutation and the
+// audit insert, and the trail must still get its row.
+func TestAuditSurvivesCanceledContext(t *testing.T) {
+	store, ctx := testStore(t)
+	sess, _ := ownerSession(ctx, t, store)
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	e := sessionActor(sess)
+	e.action, e.targetType, e.targetID = "test.canceled_ctx", "account", sess.AccountId.String()
+	store.audit(canceled, e)
+
+	var n int
+	if err := store.pool.QueryRow(ctx,
+		`SELECT count(*) FROM audit_log WHERE action = 'test.canceled_ctx' AND target_id = $1`,
+		sess.AccountId.String()).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("audit rows after canceled-context write = %d (err %v), want 1", n, err)
+	}
+}
+
+// TestAccountRoutesWiring locks the mux wiring: every lifecycle route exists
+// (a dropped registration would 404) and sits behind the owner gate (a
+// household admin on a member account gets 403 — if a route were mistakenly
+// requireAdmin-gated, this member admin would get through). The owner-passes
+// half of the gate is covered by TestRequireOwner; the behavior behind the
+// routes by the store tests above.
+func TestAccountRoutesWiring(t *testing.T) {
+	store, ctx := testStore(t)
+	_, _ = ownerSession(ctx, t, store) // make sure an owner exists so the member can't be one
+	_, email, password, profile := seedMember(ctx, t, store)
+	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+		Email: email, Password: password, UserId: &profile.Id, DeviceName: "wiring-test",
+	})
+	if err != nil {
+		t.Fatalf("register device: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, store)
+	target := uuid.NewString()
+	routes := []struct{ method, path, body string }{
+		{http.MethodGet, "/api/v1/auth/accounts", ""},
+		{http.MethodPatch, "/api/v1/auth/accounts/" + target, `{"disabled":true}`},
+		{http.MethodDelete, "/api/v1/auth/accounts/" + target, ""},
+		{http.MethodPost, "/api/v1/auth/accounts/" + target + "/password-reset", ""},
+	}
+	for _, r := range routes {
+		req := httptest.NewRequest(r.method, r.path, strings.NewReader(r.body))
+		req.Header.Set("Authorization", "Bearer "+reg.Token)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s %s as member admin = %d, want 403", r.method, r.path, rec.Code)
+		}
+
+		rec = httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(r.method, r.path, strings.NewReader(r.body)))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s %s unauthenticated = %d, want 401", r.method, r.path, rec.Code)
+		}
 	}
 }
 

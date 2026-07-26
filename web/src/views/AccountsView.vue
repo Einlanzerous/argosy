@@ -168,7 +168,8 @@ onMounted(() => {
           <h3>Reset password for “{{ resetTarget.name }}”?</h3>
           <p class="modal-body">
             Their current password stops working and a fresh one is generated. You'll see it exactly
-            once — hand it over and have them change it. Signed-in devices stay signed in.
+            once — hand it over and have them change it. All their devices are signed out and must
+            pair again with the new password.
           </p>
           <p v-if="error" class="error">{{ error }}</p>
           <div class="modal-actions">

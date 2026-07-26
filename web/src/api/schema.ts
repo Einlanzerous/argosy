@@ -371,7 +371,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an account and everything it owns (owner only)
-         * @description Removes the account with its profiles, devices, watch history, vaults and preferences (DB cascade). The instance owner's account can't be deleted. Prefer disabling unless the person is truly gone — deletion is unrecoverable.
+         * @description Removes the account with its profiles, devices, watch history, vaults and preferences (DB cascade). The instance owner's account can't be deleted, and neither can an account that still owns media libraries (possible on pre-ARGY-167 data) — the cascade would take catalog items with it, so such rows must be moved first. Prefer disabling unless the person is truly gone — deletion is unrecoverable.
          */
         delete: operations["deleteAccount"];
         options?: never;
@@ -394,7 +394,7 @@ export interface paths {
         put?: never;
         /**
          * Reset an account's password to a fresh generated one (owner only)
-         * @description Server-generates a new password and returns it exactly once — the same contract as provisioning (only the bcrypt hash is stored). There is no way to *choose* a password for someone else. The owner account itself is refused: rotate your own password through the self-serve change-password flow, which proves the current one.
+         * @description Server-generates a new password and returns it exactly once — the same contract as provisioning (only the bcrypt hash is stored). There is no way to *choose* a password for someone else. The account's paired devices are revoked as part of the reset: unlike the self-serve change-password flow (which proves the current password, so existing devices are known-good), an owner reset means the credential was lost or leaked, and a leaked password may already have paired a device. The owner account itself is refused: rotate your own password through the self-serve flow instead.
          */
         post: operations["resetAccountPassword"];
         delete?: never;

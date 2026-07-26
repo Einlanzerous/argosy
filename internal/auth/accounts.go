@@ -23,6 +23,13 @@ import (
 // password instead).
 var ErrOwnerAccount = errors.New("the instance owner's account can't be modified here")
 
+// ErrAccountHasLibraries refuses deleting an account that still owns library
+// rows. Post-ARGY-167 only the (undeletable) owner can create libraries, but
+// the 00023 backfill never moved legacy rows — and accounts→libraries→
+// media_items cascades on delete, so deleting such an account would silently
+// take catalog items (and everyone's watch history on them) with it.
+var ErrAccountHasLibraries = errors.New("this account still owns media libraries; move or delete them first")
+
 // email is coalesced: rows born before ARGY-159's cutover may hold NULL.
 const accountSummaryCols = `a.id::text, coalesce(a.email, ''), a.name, a.is_owner, a.disabled_at, a.created_at,
 	(SELECT count(*) FROM users u WHERE u.account_id = a.id)`
@@ -118,6 +125,14 @@ func (s *Store) DeleteAccount(ctx context.Context, actor auditEntry, accountID s
 	if err != nil {
 		return err
 	}
+	var hasLibraries bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT exists(SELECT 1 FROM libraries WHERE account_id = $1)`, accountID).Scan(&hasLibraries); err != nil {
+		return err
+	}
+	if hasLibraries {
+		return ErrAccountHasLibraries
+	}
 	if _, err := s.pool.Exec(ctx, `DELETE FROM accounts WHERE id = $1`, accountID); err != nil {
 		return fmt.Errorf("delete account: %w", err)
 	}
@@ -142,6 +157,12 @@ func (s *Store) DeprovisionAccountByEmail(ctx context.Context, email string) err
 // one, returned exactly once — the provisioning contract. There is no variant
 // that accepts a chosen password: the owner should never know (or pick) a
 // member's long-term credential.
+//
+// Unlike self-serve ChangePassword (which proves the current password, so the
+// account's devices are known-good and deliberately stay signed in), an owner
+// reset means the credential was lost or leaked — and in the leak case anyone
+// holding it may already have paired a device. The reset therefore revokes the
+// account's devices too; the member re-pairs with the fresh password.
 func (s *Store) ResetAccountPassword(ctx context.Context, sess api.Session, accountID string) (api.PasswordResetResponse, error) {
 	email, err := s.lifecycleTarget(ctx, accountID)
 	if err != nil {
@@ -159,9 +180,14 @@ func (s *Store) ResetAccountPassword(ctx context.Context, sess api.Session, acco
 		`UPDATE accounts SET password_hash = $1, updated_at = now() WHERE id = $2`, hash, accountID); err != nil {
 		return api.PasswordResetResponse{}, err
 	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE devices SET revoked_at = now() WHERE account_id = $1 AND revoked_at IS NULL`, accountID)
+	if err != nil {
+		return api.PasswordResetResponse{}, err
+	}
 	e := sessionActor(sess)
 	e.action, e.targetType, e.targetID = "account.password_reset", "account", accountID
-	e.detail = map[string]any{"email": email}
+	e.detail = map[string]any{"email": email, "devicesRevoked": tag.RowsAffected()}
 	s.audit(ctx, e)
 	return api.PasswordResetResponse{GeneratedPassword: password}, nil
 }

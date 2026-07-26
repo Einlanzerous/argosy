@@ -654,7 +654,7 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrInvalidInput):
 		httpx.Error(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrEmailTaken), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrSelfDelete), errors.Is(err, ErrOwnerAccount):
+	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrEmailTaken), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrSelfDelete), errors.Is(err, ErrOwnerAccount), errors.Is(err, ErrAccountHasLibraries):
 		httpx.Error(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrPasswordRequired), errors.Is(err, ErrWrongPassword), errors.Is(err, ErrAccountDisabled):
 		httpx.Error(w, http.StatusForbidden, err.Error())

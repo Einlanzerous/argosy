@@ -43,6 +43,10 @@ func sessionActor(sess api.Session) auditEntry {
 // the rest of this store sequences its statements), so a failed insert must
 // not fail the request — it is logged instead.
 func (s *Store) audit(ctx context.Context, e auditEntry) {
+	// The caller hands us the request context, which Go cancels the moment the
+	// client disconnects — and the mutation has already committed by then. The
+	// trail must survive a closed browser tab, so detach from cancellation.
+	ctx = context.WithoutCancel(ctx)
 	detail := e.detail
 	if detail == nil {
 		detail = map[string]any{}
