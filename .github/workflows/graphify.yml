@@ -1,0 +1,50 @@
+name: Update Knowledge Graph
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'graphify-out/**'
+
+permissions:
+  contents: write
+
+jobs:
+  graphify:
+    runs-on: ubuntu-latest
+    steps:
+      # No push token needed: argosy's main has no ruleset/protection, so the
+      # default GITHUB_TOKEN (contents: write above) can push the auto-commit.
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install graphify
+        # graphifyy doesn't declare `anthropic` as a dependency, but the
+        # `claude` semantic backend imports it at runtime — inject it into
+        # the tool environment so `graphify extract` doesn't bail with
+        # "requires the anthropic package".
+        run: uv tool install graphifyy --with anthropic
+
+      - name: Build knowledge graph
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        # Since graphify 0.9.x, `extract` builds graph.json but no longer
+        # writes GRAPH_REPORT.md — `cluster-only` names communities and
+        # regenerates the report. `--backend=claude` is explicit because
+        # auto-detect has been seen skipping the naming pass (leaving
+        # "Community N" placeholders). Timestamped backup dirs are dropped
+        # so they never land in the auto-commit.
+        run: |
+          graphify extract .
+          graphify cluster-only . --no-viz --backend=claude
+          rm -rf graphify-out/20*/
+
+      - name: Commit updated outputs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add graphify-out/GRAPH_REPORT.md graphify-out/cache/
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: update knowledge graph [skip ci]"
+          git push
