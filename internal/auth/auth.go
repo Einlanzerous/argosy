@@ -39,6 +39,10 @@ var (
 	// must not look like an expired token and sign the device out).
 	ErrPasswordRequired = errors.New("the account password is required to switch to an admin profile")
 	ErrWrongPassword    = errors.New("incorrect account password")
+	// Account lifecycle (ARGY-86): a disabled account fails sign-in with an
+	// explicit 403 — telling a household member they're disabled beats a
+	// gaslighting "invalid credentials".
+	ErrAccountDisabled = errors.New("this account has been disabled")
 )
 
 // EmailTakenError is ErrEmailTaken carrying the account that owns the email
@@ -80,14 +84,14 @@ func (s *Store) CreateAccount(ctx context.Context, email, password, accountName 
 	if email == "" {
 		return api.Account{}, ErrInvalidInput
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := hashPassword(password)
 	if err != nil {
-		return api.Account{}, fmt.Errorf("hash password: %w", err)
+		return api.Account{}, err
 	}
 	var idStr, name string
 	if err := s.pool.QueryRow(ctx,
 		`INSERT INTO accounts (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id::text, name`,
-		accountName, email, string(hash)).Scan(&idStr, &name); err != nil {
+		accountName, email, hash).Scan(&idStr, &name); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
 			if existing, lookupErr := s.AccountByEmail(ctx, email); lookupErr == nil {
@@ -162,6 +166,11 @@ func (s *Store) ProvisionAccount(ctx context.Context, req api.AccountCreateReque
 	if err != nil {
 		return api.AccountCreateResponse{}, err
 	}
+	s.audit(ctx, auditEntry{
+		actorType: actorProvision, action: "account.provision",
+		targetType: "account", targetID: acc.Id.String(),
+		detail: map[string]any{"email": normalizeEmail(req.Email)},
+	})
 	return api.AccountCreateResponse{Account: acc, GeneratedPassword: generated}, nil
 }
 
@@ -273,7 +282,7 @@ func (s *Store) AuthenticateDevice(ctx context.Context, token string) (api.Sessi
 		 FROM devices d
 		 JOIN accounts a ON a.id = d.account_id
 		 LEFT JOIN users u ON u.id = d.user_id
-		 WHERE d.token_hash = $1 AND d.revoked_at IS NULL`, hashToken(token)).
+		 WHERE d.token_hash = $1 AND d.revoked_at IS NULL AND a.disabled_at IS NULL`, hashToken(token)).
 		Scan(&accID, &devID, &userID, &role, &isOwner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.Session{}, ErrInvalidCredentials
@@ -441,13 +450,22 @@ func (s *Store) ChangePassword(ctx context.Context, accountID, currentPassword, 
 	if !ok {
 		return ErrWrongPassword
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hash, err := hashPassword(newPassword)
 	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
+		return err
 	}
 	_, err = s.pool.Exec(ctx,
-		`UPDATE accounts SET password_hash = $1, updated_at = now() WHERE id = $2`, string(hash), accountID)
+		`UPDATE accounts SET password_hash = $1, updated_at = now() WHERE id = $2`, hash, accountID)
 	return err
+}
+
+// hashPassword bcrypt-hashes an account password (cost 10, the package default).
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+	return string(hash), nil
 }
 
 // checkAccountPassword reports whether password matches the account's bcrypt hash.
@@ -569,9 +587,10 @@ func (s *Store) SetUserPreferences(ctx context.Context, userID string, p api.Use
 
 func (s *Store) verify(ctx context.Context, email, password string) (id, name string, err error) {
 	var hash string
+	var disabledAt *time.Time
 	err = s.pool.QueryRow(ctx,
-		`SELECT id::text, name, coalesce(password_hash, '') FROM accounts WHERE lower(email) = $1`, normalizeEmail(email)).
-		Scan(&id, &name, &hash)
+		`SELECT id::text, name, coalesce(password_hash, ''), disabled_at FROM accounts WHERE lower(email) = $1`, normalizeEmail(email)).
+		Scan(&id, &name, &hash, &disabledAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", ErrInvalidCredentials
 	}
@@ -580,6 +599,11 @@ func (s *Store) verify(ctx context.Context, email, password string) (id, name st
 	}
 	if hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
 		return "", "", ErrInvalidCredentials
+	}
+	// Checked after the password so only the account's real holder learns it
+	// was disabled rather than deleted.
+	if disabledAt != nil {
+		return "", "", ErrAccountDisabled
 	}
 	return id, name, nil
 }

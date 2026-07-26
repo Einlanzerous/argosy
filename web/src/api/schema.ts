@@ -339,6 +339,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every account on this instance (owner only)
+         * @description Account lifecycle surface (ARGY-86). Listing and managing *accounts* is an instance-level power — accounts are the server's households, not anything inside the caller's own — so it is gated on instance ownership (ARGY-167), not household admin.
+         */
+        get: operations["listAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/accounts/{accountId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an account and everything it owns (owner only)
+         * @description Removes the account with its profiles, devices, watch history, vaults and preferences (DB cascade). The instance owner's account can't be deleted, and neither can an account that still owns media libraries (possible on pre-ARGY-167 data) — the cascade would take catalog items with it, so such rows must be moved first. Prefer disabling unless the person is truly gone — deletion is unrecoverable.
+         */
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        /**
+         * Disable or re-enable an account (owner only)
+         * @description A disabled account keeps all its data but can no longer sign in, and its paired devices stop authenticating immediately. The instance owner's account can't be disabled — that would brick the server.
+         */
+        patch: operations["updateAccount"];
+        trace?: never;
+    };
+    "/api/v1/auth/accounts/{accountId}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset an account's password to a fresh generated one (owner only)
+         * @description Server-generates a new password and returns it exactly once — the same contract as provisioning (only the bcrypt hash is stored). There is no way to *choose* a password for someone else. The account's paired devices are revoked as part of the reset: unlike the self-serve change-password flow (which proves the current password, so existing devices are known-good), an owner reset means the credential was lost or leaked, and a leaked password may already have paired a device. The owner account itself is refused: rotate your own password through the self-serve flow instead.
+         */
+        post: operations["resetAccountPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/accounts": {
         parameters: {
             query?: never;
@@ -357,7 +421,11 @@ export interface paths {
          * @description Creates a new account with one initial admin profile named after the account. This is the Purser provisioning surface (ARGY-132): it is authorized by the static X-Provision-Token header rather than a bearer session, because a session is always scoped to an *existing* account. When `password` is omitted the server generates one and returns it exactly once as `generatedPassword` — only the bcrypt hash is stored. The route is registered only when ARGOSY_PROVISION_TOKEN is set, so an unconfigured server answers 404.
          */
         post: operations["createAccount"];
-        delete?: never;
+        /**
+         * Delete an account by email (service-to-service deprovisioning)
+         * @description The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set.
+         */
+        delete: operations["deprovisionAccount"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1120,6 +1188,27 @@ export interface components {
         AccountConflictError: {
             error: string;
             account: components["schemas"]["Account"];
+        };
+        /** @description One row of the owner's account-management list (ARGY-86). */
+        AccountSummary: {
+            /** Format: uuid */
+            id: string;
+            email: string;
+            name: string;
+            /** @description Whether this account owns the instance (ARGY-167). */
+            isOwner: boolean;
+            /** @description Disabled accounts can't sign in and their devices stop authenticating. */
+            disabled: boolean;
+            profileCount: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AccountUpdateRequest: {
+            disabled: boolean;
+        };
+        PasswordResetResponse: {
+            /** @description The fresh password, delivered exactly once — only the bcrypt hash is stored, so it is never retrievable again. */
+            generatedPassword: string;
         };
         LoginResponse: {
             account: components["schemas"]["Account"];
@@ -2217,6 +2306,108 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    listAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSummary"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    resetAccountPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Password reset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     lookupAccount: {
         parameters: {
             query: {
@@ -2276,6 +2467,31 @@ export interface operations {
                     "application/json": components["schemas"]["AccountConflictError"];
                 };
             };
+        };
+    };
+    deprovisionAccount: {
+        parameters: {
+            query: {
+                /** @description The account email. Matched case-insensitively. */
+                email: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listLibraries: {

@@ -229,6 +229,56 @@ class AuthApi {
     return null;
   }
 
+  /// Delete an account and everything it owns (owner only)
+  ///
+  /// Removes the account with its profiles, devices, watch history, vaults and preferences (DB cascade). The instance owner's account can't be deleted, and neither can an account that still owns media libraries (possible on pre-ARGY-167 data) — the cascade would take catalog items with it, so such rows must be moved first. Prefer disabling unless the person is truly gone — deletion is unrecoverable. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  Future<Response> deleteAccountWithHttpInfo(String accountId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/accounts/{accountId}'
+      .replaceAll('{accountId}', accountId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'DELETE',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Delete an account and everything it owns (owner only)
+  ///
+  /// Removes the account with its profiles, devices, watch history, vaults and preferences (DB cascade). The instance owner's account can't be deleted, and neither can an account that still owns media libraries (possible on pre-ARGY-167 data) — the cascade would take catalog items with it, so such rows must be moved first. Prefer disabling unless the person is truly gone — deletion is unrecoverable. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  Future<void> deleteAccount(String accountId, { Future<void>? abortTrigger, }) async {
+    final response = await deleteAccountWithHttpInfo(accountId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Delete a profile (admin only)
   ///
   /// Devices bound to the deleted profile are unbound — they keep working but drop to viewer access until reassigned. The account must keep at least one admin, and you can't delete the profile you're currently signed in as. 
@@ -274,6 +324,59 @@ class AuthApi {
   /// * [String] userId (required):
   Future<void> deleteProfile(String userId, { Future<void>? abortTrigger, }) async {
     final response = await deleteProfileWithHttpInfo(userId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
+  /// Delete an account by email (service-to-service deprovisioning)
+  ///
+  /// The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] email (required):
+  ///   The account email. Matched case-insensitively.
+  Future<Response> deprovisionAccountWithHttpInfo(String email, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/admin/accounts';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+      queryParams.addAll(_queryParams('', 'email', email));
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'DELETE',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Delete an account by email (service-to-service deprovisioning)
+  ///
+  /// The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] email (required):
+  ///   The account email. Matched case-insensitively.
+  Future<void> deprovisionAccount(String email, { Future<void>? abortTrigger, }) async {
+    final response = await deprovisionAccountWithHttpInfo(email, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -468,6 +571,58 @@ class AuthApi {
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'UserPreferences',) as UserPreferences;
     
+    }
+    return null;
+  }
+
+  /// List every account on this instance (owner only)
+  ///
+  /// Account lifecycle surface (ARGY-86). Listing and managing *accounts* is an instance-level power — accounts are the server's households, not anything inside the caller's own — so it is gated on instance ownership (ARGY-167), not household admin. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> listAccountsWithHttpInfo({ Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/accounts';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// List every account on this instance (owner only)
+  ///
+  /// Account lifecycle surface (ARGY-86). Listing and managing *accounts* is an instance-level power — accounts are the server's households, not anything inside the caller's own — so it is gated on instance ownership (ARGY-167), not household admin. 
+  Future<List<AccountSummary>?> listAccounts({ Future<void>? abortTrigger, }) async {
+    final response = await listAccountsWithHttpInfo(abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<AccountSummary>') as List)
+        .cast<AccountSummary>()
+        .toList(growable: false);
+
     }
     return null;
   }
@@ -805,6 +960,64 @@ class AuthApi {
     return null;
   }
 
+  /// Reset an account's password to a fresh generated one (owner only)
+  ///
+  /// Server-generates a new password and returns it exactly once — the same contract as provisioning (only the bcrypt hash is stored). There is no way to *choose* a password for someone else. The account's paired devices are revoked as part of the reset: unlike the self-serve change-password flow (which proves the current password, so existing devices are known-good), an owner reset means the credential was lost or leaked, and a leaked password may already have paired a device. The owner account itself is refused: rotate your own password through the self-serve flow instead. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  Future<Response> resetAccountPasswordWithHttpInfo(String accountId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/accounts/{accountId}/password-reset'
+      .replaceAll('{accountId}', accountId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Reset an account's password to a fresh generated one (owner only)
+  ///
+  /// Server-generates a new password and returns it exactly once — the same contract as provisioning (only the bcrypt hash is stored). There is no way to *choose* a password for someone else. The account's paired devices are revoked as part of the reset: unlike the self-serve change-password flow (which proves the current password, so existing devices are known-good), an owner reset means the credential was lost or leaked, and a leaked password may already have paired a device. The owner account itself is refused: rotate your own password through the self-serve flow instead. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  Future<PasswordResetResponse?> resetAccountPassword(String accountId, { Future<void>? abortTrigger, }) async {
+    final response = await resetAccountPasswordWithHttpInfo(accountId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'PasswordResetResponse',) as PasswordResetResponse;
+    
+    }
+    return null;
+  }
+
   /// Revoke a device token (\"retire from the Fleet\")
   ///
   /// Note: This method returns the HTTP [Response].
@@ -1066,6 +1279,68 @@ class AuthApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Session',) as Session;
+    
+    }
+    return null;
+  }
+
+  /// Disable or re-enable an account (owner only)
+  ///
+  /// A disabled account keeps all its data but can no longer sign in, and its paired devices stop authenticating immediately. The instance owner's account can't be disabled — that would brick the server. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  ///
+  /// * [AccountUpdateRequest] accountUpdateRequest (required):
+  Future<Response> updateAccountWithHttpInfo(String accountId, AccountUpdateRequest accountUpdateRequest, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/auth/accounts/{accountId}'
+      .replaceAll('{accountId}', accountId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = accountUpdateRequest;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'PATCH',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Disable or re-enable an account (owner only)
+  ///
+  /// A disabled account keeps all its data but can no longer sign in, and its paired devices stop authenticating immediately. The instance owner's account can't be disabled — that would brick the server. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  ///
+  /// * [AccountUpdateRequest] accountUpdateRequest (required):
+  Future<AccountSummary?> updateAccount(String accountId, AccountUpdateRequest accountUpdateRequest, { Future<void>? abortTrigger, }) async {
+    final response = await updateAccountWithHttpInfo(accountId, accountUpdateRequest, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AccountSummary',) as AccountSummary;
     
     }
     return null;

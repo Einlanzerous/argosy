@@ -42,6 +42,13 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	mux.Handle("POST /api/v1/auth/profiles", requireAdmin(store, handleCreateProfile(store)))
 	mux.Handle("PATCH /api/v1/auth/profiles/{userId}", requireAdmin(store, handleUpdateProfile(store)))
 	mux.Handle("DELETE /api/v1/auth/profiles/{userId}", requireAdmin(store, handleDeleteProfile(store)))
+	// Account lifecycle (ARGY-86): accounts are the server's households, so
+	// managing them is the instance owner's power (ARGY-167), not household
+	// admin's.
+	mux.Handle("GET /api/v1/auth/accounts", requireOwner(store, handleListAccounts(store)))
+	mux.Handle("PATCH /api/v1/auth/accounts/{accountId}", requireOwner(store, handleUpdateAccount(store)))
+	mux.Handle("DELETE /api/v1/auth/accounts/{accountId}", requireOwner(store, handleDeleteAccount(store)))
+	mux.Handle("POST /api/v1/auth/accounts/{accountId}/password-reset", requireOwner(store, handleResetAccountPassword(store)))
 	// Device code-pairing (ARGY-112, PIN-first ARGY-123): start + poll are
 	// unauthenticated (a device with no session yet); approve is any
 	// authenticated user (web or mobile) blessing the code.
@@ -62,6 +69,7 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 func RegisterProvisioning(mux *http.ServeMux, store *Store, token string) {
 	mux.Handle("POST /api/v1/admin/accounts", requireProvisionToken(token, handleCreateAccount(store)))
 	mux.Handle("GET /api/v1/admin/accounts", requireProvisionToken(token, handleLookupAccount(store)))
+	mux.Handle("DELETE /api/v1/admin/accounts", requireProvisionToken(token, handleDeprovisionAccount(store)))
 }
 
 func requireProvisionToken(token string, next http.Handler) http.Handler {
@@ -101,6 +109,84 @@ func handleLookupAccount(store *Store) http.HandlerFunc {
 			return
 		}
 		httpx.JSON(w, http.StatusOK, api.AccountLookupResponse{Account: acc})
+	}
+}
+
+// handleDeprovisionAccount is the teardown companion to handleCreateAccount
+// (ARGY-86): the provisioning service offboards a member by the same key it
+// provisioned them under — their email. The owner guard answers 409.
+func handleDeprovisionAccount(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := store.DeprovisionAccountByEmail(r.Context(), r.URL.Query().Get("email")); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func handleListAccounts(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		accounts, err := store.ListAccounts(r.Context())
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		httpx.JSON(w, http.StatusOK, accounts)
+	}
+}
+
+func handleUpdateAccount(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		id, err := uuid.Parse(r.PathValue("accountId"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid account id")
+			return
+		}
+		var req api.AccountUpdateRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		acc, err := store.SetAccountDisabled(r.Context(), sess, id.String(), req.Disabled)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, acc)
+	}
+}
+
+func handleDeleteAccount(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		id, err := uuid.Parse(r.PathValue("accountId"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid account id")
+			return
+		}
+		if err := store.DeleteAccount(r.Context(), sessionActor(sess), id.String()); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func handleResetAccountPassword(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := SessionFromContext(r.Context())
+		id, err := uuid.Parse(r.PathValue("accountId"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid account id")
+			return
+		}
+		out, err := store.ResetAccountPassword(r.Context(), sess, id.String())
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, out)
 	}
 }
 
@@ -271,6 +357,10 @@ func handleCreateProfile(store *Store) http.HandlerFunc {
 			writeAuthError(w, err)
 			return
 		}
+		e := sessionActor(sess)
+		e.action, e.targetType, e.targetID = "profile.create", "profile", p.Id.String()
+		e.detail = map[string]any{"name": p.Name, "role": p.Role}
+		store.audit(r.Context(), e)
 		httpx.JSON(w, http.StatusCreated, p)
 	}
 }
@@ -292,6 +382,10 @@ func handleUpdateProfile(store *Store) http.HandlerFunc {
 			writeAuthError(w, err)
 			return
 		}
+		e := sessionActor(sess)
+		e.action, e.targetType, e.targetID = "profile.update", "profile", p.Id.String()
+		e.detail = map[string]any{"name": p.Name, "role": p.Role}
+		store.audit(r.Context(), e)
 		httpx.JSON(w, http.StatusOK, p)
 	}
 }
@@ -308,6 +402,9 @@ func handleDeleteProfile(store *Store) http.HandlerFunc {
 			writeAuthError(w, err)
 			return
 		}
+		e := sessionActor(sess)
+		e.action, e.targetType, e.targetID = "profile.delete", "profile", id.String()
+		store.audit(r.Context(), e)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -343,6 +440,9 @@ func handleChangePassword(store *Store) http.HandlerFunc {
 			writeAuthError(w, err)
 			return
 		}
+		e := sessionActor(sess)
+		e.action, e.targetType, e.targetID = "account.password_change", "account", sess.AccountId.String()
+		store.audit(r.Context(), e)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -454,6 +554,11 @@ func requireAdmin(store *Store, next http.HandlerFunc) http.Handler {
 	return Middleware(store)(RequireAdmin(next))
 }
 
+// requireOwner authenticates then gates on instance ownership (ARGY-167).
+func requireOwner(store *Store, next http.HandlerFunc) http.Handler {
+	return Middleware(store)(RequireOwner(next))
+}
+
 // RequireAdmin wraps next so only an admin session reaches it; a viewer gets
 // 403. It must be composed *inside* Middleware (it reads the session from the
 // context Middleware populates): e.g. mw(auth.RequireAdmin(handler)).
@@ -549,9 +654,9 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrInvalidInput):
 		httpx.Error(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrEmailTaken), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrSelfDelete):
+	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrEmailTaken), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrSelfDelete), errors.Is(err, ErrOwnerAccount), errors.Is(err, ErrAccountHasLibraries):
 		httpx.Error(w, http.StatusConflict, err.Error())
-	case errors.Is(err, ErrPasswordRequired), errors.Is(err, ErrWrongPassword):
+	case errors.Is(err, ErrPasswordRequired), errors.Is(err, ErrWrongPassword), errors.Is(err, ErrAccountDisabled):
 		httpx.Error(w, http.StatusForbidden, err.Error())
 	default:
 		httpx.Error(w, http.StatusInternalServerError, "internal error")
