@@ -2,20 +2,17 @@ package library
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/Einlanzerous/argosy/internal/db"
+	"github.com/Einlanzerous/argosy/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestPlayStateLifecycle(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run play-state tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -104,10 +101,7 @@ func TestPlayStateLifecycle(t *testing.T) {
 // in-progress episode collapses to a single Continue Watching entry (its
 // most-recently-active episode), while a standalone movie keeps its own row.
 func TestContinueWatchingDedup(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run continue-watching tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -211,10 +205,7 @@ func TestContinueWatchingDedup(t *testing.T) {
 // the request. Reporting from another device surfaces the pill; requesting from
 // that same device suppresses it; a revoked device drops the attribution.
 func TestContinueWatchingLastDevice(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run continue-watching tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
 		t.Fatalf("migrate: %v", err)

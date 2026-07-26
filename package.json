@@ -4,7 +4,7 @@
   "description": "Dev orchestration for Argosy. `bun run dev` starts the backend stack + the web dev server.",
   "scripts": {
     "dev": "docker compose -f deploy/docker-compose.yml up -d --build && cd web && bun install && bun run dev",
-    "dev:down": "docker compose -f deploy/docker-compose.yml down",
+    "dev:down": "docker compose -f deploy/docker-compose.yml --profile webdev down",
     "seed": "bash scripts/seed-sample.sh",
     "gen:dart": "openapi-generator-cli generate -c proto/openapi/dart-openapi.yaml"
   },

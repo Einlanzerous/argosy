@@ -2,18 +2,16 @@ package db
 
 import (
 	"context"
-	"os"
 	"testing"
+
+	"github.com/Einlanzerous/argosy/internal/testdb"
 )
 
 // TestMigrate applies the schema against a real Postgres and checks the core
 // invariants. It runs in CI (ARGOSY_TEST_DATABASE_URL points at the service)
 // and is skipped locally when that variable is unset.
 func TestMigrate(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run DB tests")
-	}
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 
 	if err := Migrate(ctx, dsn); err != nil {

@@ -4,10 +4,10 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/Einlanzerous/argosy/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -56,10 +56,7 @@ func TestUnsubscribeStopsDelivery(t *testing.T) {
 // loop LISTENs, Publish does pg_notify, and a subscriber receives it. Runs in CI
 // (ARGOSY_TEST_DATABASE_URL points at the service); skipped otherwise.
 func TestPublishDeliversOverPostgres(t *testing.T) {
-	dsn := os.Getenv("ARGOSY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set ARGOSY_TEST_DATABASE_URL to run the beacon integration test")
-	}
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, dsn)
