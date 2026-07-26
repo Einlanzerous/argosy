@@ -145,6 +145,8 @@ make docker-build    # -> argosy:dev
 | `ARGOSY_SCAN_INTERVAL`  | _(unset)_ | Periodic library re-scan interval (e.g. `15m`)  |
 | `ARGOSY_ARTWORK_DIR`    | _(unset)_ | Cache dir for fetched poster/backdrop artwork   |
 | `TMDB_API_READ_ACCESS_KEY` / `TMDB_API_KEY` | _(unset)_ | TMDB credentials for metadata + artwork |
+| `ARGOSY_TMDB_RATE`      | `25`      | TMDB request ceiling (req/s), shared with artwork downloads |
+| `TMDB_BASE_URL` / `TMDB_IMAGE_BASE_URL` | _(unset)_ | Point the TMDB client at a stub server (testing) |
 | `ARGOSY_ENCODER_PREFERENCE` | `nvenc,qsv,vaapi,software` | Hardware-encode preference order |
 | `ARGOSY_FORCE_SOFTWARE` | `false`   | Force software (libx264/libx265) encode          |
 | `ARGOSY_VAAPI_DEVICE`   | `/dev/dri/renderD128` | VAAPI render node (e.g. a discrete GPU) |

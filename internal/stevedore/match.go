@@ -25,15 +25,21 @@ type Matcher struct {
 
 // NewMatcher returns a Matcher that downloads artwork into artworkDir.
 func NewMatcher(pool *pgxpool.Pool, provider metadata.Provider, artworkDir string, logger *slog.Logger) *Matcher {
+	// Artwork goes through the provider's own download path when it has one,
+	// so image fetches share TMDB's rate limit + retry envelope (ARGY-141).
 	client := &http.Client{Timeout: 30 * time.Second}
+	download := func(ctx context.Context, url, dest string) error {
+		return metadata.DownloadImage(ctx, client, url, dest)
+	}
+	if d, ok := provider.(metadata.ImageDownloader); ok {
+		download = d.DownloadImage
+	}
 	return &Matcher{
 		pool:       pool,
 		provider:   provider,
 		logger:     logger,
 		artworkDir: artworkDir,
-		download: func(ctx context.Context, url, dest string) error {
-			return metadata.DownloadImage(ctx, client, url, dest)
-		},
+		download:   download,
 	}
 }
 

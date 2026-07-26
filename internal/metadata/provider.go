@@ -31,6 +31,13 @@ type EpisodeMeta struct {
 	VoteCount   int     // number of votes behind VoteAverage
 }
 
+// ImageDownloader is implemented by providers that fetch artwork through
+// their own paced, retrying HTTP path (TMDB, ARGY-141). The matcher prefers
+// it over a plain client so image downloads share the API's token bucket.
+type ImageDownloader interface {
+	DownloadImage(ctx context.Context, rawURL, dest string) error
+}
+
 // Provider looks up metadata for films and series.
 type Provider interface {
 	SearchMovie(ctx context.Context, title string, year int) (*Match, error)

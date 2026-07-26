@@ -33,6 +33,14 @@ type Config struct {
 	// TMDB credentials for metadata matching (either is sufficient).
 	TMDBReadToken string
 	TMDBAPIKey    string
+	// TMDBBaseURL / TMDBImageBaseURL override the API and artwork endpoints so
+	// a stub server can stand in for TMDB (ARGY-139); empty uses the real one.
+	TMDBBaseURL      string
+	TMDBImageBaseURL string
+	// TMDBRate caps sustained TMDB request throughput in requests/second,
+	// shared across all endpoints and artwork downloads (ARGY-141). Zero uses
+	// the client's built-in default.
+	TMDBRate float64
 	// ArtworkDir is where downloaded poster/artwork files are cached.
 	ArtworkDir string
 	// ScanInterval is how often Stevedore re-sweeps every library to keep the
@@ -89,13 +97,16 @@ func Load() Config {
 		MediaDir:    getenv("ARGOSY_MEDIA_DIR", "/media"),
 		// ARGOSY_ADMIN_USERNAME is the pre-ARGY-159 name, kept as a fallback so
 		// existing deployments don't need an env change to keep booting.
-		AdminEmail:     getenv("ARGOSY_ADMIN_EMAIL", os.Getenv("ARGOSY_ADMIN_USERNAME")),
-		AdminPassword:  os.Getenv("ARGOSY_ADMIN_PASSWORD"),
-		ProvisionToken: os.Getenv("ARGOSY_PROVISION_TOKEN"),
-		TMDBReadToken:  os.Getenv("TMDB_API_READ_ACCESS_KEY"),
-		TMDBAPIKey:     os.Getenv("TMDB_API_KEY"),
-		ArtworkDir:     getenv("ARGOSY_ARTWORK_DIR", "artwork"),
-		ScanInterval:   parseDuration(os.Getenv("ARGOSY_SCAN_INTERVAL")),
+		AdminEmail:       getenv("ARGOSY_ADMIN_EMAIL", os.Getenv("ARGOSY_ADMIN_USERNAME")),
+		AdminPassword:    os.Getenv("ARGOSY_ADMIN_PASSWORD"),
+		ProvisionToken:   os.Getenv("ARGOSY_PROVISION_TOKEN"),
+		TMDBReadToken:    os.Getenv("TMDB_API_READ_ACCESS_KEY"),
+		TMDBAPIKey:       os.Getenv("TMDB_API_KEY"),
+		TMDBBaseURL:      os.Getenv("TMDB_BASE_URL"),
+		TMDBImageBaseURL: os.Getenv("TMDB_IMAGE_BASE_URL"),
+		TMDBRate:         parseFloat(os.Getenv("ARGOSY_TMDB_RATE")),
+		ArtworkDir:       getenv("ARGOSY_ARTWORK_DIR", "artwork"),
+		ScanInterval:     parseDuration(os.Getenv("ARGOSY_SCAN_INTERVAL")),
 
 		TranscodeDir:         getenv("ARGOSY_TRANSCODE_DIR", filepath.Join(os.TempDir(), "argosy-transcode")),
 		TranscodeIdleTimeout: parseDuration(os.Getenv("ARGOSY_TRANSCODE_IDLE_TIMEOUT")),
@@ -139,6 +150,16 @@ func parseSize(s string) int64 {
 		return 0
 	}
 	return n * mult
+}
+
+// parseFloat returns the float value of s, or 0 when empty/invalid (callers
+// apply their own default).
+func parseFloat(s string) float64 {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0
+	}
+	return f
 }
 
 // parseInt returns the int value of s, or 0 when empty/invalid (callers apply
