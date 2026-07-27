@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.21.0](https://github.com/Einlanzerous/argosy/compare/v0.20.0...v0.21.0) (2026-07-27)
+
+
+### Features
+
+* **mobile:** brass watched badge + long-press toggle for episode rows (ARGY-122) ([#177](https://github.com/Einlanzerous/argosy/issues/177)) ([92e47bf](https://github.com/Einlanzerous/argosy/commit/92e47bf313ea1962726d73420d9ef5920940364c))
+
+
+### Bug Fixes
+
+* **web:** brass-themed thin scrollbars in Firefox (ARGY-172) ([#179](https://github.com/Einlanzerous/argosy/issues/179)) ([47d0b1e](https://github.com/Einlanzerous/argosy/commit/47d0b1e7a31fa0f3a137ef7dda414ba34621323f))
+
 ## [0.20.0](https://github.com/Einlanzerous/argosy/compare/v0.19.1...v0.20.0) (2026-07-26)
 
 
