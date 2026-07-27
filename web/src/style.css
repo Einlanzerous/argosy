@@ -81,6 +81,13 @@ select {
   font-family: inherit;
 }
 
+/* Firefox and Chromium 121+ take the standard properties; Safari still needs
+   the ::-webkit-scrollbar rules below. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(234, 234, 229, 0.14) transparent;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
