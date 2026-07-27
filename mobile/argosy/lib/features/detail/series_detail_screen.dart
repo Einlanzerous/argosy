@@ -434,6 +434,9 @@ class _EpisodeTile extends ConsumerWidget {
       opacity: playable ? 1 : 0.5,
       child: InkWell(
         onTap: playable ? () => openPlayer(context, _rep.mediaItemId!) : null,
+        onLongPress: playable && onSet != null
+            ? () => _showWatchedSheet(context)
+            : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
           child: Row(
@@ -464,15 +467,19 @@ class _EpisodeTile extends ConsumerWidget {
                             )
                           else
                             _StillPlaceholder(seed: _rep.id),
-                          Center(
+                          const Center(
                             child: Icon(
-                              watched ? Icons.check_circle : Icons.play_arrow,
-                              size: watched ? 22 : 26,
-                              color: watched
-                                  ? ArgosyColors.green
-                                  : ArgosyColors.soft2,
+                              Icons.play_arrow,
+                              size: 26,
+                              color: ArgosyColors.soft2,
                             ),
                           ),
+                          if (watched)
+                            const Positioned(
+                              top: 4,
+                              right: 4,
+                              child: WatchedBadge(),
+                            ),
                           if (inProgress)
                             Align(
                               alignment: Alignment.bottomCenter,
@@ -548,63 +555,49 @@ class _EpisodeTile extends ConsumerWidget {
                   ),
                 ),
               ),
-              if (playable && onSet != null)
-                _EpisodeWatchedToggle(watched: watched, onSet: onSet!),
             ],
           ),
         ),
       ),
     );
   }
-}
 
-/// A compact per-episode watched toggle (ARGY-109): a check chip trailing the
-/// row. Owns its busy state and surfaces failures via a snackbar; [onSet] flips
-/// the flag (the parent applies the optimistic override on success).
-class _EpisodeWatchedToggle extends StatefulWidget {
-  const _EpisodeWatchedToggle({required this.watched, required this.onSet});
-
-  final bool watched;
-  final Future<void> Function(bool next) onSet;
-
-  @override
-  State<_EpisodeWatchedToggle> createState() => _EpisodeWatchedToggleState();
-}
-
-class _EpisodeWatchedToggleState extends State<_EpisodeWatchedToggle> {
-  bool _busy = false;
-
-  Future<void> _toggle() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await widget.onSet(!widget.watched);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Couldn't update watched state"),
-            backgroundColor: ArgosyColors.danger,
+  /// Long-press context action (ARGY-122): a small sheet offering the one
+  /// watched/unwatched flip for this row. The visible affordance is the badge
+  /// on the thumbnail; the sheet is the toggle, replacing the old trailing
+  /// check button.
+  Future<void> _showWatchedSheet(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final flip = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: ArgosyColors.panel,
+      builder: (sheet) => SafeArea(
+        child: ListTile(
+          leading: Icon(
+            watched ? Icons.check_circle_outline : Icons.check_circle,
+            color: ArgosyColors.accent,
           ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: _busy ? null : _toggle,
-      iconSize: 22,
-      visualDensity: VisualDensity.compact,
-      tooltip: widget.watched ? 'Mark unwatched' : 'Mark watched',
-      icon: Icon(
-        widget.watched ? Icons.check_circle : Icons.check_circle_outline,
-        color: widget.watched ? ArgosyColors.green : ArgosyColors.faint,
+          title: Text(
+            watched
+                ? 'Mark $_episodeLabel unwatched'
+                : 'Mark $_episodeLabel watched',
+            style: Theme.of(sheet).textTheme.titleMedium,
+          ),
+          onTap: () => Navigator.of(sheet).pop(true),
+        ),
       ),
     );
+    if (flip != true) return;
+    try {
+      await onSet!(!watched);
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't update watched state"),
+          backgroundColor: ArgosyColors.danger,
+        ),
+      );
+    }
   }
 }
 
