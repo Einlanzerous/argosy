@@ -17,6 +17,7 @@ import '../../../widgets/async_view.dart';
 import '../../../widgets/hatch_pattern.dart';
 import '../add_to_vault.dart';
 import '../detail_providers.dart';
+import '../detail_widgets.dart';
 
 /// A series' detail on the 10-foot screen (ARGY-51 / `TVSeries.dc.html`): a left
 /// column of show meta + Resume/Add over a right column of season tabs and a
@@ -546,15 +547,19 @@ class _EpisodeTile extends ConsumerWidget {
                           )
                         else
                           _StillFallback(seed: _rep.id),
-                        Center(
+                        const Center(
                           child: Icon(
-                            watched ? Icons.check_circle : Icons.play_arrow,
+                            Icons.play_arrow,
                             size: 30,
-                            color: watched
-                                ? ArgosyColors.green
-                                : ArgosyColors.soft2,
+                            color: ArgosyColors.soft2,
                           ),
                         ),
+                        if (watched)
+                          const Positioned(
+                            top: 6,
+                            right: 6,
+                            child: WatchedBadge(size: 18),
+                          ),
                         if (inProgress)
                           Align(
                             alignment: Alignment.bottomCenter,

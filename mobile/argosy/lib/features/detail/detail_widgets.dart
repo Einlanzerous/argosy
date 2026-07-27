@@ -212,9 +212,30 @@ class _WatchedButtonState extends ConsumerState<WatchedButton> {
       icon: Icon(
         widget.watched ? Icons.check_circle : Icons.check_circle_outline,
         size: 18,
-        color: widget.watched ? ArgosyColors.green : null,
+        color: widget.watched ? ArgosyColors.accent : null,
       ),
       label: Text(widget.watched ? widget.watchedLabel : widget.markLabel),
+    );
+  }
+}
+
+/// The watched marker overlaid on episode/title artwork: a solid brass pill
+/// with a dark check, mirroring the web's `.ep-watch.on` corner pill (ARGY-122).
+/// Purely indicative — the toggle affordance is long-press on the row.
+class WatchedBadge extends StatelessWidget {
+  const WatchedBadge({super.key, this.size = 14});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: ArgosyColors.accent,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Icon(Icons.check, size: size, color: ArgosyColors.bg),
     );
   }
 }
