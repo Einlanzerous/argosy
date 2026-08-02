@@ -38,6 +38,19 @@ export async function putPreferences(prefs: DevicePreferences): Promise<void> {
 // 5.1 (4K) — so a positive answer means it's safe for the server to copy *any*
 // HEVC source untouched (native resolution, bit depth, HDR) instead of
 // re-encoding it down to H.264 1080p. hvc1 matches the sample-entry tag we mux.
+//
+// The string must stay the same *shape* as the one the server advertises in a
+// master playlist (`hvc1.<profile>.4.L<level>.B0`), because that is the string
+// hls.js re-checks with isTypeSupported before it will touch the variant —
+// answering "yes, HEVC" here about a form the browser then rejects is what made
+// ARGY-174 silent.
+//
+// Profile and level are not guaranteed to match: a remux copies the source's
+// own, and nothing stops a source from exceeding Main 10 @ 5.1 (a level 6.x
+// encode, say). This probe is a representative ceiling, not an enforced bound —
+// past it the manifest is rejected the same way. The server-side "session
+// encoded segments but never served one" warning is what makes that case
+// audible; closing it properly means negotiating per item (ARGY-175).
 export function supportsHevc(): boolean {
   if (typeof MediaSource === 'undefined' || !MediaSource.isTypeSupported) return false
   return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"')

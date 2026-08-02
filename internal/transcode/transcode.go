@@ -122,6 +122,12 @@ type Session struct {
 	StartedAt  time.Time `json:"startedAt"`
 	LastAccess time.Time `json:"lastAccess"`
 	Progress   Progress  `json:"progress"`
+	// ServedPlaylist/ServedSegment report how far the client got: a live session
+	// with a playlist served and no segment is one that fetched the manifest and
+	// walked away, which is what a rejected manifest looks like (ARGY-174). They
+	// are internal to the Manager's consumers — the API DTO doesn't carry them.
+	ServedPlaylist bool `json:"-"`
+	ServedSegment  bool `json:"-"`
 }
 
 // Backend executes a transcode described by a Spec, writing HLS artifacts into
@@ -143,6 +149,11 @@ type session struct {
 	errMsg     string
 	lastAccess time.Time
 	progress   Progress
+	// servedPlaylist/servedSegment record how far a client actually got. Both
+	// are set only once an artifact has been handed over successfully — a 503
+	// while the manifest is still being written means nothing was served.
+	servedPlaylist bool
+	servedSegment  bool
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -164,6 +175,9 @@ func (s *session) snapshot() Session {
 		StartedAt:  s.startedAt,
 		LastAccess: s.lastAccess,
 		Progress:   s.progress,
+
+		ServedPlaylist: s.servedPlaylist,
+		ServedSegment:  s.servedSegment,
 	}
 }
 
@@ -188,6 +202,27 @@ func (s *session) touch(now time.Time) {
 	s.mu.Lock()
 	s.lastAccess = now
 	s.mu.Unlock()
+}
+
+func (s *session) markServed(segment bool) {
+	s.mu.Lock()
+	if segment {
+		s.servedSegment = true
+	} else {
+		s.servedPlaylist = true
+	}
+	s.mu.Unlock()
+}
+
+// neverStreamed reports that no segment was ever handed to a client, and
+// whether a playlist was. The caller pairs it with producedSegments: encoded
+// output nobody ever fetched is the shape of a client that took the manifest
+// and refused it — every response is a 2xx, so nothing else in the log
+// distinguishes it from a healthy session (ARGY-174).
+func (s *session) neverStreamed() (never, gotPlaylist bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.servedSegment, s.servedPlaylist
 }
 
 func (s *session) idleSince(cutoff time.Time) bool {
@@ -370,6 +405,20 @@ func (m *Manager) Touch(id string) bool {
 	return true
 }
 
+// MarkServed records that one of a session's artifacts was handed to a client;
+// segment distinguishes a media segment (or init) from a playlist. Call it
+// *after* the artifact has actually gone out — a 503 for a manifest that isn't
+// written yet, or a 404, is not a client that got something. Unknown ids are
+// ignored.
+func (m *Manager) MarkServed(id string, segment bool) {
+	m.mu.Lock()
+	s, ok := m.sessions[id]
+	m.mu.Unlock()
+	if ok {
+		s.markServed(segment)
+	}
+}
+
 // TouchItem marks every live session for the given account+item as recently
 // accessed and returns how many it touched. The playback progress heartbeat
 // (PUT /progress) calls this: a client that has buffered far ahead stops
@@ -430,9 +479,22 @@ func (m *Manager) List() []Session {
 
 // kill cancels, waits for the process to exit, then removes the session and its
 // output directory.
-func (m *Manager) kill(s *session) {
+func (m *Manager) kill(s *session) { m.teardown(s, true) }
+
+// teardown cancels a session's ffmpeg process, waits for it to exit (no
+// zombies), and purges its output. reportStalled is false during shutdown,
+// where every live session is torn down mid-stream and "no segment served"
+// says nothing about any client.
+func (m *Manager) teardown(s *session, reportStalled bool) {
 	s.cancel()
 	<-s.done
+	// Encoded output nobody ever fetched. Gated on segments actually existing:
+	// without that this fires for every session abandoned before ffmpeg got
+	// going, which says nothing about whether a client can play it.
+	if never, gotPlaylist := s.neverStreamed(); reportStalled && never && producedSegments(s.outputDir) {
+		m.logger.Warn("transcode: session encoded segments but never served one",
+			"id", s.id, "item", s.itemID, "method", s.method, "playlistServed", gotPlaylist)
+	}
 	m.mu.Lock()
 	delete(m.sessions, s.id)
 	m.mu.Unlock()
@@ -485,6 +547,6 @@ func (m *Manager) shutdown() {
 	}
 	m.mu.Unlock()
 	for _, s := range all {
-		m.kill(s)
+		m.teardown(s, false)
 	}
 }
