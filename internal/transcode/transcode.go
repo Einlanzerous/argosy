@@ -143,6 +143,10 @@ type session struct {
 	errMsg     string
 	lastAccess time.Time
 	progress   Progress
+	// servedPlaylist/servedSegment record how far a client actually got, so a
+	// session that hands out a manifest nobody ever streams is visible.
+	servedPlaylist bool
+	servedSegment  bool
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -188,6 +192,26 @@ func (s *session) touch(now time.Time) {
 	s.mu.Lock()
 	s.lastAccess = now
 	s.mu.Unlock()
+}
+
+func (s *session) markServed(segment bool) {
+	s.mu.Lock()
+	if segment {
+		s.servedSegment = true
+	} else {
+		s.servedPlaylist = true
+	}
+	s.mu.Unlock()
+}
+
+// stalled reports a session a client opened but never streamed: it fetched the
+// playlist and then never asked for a segment. That is what a client rejecting
+// the manifest looks like from the server side — every response is a 2xx, so
+// nothing else in the log distinguishes it from a healthy session (ARGY-174).
+func (s *session) stalled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.servedPlaylist && !s.servedSegment
 }
 
 func (s *session) idleSince(cutoff time.Time) bool {
@@ -370,6 +394,18 @@ func (m *Manager) Touch(id string) bool {
 	return true
 }
 
+// MarkServed records that one of a session's artifacts was handed to a client;
+// segment distinguishes a media segment (or init) from a playlist. Unknown ids
+// are ignored.
+func (m *Manager) MarkServed(id string, segment bool) {
+	m.mu.Lock()
+	s, ok := m.sessions[id]
+	m.mu.Unlock()
+	if ok {
+		s.markServed(segment)
+	}
+}
+
 // TouchItem marks every live session for the given account+item as recently
 // accessed and returns how many it touched. The playback progress heartbeat
 // (PUT /progress) calls this: a client that has buffered far ahead stops
@@ -433,6 +469,10 @@ func (m *Manager) List() []Session {
 func (m *Manager) kill(s *session) {
 	s.cancel()
 	<-s.done
+	if s.stalled() {
+		m.logger.Warn("transcode: session served a playlist but never a segment — the client likely rejected the manifest",
+			"id", s.id, "item", s.itemID, "method", s.method)
+	}
 	m.mu.Lock()
 	delete(m.sessions, s.id)
 	m.mu.Unlock()

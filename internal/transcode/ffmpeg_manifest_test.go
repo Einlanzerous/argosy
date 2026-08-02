@@ -86,6 +86,90 @@ func TestMultiAudioManifestIntegration(t *testing.T) {
 	}
 }
 
+// TestHEVCMultiAudioManifestCodecs is the ARGY-174 regression guard: HEVC with
+// 2+ audio tracks is the one shape that advertises a CODECS attribute for a
+// codec the browser gates on. ffmpeg writes a malformed constraint byte there
+// ("hvc1.1.4.L120.B01"), which every strict codec-string parser rejects — so
+// hls.js dropped the only variant and failed the manifest before requesting a
+// segment, while the single-audio path (no CODECS at all) played fine.
+//
+// The assertion is on the bytes a client actually receives: what ffmpeg wrote,
+// run through NormalizePlaylist the way fileTranscode serves it.
+func TestHEVCMultiAudioManifestCodecs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test needs ffmpeg")
+	}
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	if !hasEncoder(ffmpeg, "libx265") {
+		t.Skip("ffmpeg built without libx265")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.mkv")
+	genHEVCMultiAudioSource(t, ffmpeg, src)
+
+	out := t.TempDir()
+	run(t, ffmpeg, out, buildArgs(Spec{
+		Source: src, OutputDir: out, Method: MethodRemux,
+		VideoCodec: CodecHEVC, TranscodeAudio: true, SourceHeight: 240, AudioTracks: dubSub,
+	}))
+	master, err := os.ReadFile(filepath.Join(out, PlaylistName))
+	if err != nil {
+		t.Fatalf("read master: %v", err)
+	}
+	t.Logf("master as ffmpeg wrote it:\n%s", master)
+
+	raw := codecsAttr(t, string(master))
+	served := codecsAttr(t, string(NormalizePlaylist(master)))
+	if raw == served {
+		t.Errorf("nothing was rewritten (CODECS=%q) — either ffmpeg stopped emitting the "+
+			"malformed constraint byte or NormalizePlaylist no longer matches it", raw)
+	}
+	for _, codec := range strings.Split(served, ",") {
+		if !strings.HasPrefix(codec, "hvc1") && !strings.HasPrefix(codec, "hev1") {
+			continue
+		}
+		if !validHEVCCodecString(codec) {
+			t.Errorf("served CODECS %q contains %q, which a browser codec parser rejects", served, codec)
+		}
+	}
+}
+
+// codecsAttr pulls the CODECS value off the master playlist's video variant.
+func codecsAttr(t *testing.T, master string) string {
+	t.Helper()
+	m := regexp.MustCompile(`#EXT-X-STREAM-INF:.*CODECS="([^"]+)"`).FindStringSubmatch(master)
+	if m == nil {
+		t.Fatalf("no video variant with a CODECS attribute in master:\n%s", master)
+	}
+	return m[1]
+}
+
+func hasEncoder(ffmpeg, name string) bool {
+	out, err := exec.CommandContext(context.Background(), ffmpeg, "-hide_banner", "-encoders").Output()
+	return err == nil && strings.Contains(string(out), name)
+}
+
+// genHEVCMultiAudioSource writes the ARGY-174 shape: 8-bit HEVC Main video with
+// two audio tracks, the combination the remux path copies through with a hvc1
+// tag and a master playlist.
+func genHEVCMultiAudioSource(t *testing.T, ffmpeg, path string) {
+	t.Helper()
+	run(t, ffmpeg, filepath.Dir(path), []string{
+		"-y", "-nostdin", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=24",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+		"-f", "lavfi", "-i", "sine=frequency=880:duration=2",
+		"-map", "0:v", "-map", "1:a", "-map", "2:a",
+		"-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "log-level=none",
+		"-pix_fmt", "yuv420p", "-c:a", "aac",
+		"-metadata:s:a:0", "language=eng", "-metadata:s:a:1", "language=jpn",
+		"-disposition:a:0", "default", path,
+	})
+}
+
 // genMultiAudioSource writes a short mkv with one H.264 video and two AAC audio
 // tracks (English default + Japanese), the ARGY-126 dub/sub shape.
 func genMultiAudioSource(t *testing.T, ffmpeg, path string) {

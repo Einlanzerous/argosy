@@ -263,6 +263,10 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.tc.Touch(sess.ID)
+	// A segment (or init) fetch is the client's signal that it accepted the
+	// manifest and started buffering; a session that only ever hands out
+	// playlists is reported when it's torn down (ARGY-174).
+	h.tc.MarkServed(sess.ID, filepath.Ext(name) != ".m3u8")
 	path := filepath.Join(sess.OutputDir, name)
 	if _, err := os.Stat(path); err != nil {
 		// The master playlist may not be written yet — tell the client to retry.
@@ -289,7 +293,9 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 			httpx.Error(w, http.StatusNotFound, "not found")
 			return
 		}
-		_, _ = w.Write(data)
+		// Reading it into memory is also the interception point for the codec
+		// strings ffmpeg writes into the master playlist (ARGY-174).
+		_, _ = w.Write(transcode.NormalizePlaylist(data))
 		return
 	}
 	http.ServeFile(w, r, path)
