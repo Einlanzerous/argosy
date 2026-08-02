@@ -262,11 +262,12 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Touch on every request, including the ones answered below with a 503 or a
+	// 404: a client retrying a not-yet-written manifest is alive and must not be
+	// reaped. Whether anything was *served* is recorded further down, once it
+	// has actually gone out.
 	h.tc.Touch(sess.ID)
-	// A segment (or init) fetch is the client's signal that it accepted the
-	// manifest and started buffering; a session that only ever hands out
-	// playlists is reported when it's torn down (ARGY-174).
-	h.tc.MarkServed(sess.ID, filepath.Ext(name) != ".m3u8")
+	isSegment := filepath.Ext(name) != ".m3u8"
 	path := filepath.Join(sess.OutputDir, name)
 	if _, err := os.Stat(path); err != nil {
 		// The master playlist may not be written yet — tell the client to retry.
@@ -286,7 +287,7 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 	// segments appended afterward — wedging playback at that boundary (ARGY-106).
 	// Serve playlists with no validators and no-store; segments/init are
 	// immutable, so they stay cacheable via ServeFile.
-	if filepath.Ext(name) == ".m3u8" {
+	if !isSegment {
 		w.Header().Set("Cache-Control", "no-store")
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -296,9 +297,13 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 		// Reading it into memory is also the interception point for the codec
 		// strings ffmpeg writes into the master playlist (ARGY-174).
 		_, _ = w.Write(transcode.NormalizePlaylist(data))
+		h.tc.MarkServed(sess.ID, false)
 		return
 	}
 	http.ServeFile(w, r, path)
+	// A segment (or init) fetch is the client's signal that it accepted the
+	// manifest and started buffering (ARGY-174).
+	h.tc.MarkServed(sess.ID, true)
 }
 
 // stopTranscode kills a session's ffmpeg process and purges its output.

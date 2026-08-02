@@ -86,16 +86,21 @@ func TestMultiAudioManifestIntegration(t *testing.T) {
 	}
 }
 
-// TestHEVCMultiAudioManifestCodecs is the ARGY-174 regression guard: HEVC with
-// 2+ audio tracks is the one shape that advertises a CODECS attribute for a
-// codec the browser gates on. ffmpeg writes a malformed constraint byte there
-// ("hvc1.1.4.L120.B01"), which every strict codec-string parser rejects — so
-// hls.js dropped the only variant and failed the manifest before requesting a
-// segment, while the single-audio path (no CODECS at all) played fine.
+// TestHEVCManifestCodecs is the ARGY-174 regression guard. Any master playlist
+// carrying an HEVC variant advertises a CODECS attribute the browser gates on,
+// and ffmpeg writes a malformed constraint byte into it ("hvc1.1.4.L120.B01")
+// that every strict codec-string parser rejects — so hls.js drops the variant
+// and fails the manifest before requesting a segment.
+//
+// Two shapes reach that state, and both are covered here: the multi-audio remux
+// that surfaced the bug, and the multi-rung ladder, which emits a master for a
+// *single*-audio source too. Only a lone-variant media playlist escapes, having
+// no CODECS at all — which is why single-audio remuxes were the only HEVC that
+// ever played.
 //
 // The assertion is on the bytes a client actually receives: what ffmpeg wrote,
 // run through NormalizePlaylist the way fileTranscode serves it.
-func TestHEVCMultiAudioManifestCodecs(t *testing.T) {
+func TestHEVCManifestCodecs(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test needs ffmpeg")
 	}
@@ -110,30 +115,60 @@ func TestHEVCMultiAudioManifestCodecs(t *testing.T) {
 	src := filepath.Join(dir, "src.mkv")
 	genHEVCMultiAudioSource(t, ffmpeg, src)
 
-	out := t.TempDir()
-	run(t, ffmpeg, out, buildArgs(Spec{
-		Source: src, OutputDir: out, Method: MethodRemux,
-		VideoCodec: CodecHEVC, TranscodeAudio: true, SourceHeight: 240, AudioTracks: dubSub,
-	}))
-	master, err := os.ReadFile(filepath.Join(out, PlaylistName))
-	if err != nil {
-		t.Fatalf("read master: %v", err)
-	}
-	t.Logf("master as ffmpeg wrote it:\n%s", master)
+	for _, tc := range []struct {
+		name string
+		spec Spec
+	}{
+		{
+			name: "multi-audio remux",
+			spec: Spec{
+				Source: src, Method: MethodRemux, VideoCodec: CodecHEVC,
+				TranscodeAudio: true, SourceHeight: 240, AudioTracks: dubSub,
+			},
+		},
+		{
+			// One audio track, so the master exists purely because the ladder has
+			// more than one rung. Same broken codec string, no multi-audio in sight.
+			name: "single-audio hevc ladder",
+			spec: Spec{
+				Source: src, Encoder: EncoderSoftware, VideoCodec: CodecHEVC, SourceHeight: 1080,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := t.TempDir()
+			spec := tc.spec
+			spec.OutputDir = out
+			run(t, ffmpeg, out, buildArgs(spec))
 
-	raw := codecsAttr(t, string(master))
-	served := codecsAttr(t, string(NormalizePlaylist(master)))
-	if raw == served {
-		t.Errorf("nothing was rewritten (CODECS=%q) — either ffmpeg stopped emitting the "+
-			"malformed constraint byte or NormalizePlaylist no longer matches it", raw)
-	}
-	for _, codec := range strings.Split(served, ",") {
-		if !strings.HasPrefix(codec, "hvc1") && !strings.HasPrefix(codec, "hev1") {
-			continue
-		}
-		if !validHEVCCodecString(codec) {
-			t.Errorf("served CODECS %q contains %q, which a browser codec parser rejects", served, codec)
-		}
+			master, err := os.ReadFile(filepath.Join(out, PlaylistName))
+			if err != nil {
+				t.Fatalf("read master: %v", err)
+			}
+			t.Logf("master as ffmpeg wrote it:\n%s", master)
+
+			raw := codecsAttr(t, string(master))
+			served := codecsAttr(t, string(NormalizePlaylist(master)))
+			for _, codec := range strings.Split(served, ",") {
+				if !strings.HasPrefix(codec, "hvc1") && !strings.HasPrefix(codec, "hev1") {
+					continue
+				}
+				if !validHEVCCodecString(codec) {
+					t.Errorf("served CODECS %q contains %q, which a browser codec parser rejects", served, codec)
+				}
+			}
+			// Catch a normalization that silently stops matching. Phrased so that a
+			// future ffmpeg emitting a well-formed string is fine (nothing to fix)
+			// rather than a build break: only an unchanged *invalid* string fails.
+			if raw == served && !validHEVCCodecString(strings.Split(raw, ",")[0]) {
+				t.Errorf("CODECS %q left as-is and still invalid — NormalizePlaylist no longer matches "+
+					"what ffmpeg writes", raw)
+			}
+			if raw == served {
+				t.Logf("ffmpeg wrote a valid codec string (%q) — upstream may have fixed this; "+
+					"NormalizePlaylist is now a no-op here", raw)
+			}
+		})
 	}
 }
 

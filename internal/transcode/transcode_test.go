@@ -1,10 +1,12 @@
 package transcode
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -486,4 +488,143 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("condition not met within timeout")
+}
+
+// segmentBackend writes one media segment into the output dir, the way a real
+// encode would, then returns. producedSegments sees it.
+type segmentBackend struct{}
+
+func (segmentBackend) Name() string { return "segment" }
+func (segmentBackend) Run(_ context.Context, spec Spec, _ func(Progress)) error {
+	return os.WriteFile(filepath.Join(spec.OutputDir, "stream_0_00000.m4s"), []byte("seg"), 0o644)
+}
+
+// TestStalledSessionWarning covers the ARGY-174 signal: encoded output that no
+// client ever fetched. It has to stay quiet for sessions that streamed, for
+// sessions that never got far enough to have anything to serve, and for
+// shutdown — a warning that cries wolf during normal playback is worse than no
+// warning, since the whole point is that this failure is otherwise invisible.
+func TestStalledSessionWarning(t *testing.T) {
+	// waitForSegment gives the backend goroutine time to write before teardown.
+	waitForSegment := func(t *testing.T, dir string) {
+		t.Helper()
+		for i := 0; i < 100; i++ {
+			if producedSegments(dir) {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatal("backend never produced a segment")
+	}
+
+	t.Run("manifest fetched, nothing streamed", func(t *testing.T) {
+		var buf bytes.Buffer
+		m := NewManager(segmentBackend{}, t.TempDir(), time.Minute, 4, slog.New(slog.NewTextHandler(&buf, nil)))
+		s, err := m.Start(newReq("item-stalled"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForSegment(t, s.OutputDir)
+		m.MarkServed(s.ID, false)
+		m.Stop(s.ID)
+		if !strings.Contains(buf.String(), "never served one") {
+			t.Errorf("no warning for a session that served a manifest and nothing else:\n%s", buf.String())
+		}
+		if !strings.Contains(buf.String(), "playlistServed=true") {
+			t.Errorf("warning should record that the manifest went out:\n%s", buf.String())
+		}
+	})
+
+	t.Run("nothing served at all", func(t *testing.T) {
+		// The client never came back for anything. Still wasted encode, still
+		// worth saying — the earlier predicate was silent here.
+		var buf bytes.Buffer
+		m := NewManager(segmentBackend{}, t.TempDir(), time.Minute, 4, slog.New(slog.NewTextHandler(&buf, nil)))
+		s, err := m.Start(newReq("item-silent"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForSegment(t, s.OutputDir)
+		m.Stop(s.ID)
+		if !strings.Contains(buf.String(), "never served one") {
+			t.Errorf("no warning for a session that served nothing:\n%s", buf.String())
+		}
+		if !strings.Contains(buf.String(), "playlistServed=false") {
+			t.Errorf("warning should distinguish 'never fetched the manifest':\n%s", buf.String())
+		}
+	})
+
+	t.Run("streamed", func(t *testing.T) {
+		var buf bytes.Buffer
+		m := NewManager(segmentBackend{}, t.TempDir(), time.Minute, 4, slog.New(slog.NewTextHandler(&buf, nil)))
+		s, err := m.Start(newReq("item-played"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForSegment(t, s.OutputDir)
+		m.MarkServed(s.ID, false)
+		m.MarkServed(s.ID, true)
+		m.Stop(s.ID)
+		if strings.Contains(buf.String(), "never served one") {
+			t.Errorf("warned about a session that streamed:\n%s", buf.String())
+		}
+	})
+
+	t.Run("no segments produced", func(t *testing.T) {
+		// Abandoned before the encode got anywhere. Nothing to serve, so nothing
+		// to blame the client for.
+		var buf bytes.Buffer
+		be := &blockingBackend{}
+		m := NewManager(be, t.TempDir(), time.Minute, 4, slog.New(slog.NewTextHandler(&buf, nil)))
+		s, err := m.Start(newReq("item-early-exit"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.MarkServed(s.ID, false)
+		m.Stop(s.ID)
+		if strings.Contains(buf.String(), "never served one") {
+			t.Errorf("warned about a session with no encoded output:\n%s", buf.String())
+		}
+	})
+
+	t.Run("shutdown", func(t *testing.T) {
+		// Every live session is torn down mid-stream here; "no segment served"
+		// says nothing about any client.
+		var buf bytes.Buffer
+		m := NewManager(segmentBackend{}, t.TempDir(), time.Minute, 4, slog.New(slog.NewTextHandler(&buf, nil)))
+		s, err := m.Start(newReq("item-shutdown"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForSegment(t, s.OutputDir)
+		m.MarkServed(s.ID, false)
+		m.shutdown()
+		if strings.Contains(buf.String(), "never served one") {
+			t.Errorf("warned during shutdown:\n%s", buf.String())
+		}
+	})
+}
+
+// TestSnapshotReportsServedArtifacts keeps the served flags observable while a
+// session is live, not only in the teardown log line.
+func TestSnapshotReportsServedArtifacts(t *testing.T) {
+	m := NewManager(&blockingBackend{}, t.TempDir(), time.Minute, 4, discardLogger())
+	s, err := m.Start(newReq("item-snap"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { m.Stop(s.ID) })
+
+	if snap, _ := m.Get(s.ID); snap.ServedPlaylist || snap.ServedSegment {
+		t.Fatalf("fresh session already marked served: %+v", snap)
+	}
+	m.MarkServed(s.ID, false)
+	if snap, _ := m.Get(s.ID); !snap.ServedPlaylist || snap.ServedSegment {
+		t.Errorf("after a playlist: ServedPlaylist=%v ServedSegment=%v, want true/false",
+			snap.ServedPlaylist, snap.ServedSegment)
+	}
+	m.MarkServed(s.ID, true)
+	if snap, _ := m.Get(s.ID); !snap.ServedSegment {
+		t.Error("segment fetch not reflected in the snapshot")
+	}
 }

@@ -70,8 +70,13 @@ func validHEVCCodecString(codec string) bool {
 	if elems[0] != "hvc1" && elems[0] != "hev1" {
 		return false
 	}
-	profile := strings.TrimLeft(elems[1], "ABC")
-	if _, err := strconv.ParseUint(profile, 10, 8); err != nil {
+	// Profile: an optional single-character profile space (A/B/C) followed by a
+	// 5-bit profile_idc. Exactly one prefix character, not a run of them.
+	profile := elems[1]
+	if profile != "" && (profile[0] == 'A' || profile[0] == 'B' || profile[0] == 'C') {
+		profile = profile[1:]
+	}
+	if idc, err := strconv.ParseUint(profile, 10, 8); err != nil || idc > 31 {
 		return false
 	}
 	if _, err := strconv.ParseUint(elems[2], 16, 32); err != nil {
@@ -105,6 +110,10 @@ func TestValidHEVCCodecString(t *testing.T) {
 		"hvc1.1.4.L120.B01": false,
 		"hvc1.1.4.120.B0":   false,
 		"avc1.640028":       false,
+		"hvc1.A1.4.L120.B0": true,  // profile space A
+		"hvc1.AB1.4.L120":   false, // ...but only one prefix character
+		"hvc1.99.4.L120":    false, // profile_idc is 5 bits
+		"hvc1.1.4.L120.0.0": true,  // several constraint bytes
 	} {
 		if got := validHEVCCodecString(codec); got != want {
 			t.Errorf("validHEVCCodecString(%q) = %v, want %v", codec, got, want)
