@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.1](https://github.com/Einlanzerous/argosy/compare/v0.21.0...v0.21.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* **transcode:** serve a parseable HEVC codec string in HLS master playlists (ARGY-174) ([#180](https://github.com/Einlanzerous/argosy/issues/180)) ([07b1b09](https://github.com/Einlanzerous/argosy/commit/07b1b09199fe6d9965fd1efaf8fa98f556a2bb8d))
+
 ## [0.21.0](https://github.com/Einlanzerous/argosy/compare/v0.20.0...v0.21.0) (2026-07-27)
 
 
