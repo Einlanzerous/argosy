@@ -372,14 +372,27 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // remux-copy races so far ahead that the edge can be minutes in, dropping a
         // fresh play deep into the episode (ARGY-103). Pin the start explicitly.
         startPosition: 0,
+        // Open the ABR estimate high enough to reach the top rung (ARGY-177).
+        // Left unset, hls.js seeds its bandwidth estimate with
+        // min(firstLevelBitrate, abrEwmaDefaultEstimateMax) — and that ceiling is
+        // 5 Mbps, well under the ~17.7 Mbps a 2160p rung advertises. The 4K
+        // rendition was therefore unreachable at startup on *any* connection,
+        // however fast: playback opened at 1080p, dropped to 720p on the first
+        // fragment, and only climbed back once the average crawled past ~18 Mbps
+        // on a diet of small 720p segments. Setting this at all is what skips the
+        // clamp (hls.js checks `userConfig.abrEwmaDefaultEstimate === undefined`).
+        // A slow link still measures its way down within a segment or two, with
+        // the buffer below as the cushion.
+        abrEwmaDefaultEstimate: 25_000_000,
         // Buffer aggressively. The server transcodes far ahead of the playhead (no
         // realtime throttle) and won't reap a live session with a full buffer, so the
         // only thing capping look-ahead is hls.js's conservative defaults (30s /
-        // 60MB). Since each transcode is a single video rendition — there's no
-        // lower-quality fallback to switch down to — a deep buffer is our sole defense
-        // against a bandwidth dip on remote links. Fetch 60s ahead to start and let it
-        // grow to a 500MB / ~50-min ceiling as size permits; a pause naturally fills
-        // to the cap. backBufferLength bounds the memory retained behind the playhead.
+        // 60MB). A remux is a single video rendition with nothing to fall back to,
+        // and even a laddered transcode is cheaper to ride out than to downshift,
+        // so a deep buffer is our first defense against a bandwidth dip on remote
+        // links. Fetch 60s ahead to start and let it grow to a 500MB / ~50-min
+        // ceiling as size permits; a pause naturally fills to the cap.
+        // backBufferLength bounds the memory retained behind the playhead.
         maxBufferLength: 60,
         maxMaxBufferLength: 3000,
         maxBufferSize: 500_000_000,
