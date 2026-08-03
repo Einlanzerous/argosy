@@ -230,6 +230,10 @@ let mode: 'direct' | 'transcode' = 'direct'
 const baseOffset = ref(0)
 let directAttached = false
 let hls: Hls | null = null
+// Throughput this player has actually observed, carried across the hls.js
+// instances that a seek or an auto-advance destroys and rebuilds (ARGY-177).
+// 0 until something has been measured.
+let measuredBandwidth = 0
 let heartbeat: ReturnType<typeof setInterval> | null = null
 // Guards a single transparent recovery after a reaped/expired transcode session
 // (ARGY-107); re-armed once playback resumes.
@@ -343,6 +347,11 @@ function attachDirect(el: HTMLVideoElement): void {
 // The HLS timeline's 0 corresponds to baseOffset in the media.
 async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<void> {
   if (hls) {
+    // Carry the measured throughput across the restart. Every seek and every
+    // auto-advance destroys the instance, and a fresh one would otherwise go
+    // back to seeding from the manifest — re-learning a slow link from scratch
+    // at the top rung, once per restart (ARGY-177).
+    measuredBandwidth = hls.bandwidthEstimate || measuredBandwidth
     hls.destroy()
     hls = null
   }
@@ -372,27 +381,43 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // remux-copy races so far ahead that the edge can be minutes in, dropping a
         // fresh play deep into the episode (ARGY-103). Pin the start explicitly.
         startPosition: 0,
-        // Open the ABR estimate high enough to reach the top rung (ARGY-177).
-        // Left unset, hls.js seeds its bandwidth estimate with
-        // min(firstLevelBitrate, abrEwmaDefaultEstimateMax) — and that ceiling is
-        // 5 Mbps, well under the ~17.7 Mbps a 2160p rung advertises. The 4K
-        // rendition was therefore unreachable at startup on *any* connection,
-        // however fast: playback opened at 1080p, dropped to 720p on the first
-        // fragment, and only climbed back once the average crawled past ~18 Mbps
-        // on a diet of small 720p segments. Setting this at all is what skips the
-        // clamp (hls.js checks `userConfig.abrEwmaDefaultEstimate === undefined`).
-        // A slow link still measures its way down within a segment or two, with
-        // the buffer below as the cushion.
-        abrEwmaDefaultEstimate: 25_000_000,
+        // Let hls.js seed its bandwidth estimate from the manifest's top rung
+        // (ARGY-177). On manifest load it seeds with
+        // min(firstLevelBitrate, abrEwmaDefaultEstimateMax); both server ladders
+        // are widest-first, so firstLevelBitrate *is* the top rung — but the
+        // default 5 Mbps ceiling sits under every 4K rung (~17.7 Mbps), which
+        // made 2160p unreachable at startup on *any* connection, however fast.
+        // Playback opened at 1080p, dropped to 720p on the first fragment, and
+        // only climbed back once the running average crawled past the top rung on
+        // a diet of small low-rung segments. Raising the ceiling keeps the seed
+        // derived from whatever the server actually advertised, instead of
+        // hardcoding a copy of the ladder here; it is not a claim about the link.
+        abrEwmaDefaultEstimateMax: 50_000_000,
+        // Once we've measured this link, that beats anything derived: supplying
+        // abrEwmaDefaultEstimate is also what suppresses the seeding above (hls.js
+        // guards it on `userConfig.abrEwmaDefaultEstimate === undefined`).
+        ...(measuredBandwidth ? { abrEwmaDefaultEstimate: measuredBandwidth } : {}),
+        // Don't hand a 4K rendition to a small window. This defaults to false, and
+        // until the seed was raised the 5 Mbps ceiling was capping quality by
+        // accident; now that the top rung is reachable, cap it on purpose. hls.js
+        // no-ops while the element measures 0 and re-caps on resize, so entering
+        // fullscreen lifts the cap rather than being locked out by it.
+        capLevelToPlayerSize: true,
         // Buffer aggressively. The server transcodes far ahead of the playhead (no
         // realtime throttle) and won't reap a live session with a full buffer, so the
         // only thing capping look-ahead is hls.js's conservative defaults (30s /
         // 60MB). A remux is a single video rendition with nothing to fall back to,
         // and even a laddered transcode is cheaper to ride out than to downshift,
         // so a deep buffer is our first defense against a bandwidth dip on remote
-        // links. Fetch 60s ahead to start and let it grow to a 500MB / ~50-min
-        // ceiling as size permits; a pause naturally fills to the cap.
-        // backBufferLength bounds the memory retained behind the playhead.
+        // links — which matters more now that playback can open at the top rung:
+        // a slow client can't abandon its first fragment until the next playlist
+        // reload (~one target duration) and half that fragment's duration have
+        // passed, so the buffer is what covers the gap. Fetch 60s ahead to start
+        // and let it grow to a 500MB ceiling as size permits — that's ~50 min of a
+        // 1.3 Mbps stream but only ~4 min of a 4K rung, so the time ceiling above
+        // is what binds on low bitrates and the byte ceiling on high ones. A pause
+        // naturally fills to the cap. backBufferLength bounds the memory retained
+        // behind the playhead.
         maxBufferLength: 60,
         maxMaxBufferLength: 3000,
         maxBufferSize: 500_000_000,
