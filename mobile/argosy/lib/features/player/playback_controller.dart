@@ -104,11 +104,12 @@ class PlaybackController extends ChangeNotifier {
   static const upNextTailSeconds = 25;
 
   /// Aggressive buffering for smoother playback on remote/flaky links, mirroring
-  /// the web player's deep hls.js buffer. Each transcode is a single video
-  /// rendition (no lower-quality fallback to switch down to), so a deep buffer is
-  /// our only defense against a bandwidth dip. The server transcodes far ahead of
-  /// the playhead and won't reap a live session with a full buffer, so it can feed
-  /// this. Levers exposed by better_player_plus map to ExoPlayer's DefaultLoadControl:
+  /// the web player's deep hls.js buffer. A remux is a single video rendition with
+  /// nothing to fall back to, and even a laddered transcode is cheaper to ride out
+  /// than to downshift, so a deep buffer is our first defense against a bandwidth
+  /// dip. The server transcodes far ahead of the playhead and won't reap a live
+  /// session with a full buffer, so it can feed this. Levers exposed by
+  /// better_player_plus map to ExoPlayer's DefaultLoadControl:
   /// - minBufferMs 50s (from 25s): maintain a deeper continuous floor.
   /// - maxBufferMs 10min: the time ceiling. ExoPlayer *also* caps by an internal
   ///   per-track byte target that the plugin doesn't expose, so the real ahead-depth

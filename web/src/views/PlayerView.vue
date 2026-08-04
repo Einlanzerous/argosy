@@ -11,7 +11,9 @@ import {
   getPreferences,
   getProgress,
   listSubtitles,
+  measuredBandwidth,
   putPreferences,
+  rememberBandwidth,
   reportProgress,
   setWatched,
   startTranscode,
@@ -30,6 +32,72 @@ type MovieDetail = components['schemas']['MediaItemDetail']
 
 const route = useRoute()
 const router = useRouter()
+
+// `?hlsdebug` arms the ABR diagnostics on the hls.js instance below. Tested with
+// `in` rather than a null check because vue-router parses a valueless flag
+// (`?hlsdebug`) as null, not "" — so `!= null` silently ignores the bare form
+// that anyone hand-typing a URL will reach for first.
+const hlsDebug = computed(() => 'hlsdebug' in route.query)
+
+// hls.js takes an ILogger in place of `debug: true`. Its own logger writes the
+// interesting lines (start tier, capability results) through console.debug,
+// which Firefox hides by default — so turning debug on looks like it does
+// nothing. Route those through console.log instead, while leaving warnings and
+// errors at their real severity, and keep a transcript on window.__hlsLog.
+//
+// Note `trace` is unreachable: hls.js sets `this.trace = noop` and omits it from
+// the levels it wires up ("Remove out from list here to hard-disable a
+// log-level"). The "Skipped level(s) … not compatible with" line goes through
+// it, so the levelSupport() dump below stands in for it.
+function hlsDebugLogger() {
+  const w = window as unknown as { __hlsLog?: string[] }
+  // Append to any existing transcript: a seek or an error recovery builds a new
+  // instance, and the interesting evidence is usually what came before it.
+  const buf: string[] = w.__hlsLog ?? []
+  w.__hlsLog = buf
+  const fmt = (a: unknown) => {
+    if (typeof a === 'string') return a
+    if (a === undefined) return 'undefined'
+    try {
+      return JSON.stringify(a) ?? String(a)
+    } catch {
+      return String(a)
+    }
+  }
+  const sink =
+    (level: string, out: (msg: string) => void) =>
+    (...args: unknown[]) => {
+      const line = `[hls:${level}] ${args.map(fmt).join(' ')}`
+      // Keep the tail, not the head: on this bug the collapse arrives about a
+      // minute in, exactly when a head-biased buffer would already be full.
+      buf.push(line)
+      if (buf.length > 5000) buf.shift()
+      out(line)
+    }
+  const say = (m: string) => console.log(m)
+  return {
+    trace: sink('trace', say),
+    debug: sink('debug', say),
+    log: sink('log', say),
+    info: sink('info', say),
+    warn: sink('warn', (m) => console.warn(m)),
+    error: sink('error', (m) => console.error(m)),
+  }
+}
+
+// levelSupport summarises what hls.js decided about each rendition's
+// decodability. This is the state behind the ABR skip that hls.js only reports
+// through its hard-disabled trace level, so it is the one thing a level choice
+// can't otherwise be explained by (ARGY-177).
+function levelSupport(h: Hls): string {
+  return h.levels
+    .map((l, i) => {
+      const r = l.supportedResult?.decodingInfoResults?.[0]
+      const verdict = r ? `supported=${r.supported} smooth=${r.smooth}` : 'unqueried'
+      return `${i}:${l.height}p ${verdict}`
+    })
+    .join(' | ')
+}
 const session = useSessionStore()
 const itemId = String(route.params.id)
 
@@ -230,6 +298,10 @@ let mode: 'direct' | 'transcode' = 'direct'
 const baseOffset = ref(0)
 let directAttached = false
 let hls: Hls | null = null
+// Set once a fragment has actually completed, which is what makes
+// hls.bandwidthEstimate a measurement rather than the configured default
+// (ARGY-177). Only then is the estimate worth carrying to the next instance.
+let sawFragment = false
 let heartbeat: ReturnType<typeof setInterval> | null = null
 // Guards a single transparent recovery after a reaped/expired transcode session
 // (ARGY-107); re-armed once playback resumes.
@@ -343,8 +415,17 @@ function attachDirect(el: HTMLVideoElement): void {
 // The HLS timeline's 0 corresponds to baseOffset in the media.
 async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<void> {
   if (hls) {
+    // Carry the measured throughput across the restart. Every seek and every
+    // auto-advance destroys the instance, and a fresh one would otherwise go
+    // back to seeding from the manifest — re-learning a slow link from scratch
+    // at the top rung, once per restart (ARGY-177). Gated on a fragment having
+    // completed: with no samples hls.bandwidthEstimate returns the configured
+    // default, and carrying *that* would suppress the manifest seed for the
+    // rest of the session and pin playback to the lowest rung.
+    if (sawFragment) rememberBandwidth(hls.bandwidthEstimate)
     hls.destroy()
     hls = null
+    sawFragment = false
   }
   if (transcodeSessionId) {
     void stopTranscode(transcodeSessionId).catch(() => {})
@@ -372,22 +453,95 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // remux-copy races so far ahead that the edge can be minutes in, dropping a
         // fresh play deep into the episode (ARGY-103). Pin the start explicitly.
         startPosition: 0,
+        // Let hls.js seed its bandwidth estimate from the manifest's top rung
+        // (ARGY-177). On manifest load it seeds with
+        // min(firstLevelBitrate, abrEwmaDefaultEstimateMax); both server ladders
+        // are widest-first, so firstLevelBitrate *is* the top rung — but the
+        // default 5 Mbps ceiling sits under every 4K rung (~17.7 Mbps), which
+        // made 2160p unreachable at startup on *any* connection, however fast.
+        // Playback opened at 1080p, dropped to 720p on the first fragment, and
+        // only climbed back once the running average crawled past the top rung on
+        // a diet of small low-rung segments. Raising the ceiling keeps the seed
+        // derived from whatever the server actually advertised, instead of
+        // hardcoding a copy of the ladder here; it is not a claim about the link.
+        abrEwmaDefaultEstimateMax: 50_000_000,
+        // Once we've measured this link, that beats anything derived: supplying
+        // abrEwmaDefaultEstimate is also what suppresses the seeding above (hls.js
+        // guards it on `userConfig.abrEwmaDefaultEstimate === undefined`).
+        ...(measuredBandwidth() ? { abrEwmaDefaultEstimate: measuredBandwidth() } : {}),
+        // Deliberately NOT setting capLevelToPlayerSize. Sizing quality to the
+        // video element sounds thrifty, but people watch this windowed and still
+        // want the resolution they chose to store — letting a window heuristic
+        // silently downgrade a 4K source is the opposite of what a self-hosted
+        // library is for. A genuinely constrained link is still handled, by
+        // measurement rather than by guessing from geometry.
         // Buffer aggressively. The server transcodes far ahead of the playhead (no
         // realtime throttle) and won't reap a live session with a full buffer, so the
         // only thing capping look-ahead is hls.js's conservative defaults (30s /
-        // 60MB). Since each transcode is a single video rendition — there's no
-        // lower-quality fallback to switch down to — a deep buffer is our sole defense
-        // against a bandwidth dip on remote links. Fetch 60s ahead to start and let it
-        // grow to a 500MB / ~50-min ceiling as size permits; a pause naturally fills
-        // to the cap. backBufferLength bounds the memory retained behind the playhead.
+        // 60MB). A remux is a single video rendition with nothing to fall back to,
+        // and even a laddered transcode is cheaper to ride out than to downshift,
+        // so a deep buffer is our first defense against a bandwidth dip on remote
+        // links — which matters more now that playback can open at the top rung:
+        // a slow client can't abandon its first fragment until the next playlist
+        // reload (~one target duration) and half that fragment's duration have
+        // passed, so the buffer is what covers the gap. Fetch 60s ahead to start
+        // and let it grow to a 500MB ceiling as size permits — that's ~50 min of a
+        // 1.3 Mbps stream but only ~4 min of a 4K rung, so the time ceiling above
+        // is what binds on low bitrates and the byte ceiling on high ones. A pause
+        // naturally fills to the cap. backBufferLength bounds the memory retained
+        // behind the playhead.
         maxBufferLength: 60,
         maxMaxBufferLength: 3000,
         maxBufferSize: 500_000_000,
         backBufferLength: 60,
+        // Stop hls.js from declaring our HEVC renditions undecodable on a
+        // user-agent hunch (ARGY-177). Its media-capabilities gate never asks
+        // the browser about HEVC on Windows Firefox — `getMediaDecodingInfo`
+        // short-circuits to supported/smooth/powerEfficient = false purely from
+        // the UA string. findBestLevel then skips every level whose result says
+        // `smooth === false`, so ABR walks the whole ladder down to the lowest
+        // rung no matter what: observed stepping 2160p → 1080p → 720p with
+        // 175 Mbps measured and no cap set. It resolves asynchronously, so
+        // playback runs at the top rung for a minute and *then* collapses, which
+        // is what made it look like a bandwidth problem for so long.
+        //
+        // Disabling the gate is safe here because we already answer this
+        // question better: `supportsHevc()` probes MediaSource.isTypeSupported
+        // and the server only emits HEVC when the client said yes — a measured
+        // answer rather than a UA guess. That same browser also reports
+        // `smooth: true` for these exact configurations when asked directly.
+        // The flag has exactly one consumer, this ABR gate; the only other
+        // capability path is SUPPLEMENTAL-CODECS, which we never emit.
+        useMediaCapabilities: false,
+        // `?hlsdebug` on a /player URL turns on hls.js's own logging. Which
+        // rendition it picks, and why, is otherwise invisible from the outside:
+        // the server log shows which rung was *fetched*, but not the estimate or
+        // the cap behind the choice. Off by default — this is noisy.
+        debug: hlsDebug.value ? hlsDebugLogger() : false,
         xhrSetup: (xhr) => {
           const t = getToken()
           if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
         },
+      })
+      if (hlsDebug.value) {
+        // Park the instance so levels/estimate/capping can be inspected live.
+        ;(window as unknown as { __hls?: Hls }).__hls = hls
+      }
+      // A completed fragment is what turns hls.bandwidthEstimate from the
+      // configured default into a measurement worth carrying forward.
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        sawFragment = true
+      })
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
+        if (!hlsDebug.value || !hls) return
+        const l = hls.levels[data.level]
+        console.log(
+          `[argosy] level -> ${l?.height}p @ ${l?.bitrate}` +
+            ` | estimate ${Math.round(hls.bandwidthEstimate / 1000)}kbps` +
+            ` | measured ${sawFragment}` +
+            ` | cap ${hls.autoLevelCapping} | player ${el.clientWidth}x${el.clientHeight}@${window.devicePixelRatio}` +
+            `\n[argosy] levels: ${levelSupport(hls)}`,
+        )
       })
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         refreshAudioTracks()
@@ -549,7 +703,11 @@ function advance(): void {
   flush()
   // Replace (not push) so chaining through episodes doesn't stack player routes
   // on history — otherwise "back" walks into a previously-played episode (ARGY-108).
-  void router.replace({ name: 'player', params: { id: next.id }, query: { resume: '1' } })
+  // Carry ?hlsdebug through the hand-off: the estimate is re-seeded on every
+  // remount, so the transition itself is worth being able to watch.
+  const q: Record<string, string> = { resume: '1' }
+  if (hlsDebug.value) q.hlsdebug = ''
+  void router.replace({ name: 'player', params: { id: next.id }, query: q })
 }
 
 // playNext skips the rest of the credits/countdown and jumps straight to the
