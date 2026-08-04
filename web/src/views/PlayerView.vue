@@ -30,6 +30,45 @@ type MovieDetail = components['schemas']['MediaItemDetail']
 
 const route = useRoute()
 const router = useRouter()
+
+// `?hlsdebug` arms the ABR diagnostics on the hls.js instance below. Tested with
+// `in` rather than a null check because vue-router parses a valueless flag
+// (`?hlsdebug`) as null, not "" — so `!= null` silently ignores the bare form
+// that anyone hand-typing a URL will reach for first.
+const hlsDebug = computed(() => 'hlsdebug' in route.query)
+
+// hls.js takes an ILogger in place of `debug: true`. Its own logger writes the
+// interesting lines (start tier, skipped levels, capability results) through
+// console.debug, which Firefox hides by default — so turning debug on looks
+// like it does nothing. Route everything through console.log instead, and keep
+// a copy on window.__hlsLog so a whole session can be pasted in one go.
+function hlsDebugLogger() {
+  const buf: string[] = []
+  ;(window as unknown as { __hlsLog?: string[] }).__hlsLog = buf
+  const fmt = (a: unknown) => {
+    if (typeof a === 'string') return a
+    try {
+      return JSON.stringify(a)
+    } catch {
+      return String(a)
+    }
+  }
+  const sink =
+    (level: string) =>
+    (...args: unknown[]) => {
+      const line = `[hls:${level}] ${args.map(fmt).join(' ')}`
+      if (buf.length < 5000) buf.push(line)
+      console.log(line)
+    }
+  return {
+    trace: sink('trace'),
+    debug: sink('debug'),
+    log: sink('log'),
+    warn: sink('warn'),
+    info: sink('info'),
+    error: sink('error'),
+  }
+}
 const session = useSessionStore()
 const itemId = String(route.params.id)
 
@@ -397,12 +436,12 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // abrEwmaDefaultEstimate is also what suppresses the seeding above (hls.js
         // guards it on `userConfig.abrEwmaDefaultEstimate === undefined`).
         ...(measuredBandwidth ? { abrEwmaDefaultEstimate: measuredBandwidth } : {}),
-        // Don't hand a 4K rendition to a small window. This defaults to false, and
-        // until the seed was raised the 5 Mbps ceiling was capping quality by
-        // accident; now that the top rung is reachable, cap it on purpose. hls.js
-        // no-ops while the element measures 0 and re-caps on resize, so entering
-        // fullscreen lifts the cap rather than being locked out by it.
-        capLevelToPlayerSize: true,
+        // Deliberately NOT setting capLevelToPlayerSize. Sizing quality to the
+        // video element sounds thrifty, but people watch this windowed and still
+        // want the resolution they chose to store — letting a window heuristic
+        // silently downgrade a 4K source is the opposite of what a self-hosted
+        // library is for. A genuinely constrained link is still handled, by
+        // measurement rather than by guessing from geometry.
         // Buffer aggressively. The server transcodes far ahead of the playhead (no
         // realtime throttle) and won't reap a live session with a full buffer, so the
         // only thing capping look-ahead is hls.js's conservative defaults (30s /
@@ -422,10 +461,47 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         maxMaxBufferLength: 3000,
         maxBufferSize: 500_000_000,
         backBufferLength: 60,
+        // Stop hls.js from declaring our HEVC renditions undecodable on a
+        // user-agent hunch (ARGY-177). Its media-capabilities gate never asks
+        // the browser about HEVC on Windows Firefox — `getMediaDecodingInfo`
+        // short-circuits to supported/smooth/powerEfficient = false purely from
+        // the UA string. findBestLevel then skips every level whose result says
+        // `smooth === false`, so ABR walks the whole ladder down to the lowest
+        // rung no matter what: observed stepping 2160p → 1080p → 720p with
+        // 175 Mbps measured and no cap set. It resolves asynchronously, so
+        // playback runs at the top rung for a minute and *then* collapses, which
+        // is what made it look like a bandwidth problem for so long.
+        //
+        // Disabling the gate is safe here because we already answer this
+        // question better: `supportsHevc()` probes MediaSource.isTypeSupported
+        // and the server only emits HEVC when the client said yes — a measured
+        // answer rather than a UA guess. That same browser also reports
+        // `smooth: true` for these exact configurations when asked directly.
+        // The flag has exactly one consumer, this ABR gate; the only other
+        // capability path is SUPPLEMENTAL-CODECS, which we never emit.
+        useMediaCapabilities: false,
+        // `?hlsdebug` on a /player URL turns on hls.js's own logging. Which
+        // rendition it picks, and why, is otherwise invisible from the outside:
+        // the server log shows which rung was *fetched*, but not the estimate or
+        // the cap behind the choice. Off by default — this is noisy.
+        debug: hlsDebug.value ? hlsDebugLogger() : false,
         xhrSetup: (xhr) => {
           const t = getToken()
           if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
         },
+      })
+      if (hlsDebug.value) {
+        // Park the instance so levels/estimate/capping can be inspected live.
+        ;(window as unknown as { __hls?: Hls }).__hls = hls
+      }
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
+        if (!hlsDebug.value || !hls) return
+        const l = hls.levels[data.level]
+        console.log(
+          `[argosy] level -> ${l?.height}p @ ${l?.bitrate}` +
+            ` | estimate ${Math.round(hls.bandwidthEstimate / 1000)}kbps` +
+            ` | cap ${hls.autoLevelCapping} | player ${el.clientWidth}x${el.clientHeight}@${window.devicePixelRatio}`,
+        )
       })
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         refreshAudioTracks()
