@@ -11,7 +11,9 @@ import {
   getPreferences,
   getProgress,
   listSubtitles,
+  measuredBandwidth,
   putPreferences,
+  rememberBandwidth,
   reportProgress,
   setWatched,
   startTranscode,
@@ -38,36 +40,63 @@ const router = useRouter()
 const hlsDebug = computed(() => 'hlsdebug' in route.query)
 
 // hls.js takes an ILogger in place of `debug: true`. Its own logger writes the
-// interesting lines (start tier, skipped levels, capability results) through
-// console.debug, which Firefox hides by default — so turning debug on looks
-// like it does nothing. Route everything through console.log instead, and keep
-// a copy on window.__hlsLog so a whole session can be pasted in one go.
+// interesting lines (start tier, capability results) through console.debug,
+// which Firefox hides by default — so turning debug on looks like it does
+// nothing. Route those through console.log instead, while leaving warnings and
+// errors at their real severity, and keep a transcript on window.__hlsLog.
+//
+// Note `trace` is unreachable: hls.js sets `this.trace = noop` and omits it from
+// the levels it wires up ("Remove out from list here to hard-disable a
+// log-level"). The "Skipped level(s) … not compatible with" line goes through
+// it, so the levelSupport() dump below stands in for it.
 function hlsDebugLogger() {
-  const buf: string[] = []
-  ;(window as unknown as { __hlsLog?: string[] }).__hlsLog = buf
+  const w = window as unknown as { __hlsLog?: string[] }
+  // Append to any existing transcript: a seek or an error recovery builds a new
+  // instance, and the interesting evidence is usually what came before it.
+  const buf: string[] = w.__hlsLog ?? []
+  w.__hlsLog = buf
   const fmt = (a: unknown) => {
     if (typeof a === 'string') return a
+    if (a === undefined) return 'undefined'
     try {
-      return JSON.stringify(a)
+      return JSON.stringify(a) ?? String(a)
     } catch {
       return String(a)
     }
   }
   const sink =
-    (level: string) =>
+    (level: string, out: (msg: string) => void) =>
     (...args: unknown[]) => {
       const line = `[hls:${level}] ${args.map(fmt).join(' ')}`
-      if (buf.length < 5000) buf.push(line)
-      console.log(line)
+      // Keep the tail, not the head: on this bug the collapse arrives about a
+      // minute in, exactly when a head-biased buffer would already be full.
+      buf.push(line)
+      if (buf.length > 5000) buf.shift()
+      out(line)
     }
+  const say = (m: string) => console.log(m)
   return {
-    trace: sink('trace'),
-    debug: sink('debug'),
-    log: sink('log'),
-    warn: sink('warn'),
-    info: sink('info'),
-    error: sink('error'),
+    trace: sink('trace', say),
+    debug: sink('debug', say),
+    log: sink('log', say),
+    info: sink('info', say),
+    warn: sink('warn', (m) => console.warn(m)),
+    error: sink('error', (m) => console.error(m)),
   }
+}
+
+// levelSupport summarises what hls.js decided about each rendition's
+// decodability. This is the state behind the ABR skip that hls.js only reports
+// through its hard-disabled trace level, so it is the one thing a level choice
+// can't otherwise be explained by (ARGY-177).
+function levelSupport(h: Hls): string {
+  return h.levels
+    .map((l, i) => {
+      const r = l.supportedResult?.decodingInfoResults?.[0]
+      const verdict = r ? `supported=${r.supported} smooth=${r.smooth}` : 'unqueried'
+      return `${i}:${l.height}p ${verdict}`
+    })
+    .join(' | ')
 }
 const session = useSessionStore()
 const itemId = String(route.params.id)
@@ -269,10 +298,10 @@ let mode: 'direct' | 'transcode' = 'direct'
 const baseOffset = ref(0)
 let directAttached = false
 let hls: Hls | null = null
-// Throughput this player has actually observed, carried across the hls.js
-// instances that a seek or an auto-advance destroys and rebuilds (ARGY-177).
-// 0 until something has been measured.
-let measuredBandwidth = 0
+// Set once a fragment has actually completed, which is what makes
+// hls.bandwidthEstimate a measurement rather than the configured default
+// (ARGY-177). Only then is the estimate worth carrying to the next instance.
+let sawFragment = false
 let heartbeat: ReturnType<typeof setInterval> | null = null
 // Guards a single transparent recovery after a reaped/expired transcode session
 // (ARGY-107); re-armed once playback resumes.
@@ -389,10 +418,14 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
     // Carry the measured throughput across the restart. Every seek and every
     // auto-advance destroys the instance, and a fresh one would otherwise go
     // back to seeding from the manifest — re-learning a slow link from scratch
-    // at the top rung, once per restart (ARGY-177).
-    measuredBandwidth = hls.bandwidthEstimate || measuredBandwidth
+    // at the top rung, once per restart (ARGY-177). Gated on a fragment having
+    // completed: with no samples hls.bandwidthEstimate returns the configured
+    // default, and carrying *that* would suppress the manifest seed for the
+    // rest of the session and pin playback to the lowest rung.
+    if (sawFragment) rememberBandwidth(hls.bandwidthEstimate)
     hls.destroy()
     hls = null
+    sawFragment = false
   }
   if (transcodeSessionId) {
     void stopTranscode(transcodeSessionId).catch(() => {})
@@ -435,7 +468,7 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // Once we've measured this link, that beats anything derived: supplying
         // abrEwmaDefaultEstimate is also what suppresses the seeding above (hls.js
         // guards it on `userConfig.abrEwmaDefaultEstimate === undefined`).
-        ...(measuredBandwidth ? { abrEwmaDefaultEstimate: measuredBandwidth } : {}),
+        ...(measuredBandwidth() ? { abrEwmaDefaultEstimate: measuredBandwidth() } : {}),
         // Deliberately NOT setting capLevelToPlayerSize. Sizing quality to the
         // video element sounds thrifty, but people watch this windowed and still
         // want the resolution they chose to store — letting a window heuristic
@@ -494,13 +527,20 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // Park the instance so levels/estimate/capping can be inspected live.
         ;(window as unknown as { __hls?: Hls }).__hls = hls
       }
+      // A completed fragment is what turns hls.bandwidthEstimate from the
+      // configured default into a measurement worth carrying forward.
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        sawFragment = true
+      })
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
         if (!hlsDebug.value || !hls) return
         const l = hls.levels[data.level]
         console.log(
           `[argosy] level -> ${l?.height}p @ ${l?.bitrate}` +
             ` | estimate ${Math.round(hls.bandwidthEstimate / 1000)}kbps` +
-            ` | cap ${hls.autoLevelCapping} | player ${el.clientWidth}x${el.clientHeight}@${window.devicePixelRatio}`,
+            ` | measured ${sawFragment}` +
+            ` | cap ${hls.autoLevelCapping} | player ${el.clientWidth}x${el.clientHeight}@${window.devicePixelRatio}` +
+            `\n[argosy] levels: ${levelSupport(hls)}`,
         )
       })
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -663,7 +703,11 @@ function advance(): void {
   flush()
   // Replace (not push) so chaining through episodes doesn't stack player routes
   // on history — otherwise "back" walks into a previously-played episode (ARGY-108).
-  void router.replace({ name: 'player', params: { id: next.id }, query: { resume: '1' } })
+  // Carry ?hlsdebug through the hand-off: the estimate is re-seeded on every
+  // remount, so the transition itself is worth being able to watch.
+  const q: Record<string, string> = { resume: '1' }
+  if (hlsDebug.value) q.hlsdebug = ''
+  void router.replace({ name: 'player', params: { id: next.id }, query: q })
 }
 
 // playNext skips the rest of the credits/countdown and jumps straight to the

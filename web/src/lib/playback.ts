@@ -168,3 +168,26 @@ export async function getNextEpisode(itemId: string): Promise<OnDeckItem | null>
   })
   return data ?? null
 }
+
+// --- ABR throughput memory (ARGY-177) -----------------------------------------
+// Module scope on purpose. Every seek and every auto-advance tears the hls.js
+// instance down, and App.vue keys the player by route.fullPath — so auto-advance
+// remounts PlayerView entirely and any component-scoped value would reset. Held
+// here, a link measured once is not re-learned from scratch on each restart.
+let measured = 0
+
+// rememberBandwidth records a throughput figure hls.js actually measured.
+// Callers must only pass an estimate taken after a fragment completed: with no
+// samples, hls.bandwidthEstimate returns the configured default, and feeding
+// that back as abrEwmaDefaultEstimate would suppress the manifest-derived seed
+// for the rest of the session — pinning playback to the lowest rung on a link
+// that was never measured.
+export function rememberBandwidth(bps: number): void {
+  if (Number.isFinite(bps) && bps > 0) measured = bps
+}
+
+// measuredBandwidth is the last measured throughput, or 0 if nothing has been
+// measured yet in this page session.
+export function measuredBandwidth(): number {
+  return measured
+}
