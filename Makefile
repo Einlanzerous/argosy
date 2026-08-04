@@ -16,7 +16,7 @@ all: build
 
 build: web-build go-build ## Build the single artifact: web UI embedded into the server binary
 
-web-build: ## Build the Vue SPA into the Go embed dir (internal/webui/dist)
+web-build: ## Build the Vue SPA into the Go embed dir (:8097 picks it up live via air)
 	cd $(WEB) && $(BUN) install --frozen-lockfile && $(BUN) run build
 	@touch $(EMBED_DIR)/.gitkeep   # Vite's emptyOutDir wipes it; keep it tracked
 
@@ -33,11 +33,10 @@ server-dev: ensure-embed ## Run the Go server (serves a placeholder until the we
 web-dev: ## Run the Vite dev server with HMR (proxies API/stream routes to :8097)
 	cd $(WEB) && $(BUN) install && $(BUN) run dev
 
-dev: ## Start the backend stack, then the Vite dev server (one command)
-	$(COMPOSE) up -d --build
+dev: compose-up ## Start the dev stack on :8097, then the Vite dev server on :5173
 	$(MAKE) web-dev
 
-compose-up: ## Start the dev stack: Postgres + server (air hot-reload) on :8097
+compose-up: web-build ## Start the dev stack on :8097 (Postgres + server, air hot-reload) serving a freshly built SPA
 	$(COMPOSE) up -d --build
 
 compose-web: ## Start the dev stack incl. the Vite dev server (HMR) on :5173
