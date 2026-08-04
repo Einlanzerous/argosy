@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.2](https://github.com/Einlanzerous/argosy/compare/v0.21.1...v0.21.2) (2026-08-04)
+
+
+### Bug Fixes
+
+* **dev:** make :8097 serve a current SPA instead of a silently stale one (ARGY-180) ([#183](https://github.com/Einlanzerous/argosy/issues/183)) ([7f79ecd](https://github.com/Einlanzerous/argosy/commit/7f79ecd9b3c30653e474edded871ebfb59695088))
+* **web:** open ABR at the top rung so 4K transcodes can reach 2160p (ARGY-177) ([#182](https://github.com/Einlanzerous/argosy/issues/182)) ([93f5453](https://github.com/Einlanzerous/argosy/commit/93f5453650fcba567887ecd60af3e48356eeb492))
+
 ## [0.21.1](https://github.com/Einlanzerous/argosy/compare/v0.21.0...v0.21.1) (2026-08-02)
 
 
