@@ -36,7 +36,7 @@ class TranscodeStartRequest {
   ///
   bool? hevc;
 
-  /// Whether the client decodes 10-bit HEVC (Main 10) in *hardware* — from MediaCapabilities.decodingInfo reporting both smooth and powerEfficient. `hevc` alone cannot answer this: MediaSource.isTypeSupported says \"supported\" for a stream the client will software-decode and stutter on, which is why 10-bit sources were re-encoded unconditionally (ARGY-150). When true, a 10-bit HEVC source keeps its bit depth and HDR instead of being re-encoded down to 8-bit. Defaults to false, which preserves the previous behaviour. 
+  /// MediaCapabilities.decodingInfo's view of whether this client decodes 10-bit HEVC (Main 10) in hardware — both `smooth` and `powerEfficient`. Read it asymmetrically: false is meaningful (the device has recorded decode stats and they are bad), while true is weak, because browsers report any supported configuration as smooth and powerEfficient until stats have been recorded on the device. The server treats it as a veto rather than a licence: a true only permits a 10-bit HEVC source to keep its bit depth and HDR above 1080p, where such a copy has been observed playing smoothly (ARGY-178). Absent or false re-encodes to 8-bit, which is the pre-ARGY-178 behaviour. 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated

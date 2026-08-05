@@ -56,18 +56,27 @@ export function supportsHevc(): boolean {
   return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"')
 }
 
-// supportsHevcInHardware reports whether 10-bit HEVC decodes in *hardware* here.
-// supportsHevc() cannot answer this — isTypeSupported says "supported" for a
-// stream the client will software-decode and stutter on, and that ambiguity is
-// the whole reason 10-bit sources were re-encoded to 8-bit unconditionally
-// (ARGY-150), costing every 4K HDR title its resolution and its HDR (ARGY-178).
+// supportsHevcInHardware reports MediaCapabilities' view of whether 10-bit HEVC
+// decodes in hardware here, probed at the hardest realistic case (Main 10, level
+// 5.1, 4K, ~20 Mbps) so a yes covers anything lighter.
 //
-// MediaCapabilities answers it directly: `powerEfficient` means a hardware
-// decoder, `smooth` means it keeps up at this resolution and bitrate. We require
-// both, at the hardest realistic case (Main 10, level 5.1, 4K, ~20 Mbps), so a
-// yes covers anything lighter. Anything unexpected — no MediaCapabilities, a
-// rejected configuration, a rejected promise — resolves false and leaves the
-// 8-bit re-encode in place.
+// Read the answer asymmetrically. A **false** is meaningful: the browser has
+// recorded decode stats on this device and they say this configuration drops
+// frames or burns power. A **true** is weak — per spec, browsers report any
+// supported configuration as smooth and powerEfficient *until stats have been
+// recorded*, so it can simply mean "this device has never played one". The
+// server treats it accordingly, as a veto rather than a licence (see
+// planPlayback): a true only permits a 10-bit copy above 1080p, where we have
+// observed such a copy playing smoothly.
+//
+// The value is therefore not stable — it can flip once the browser has watched a
+// real decode, including between two starts of the same title. That is the point
+// (it self-corrects downward), and the transcode session key covers method and
+// codec, so a changed answer starts a new session rather than joining a stale
+// one.
+//
+// Anything unexpected — no MediaCapabilities, a rejected configuration, a
+// rejected promise — resolves false and leaves the 8-bit re-encode in place.
 export async function supportsHevcInHardware(): Promise<boolean> {
   const mc = navigator.mediaCapabilities
   if (!mc?.decodingInfo) return false

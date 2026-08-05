@@ -62,11 +62,15 @@ func TestPlanPlayback(t *testing.T) {
 		{"hevc 10-bit 1080 client → h264 encode", "hevc", "aac", true, false, true, 1080, methodTranscode, transcode.CodecH264, false},
 		{"hevc 10-bit 4k client → hevc encode (8-bit)", "hevc", "aac", true, false, true, 2160, methodTranscode, transcode.CodecHEVC, false},
 		{"h264 10-bit client → h264 encode", "h264", "aac", true, false, true, 1080, methodTranscode, transcode.CodecH264, false},
-		// A client that hardware-decodes 10-bit HEVC keeps its bit depth and HDR
-		// (ARGY-178): the re-encode existed only because isTypeSupported couldn't
-		// tell hardware from software decode.
+		// A client reporting hardware decode keeps 10-bit and HDR *above 1080p*,
+		// the one case with positive evidence (ARGY-178).
 		{"hevc 10-bit 4k hw client copies", "hevc", "aac", true, true, true, 2160, methodRemux, transcode.CodecHEVC, false},
-		{"hevc 10-bit 1080 hw client copies", "hevc", "aac", true, true, true, 1080, methodRemux, transcode.CodecHEVC, false},
+		// ...but not at or below 1080p. decodingInfo reports smooth/powerEfficient
+		// by default until the device has recorded stats, so a "hardware" answer
+		// can mean "never played one" — and 1080p 10-bit is the class the
+		// unexplained ARGY-150 stutter belongs to. It keeps re-encoding.
+		{"hevc 10-bit 1080 hw client still encodes", "hevc", "aac", true, true, true, 1080, methodTranscode, transcode.CodecH264, false},
+		{"hevc 10-bit 720 hw client still encodes", "hevc", "aac", true, true, true, 720, methodTranscode, transcode.CodecH264, false},
 		{"hevc 10-bit hw client still transcodes odd audio", "hevc", "truehd", true, true, true, 2160, methodRemux, transcode.CodecHEVC, true},
 		// The hardware answer is about HEVC; it must not unblock 10-bit H.264,
 		// where browser High 10 support is far thinner and the probe says nothing.
