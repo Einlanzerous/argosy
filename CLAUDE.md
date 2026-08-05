@@ -81,19 +81,21 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
   underneath it, and must keep the session alive while paused (ARGY-107). New
   playback paths need both.
 
-## Testing — and what CI does not cover
+## Testing
 
-**`go test` runs in no workflow.** There are 47 `_test.go` files under `cmd/`
-and `internal/` — including `internal/auth/`'s account, owner, middleware and
-audit tests — and none of them run in CI.
+CI is thorough here — more so than the other repos in the estate.
 
-What CI actually proves:
-
-| Workflow | Runs |
+| Workflow / job | Runs |
 |---|---|
-| `ci.yml` | `go vet ./cmd/... ./internal/...`, `bun run lint` |
-| `mobile.yml` | `flutter analyze`, `flutter test` |
+| `ci.yml` / `go` | `go vet`, `gofmt -l`, `golangci-lint`, `make test` (= `go test ./cmd/... ./internal/...`, all 47 test files) against a `postgres` service with `ffmpeg` installed, then `make go-build` |
+| `ci.yml` / `web` | `bun run format:check`, `lint`, `build` |
+| `ci.yml` / `openapi-drift` | `make generate` + `git diff --exit-code` — regenerating the contract's consumers is enforced, not remembered |
+| `mobile.yml` | `flutter analyze`, `flutter test`, debug APK, iOS build |
 
-So the Go backend — auth, ownership, transcode, subtitle — is covered by
-`go vet` and nothing else automated. `go test ./...` locally is the only thing
-that executes those 47 files.
+`make test` needs `ARGOSY_TEST_DATABASE_URL`; CI provides it from the service
+container. Locally, `make test` after `make ensure-embed`.
+
+What CI cannot see is what the invariants above are for: ownership semantics,
+cache and staleness behaviour, secure-context browser APIs, and playback
+lifecycle across a reaped transcode session. Every one of those was learned from
+a bug that shipped green.

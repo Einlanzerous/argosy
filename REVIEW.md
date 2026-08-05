@@ -5,20 +5,26 @@ how this repo works; this file describes what a review of it is *for*.
 
 ## What this review is for
 
-Know precisely what CI covers before leaning on it, because here it is less
-than it looks. `ci.yml` runs **`go vet` and `bun run lint` — that is all for the
-backend and web.** `mobile.yml` runs `flutter analyze` and `flutter test`.
+Argosy has the strongest CI in the estate. Lean on it, and do not spend the
+review re-proving what it already proves:
 
-**`go test` runs in no workflow.** There are 47 `_test.go` files under `cmd/`
-and `internal/`, including the auth package's account, owner, middleware and
-audit tests. None execute in CI. So a change to accounts, ownership, device
-pairing, transcode or subtitles is checked by `go vet` and a human, and by
-nothing else.
+| job | proves |
+|---|---|
+| `ci.yml` / `go` (with a `postgres` service and `ffmpeg`) | `go vet`, `gofmt -l`, `golangci-lint`, **`make test` — every one of the 47 `_test.go` files under `cmd/` and `internal/`, including all four of `internal/auth/`'s** — and that the binary builds |
+| `ci.yml` / `web` | `format:check`, `lint`, `build` |
+| `ci.yml` / `openapi-drift` | `make generate` then `git diff --exit-code` — a `proto/openapi` change that did not regenerate its Go, Dart and TS consumers fails the build |
+| `mobile.yml` | `flutter analyze`, `flutter test`, debug APK and iOS builds |
 
-Assume `go vet`, `bun run lint`, and the Flutter analyze/test pass. Assume
-nothing about Go behaviour. That inverts the usual rule: **for Go changes the
-tests existing is not evidence they ran**, so reason through the change rather
-than deferring to a green check.
+Assume all of that passed. A green `ci` means the Go tests ran against a real
+Postgres, not that test files merely exist.
+
+So the review's job here is narrow and specific: **the classes of bug this repo
+keeps shipping despite that CI.** Every invariant in `CLAUDE.md` was learned
+from a `fix(...)` commit that got past exactly this pipeline. Ownership
+semantics that compile and pass their tests but grant the wrong person access;
+caching and staleness, which no unit test observes; browser APIs that work in CI
+and throw on the tailnet; playback lifecycle across a reaped session. Those are
+where attention belongs.
 
 ## Ticket fidelity — check this first
 
@@ -29,8 +35,9 @@ before the diff, and answer explicitly in the summary:
   subset of them?
 - Did a requirement get silently dropped, narrowed, or deferred without saying?
 - Does the PR claim something is verified that the diff does not demonstrate?
-  Here that is sharper than usual: a PR saying "added tests" has added files CI
-  will not run.
+  Note the shape this takes here: CI runs the tests, so "added tests" is
+  credible — what it does not tell you is whether the test asserts the thing the
+  ticket asked for. A passing test of the wrong behaviour is still a finding.
 
 A change that is clean code and wrong scope is a **🔴 Important** finding. Say
 which criterion is unmet and quote it.
@@ -81,9 +88,6 @@ learned the hard way. `internal/auth/`.
 
 - Does a new player path handle its session disappearing, and keep it alive
   while paused?
-
-**Contract changes** — `proto/openapi` fans out to Go, Dart and TypeScript.
-Does the diff regenerate all three consumers, or only the one being worked on?
 
 **Migrations** — `internal/db/migrations/` is applied in order at startup. Is
 the change additive, and is it safe against the pre-ARGY-167 data the ownership

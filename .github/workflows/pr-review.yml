@@ -5,9 +5,10 @@ name: PR Review
 # Argosy is the highest-churn repo on this reviewer — 179 merged PRs since June,
 # and the repo SERV-59 named (ARGY-159, ARGY-167) as carrying the ownership and
 # permission changes nothing independently verified. It is also where the
-# reviewer matters most for a reason particular to this repo: `go test` runs in
-# no workflow, so 47 Go test files including the whole auth package execute
-# nowhere in CI.
+# reviewer earns its keep here despite CI being strong — `ci.yml` runs vet,
+# gofmt, golangci-lint and the full `go test` suite against a real Postgres, and
+# enforces OpenAPI regeneration. Every invariant in CLAUDE.md was learned from a
+# fix that got past exactly that pipeline.
 #
 # The point of running this in CI rather than asking for it in a session is that
 # the reviewer structurally cannot share context with whatever wrote the code,
