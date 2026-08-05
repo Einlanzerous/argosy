@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.22.0](https://github.com/Einlanzerous/argosy/compare/v0.21.2...v0.22.0) (2026-08-05)
+
+
+### Features
+
+* adopt the fresh-context PR reviewer (ARGY-181) ([#185](https://github.com/Einlanzerous/argosy/issues/185)) ([73ef9a1](https://github.com/Einlanzerous/argosy/commit/73ef9a1e7af713a4b4bc884cf0e3165f1f24924f))
+
+
+### Bug Fixes
+
+* **transcode:** keep 10-bit HEVC when the client decodes it in hardware (ARGY-178) ([#187](https://github.com/Einlanzerous/argosy/issues/187)) ([fa01acd](https://github.com/Einlanzerous/argosy/commit/fa01acde5160ed664ae0338539a9498b011cdbcb))
+
 ## [0.21.2](https://github.com/Einlanzerous/argosy/compare/v0.21.1...v0.21.2) (2026-08-04)
 
 
