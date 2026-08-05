@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.1](https://github.com/Einlanzerous/argosy/compare/v0.22.0...v0.22.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **web:** give Continue Watching episode identity and let sampled items age out (ARGY-176, ARGY-182) ([#188](https://github.com/Einlanzerous/argosy/issues/188)) ([a87fe9e](https://github.com/Einlanzerous/argosy/commit/a87fe9e3ef58837068389a4996372e5c073ad632))
+
 ## [0.22.0](https://github.com/Einlanzerous/argosy/compare/v0.21.2...v0.22.0) (2026-08-05)
 
 
