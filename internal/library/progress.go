@@ -202,8 +202,13 @@ func (s *Store) SetSeasonWatched(ctx context.Context, accountID, userID, seasonI
 // Collapsed to at most one entry per series (ARGY-97): a show with several
 // in-progress episodes shows up once, as its most-recently-active episode.
 // Movies are keyed by their own item id, so each stays a standalone row. The
-// LATERAL pins one series per item, so a combined multi-episode file (one
+// LATERAL pins one row per item, so a combined multi-episode file (one
 // media_item linked to several episodes, ARGY-69) can't fan out into duplicates.
+// It is ordered, not just limited: series_id is the same across those rows, but
+// the episode number and title are not, so an unordered LIMIT 1 would label a
+// combined file from whichever heap row came back first — and that flips after a
+// rescan or a TMDB title backfill relocates it. A combined file is labelled by
+// its first episode.
 // currentDeviceID is the requesting deck; the cross-device pill is suppressed for
 // any item whose last-played device is that same deck (showing "you left off here"
 // would be noise — ARGY-98).
@@ -230,6 +235,7 @@ func (s *Store) ContinueWatching(ctx context.Context, accountID, userID, current
 		         FROM episodes e
 		         JOIN seasons sea ON sea.id = e.season_id
 		         WHERE e.media_item_id = ps.media_item_id
+		         ORDER BY sea.season_number, e.episode_number
 		         LIMIT 1
 		     ) ep ON true
 		     WHERE l.account_id = $1 AND ps.user_id = $2

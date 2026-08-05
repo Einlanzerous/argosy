@@ -337,7 +337,7 @@ func TestContinueWatchingAbandoned(t *testing.T) {
 	// Separate series so each row can be asserted independently (the rail
 	// collapses per series).
 	freshID := episode(1, "The World of Swords")
-	var staleID, recentID string
+	var staleID, recentID, midWatchID string
 	{
 		var s2, se2 string
 		if err := pool.QueryRow(ctx, `INSERT INTO series (library_id, title, sort_title) VALUES ($1,'Stale Show','stale show') RETURNING id::text`, libID).Scan(&s2); err != nil {
@@ -357,6 +357,34 @@ func TestContinueWatchingAbandoned(t *testing.T) {
 			libID, "recent-"+suffix+".mkv").Scan(&recentID); err != nil {
 			t.Fatal(err)
 		}
+		// A film genuinely under way but not opened in days — the case an absolute
+		// threshold protects and a staleness-only rule would evict.
+		if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'movie','Half Watched Film',$2) RETURNING id::text`,
+			libID, "half-"+suffix+".mkv").Scan(&midWatchID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A combined multi-episode rip: one media_item backing two episodes rows
+	// (ARGY-69). Its own series, so it doesn't compete for the collapsed row.
+	var combinedID string
+	{
+		var s3, se3 string
+		if err := pool.QueryRow(ctx, `INSERT INTO series (library_id, title, sort_title) VALUES ($1,'Combined Show','combined show') RETURNING id::text`, libID).Scan(&s3); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `INSERT INTO seasons (series_id, season_number) VALUES ($1,1) RETURNING id::text`, s3).Scan(&se3); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'episode','Combined S01E01E02',$2) RETURNING id::text`,
+			libID, "combined-"+suffix+".mkv").Scan(&combinedID); err != nil {
+			t.Fatal(err)
+		}
+		// Inserted high-number-first so an unordered LIMIT 1 is likely to see E2.
+		if _, err := pool.Exec(ctx, `INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1,2,$2,'Second'),($1,1,$2,'First')`,
+			se3, combinedID); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	seed := func(itemID string, pos float64, agoSecs int) {
@@ -367,9 +395,11 @@ func TestContinueWatchingAbandoned(t *testing.T) {
 			t.Fatalf("seed play_state: %v", err)
 		}
 	}
-	seed(freshID, 600, 3600)    // properly under way — stays regardless of age
-	seed(staleID, 19, 60*60*30) // 19s, untouched for 30h — the reported case
-	seed(recentID, 19, 60*30)   // 19s but only 30m ago — too soon to judge
+	seed(freshID, 600, 3600)        // properly under way — stays regardless of age
+	seed(midWatchID, 600, 60*60*48) // 10 min in, untouched for 2 days — must stay
+	seed(staleID, 19, 60*60*30)     // 19s, untouched for 30h — the reported case
+	seed(recentID, 19, 60*30)       // 19s but only 30m ago — too soon to judge
+	seed(combinedID, 600, 120)      // a combined rip, properly under way
 
 	cont, err := store.ContinueWatching(ctx, accID, userID, "", 20)
 	if err != nil {
@@ -386,6 +416,12 @@ func TestContinueWatchingAbandoned(t *testing.T) {
 	if _, ok := seen[recentID]; !ok {
 		t.Errorf("a 19s partial from 30m ago was dropped; the staleness window should protect a same-day start")
 	}
+	// Staleness alone must not evict: without the position half of the predicate a
+	// film you are 40 minutes into and haven't opened for two days would silently
+	// leave the rail, which is what the absolute threshold exists to prevent.
+	if _, ok := seen[midWatchID]; !ok {
+		t.Errorf("a well-progressed item untouched for 2 days was dropped; only barely-started ones should age out")
+	}
 	got, ok := seen[freshID]
 	if !ok {
 		t.Fatalf("a well-progressed episode fell off the rail: %+v", cont)
@@ -401,6 +437,30 @@ func TestContinueWatchingAbandoned(t *testing.T) {
 	if got.EpisodeTitle == nil || *got.EpisodeTitle != "The World of Swords" {
 		t.Errorf("episodeTitle = %v, want %q", got.EpisodeTitle, "The World of Swords")
 	}
+	// A combined file must label deterministically from its first episode. The
+	// LATERAL's LIMIT 1 was safe when it only returned series_id (identical across
+	// those rows); episode number and title are not, so it has to be ordered.
+	//
+	// This pins the direction, not the necessity: Postgres already returns E1
+	// first here without an ORDER BY, so the case passes against the unordered
+	// query too. It fails if the ordering is reversed or dropped in favour of a
+	// different key, and it documents which episode a combined file is named
+	// after. The argument for ordering at all is that the row order is incidental
+	// — it changes when an UPDATE relocates the row — not that this test proves
+	// it today.
+	if c, ok := seen[combinedID]; !ok {
+		t.Errorf("combined multi-episode item missing from Continue Watching")
+	} else if c.EpisodeNumber == nil || *c.EpisodeNumber != 1 || c.EpisodeTitle == nil || *c.EpisodeTitle != "First" {
+		gotNum, gotTitle := 0, "<nil>"
+		if c.EpisodeNumber != nil {
+			gotNum = *c.EpisodeNumber
+		}
+		if c.EpisodeTitle != nil {
+			gotTitle = *c.EpisodeTitle
+		}
+		t.Errorf("combined file labelled E%d %q, want E1 \"First\" — the LATERAL must be ordered", gotNum, gotTitle)
+	}
+
 	// The media-item title is still the filename-derived string; the point is that
 	// clients no longer have to render it.
 	if got.Title == "" || got.SeriesTitle == nil || *got.SeriesTitle != "Sword Art Online" {
