@@ -15,6 +15,7 @@ class TranscodeStartRequest {
   TranscodeStartRequest({
     this.startAt,
     this.hevc,
+    this.hevcHardware,
   });
 
   /// Seek offset in seconds (default 0).
@@ -35,19 +36,30 @@ class TranscodeStartRequest {
   ///
   bool? hevc;
 
+  /// MediaCapabilities.decodingInfo's view of whether this client decodes 10-bit HEVC (Main 10) in hardware — both `smooth` and `powerEfficient`. Read it asymmetrically: false is meaningful (the device has recorded decode stats and they are bad), while true is weak, because browsers report any supported configuration as smooth and powerEfficient until stats have been recorded on the device. The server treats it as a veto rather than a licence: a true only permits a 10-bit HEVC source to keep its bit depth and HDR above 1080p, where such a copy has been observed playing smoothly (ARGY-178). Absent or false re-encodes to 8-bit, which is the pre-ARGY-178 behaviour. 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? hevcHardware;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is TranscodeStartRequest &&
     other.startAt == startAt &&
-    other.hevc == hevc;
+    other.hevc == hevc &&
+    other.hevcHardware == hevcHardware;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (startAt == null ? 0 : startAt!.hashCode) +
-    (hevc == null ? 0 : hevc!.hashCode);
+    (hevc == null ? 0 : hevc!.hashCode) +
+    (hevcHardware == null ? 0 : hevcHardware!.hashCode);
 
   @override
-  String toString() => 'TranscodeStartRequest[startAt=$startAt, hevc=$hevc]';
+  String toString() => 'TranscodeStartRequest[startAt=$startAt, hevc=$hevc, hevcHardware=$hevcHardware]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -60,6 +72,11 @@ class TranscodeStartRequest {
       json[r'hevc'] = this.hevc;
     } else {
       json[r'hevc'] = null;
+    }
+    if (this.hevcHardware != null) {
+      json[r'hevcHardware'] = this.hevcHardware;
+    } else {
+      json[r'hevcHardware'] = null;
     }
     return json;
   }
@@ -81,6 +98,7 @@ class TranscodeStartRequest {
       return TranscodeStartRequest(
         startAt: mapValueOfType<double>(json, r'startAt'),
         hevc: mapValueOfType<bool>(json, r'hevc'),
+        hevcHardware: mapValueOfType<bool>(json, r'hevcHardware'),
       );
     }
     return null;

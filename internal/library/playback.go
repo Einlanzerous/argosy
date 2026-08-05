@@ -76,18 +76,37 @@ type transcodePlan struct {
 // for >1080p capable clients (H.264's 4K bitrate is impractical) and H.264
 // otherwise.
 //
-// Exception: high-bit-depth H.264/HEVC is never copied. MediaSource reports
-// Main 10 "supported", so clients negotiate a copy, then software-decode the
-// 10-bit stream (Firefox falls off the HW-decode path) and stutter on
-// higher-bitrate content — while the same client hardware-decodes 8-bit fine,
-// even at 4K (ARGY-150). Re-encoding drops it to 8-bit AND runs it through the
-// bitrate ladder, fixing both the decode cost and the uncapped peaks that also
-// choke remote (Tailscale) playback. VP9/AV1 10-bit stay copyable — those are
-// broadly hardware-decoded.
-func planPlayback(videoCodec, audioCodec string, clientHEVC, highBitDepth bool, height int) transcodePlan {
+// Exception: high-bit-depth H.264/HEVC is not copied, except for HEVC above
+// 1080p when the client also reports hardware decode. That exception is
+// deliberately narrow, because the evidence underneath it is thin on both sides.
+//
+// ARGY-150 blocked every 10-bit copy, reasoning that MediaSource.isTypeSupported
+// reports Main 10 "supported" for a stream the client will software-decode and
+// stutter on. Bit depth stood in for "will this decode in hardware" — but it
+// separates nothing: the title that stuttered (1080p Main 10, ~4.8 Mbps) and the
+// titles that played smoothly (2160p Main 10, ~62 Mbps) are both 10-bit, and the
+// *cheaper* file is the one that stuttered. Whatever went wrong there, decode
+// cost does not describe it, and the rule cost every 4K HDR title its resolution
+// and its HDR (ARGY-178).
+//
+// clientHEVCHardware carries MediaCapabilities' `powerEfficient`/`smooth`, which
+// is a better question than bit depth but a weak answer: browsers report a
+// supported configuration as smooth and powerEfficient *until stats have been
+// recorded on the device*, so a true can simply mean "never played this". It is
+// therefore treated as a veto rather than a guarantee — false withholds the copy,
+// true only permits it — and paired with the one condition we have positive
+// evidence for: >1080p, where 4K HDR was observed playing smoothly on a copy.
+// At 1080p and below, 10-bit keeps re-encoding exactly as ARGY-150 left it, which
+// is the class the unexplained stutter belongs to.
+//
+// 10-bit H.264 stays blocked outright: an HEVC probe says nothing about High 10,
+// and browser hardware support for it is far thinner. VP9/AV1 10-bit stay
+// copyable — those are broadly hardware-decoded.
+func planPlayback(videoCodec, audioCodec string, clientHEVC, clientHEVCHardware, highBitDepth bool, height int) transcodePlan {
 	v := strings.ToLower(videoCodec)
 	audioOK := audioCodec == "" || directAudio[strings.ToLower(audioCodec)]
-	highDepthBlocked := highBitDepth && (isHEVC(v) || v == "h264" || v == "avc1")
+	hevcTenBitOK := isHEVC(v) && clientHEVC && clientHEVCHardware && height > 1080
+	highDepthBlocked := highBitDepth && !hevcTenBitOK && (isHEVC(v) || v == "h264" || v == "avc1")
 	copyVideo := !highDepthBlocked && (directVideo[v] || (clientHEVC && isHEVC(v)))
 
 	if copyVideo {

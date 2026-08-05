@@ -56,17 +56,59 @@ export function supportsHevc(): boolean {
   return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"')
 }
 
+// supportsHevcInHardware reports MediaCapabilities' view of whether 10-bit HEVC
+// decodes in hardware here, probed at the hardest realistic case (Main 10, level
+// 5.1, 4K, ~20 Mbps) so a yes covers anything lighter.
+//
+// Read the answer asymmetrically. A **false** is meaningful: the browser has
+// recorded decode stats on this device and they say this configuration drops
+// frames or burns power. A **true** is weak — per spec, browsers report any
+// supported configuration as smooth and powerEfficient *until stats have been
+// recorded*, so it can simply mean "this device has never played one". The
+// server treats it accordingly, as a veto rather than a licence (see
+// planPlayback): a true only permits a 10-bit copy above 1080p, where we have
+// observed such a copy playing smoothly.
+//
+// The value is therefore not stable — it can flip once the browser has watched a
+// real decode, including between two starts of the same title. That is the point
+// (it self-corrects downward), and the transcode session key covers method and
+// codec, so a changed answer starts a new session rather than joining a stale
+// one.
+//
+// Anything unexpected — no MediaCapabilities, a rejected configuration, a
+// rejected promise — resolves false and leaves the 8-bit re-encode in place.
+export async function supportsHevcInHardware(): Promise<boolean> {
+  const mc = navigator.mediaCapabilities
+  if (!mc?.decodingInfo) return false
+  try {
+    const info = await mc.decodingInfo({
+      type: 'media-source',
+      video: {
+        contentType: 'video/mp4; codecs="hvc1.2.4.L153.B0"',
+        width: 3840,
+        height: 2160,
+        bitrate: 20_000_000,
+        framerate: 30,
+      },
+    })
+    return info.supported && info.smooth && info.powerEfficient
+  } catch {
+    return false
+  }
+}
+
 // startTranscode begins (or joins) a server-side HLS transcode for an item that
 // can't be direct-played, returning the session + its playlist URL. It advertises
 // the client's HEVC capability so 4K HEVC can be passed through (copied) rather
-// than re-encoded.
+// than re-encoded, and whether that decode is in hardware so a 10-bit source can
+// keep its bit depth and HDR.
 export async function startTranscode(
   itemId: string,
   startAt = 0,
 ): Promise<TranscodeSession | null> {
   const { data } = await api.POST('/api/v1/items/{itemId}/transcode', {
     params: { path: { itemId } },
-    body: { startAt, hevc: supportsHevc() },
+    body: { startAt, hevc: supportsHevc(), hevcHardware: await supportsHevcInHardware() },
   })
   return data ?? null
 }
