@@ -124,13 +124,24 @@ String? _remainingLabel(num? durationSeconds, num positionSeconds) {
   return '${formatRuntime(remaining)} left';
 }
 
+/// Second line of a Continue Watching entry. Episodes get their own identity —
+/// `S1 · E1 · The World of Swords` — rather than the media item's title, which
+/// is filename-derived and repeats the series name already on the line above
+/// (ARGY-176). Films keep their year. Older rows may predate the episode
+/// fields, so fall back to the previous behaviour rather than a bare `S · E`.
+String? _continueSubtitle(ContinueItem c) {
+  if (c.seriesTitle != null && c.seasonNumber != null && c.episodeNumber != null) {
+    return episodeLabel(c.seasonNumber!, c.episodeNumber!, c.episodeTitle);
+  }
+  if (c.seriesTitle != null) return formatTitle(c.title);
+  return c.year != null ? '${c.year}' : null;
+}
+
 ContinueEntry _continueEntry(ContinueItem c) => ContinueEntry(
   id: c.id,
   kind: c.kind == 'series' ? MediaKind.series : MediaKind.movie,
   title: c.seriesTitle ?? formatTitle(c.title),
-  subtitle: c.seriesTitle != null
-      ? formatTitle(c.title)
-      : (c.year != null ? '${c.year}' : null),
+  subtitle: _continueSubtitle(c),
   posterUrl: c.posterUrl,
   backdropUrl: c.backdropUrl,
   progress: (c.percent / 100).clamp(0.0, 1.0).toDouble(),
@@ -142,7 +153,7 @@ MediaCard _onDeckCard(OnDeckItem o) => MediaCard(
   id: o.seriesId,
   kind: MediaKind.series,
   title: o.seriesTitle,
-  subtitleOverride: 'S${o.seasonNumber} · E${o.episodeNumber}',
+  subtitleOverride: episodeLabel(o.seasonNumber, o.episodeNumber),
   posterUrl: o.posterUrl,
   backdropUrl: o.backdropUrl,
 );
@@ -165,9 +176,7 @@ HomeHero? _heroFrom(List<ContinueItem> cont, List<MediaItemSummary> recent) {
     return HomeHero(
       eyebrow: 'Continue watching',
       title: r.seriesTitle ?? r.title,
-      subtitle: r.seriesTitle != null
-          ? formatTitle(r.title)
-          : (r.year != null ? '${r.year}' : null),
+      subtitle: _continueSubtitle(r),
       kind: r.seriesId != null ? MediaKind.series : MediaKind.movie,
       detailId: r.seriesId ?? r.id,
       // r.id is the resumed item itself (the episode for a series) — playable.

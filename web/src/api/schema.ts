@@ -1445,6 +1445,12 @@ export interface components {
             /** Format: uuid */
             seriesId?: string | null;
             seriesTitle?: string | null;
+            /** @description Season number when this item is an episode; null for films. Named to match OnDeckItem so clients can share the "S1 · E1" formatting. */
+            seasonNumber?: number | null;
+            /** @description Episode number when this item is an episode; null for films. */
+            episodeNumber?: number | null;
+            /** @description The episode's own title (e.g. "The World of Swords"). Distinct from `title`, which is the media item's — filename-derived for episodes, and therefore usually a repeat of the series name plus release tags (ARGY-176). Null for films, which carry their name in `title`. */
+            episodeTitle?: string | null;
             /** @description The deck that last owned this playhead, set only when it differs from the requesting device — drives the cross-device "⇄ left off on" pill (ARGY-98). */
             lastPlayedDevice?: components["schemas"]["DeviceRef"] | null;
         };

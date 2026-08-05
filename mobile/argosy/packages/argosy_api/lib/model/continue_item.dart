@@ -24,6 +24,9 @@ class ContinueItem {
     required this.percent,
     this.seriesId,
     this.seriesTitle,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.episodeTitle,
     this.lastPlayedDevice,
   });
 
@@ -50,6 +53,15 @@ class ContinueItem {
 
   String? seriesTitle;
 
+  /// Season number when this item is an episode; null for films. Named to match OnDeckItem so clients can share the \"S1 · E1\" formatting. 
+  int? seasonNumber;
+
+  /// Episode number when this item is an episode; null for films.
+  int? episodeNumber;
+
+  /// The episode's own title (e.g. \"The World of Swords\"). Distinct from `title`, which is the media item's — filename-derived for episodes, and therefore usually a repeat of the series name plus release tags (ARGY-176). Null for films, which carry their name in `title`. 
+  String? episodeTitle;
+
   /// The deck that last owned this playhead, set only when it differs from the requesting device — drives the cross-device \"⇄ left off on\" pill (ARGY-98).
   DeviceRef? lastPlayedDevice;
 
@@ -66,6 +78,9 @@ class ContinueItem {
     other.percent == percent &&
     other.seriesId == seriesId &&
     other.seriesTitle == seriesTitle &&
+    other.seasonNumber == seasonNumber &&
+    other.episodeNumber == episodeNumber &&
+    other.episodeTitle == episodeTitle &&
     other.lastPlayedDevice == lastPlayedDevice;
 
   @override
@@ -82,10 +97,13 @@ class ContinueItem {
     (percent.hashCode) +
     (seriesId == null ? 0 : seriesId!.hashCode) +
     (seriesTitle == null ? 0 : seriesTitle!.hashCode) +
+    (seasonNumber == null ? 0 : seasonNumber!.hashCode) +
+    (episodeNumber == null ? 0 : episodeNumber!.hashCode) +
+    (episodeTitle == null ? 0 : episodeTitle!.hashCode) +
     (lastPlayedDevice == null ? 0 : lastPlayedDevice!.hashCode);
 
   @override
-  String toString() => 'ContinueItem[id=$id, kind=$kind, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, positionSeconds=$positionSeconds, durationSeconds=$durationSeconds, percent=$percent, seriesId=$seriesId, seriesTitle=$seriesTitle, lastPlayedDevice=$lastPlayedDevice]';
+  String toString() => 'ContinueItem[id=$id, kind=$kind, title=$title, year=$year, posterUrl=$posterUrl, backdropUrl=$backdropUrl, positionSeconds=$positionSeconds, durationSeconds=$durationSeconds, percent=$percent, seriesId=$seriesId, seriesTitle=$seriesTitle, seasonNumber=$seasonNumber, episodeNumber=$episodeNumber, episodeTitle=$episodeTitle, lastPlayedDevice=$lastPlayedDevice]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -123,6 +141,21 @@ class ContinueItem {
       json[r'seriesTitle'] = this.seriesTitle;
     } else {
       json[r'seriesTitle'] = null;
+    }
+    if (this.seasonNumber != null) {
+      json[r'seasonNumber'] = this.seasonNumber;
+    } else {
+      json[r'seasonNumber'] = null;
+    }
+    if (this.episodeNumber != null) {
+      json[r'episodeNumber'] = this.episodeNumber;
+    } else {
+      json[r'episodeNumber'] = null;
+    }
+    if (this.episodeTitle != null) {
+      json[r'episodeTitle'] = this.episodeTitle;
+    } else {
+      json[r'episodeTitle'] = null;
     }
     if (this.lastPlayedDevice != null) {
       json[r'lastPlayedDevice'] = this.lastPlayedDevice;
@@ -170,6 +203,9 @@ class ContinueItem {
         percent: num.parse('${json[r'percent']}'),
         seriesId: mapValueOfType<String>(json, r'seriesId'),
         seriesTitle: mapValueOfType<String>(json, r'seriesTitle'),
+        seasonNumber: mapValueOfType<int>(json, r'seasonNumber'),
+        episodeNumber: mapValueOfType<int>(json, r'episodeNumber'),
+        episodeTitle: mapValueOfType<String>(json, r'episodeTitle'),
         lastPlayedDevice: DeviceRef.fromJson(json[r'lastPlayedDevice']),
       );
     }

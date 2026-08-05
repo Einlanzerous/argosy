@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/Einlanzerous/argosy/internal/db"
 	"github.com/Einlanzerous/argosy/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -277,5 +278,132 @@ func TestContinueWatchingLastDevice(t *testing.T) {
 	}
 	if got := pill("11111111-1111-1111-1111-111111111111"); got != nil {
 		t.Fatalf("pill after revoke = %v, want nil", *got)
+	}
+}
+
+// TestContinueWatchingAbandoned covers ARGY-182 and ARGY-176 together, since both
+// hang off the same query: a barely-started item ages off the rail, and episodes
+// carry their own identity so a card needn't fall back to the filename-derived
+// media-item title.
+func TestContinueWatchingAbandoned(t *testing.T) {
+	dsn := testdb.DSN(t)
+	ctx := context.Background()
+	if err := db.Migrate(ctx, dsn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	store := NewStore(pool, "/artwork")
+
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
+	var accID, userID, libID string
+	if err := pool.QueryRow(ctx, `INSERT INTO accounts (name) VALUES ($1) RETURNING id::text`, "ab_"+suffix).Scan(&accID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO users (account_id, name) VALUES ($1,$2) RETURNING id::text`, accID, "viewer").Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO libraries (account_id, name, kind, root_path) VALUES ($1,$2,'mixed',$3) RETURNING id::text`,
+		accID, "lib_"+suffix, "/tmp/"+suffix).Scan(&libID); err != nil {
+		t.Fatal(err)
+	}
+
+	// One series, three episodes — each gets its own play_state below. The
+	// media_item titles carry the filename shape that ARGY-176 is about.
+	var seriesID, seasonID string
+	if err := pool.QueryRow(ctx, `INSERT INTO series (library_id, title, sort_title) VALUES ($1,'Sword Art Online','sword art online') RETURNING id::text`, libID).Scan(&seriesID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO seasons (series_id, season_number) VALUES ($1,1) RETURNING id::text`, seriesID).Scan(&seasonID); err != nil {
+		t.Fatal(err)
+	}
+	episode := func(n int, epTitle string) string {
+		var itemID string
+		if err := pool.QueryRow(ctx,
+			`INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'episode',$2,$3) RETURNING id::text`,
+			libID, "Sword Art Online - S01E0"+strconv.Itoa(n)+" - "+epTitle+" Bluray-1080p",
+			"sao"+strconv.Itoa(n)+"-"+suffix+".mkv").Scan(&itemID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1,$2,$3,$4)`,
+			seasonID, n, itemID, epTitle); err != nil {
+			t.Fatal(err)
+		}
+		return itemID
+	}
+	// Separate series so each row can be asserted independently (the rail
+	// collapses per series).
+	freshID := episode(1, "The World of Swords")
+	var staleID, recentID string
+	{
+		var s2, se2 string
+		if err := pool.QueryRow(ctx, `INSERT INTO series (library_id, title, sort_title) VALUES ($1,'Stale Show','stale show') RETURNING id::text`, libID).Scan(&s2); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `INSERT INTO seasons (series_id, season_number) VALUES ($1,2) RETURNING id::text`, s2).Scan(&se2); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'episode','Stale S02E05',$2) RETURNING id::text`,
+			libID, "stale-"+suffix+".mkv").Scan(&staleID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1,5,$2,'Old Ground')`, se2, staleID); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'movie','Recent Sample',$2) RETURNING id::text`,
+			libID, "recent-"+suffix+".mkv").Scan(&recentID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	seed := func(itemID string, pos float64, agoSecs int) {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO play_state (user_id, media_item_id, position_seconds, duration_seconds, watched, updated_at)
+			 VALUES ($1,$2,$3,1440,false, now() - make_interval(secs => $4))`,
+			userID, itemID, pos, agoSecs); err != nil {
+			t.Fatalf("seed play_state: %v", err)
+		}
+	}
+	seed(freshID, 600, 3600)    // properly under way — stays regardless of age
+	seed(staleID, 19, 60*60*30) // 19s, untouched for 30h — the reported case
+	seed(recentID, 19, 60*30)   // 19s but only 30m ago — too soon to judge
+
+	cont, err := store.ContinueWatching(ctx, accID, userID, "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]api.ContinueItem{}
+	for _, c := range cont {
+		seen[c.Id.String()] = c
+	}
+
+	if _, ok := seen[staleID]; ok {
+		t.Errorf("a 19s partial untouched for 30h is still on the rail — that is the ARGY-182 case")
+	}
+	if _, ok := seen[recentID]; !ok {
+		t.Errorf("a 19s partial from 30m ago was dropped; the staleness window should protect a same-day start")
+	}
+	got, ok := seen[freshID]
+	if !ok {
+		t.Fatalf("a well-progressed episode fell off the rail: %+v", cont)
+	}
+
+	// ARGY-176: the card can name the episode without reaching for mi.title.
+	if got.SeasonNumber == nil || *got.SeasonNumber != 1 {
+		t.Errorf("seasonNumber = %v, want 1", got.SeasonNumber)
+	}
+	if got.EpisodeNumber == nil || *got.EpisodeNumber != 1 {
+		t.Errorf("episodeNumber = %v, want 1", got.EpisodeNumber)
+	}
+	if got.EpisodeTitle == nil || *got.EpisodeTitle != "The World of Swords" {
+		t.Errorf("episodeTitle = %v, want %q", got.EpisodeTitle, "The World of Swords")
+	}
+	// The media-item title is still the filename-derived string; the point is that
+	// clients no longer have to render it.
+	if got.Title == "" || got.SeriesTitle == nil || *got.SeriesTitle != "Sword Art Online" {
+		t.Errorf("seriesTitle = %v, title = %q", got.SeriesTitle, got.Title)
 	}
 }

@@ -5,7 +5,7 @@ import { api } from '@/api/client'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import { posterStyle } from '@/lib/poster'
-import { formatRuntime, formatTitle } from '@/lib/format'
+import { episodeLabel, formatRuntime, formatTitle } from '@/lib/format'
 import {
   getRecent,
   getFacets,
@@ -118,6 +118,19 @@ const recent = computed(() => recentItems.value.slice(0, 12))
 // playable). Films keep kind "movie"; series carry kind "series".
 const newestFilm = computed(() => recentItems.value.find((i) => i.kind !== 'series'))
 
+// Second line of a Continue Watching entry. Episodes get their own identity —
+// "S1 · E1 · The World of Swords" — rather than the media item's title, which is
+// filename-derived and repeats the series name already on the line above
+// (ARGY-176). Films keep their year. Older rows may predate the episode fields,
+// so fall back to the previous behaviour rather than rendering a bare "S · E".
+function continueSubtitle(c: ContinueItem): string {
+  if (c.seriesTitle && c.seasonNumber != null && c.episodeNumber != null) {
+    return episodeLabel(c.seasonNumber, c.episodeNumber, c.episodeTitle)
+  }
+  if (c.seriesTitle) return formatTitle(c.title)
+  return c.year ? String(c.year) : ''
+}
+
 // The hero is the top continue-watching item when there is one (a real resume),
 // otherwise the most recent film as a featured spotlight.
 const hero = computed(() => {
@@ -127,7 +140,7 @@ const hero = computed(() => {
       id: r.id,
       eyebrow: 'Continue watching',
       title: r.seriesTitle || r.title,
-      sub: r.seriesTitle ? formatTitle(r.title) : r.year ? String(r.year) : '',
+      sub: continueSubtitle(r),
       posterUrl: r.posterUrl,
       backdropUrl: r.backdropUrl,
       percent: r.percent,
@@ -276,7 +289,7 @@ onUnmounted(() => {
             </div>
             <div class="cw-meta">
               <div class="cw-title">{{ c.seriesTitle || formatTitle(c.title) }}</div>
-              <div class="cw-sub">{{ c.seriesTitle ? formatTitle(c.title) : c.year }}</div>
+              <div class="cw-sub">{{ continueSubtitle(c) }}</div>
             </div>
             <div class="cw-bar"><div class="cw-fill" :style="{ width: `${c.percent}%` }" /></div>
           </div>
@@ -290,7 +303,7 @@ onUnmounted(() => {
           :key="o.id"
           :width="158"
           :title="o.seriesTitle"
-          :subtitle="`S${o.seasonNumber} · E${o.episodeNumber}`"
+          :subtitle="episodeLabel(o.seasonNumber, o.episodeNumber)"
           kind="Up Next"
           :poster-url="o.posterUrl"
           :to="{ name: 'player', params: { id: o.id } }"
