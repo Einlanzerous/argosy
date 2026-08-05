@@ -66,6 +66,20 @@ export function episodeHeader(
   return parts.join(' · ')
 }
 
+// Compact episode label for a card subtitle: "S1 · E1 · The World of Swords",
+// dropping the name when it isn't known. Deliberately omits the series title,
+// unlike episodeHeader — on a card the series is already the line above, and
+// repeating it is the bug this exists to fix (ARGY-176). Mirrored in mobile
+// format.dart.
+export function episodeLabel(
+  seasonNumber: number,
+  episodeNumber: number,
+  episodeTitle?: string | null,
+): string {
+  const base = `S${seasonNumber} · E${episodeNumber}`
+  return episodeTitle ? `${base} · ${episodeTitle}` : base
+}
+
 // Clock like "0:42:15" from a position in seconds.
 export function formatClock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds))

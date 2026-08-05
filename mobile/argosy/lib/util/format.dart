@@ -67,6 +67,16 @@ String episodeHeader(
   return parts.join(' · ');
 }
 
+/// Compact episode label for a card subtitle: `S1 · E1 · The World of Swords`,
+/// dropping the name when it isn't known. Deliberately omits the series title,
+/// unlike [episodeHeader] — on a card the series is already the line above, and
+/// repeating it is the bug this exists to fix (ARGY-176). Mirrors web format.ts.
+String episodeLabel(int seasonNumber, int episodeNumber, [String? episodeTitle]) {
+  final base = 'S$seasonNumber · E$episodeNumber';
+  if (episodeTitle == null || episodeTitle.isEmpty) return base;
+  return '$base · $episodeTitle';
+}
+
 /// A coarse "last seen" label like `just now`, `5m ago`, `3h ago`, `2d ago`,
 /// or a date for anything older than a week. [now] is injectable for tests.
 String formatRelativeTime(DateTime? when, {DateTime? now}) {

@@ -2302,6 +2302,24 @@ components:
         percent: { type: number }
         seriesId: { type: string, format: uuid, nullable: true }
         seriesTitle: { type: string, nullable: true }
+        seasonNumber:
+          type: integer
+          nullable: true
+          description: >
+            Season number when this item is an episode; null for films. Named to
+            match OnDeckItem so clients can share the "S1 · E1" formatting.
+        episodeNumber:
+          type: integer
+          nullable: true
+          description: Episode number when this item is an episode; null for films.
+        episodeTitle:
+          type: string
+          nullable: true
+          description: >
+            The episode's own title (e.g. "The World of Swords"). Distinct from
+            `title`, which is the media item's — filename-derived for episodes,
+            and therefore usually a repeat of the series name plus release tags
+            (ARGY-176). Null for films, which carry their name in `title`.
         lastPlayedDevice:
           allOf: [{ $ref: "#/components/schemas/DeviceRef" }]
           nullable: true

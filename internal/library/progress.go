@@ -20,6 +20,15 @@ import (
 // its duration.
 const watchedThreshold = 0.95
 
+// abandonedSeconds / abandonedAfter bound what Continue Watching treats as a
+// real start (ARGY-182): under this much progress, untouched for this long, an
+// item is something that was sampled rather than begun, and it leaves the rail.
+// Two minutes reads the same at every runtime, which a percentage does not.
+const (
+	abandonedSeconds = 120
+	abandonedAfter   = "24 hours"
+)
+
 func (s *Store) itemInAccount(ctx context.Context, accountID, itemID string) (bool, error) {
 	var ok bool
 	err := s.pool.QueryRow(ctx,
@@ -193,45 +202,64 @@ func (s *Store) SetSeasonWatched(ctx context.Context, accountID, userID, seasonI
 // Collapsed to at most one entry per series (ARGY-97): a show with several
 // in-progress episodes shows up once, as its most-recently-active episode.
 // Movies are keyed by their own item id, so each stays a standalone row. The
-// LATERAL pins one series per item, so a combined multi-episode file (one
+// LATERAL pins one row per item, so a combined multi-episode file (one
 // media_item linked to several episodes, ARGY-69) can't fan out into duplicates.
+// It is ordered, not just limited: series_id is the same across those rows, but
+// the episode number and title are not, so an unordered LIMIT 1 would label a
+// combined file from whichever heap row came back first — and that flips after a
+// rescan or a TMDB title backfill relocates it. A combined file is labelled by
+// its first episode.
 // currentDeviceID is the requesting deck; the cross-device pill is suppressed for
 // any item whose last-played device is that same deck (showing "you left off here"
 // would be noise — ARGY-98).
+//
+// Barely-started items age out (ARGY-182). Anything with progress used to stay on
+// the rail until it was finished, so sampling a few seconds of something pinned it
+// there permanently. An item under abandonedSeconds that hasn't been touched for
+// abandonedAfter drops off; both halves matter, since the staleness window is what
+// keeps something started an hour ago from vanishing before you return to it. The
+// threshold is absolute rather than a share of runtime: 1% is 13 seconds of a
+// 22-minute episode and 108 seconds of a three-hour film, and it can't be computed
+// at all when duration_seconds is null. Nothing is deleted — play_state keeps the
+// position, so the item page still offers Resume.
 func (s *Store) ContinueWatching(ctx context.Context, accountID, userID, currentDeviceID string, limit int) ([]api.ContinueItem, error) {
 	rows, err := s.pool.Query(ctx,
 		`WITH in_progress AS (
 		     SELECT ps.media_item_id, ps.position_seconds, ps.duration_seconds, ps.updated_at,
-		            ps.device_id, ep.series_id
+		            ps.device_id, ep.series_id, ep.episode_number, ep.season_number, ep.episode_title
 		     FROM play_state ps
 		     JOIN media_items mi ON mi.id = ps.media_item_id
 		     JOIN libraries l ON l.id = mi.library_id
 		     LEFT JOIN LATERAL (
-		         SELECT sea.series_id
+		         SELECT sea.series_id, e.episode_number, sea.season_number, e.title AS episode_title
 		         FROM episodes e
 		         JOIN seasons sea ON sea.id = e.season_id
 		         WHERE e.media_item_id = ps.media_item_id
+		         ORDER BY sea.season_number, e.episode_number
 		         LIMIT 1
 		     ) ep ON true
 		     WHERE l.account_id = $1 AND ps.user_id = $2
 		       AND ps.watched = false AND ps.position_seconds > 0
+		       AND NOT (ps.position_seconds < $4 AND ps.updated_at < now() - $5::interval)
 		 ),
 		 picked AS (
 		     SELECT DISTINCT ON (COALESCE(series_id, media_item_id))
-		            media_item_id, position_seconds, duration_seconds, updated_at, series_id, device_id
+		            media_item_id, position_seconds, duration_seconds, updated_at, series_id, device_id,
+		            episode_number, season_number, episode_title
 		     FROM in_progress
 		     ORDER BY COALESCE(series_id, media_item_id), updated_at DESC
 		 )
 		 SELECT mi.id::text, mi.kind, mi.title, mi.year, mi.provider_metadata, mi.metadata,
 		        p.position_seconds, p.duration_seconds,
 		        sr.id::text, sr.title, sr.provider_metadata, sr.metadata,
-		        d.id::text, d.name, d.platform
+		        d.id::text, d.name, d.platform,
+		        p.season_number, p.episode_number, p.episode_title
 		 FROM picked p
 		 JOIN media_items mi ON mi.id = p.media_item_id
 		 LEFT JOIN series sr ON sr.id = p.series_id
 		 LEFT JOIN devices d ON d.id = p.device_id AND d.revoked_at IS NULL
 		 ORDER BY p.updated_at DESC LIMIT $3`,
-		accountID, userID, limit)
+		accountID, userID, limit, abandonedSeconds, abandonedAfter)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +275,10 @@ func (s *Store) ContinueWatching(ctx context.Context, accountID, userID, current
 		var seriesID, seriesTitle *string
 		var sprov, sover []byte
 		var devID, devName, devPlatform *string
-		if err := rows.Scan(&id, &kind, &title, &year, &prov, &over, &pos, &dur, &seriesID, &seriesTitle, &sprov, &sover, &devID, &devName, &devPlatform); err != nil {
+		var seasonNum, episodeNum *int
+		var episodeTitle *string
+		if err := rows.Scan(&id, &kind, &title, &year, &prov, &over, &pos, &dur, &seriesID, &seriesTitle, &sprov, &sover, &devID, &devName, &devPlatform,
+			&seasonNum, &episodeNum, &episodeTitle); err != nil {
 			return nil, err
 		}
 		p, o := decodeMap(prov), decodeMap(over)
@@ -257,6 +288,12 @@ func (s *Store) ContinueWatching(ctx context.Context, accountID, userID, current
 			Title:           effectiveTitle(o, p, title),
 			Year:            effectiveYear(o, p, year),
 			PositionSeconds: float32(pos),
+			// Episode identity, so a card can render "S1 · E1 · The World of Swords"
+			// instead of falling back to the media_item title, which is derived from
+			// the filename and repeats the series name (ARGY-176). Null for films.
+			SeasonNumber:  seasonNum,
+			EpisodeNumber: episodeNum,
+			EpisodeTitle:  episodeTitle,
 		}
 		poster := posterURL(s.artworkBase, o, p)
 		backdrop := backdropURL(s.artworkBase, o, p)
