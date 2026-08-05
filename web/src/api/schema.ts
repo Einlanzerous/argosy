@@ -1065,6 +1065,8 @@ export interface components {
             startAt?: number;
             /** @description Whether the client can play HEVC (H.265) in fMP4/MSE — detected via MediaSource.isTypeSupported. When true, an HEVC source is remuxed (copied) at native resolution including 4K instead of being re-encoded to H.264 1080p, and re-encodes of >1080p sources target HEVC. Defaults to false (H.264 only). */
             hevc?: boolean;
+            /** @description Whether the client decodes 10-bit HEVC (Main 10) in *hardware* — from MediaCapabilities.decodingInfo reporting both smooth and powerEfficient. `hevc` alone cannot answer this: MediaSource.isTypeSupported says "supported" for a stream the client will software-decode and stutter on, which is why 10-bit sources were re-encoded unconditionally (ARGY-150). When true, a 10-bit HEVC source keeps its bit depth and HDR instead of being re-encoded down to 8-bit. Defaults to false, which preserves the previous behaviour. */
+            hevcHardware?: boolean;
         };
         TranscodeProgress: {
             /**

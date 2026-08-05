@@ -208,11 +208,14 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 	}
 	clientHEVC := body.Hevc != nil && *body.Hevc
+	// Whether the client hardware-decodes 10-bit HEVC. Absent on every client
+	// that predates ARGY-178, which reads as false and keeps the old behaviour.
+	clientHEVCHardware := body.HevcHardware != nil && *body.HevcHardware
 
 	// Decide the cheapest playable recipe: copy the video whenever the client can
 	// play it (true 4K for HEVC clients), transcoding only the audio if needed;
 	// otherwise re-encode (to HEVC for >1080p capable clients, else H.264).
-	plan := planPlayback(src.video, src.audio, clientHEVC, src.highBitDepth, src.height)
+	plan := planPlayback(src.video, src.audio, clientHEVC, clientHEVCHardware, src.highBitDepth, src.height)
 	mode := transcode.MethodTranscode
 	if plan.method != methodTranscode {
 		mode = transcode.MethodRemux
@@ -220,7 +223,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("transcode decision", "item", itemID, "method", mode, "codec", plan.videoCodec,
 		"transcodeAudio", plan.transcodeAudio, "reason", plan.reason, "container", filepath.Ext(src.path),
 		"video", src.video, "audio", src.audio, "height", src.height, "clientHevc", clientHEVC,
-		"highBitDepth", src.highBitDepth)
+		"clientHevcHardware", clientHEVCHardware, "highBitDepth", src.highBitDepth)
 
 	var startAt float64
 	if body.StartAt != nil && *body.StartAt > 0 {

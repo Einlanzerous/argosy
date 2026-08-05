@@ -76,18 +76,28 @@ type transcodePlan struct {
 // for >1080p capable clients (H.264's 4K bitrate is impractical) and H.264
 // otherwise.
 //
-// Exception: high-bit-depth H.264/HEVC is never copied. MediaSource reports
-// Main 10 "supported", so clients negotiate a copy, then software-decode the
-// 10-bit stream (Firefox falls off the HW-decode path) and stutter on
-// higher-bitrate content — while the same client hardware-decodes 8-bit fine,
-// even at 4K (ARGY-150). Re-encoding drops it to 8-bit AND runs it through the
-// bitrate ladder, fixing both the decode cost and the uncapped peaks that also
-// choke remote (Tailscale) playback. VP9/AV1 10-bit stay copyable — those are
-// broadly hardware-decoded.
-func planPlayback(videoCodec, audioCodec string, clientHEVC, highBitDepth bool, height int) transcodePlan {
+// Exception: high-bit-depth H.264/HEVC is not copied unless the client says it
+// decodes it in hardware. MediaSource.isTypeSupported reports Main 10
+// "supported" for a stream the client will software-decode and stutter on —
+// that gap is what made 10-bit sources re-encode unconditionally (ARGY-150).
+// The gap has a direct answer now: MediaCapabilities.decodingInfo reports
+// `powerEfficient`, and clientHEVCHardware carries it. When the client says
+// hardware, a 10-bit HEVC source keeps its bit depth and its HDR; when it says
+// otherwise — or says nothing, as every pre-ARGY-178 client does — the 8-bit
+// re-encode stands, which also caps the uncapped peaks that choke remote
+// (Tailscale) playback.
+//
+// Bit depth was only ever a proxy for that answer, and a poor one: it treats
+// 1080p Main 10 and 4K HDR identically, so it cost every 4K HDR title both its
+// resolution and its HDR (ARGY-178). The hardware answer is scoped to HEVC —
+// 10-bit H.264 stays blocked, since the HEVC probe says nothing about it and
+// browser hardware support for High 10 is far thinner. VP9/AV1 10-bit stay
+// copyable — those are broadly hardware-decoded.
+func planPlayback(videoCodec, audioCodec string, clientHEVC, clientHEVCHardware, highBitDepth bool, height int) transcodePlan {
 	v := strings.ToLower(videoCodec)
 	audioOK := audioCodec == "" || directAudio[strings.ToLower(audioCodec)]
-	highDepthBlocked := highBitDepth && (isHEVC(v) || v == "h264" || v == "avc1")
+	hevcTenBitOK := isHEVC(v) && clientHEVC && clientHEVCHardware
+	highDepthBlocked := highBitDepth && !hevcTenBitOK && (isHEVC(v) || v == "h264" || v == "avc1")
 	copyVideo := !highDepthBlocked && (directVideo[v] || (clientHEVC && isHEVC(v)))
 
 	if copyVideo {

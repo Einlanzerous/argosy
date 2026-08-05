@@ -36,6 +36,7 @@ func TestPlanPlayback(t *testing.T) {
 		name           string
 		video, audio   string
 		clientHEVC     bool
+		clientHEVCHW   bool
 		highBitDepth   bool
 		height         int
 		wantMethod     string
@@ -44,31 +45,43 @@ func TestPlanPlayback(t *testing.T) {
 	}{
 		// H.264 video is always copied; audio decides whether it's a clean remux
 		// or a copy-video/transcode-audio.
-		{"h264+aac remux", "h264", "aac", false, false, 1080, methodRemux, transcode.CodecH264, false},
-		{"h264+ac3 copy-video", "h264", "ac3", false, false, 1080, methodRemux, transcode.CodecH264, true},
+		{"h264+aac remux", "h264", "aac", false, false, false, 1080, methodRemux, transcode.CodecH264, false},
+		{"h264+ac3 copy-video", "h264", "ac3", false, false, false, 1080, methodRemux, transcode.CodecH264, true},
 		// HEVC: only copyable when the client negotiated it → true 4K passthrough.
-		{"hevc no-client transcodes to h264", "hevc", "aac", false, false, 2160, methodTranscode, transcode.CodecH264, false},
-		{"hevc+truehd client copies video, transcodes audio", "hevc", "truehd", true, false, 2160, methodRemux, transcode.CodecHEVC, true},
-		{"hevc+aac client clean copy", "hevc", "aac", true, false, 2160, methodRemux, transcode.CodecHEVC, false},
+		{"hevc no-client transcodes to h264", "hevc", "aac", false, false, false, 2160, methodTranscode, transcode.CodecH264, false},
+		{"hevc+truehd client copies video, transcodes audio", "hevc", "truehd", true, false, false, 2160, methodRemux, transcode.CodecHEVC, true},
+		{"hevc+aac client clean copy", "hevc", "aac", true, false, false, 2160, methodRemux, transcode.CodecHEVC, false},
 		// Re-encode path (mpeg2 isn't browser-playable): HEVC output only for
 		// >1080p capable clients, H.264 otherwise.
-		{"mpeg2 4k client → hevc encode", "mpeg2video", "aac", true, false, 2160, methodTranscode, transcode.CodecHEVC, false},
-		{"mpeg2 1080 client → h264 encode", "mpeg2video", "aac", true, false, 1080, methodTranscode, transcode.CodecH264, false},
-		{"mpeg2 4k no-client → h264 encode", "mpeg2video", "aac", false, false, 2160, methodTranscode, transcode.CodecH264, false},
+		{"mpeg2 4k client → hevc encode", "mpeg2video", "aac", true, false, false, 2160, methodTranscode, transcode.CodecHEVC, false},
+		{"mpeg2 1080 client → h264 encode", "mpeg2video", "aac", true, false, false, 1080, methodTranscode, transcode.CodecH264, false},
+		{"mpeg2 4k no-client → h264 encode", "mpeg2video", "aac", false, false, false, 2160, methodTranscode, transcode.CodecH264, false},
 		// High-bit-depth (10-bit) H.264/HEVC is never copied — re-encode to 8-bit
 		// so clients hardware-decode it instead of stuttering (ARGY-150). Target
 		// codec still follows the height/HEVC-client rule.
-		{"hevc 10-bit 1080 client → h264 encode", "hevc", "aac", true, true, 1080, methodTranscode, transcode.CodecH264, false},
-		{"hevc 10-bit 4k client → hevc encode (8-bit)", "hevc", "aac", true, true, 2160, methodTranscode, transcode.CodecHEVC, false},
-		{"h264 10-bit client → h264 encode", "h264", "aac", true, true, 1080, methodTranscode, transcode.CodecH264, false},
+		{"hevc 10-bit 1080 client → h264 encode", "hevc", "aac", true, false, true, 1080, methodTranscode, transcode.CodecH264, false},
+		{"hevc 10-bit 4k client → hevc encode (8-bit)", "hevc", "aac", true, false, true, 2160, methodTranscode, transcode.CodecHEVC, false},
+		{"h264 10-bit client → h264 encode", "h264", "aac", true, false, true, 1080, methodTranscode, transcode.CodecH264, false},
+		// A client that hardware-decodes 10-bit HEVC keeps its bit depth and HDR
+		// (ARGY-178): the re-encode existed only because isTypeSupported couldn't
+		// tell hardware from software decode.
+		{"hevc 10-bit 4k hw client copies", "hevc", "aac", true, true, true, 2160, methodRemux, transcode.CodecHEVC, false},
+		{"hevc 10-bit 1080 hw client copies", "hevc", "aac", true, true, true, 1080, methodRemux, transcode.CodecHEVC, false},
+		{"hevc 10-bit hw client still transcodes odd audio", "hevc", "truehd", true, true, true, 2160, methodRemux, transcode.CodecHEVC, true},
+		// The hardware answer is about HEVC; it must not unblock 10-bit H.264,
+		// where browser High 10 support is far thinner and the probe says nothing.
+		{"h264 10-bit hw-hevc client still encodes", "h264", "aac", true, true, true, 1080, methodTranscode, transcode.CodecH264, false},
+		// Hardware without the HEVC negotiation is meaningless — there is no copy
+		// path to take.
+		{"hevc 10-bit hw but no hevc client", "hevc", "aac", false, true, true, 2160, methodTranscode, transcode.CodecH264, false},
 		// VP9 10-bit stays a copy — broadly hardware-decoded, not part of the gate.
-		{"vp9 10-bit remux", "vp9", "opus", false, true, 2160, methodRemux, transcode.CodecH264, false},
+		{"vp9 10-bit remux", "vp9", "opus", false, false, true, 2160, methodRemux, transcode.CodecH264, false},
 	}
 	for _, c := range cases {
-		p := planPlayback(c.video, c.audio, c.clientHEVC, c.highBitDepth, c.height)
+		p := planPlayback(c.video, c.audio, c.clientHEVC, c.clientHEVCHW, c.highBitDepth, c.height)
 		if p.method != c.wantMethod || p.videoCodec != c.wantCodec || p.transcodeAudio != c.wantTransAudio {
-			t.Errorf("%s: planPlayback(%q,%q,hevc=%v,10bit=%v,%d) = {%s %s audio=%v}, want {%s %s audio=%v}",
-				c.name, c.video, c.audio, c.clientHEVC, c.highBitDepth, c.height,
+			t.Errorf("%s: planPlayback(%q,%q,hevc=%v,hw=%v,10bit=%v,%d) = {%s %s audio=%v}, want {%s %s audio=%v}",
+				c.name, c.video, c.audio, c.clientHEVC, c.clientHEVCHW, c.highBitDepth, c.height,
 				p.method, p.videoCodec, p.transcodeAudio, c.wantMethod, c.wantCodec, c.wantTransAudio)
 		}
 	}

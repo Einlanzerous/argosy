@@ -56,17 +56,50 @@ export function supportsHevc(): boolean {
   return MediaSource.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"')
 }
 
+// supportsHevcInHardware reports whether 10-bit HEVC decodes in *hardware* here.
+// supportsHevc() cannot answer this — isTypeSupported says "supported" for a
+// stream the client will software-decode and stutter on, and that ambiguity is
+// the whole reason 10-bit sources were re-encoded to 8-bit unconditionally
+// (ARGY-150), costing every 4K HDR title its resolution and its HDR (ARGY-178).
+//
+// MediaCapabilities answers it directly: `powerEfficient` means a hardware
+// decoder, `smooth` means it keeps up at this resolution and bitrate. We require
+// both, at the hardest realistic case (Main 10, level 5.1, 4K, ~20 Mbps), so a
+// yes covers anything lighter. Anything unexpected — no MediaCapabilities, a
+// rejected configuration, a rejected promise — resolves false and leaves the
+// 8-bit re-encode in place.
+export async function supportsHevcInHardware(): Promise<boolean> {
+  const mc = navigator.mediaCapabilities
+  if (!mc?.decodingInfo) return false
+  try {
+    const info = await mc.decodingInfo({
+      type: 'media-source',
+      video: {
+        contentType: 'video/mp4; codecs="hvc1.2.4.L153.B0"',
+        width: 3840,
+        height: 2160,
+        bitrate: 20_000_000,
+        framerate: 30,
+      },
+    })
+    return info.supported && info.smooth && info.powerEfficient
+  } catch {
+    return false
+  }
+}
+
 // startTranscode begins (or joins) a server-side HLS transcode for an item that
 // can't be direct-played, returning the session + its playlist URL. It advertises
 // the client's HEVC capability so 4K HEVC can be passed through (copied) rather
-// than re-encoded.
+// than re-encoded, and whether that decode is in hardware so a 10-bit source can
+// keep its bit depth and HDR.
 export async function startTranscode(
   itemId: string,
   startAt = 0,
 ): Promise<TranscodeSession | null> {
   const { data } = await api.POST('/api/v1/items/{itemId}/transcode', {
     params: { path: { itemId } },
-    body: { startAt, hevc: supportsHevc() },
+    body: { startAt, hevc: supportsHevc(), hevcHardware: await supportsHevcInHardware() },
   })
   return data ?? null
 }
