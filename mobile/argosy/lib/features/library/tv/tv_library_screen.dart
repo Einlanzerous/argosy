@@ -54,6 +54,12 @@ class TvLibraryScreen extends ConsumerWidget {
   }
 }
 
+/// How far the facet rows sit in from the panel's clip edge. Sized for the
+/// focus ring: a row at scale 1.03 with focusOffset 3 and a 5px glow spread
+/// paints ~12px beyond its own box, and the scroll viewport clips at the
+/// padding edge.
+const double _facetInset = 18;
+
 /// The left facet rail: title block + Kind (scope) and Genre
 /// (from [libraryFacetsProvider], with counts) groups.
 class _FacetPanel extends ConsumerWidget {
@@ -74,82 +80,108 @@ class _FacetPanel extends ConsumerWidget {
         color: ArgosyColors.bg2,
         border: Border(right: BorderSide(color: ArgosyColors.line)),
       ),
-      padding: const EdgeInsets.fromLTRB(30, 56, 30, 40),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'THE MANIFEST',
-              style: TextStyle(
-                fontFamily: 'Archivo',
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2.6,
-                color: ArgosyColors.accent,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Library',
-              style: TextStyle(
-                fontFamily: 'Archivo',
-                fontSize: 38,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.7,
-                color: ArgosyColors.cream,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              count == null
-                  ? 'Reading the hold…'
-                  : '$count ${count == 1 ? 'title' : 'titles'} in the hold',
-              style: const TextStyle(
-                fontFamily: 'HankenGrotesk',
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: ArgosyColors.mute,
-              ),
-            ),
-            const SizedBox(height: 34),
-            _FacetGroup(
-              title: 'Kind',
+      // Horizontal padding is deliberately small: the scroll viewport below
+      // clips, and a focused row's brass ring paints ~12px outside the row
+      // (scale 1.03 over focusOffset 3 + a 5px glow spread). Keeping the
+      // viewport wide and insetting the rows instead gives the ring room to
+      // land inside the clip, rather than being sliced off at both ends.
+      padding: const EdgeInsets.fromLTRB(12, 56, 12, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed header. This used to sit inside the scroll view, so moving
+          // down the genre list carried the library's own title off the top and
+          // there was no way back to it without scrolling up.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _facetInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FacetRow(
-                  label: 'All',
-                  active: filter.scope == BrowseScope.all,
-                  onSelect: () => ctrl.setScope(BrowseScope.all),
+                const Text(
+                  'THE MANIFEST',
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.6,
+                    color: ArgosyColors.accent,
+                  ),
                 ),
-                _FacetRow(
-                  label: 'Films',
-                  active: filter.scope == BrowseScope.movies,
-                  onSelect: () => ctrl.setScope(BrowseScope.movies),
+                const SizedBox(height: 8),
+                const Text(
+                  'Library',
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 38,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.7,
+                    color: ArgosyColors.cream,
+                  ),
                 ),
-                _FacetRow(
-                  label: 'Series',
-                  active: filter.scope == BrowseScope.series,
-                  onSelect: () => ctrl.setScope(BrowseScope.series),
+                const SizedBox(height: 4),
+                Text(
+                  count == null
+                      ? 'Reading the hold…'
+                      : '$count ${count == 1 ? 'title' : 'titles'} in the hold',
+                  style: const TextStyle(
+                    fontFamily: 'HankenGrotesk',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: ArgosyColors.mute,
+                  ),
                 ),
               ],
             ),
-            if (genres.isNotEmpty) ...[
-              const SizedBox(height: 28),
-              _FacetGroup(
-                title: 'Genre',
-                children: [
-                  for (final g in genres)
-                    _FacetRow(
-                      label: g.value,
-                      count: g.count,
-                      active: filter.genres.contains(g.value),
-                      onSelect: () => ctrl.toggleGenre(g.value),
+          ),
+          const SizedBox(height: 34),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: _facetInset),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _FacetGroup(
+                      title: 'Kind',
+                      children: [
+                        _FacetRow(
+                          label: 'All',
+                          active: filter.scope == BrowseScope.all,
+                          onSelect: () => ctrl.setScope(BrowseScope.all),
+                        ),
+                        _FacetRow(
+                          label: 'Films',
+                          active: filter.scope == BrowseScope.movies,
+                          onSelect: () => ctrl.setScope(BrowseScope.movies),
+                        ),
+                        _FacetRow(
+                          label: 'Series',
+                          active: filter.scope == BrowseScope.series,
+                          onSelect: () => ctrl.setScope(BrowseScope.series),
+                        ),
+                      ],
                     ),
-                ],
+                    if (genres.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      _FacetGroup(
+                        title: 'Genre',
+                        children: [
+                          for (final g in genres)
+                            _FacetRow(
+                              label: g.value,
+                              count: g.count,
+                              active: filter.genres.contains(g.value),
+                              onSelect: () => ctrl.toggleGenre(g.value),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ],
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -179,10 +211,7 @@ class _FacetGroup extends StatelessWidget {
             ),
           ),
         ),
-        for (final child in children) ...[
-          child,
-          const SizedBox(height: 6),
-        ],
+        for (final child in children) ...[child, const SizedBox(height: 6)],
       ],
     );
   }
@@ -221,7 +250,9 @@ class _FacetRow extends StatelessWidget {
                 height: 20,
                 decoration: const BoxDecoration(
                   color: ArgosyColors.accent,
-                  borderRadius: BorderRadius.horizontal(right: Radius.circular(4)),
+                  borderRadius: BorderRadius.horizontal(
+                    right: Radius.circular(4),
+                  ),
                 ),
               ),
             ),
@@ -333,14 +364,17 @@ class _Grid extends ConsumerWidget {
             child: cards.isEmpty
                 ? const _Empty()
                 : GridView.builder(
-                    padding: const EdgeInsets.only(top: 6, bottom: 40, right: 8),
+                    // Room for a focused tile: it scales 1.06 and rings ~5px out with a
+                    // 5px glow, so the first column and top row need ~18px and
+                    // ~24px respectively or the GridView clips them off.
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 6,
-                      mainAxisSpacing: 26,
-                      crossAxisSpacing: 22,
-                      childAspectRatio: 0.5,
-                    ),
+                          crossAxisCount: 6,
+                          mainAxisSpacing: 26,
+                          crossAxisSpacing: 22,
+                          childAspectRatio: 0.5,
+                        ),
                     itemCount: cards.length,
                     itemBuilder: (_, i) => _PosterTile(card: cards[i]),
                   ),
@@ -400,7 +434,9 @@ class _PosterTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final img = ref.watch(artworkResolverProvider)(card.posterUrl ?? card.backdropUrl);
+    final img = ref.watch(artworkResolverProvider)(
+      card.posterUrl ?? card.backdropUrl,
+    );
 
     return TvFocusable(
       borderRadius: 13,
