@@ -18,11 +18,53 @@ import '../home_providers.dart';
 /// backdrop behind a hero spotlight (resume + cross-device progress) over the
 /// Continue Watching rail and the rest of the home rows. Binds the same
 /// [homeDataProvider] the phone home uses — only the layout + D-pad focus differ.
-class TvHomeScreen extends ConsumerWidget {
+class TvHomeScreen extends ConsumerStatefulWidget {
   const TvHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TvHomeScreen> createState() => _TvHomeScreenState();
+}
+
+class _TvHomeScreenState extends ConsumerState<TvHomeScreen> {
+  /// Where focus first landed (the rail's active item), and whether it has moved
+  /// since. The hero only claims focus while it hasn't (ARGY-173).
+  ///
+  /// homeDataProvider waits on four API calls, and the rail is fully focusable
+  /// for that whole gap — so a viewer can be two presses down at Search when the
+  /// data lands. Claiming focus unconditionally at that moment would move the
+  /// remote off what they aimed at and onto a button that starts playback.
+  ///
+  /// Tracked by listening rather than by snapshotting a node post-frame: the
+  /// focus manager applies autofocus in its own post-frame pass, which can run
+  /// after this widget's, so a snapshot taken there is empty and the guard never
+  /// fires.
+  FocusNode? _landed;
+  bool _focusMoved = false;
+
+  void _onFocusChanged() {
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null) return;
+    if (_landed == null) {
+      _landed = primary;
+    } else if (primary != _landed) {
+      _focusMoved = true;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeListener(_onFocusChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final data = ref.watch(homeDataProvider);
     // The nav rail lives *outside* the AsyncView so it exists from the first
     // frame and holds initial focus (autofocusActive) — content loads in behind
@@ -39,7 +81,8 @@ class TvHomeScreen extends ConsumerWidget {
               child: AsyncView(
                 value: data,
                 onRetry: () => ref.invalidate(homeDataProvider),
-                builder: (home) => _Home(home: home),
+                builder: (home) =>
+                    _Home(home: home, focusUntouched: () => !_focusMoved),
               ),
             ),
           ],
@@ -50,9 +93,13 @@ class TvHomeScreen extends ConsumerWidget {
 }
 
 class _Home extends ConsumerWidget {
-  const _Home({required this.home});
+  const _Home({required this.home, this.focusUntouched});
 
   final HomeData home;
+
+  /// Whether focus is still where the screen put it; forwarded to the hero as
+  /// its permission to claim focus. See [_TvHomeScreenState._focusMoved].
+  final bool Function()? focusUntouched;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -93,7 +140,9 @@ class _Home extends ConsumerWidget {
         ),
         // The nav rail is rendered by the screen (outside the AsyncView); here we
         // only lay out the content that loads in behind it.
-        home.isEmpty ? const _Empty() : _Page(home: home),
+        home.isEmpty
+            ? const _Empty()
+            : _Page(home: home, focusUntouched: focusUntouched),
       ],
     );
   }
@@ -106,9 +155,12 @@ class _Home extends ConsumerWidget {
 /// hero above to return to; focusing a hero action snaps back to the top so the
 /// hero reads full-size instead of being pulled up tight against the rails.
 class _Page extends StatefulWidget {
-  const _Page({required this.home});
+  const _Page({required this.home, this.focusUntouched});
 
   final HomeData home;
+
+  /// Forwarded to the hero; see [_TvHomeScreenState._focusMoved].
+  final bool Function()? focusUntouched;
 
   @override
   State<_Page> createState() => _PageState();
@@ -140,23 +192,27 @@ class _PageState extends State<_Page> {
 
     void posterRail(String title, List<MediaCard> cards) {
       if (cards.isEmpty) return;
-      rails.add(TvRail(
-        title: title,
-        // Fits the 2:3 poster (172×258) plus its title/subtitle without
-        // overflowing the rail row.
-        height: 340,
-        gap: 24,
-        children: [for (final c in cards) _PosterTile(card: c)],
-      ));
+      rails.add(
+        TvRail(
+          title: title,
+          // Fits the 2:3 poster (172×258) plus its title/subtitle without
+          // overflowing the rail row.
+          height: 340,
+          gap: 24,
+          children: [for (final c in cards) _PosterTile(card: c)],
+        ),
+      );
     }
 
     if (home.continueRow.isNotEmpty) {
-      rails.add(TvRail(
-        title: 'Continue Watching',
-        hint: 'pick up on any deck in your Fleet',
-        accent: true,
-        children: [for (final e in home.continueRow) _ContinueTile(entry: e)],
-      ));
+      rails.add(
+        TvRail(
+          title: 'Continue Watching',
+          hint: 'pick up on any deck in your Fleet',
+          accent: true,
+          children: [for (final e in home.continueRow) _ContinueTile(entry: e)],
+        ),
+      );
     }
     posterRail('On Deck', home.onDeck);
     posterRail('Newly Arrived', home.recent);
@@ -171,11 +227,13 @@ class _PageState extends State<_Page> {
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(56, 96, 64, 56),
       children: [
-        if (home.hero != null) _Hero(hero: home.hero!, onFocused: _toTop),
-        for (final rail in rails) ...[
-          const SizedBox(height: 40),
-          rail,
-        ],
+        if (home.hero != null)
+          _Hero(
+            hero: home.hero!,
+            onFocused: _toTop,
+            focusUntouched: widget.focusUntouched,
+          ),
+        for (final rail in rails) ...[const SizedBox(height: 40), rail],
       ],
     );
   }
@@ -191,14 +249,27 @@ class _PageState extends State<_Page> {
 /// route's modal scope self-focusing and killing D-pad traversal. So the hero
 /// takes focus once it has actually mounted.
 ///
-/// initState (not build) is what makes that safe to do repeatedly: a Beacon
-/// refresh or a homeDataProvider invalidation re-renders this widget without
-/// re-running initState, so focus is never yanked away from someone already
-/// browsing the rails below.
+/// Two things keep that from stealing focus someone else wanted:
+///
+/// * it runs from initState, not build, so a Beacon refresh or a
+///   homeDataProvider invalidation re-renders the hero without re-claiming
+///   focus from someone already browsing the rails below; and
+/// * it only fires while [focusUntouched] reports focus is still where the
+///   screen put it, so a viewer who moved down the rail during the load — four
+///   API calls' worth of time — keeps the remote where they aimed it.
 class _Hero extends StatefulWidget {
-  const _Hero({required this.hero, required this.onFocused});
+  const _Hero({
+    required this.hero,
+    required this.onFocused,
+    this.focusUntouched,
+  });
 
   final HomeHero hero;
+
+  /// Reports whether focus is still where the screen put it. Evaluated when the
+  /// hero mounts rather than when it is built, so it reflects the moment the
+  /// claim would happen. Absent reads as untouched.
+  final bool Function()? focusUntouched;
 
   /// Called when a hero action is focused, to snap the page back to the top.
   final VoidCallback onFocused;
@@ -218,7 +289,9 @@ class _HeroState extends State<_Hero> {
     // Post-frame: the node isn't attached to an element until this subtree has
     // been laid out.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _firstAction.requestFocus();
+      if (!mounted) return;
+      if (!(widget.focusUntouched?.call() ?? true)) return;
+      _firstAction.requestFocus();
     });
   }
 
@@ -299,8 +372,9 @@ class _HeroState extends State<_Hero> {
                         value: hero.percent,
                         minHeight: 7,
                         backgroundColor: ArgosyColors.line3,
-                        valueColor:
-                            const AlwaysStoppedAnimation(ArgosyColors.accent),
+                        valueColor: const AlwaysStoppedAnimation(
+                          ArgosyColors.accent,
+                        ),
                       ),
                     ),
                   ),
@@ -342,8 +416,10 @@ class _HeroState extends State<_Hero> {
               _HeroButton(
                 label: isSeries ? 'Episodes' : 'Details',
                 primary: false,
-                // Nothing playable (no resume point, no direct file) — this is
-                // the first action, so it takes the landing focus instead.
+                // Nothing playable — this is then the first action, so it
+                // takes the landing focus instead. Defensive: _heroFrom always
+                // sets playableId today, so this is a guard against a future
+                // hero source rather than a state seen in the wild.
                 focusNode: hero.playableId == null ? _firstAction : null,
                 onFocused: onFocused,
                 onSelect: () => openDetail(context, hero.kind, hero.detailId),
@@ -391,9 +467,7 @@ class _HeroButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 18),
         decoration: BoxDecoration(
-          color: primary
-              ? ArgosyColors.accent
-              : const Color(0x66141413),
+          color: primary ? ArgosyColors.accent : const Color(0x66141413),
           borderRadius: BorderRadius.circular(13),
           border: primary ? null : Border.all(color: ArgosyColors.line3),
         ),
@@ -401,9 +475,11 @@ class _HeroButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon,
-                  size: 22,
-                  color: primary ? ArgosyColors.ink : ArgosyColors.cream),
+              Icon(
+                icon,
+                size: 22,
+                color: primary ? ArgosyColors.ink : ArgosyColors.cream,
+              ),
               const SizedBox(width: 11),
             ],
             Text(
@@ -514,8 +590,9 @@ class _ContinueTile extends ConsumerWidget {
                         value: entry.progress,
                         minHeight: 5,
                         backgroundColor: ArgosyColors.line3,
-                        valueColor:
-                            const AlwaysStoppedAnimation(ArgosyColors.accent),
+                        valueColor: const AlwaysStoppedAnimation(
+                          ArgosyColors.accent,
+                        ),
                       ),
                     ),
                   ],

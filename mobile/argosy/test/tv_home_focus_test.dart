@@ -9,6 +9,8 @@
 // Worth testing here rather than only on a device: this is pure focus
 // behaviour, and a Google TV dongle isn't always reachable.
 
+import 'dart:async';
+
 import 'package:argosy/features/browse/media_card.dart';
 import 'package:argosy/features/home/home_providers.dart';
 import 'package:argosy/features/home/tv/tv_home_screen.dart';
@@ -80,10 +82,46 @@ void main() {
     );
   });
 
+  testWidgets('does not steal focus the viewer moved during the load', (
+    tester,
+  ) async {
+    // The gap this screen is built around: the rail is focusable from frame one
+    // and homeDataProvider waits on four API calls, so a viewer can be two
+    // presses down the rail when the data lands.
+    final pending = Completer<HomeData>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [homeDataProvider.overrideWith((ref) => pending.future)],
+        child: const MaterialApp(home: TvHomeScreen()),
+      ),
+    );
+    await tester.pump(); // rail autofocus settles
+
+    final search = find.byIcon(Icons.search);
+    Focus.of(tester.element(search)).requestFocus();
+    await tester.pump();
+    expect(Focus.of(tester.element(search)).hasFocus, isTrue);
+
+    pending.complete(const HomeData(hero: _playableHero));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      Focus.of(tester.element(find.text('Resume'))).hasFocus,
+      isFalse,
+      reason:
+          'the hero must not pull the remote off what the viewer aimed at — '
+          'the next SELECT would start playback instead of opening Search',
+    );
+    expect(Focus.of(tester.element(search)).hasFocus, isTrue);
+  });
+
   testWidgets('a refresh does not pull focus back to the hero', (tester) async {
     final container = ProviderContainer(
       overrides: [
-        homeDataProvider.overrideWith((ref) async => const HomeData(hero: _playableHero)),
+        homeDataProvider.overrideWith(
+          (ref) async => const HomeData(hero: _playableHero),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -109,7 +147,8 @@ void main() {
     expect(
       Focus.of(tester.element(find.text('Episodes'))).hasFocus,
       isTrue,
-      reason: 'a data refresh rebuilds the hero but must not re-run initState '
+      reason:
+          'a data refresh rebuilds the hero but must not re-run initState '
           'and steal focus from wherever the viewer has moved it',
     );
   });
