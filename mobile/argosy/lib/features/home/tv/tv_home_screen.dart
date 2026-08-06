@@ -182,9 +182,20 @@ class _PageState extends State<_Page> {
 }
 
 /// The hero spotlight — eyebrow, big title, the resume progress, and the
-/// Resume/Play + Details actions. The first action autofocuses so the remote
-/// lands somewhere sensible on entry.
-class _Hero extends StatelessWidget {
+/// Resume/Play + Details actions.
+///
+/// Claims focus when it first appears, so the first SELECT resumes the hero
+/// instead of re-selecting the Home nav icon you are already on (ARGY-173).
+/// It can't simply autofocus: the nav rail deliberately holds focus on the first
+/// frame because it exists before the async data does, which is what stops the
+/// route's modal scope self-focusing and killing D-pad traversal. So the hero
+/// takes focus once it has actually mounted.
+///
+/// initState (not build) is what makes that safe to do repeatedly: a Beacon
+/// refresh or a homeDataProvider invalidation re-renders this widget without
+/// re-running initState, so focus is never yanked away from someone already
+/// browsing the rails below.
+class _Hero extends StatefulWidget {
   const _Hero({required this.hero, required this.onFocused});
 
   final HomeHero hero;
@@ -193,7 +204,34 @@ class _Hero extends StatelessWidget {
   final VoidCallback onFocused;
 
   @override
+  State<_Hero> createState() => _HeroState();
+}
+
+class _HeroState extends State<_Hero> {
+  /// Attached to whichever action renders first — Resume/Play when the hero is
+  /// playable, otherwise Episodes/Details.
+  final FocusNode _firstAction = FocusNode(debugLabel: 'tv-home-hero-action');
+
+  @override
+  void initState() {
+    super.initState();
+    // Post-frame: the node isn't attached to an element until this subtree has
+    // been laid out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _firstAction.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _firstAction.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final hero = widget.hero;
+    final onFocused = widget.onFocused;
     final isSeries = hero.kind == MediaKind.series;
     // A tall block so the hero fills most of the screen and the first rail only
     // peeks in below it. The eyebrow + title sit at the top; a Spacer pushes the
@@ -286,11 +324,12 @@ class _Hero extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (hero.playableId != null)
+              if (hero.playableId != null) ...[
                 _HeroButton(
                   label: hero.percent != null ? 'Resume' : 'Play',
                   icon: Icons.play_arrow,
                   primary: true,
+                  focusNode: _firstAction,
                   onFocused: onFocused,
                   onSelect: () => openPlayer(
                     context,
@@ -298,10 +337,14 @@ class _Hero extends StatelessWidget {
                     resume: hero.percent != null,
                   ),
                 ),
-              const SizedBox(width: 16),
+                const SizedBox(width: 16),
+              ],
               _HeroButton(
                 label: isSeries ? 'Episodes' : 'Details',
                 primary: false,
+                // Nothing playable (no resume point, no direct file) — this is
+                // the first action, so it takes the landing focus instead.
+                focusNode: hero.playableId == null ? _firstAction : null,
                 onFocused: onFocused,
                 onSelect: () => openDetail(context, hero.kind, hero.detailId),
               ),
@@ -320,11 +363,15 @@ class _HeroButton extends StatelessWidget {
     required this.onSelect,
     required this.onFocused,
     this.icon,
+    this.focusNode,
   });
 
   final String label;
   final bool primary;
   final VoidCallback onSelect;
+
+  /// Set on the action that should hold focus when the hero appears.
+  final FocusNode? focusNode;
 
   /// Snap the page to the top when this action takes focus (instead of
   /// ensure-visible, which pulled the hero up tight against the rails).
@@ -334,6 +381,7 @@ class _HeroButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TvFocusable(
+      focusNode: focusNode,
       borderRadius: 13,
       scale: 1.05,
       onFocusChange: (focused) {
