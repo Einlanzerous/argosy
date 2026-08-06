@@ -5,6 +5,7 @@ import '../../../api/artwork.dart';
 import '../../../router/app_router.dart';
 import '../../../theme/argosy_colors.dart';
 import '../../../tv/tv_focusable.dart';
+import '../../../tv/tv_landing_focus.dart';
 import '../../../tv/tv_nav_rail.dart';
 import '../../../tv/tv_rail.dart';
 import '../../../tv/tv_stage.dart';
@@ -18,74 +19,33 @@ import '../home_providers.dart';
 /// backdrop behind a hero spotlight (resume + cross-device progress) over the
 /// Continue Watching rail and the rest of the home rows. Binds the same
 /// [homeDataProvider] the phone home uses — only the layout + D-pad focus differ.
-class TvHomeScreen extends ConsumerStatefulWidget {
+class TvHomeScreen extends ConsumerWidget {
   const TvHomeScreen({super.key});
 
   @override
-  ConsumerState<TvHomeScreen> createState() => _TvHomeScreenState();
-}
-
-class _TvHomeScreenState extends ConsumerState<TvHomeScreen> {
-  /// Where focus first landed (the rail's active item), and whether it has moved
-  /// since. The hero only claims focus while it hasn't (ARGY-173).
-  ///
-  /// homeDataProvider waits on four API calls, and the rail is fully focusable
-  /// for that whole gap — so a viewer can be two presses down at Search when the
-  /// data lands. Claiming focus unconditionally at that moment would move the
-  /// remote off what they aimed at and onto a button that starts playback.
-  ///
-  /// Tracked by listening rather than by snapshotting a node post-frame: the
-  /// focus manager applies autofocus in its own post-frame pass, which can run
-  /// after this widget's, so a snapshot taken there is empty and the guard never
-  /// fires.
-  FocusNode? _landed;
-  bool _focusMoved = false;
-
-  void _onFocusChanged() {
-    final primary = FocusManager.instance.primaryFocus;
-    if (primary == null) return;
-    if (_landed == null) {
-      _landed = primary;
-    } else if (primary != _landed) {
-      _focusMoved = true;
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    FocusManager.instance.addListener(_onFocusChanged);
-  }
-
-  @override
-  void dispose() {
-    FocusManager.instance.removeListener(_onFocusChanged);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(homeDataProvider);
     // The nav rail lives *outside* the AsyncView so it exists from the first
     // frame and holds initial focus (autofocusActive) — content loads in behind
     // it. This avoids the route's modal scope self-focusing during the async gap
-    // (which kills D-pad traversal); focus starts on the rail and Right enters
-    // the content. The same pattern is used by the TV detail screens.
+    // (which kills D-pad traversal); focus starts on the rail and the hero takes
+    // it once it mounts, unless the viewer moved first (TvLandingFocus).
     return Scaffold(
       backgroundColor: ArgosyColors.bg,
       body: TvStage(
-        child: Row(
-          children: [
-            const TvNavRail(active: TvSection.home, autofocusActive: true),
-            Expanded(
-              child: AsyncView(
-                value: data,
-                onRetry: () => ref.invalidate(homeDataProvider),
-                builder: (home) =>
-                    _Home(home: home, focusUntouched: () => !_focusMoved),
+        child: TvLandingFocus(
+          child: Row(
+            children: [
+              const TvNavRail(active: TvSection.home, autofocusActive: true),
+              Expanded(
+                child: AsyncView(
+                  value: data,
+                  onRetry: () => ref.invalidate(homeDataProvider),
+                  builder: (home) => _Home(home: home),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -93,13 +53,9 @@ class _TvHomeScreenState extends ConsumerState<TvHomeScreen> {
 }
 
 class _Home extends ConsumerWidget {
-  const _Home({required this.home, this.focusUntouched});
+  const _Home({required this.home});
 
   final HomeData home;
-
-  /// Whether focus is still where the screen put it; forwarded to the hero as
-  /// its permission to claim focus. See [_TvHomeScreenState._focusMoved].
-  final bool Function()? focusUntouched;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -140,9 +96,7 @@ class _Home extends ConsumerWidget {
         ),
         // The nav rail is rendered by the screen (outside the AsyncView); here we
         // only lay out the content that loads in behind it.
-        home.isEmpty
-            ? const _Empty()
-            : _Page(home: home, focusUntouched: focusUntouched),
+        home.isEmpty ? const _Empty() : _Page(home: home),
       ],
     );
   }
@@ -155,12 +109,9 @@ class _Home extends ConsumerWidget {
 /// hero above to return to; focusing a hero action snaps back to the top so the
 /// hero reads full-size instead of being pulled up tight against the rails.
 class _Page extends StatefulWidget {
-  const _Page({required this.home, this.focusUntouched});
+  const _Page({required this.home});
 
   final HomeData home;
-
-  /// Forwarded to the hero; see [_TvHomeScreenState._focusMoved].
-  final bool Function()? focusUntouched;
 
   @override
   State<_Page> createState() => _PageState();
@@ -227,12 +178,7 @@ class _PageState extends State<_Page> {
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(56, 96, 64, 56),
       children: [
-        if (home.hero != null)
-          _Hero(
-            hero: home.hero!,
-            onFocused: _toTop,
-            focusUntouched: widget.focusUntouched,
-          ),
+        if (home.hero != null) _Hero(hero: home.hero!, onFocused: _toTop),
         for (final rail in rails) ...[const SizedBox(height: 40), rail],
       ],
     );
@@ -254,22 +200,13 @@ class _PageState extends State<_Page> {
 /// * it runs from initState, not build, so a Beacon refresh or a
 ///   homeDataProvider invalidation re-renders the hero without re-claiming
 ///   focus from someone already browsing the rails below; and
-/// * it only fires while [focusUntouched] reports focus is still where the
-///   screen put it, so a viewer who moved down the rail during the load — four
-///   API calls' worth of time — keeps the remote where they aimed it.
+/// * it goes through [TvLandingFocus], which no-ops once the viewer has moved
+///   focus — so someone who D-padded down the rail during the load (four API
+///   calls' worth of time) keeps the remote where they aimed it.
 class _Hero extends StatefulWidget {
-  const _Hero({
-    required this.hero,
-    required this.onFocused,
-    this.focusUntouched,
-  });
+  const _Hero({required this.hero, required this.onFocused});
 
   final HomeHero hero;
-
-  /// Reports whether focus is still where the screen put it. Evaluated when the
-  /// hero mounts rather than when it is built, so it reflects the moment the
-  /// claim would happen. Absent reads as untouched.
-  final bool Function()? focusUntouched;
 
   /// Called when a hero action is focused, to snap the page back to the top.
   final VoidCallback onFocused;
@@ -290,8 +227,7 @@ class _HeroState extends State<_Hero> {
     // been laid out.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (!(widget.focusUntouched?.call() ?? true)) return;
-      _firstAction.requestFocus();
+      TvLandingFocus.maybeClaim(context, _firstAction);
     });
   }
 

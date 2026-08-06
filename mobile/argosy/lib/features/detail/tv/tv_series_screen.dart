@@ -9,6 +9,7 @@ import '../../../theme/argosy_colors.dart';
 import '../../../tv/tv_backdrop_scaffold.dart';
 import '../../../tv/tv_button.dart';
 import '../../../tv/tv_focusable.dart';
+import '../../../tv/tv_landing_focus.dart';
 import '../../../tv/tv_nav_rail.dart';
 import '../../../tv/tv_stage.dart';
 import '../../../util/format.dart';
@@ -37,17 +38,22 @@ class TvSeriesScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: ArgosyColors.bg,
       body: TvStage(
-        child: Row(
-          children: [
-            const TvNavRail(active: TvSection.library, autofocusActive: true),
-            Expanded(
-              child: AsyncView(
-                value: detail,
-                onRetry: () => ref.invalidate(seriesDetailProvider(seriesId)),
-                builder: (series) => _Series(series: series),
+        // Focus starts on the rail (it exists before the async detail does),
+        // then the primary action claims it on mount unless the viewer already
+        // moved — ARGY-173, the same arrangement as TV Home.
+        child: TvLandingFocus(
+          child: Row(
+            children: [
+              const TvNavRail(active: TvSection.library, autofocusActive: true),
+              Expanded(
+                child: AsyncView(
+                  value: detail,
+                  onRetry: () => ref.invalidate(seriesDetailProvider(seriesId)),
+                  builder: (series) => _Series(series: series),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -75,7 +81,9 @@ class _SeriesState extends State<_Series> {
   int get _resumeSeasonIndex {
     final target = _resumeTarget;
     if (target == null) return 0;
-    final i = _series.seasons.indexWhere((s) => s.seasonNumber == target.seasonNumber);
+    final i = _series.seasons.indexWhere(
+      (s) => s.seasonNumber == target.seasonNumber,
+    );
     return i >= 0 ? i : 0;
   }
 
@@ -89,6 +97,20 @@ class _SeriesState extends State<_Series> {
   final FocusNode _firstEpisodeFocus = FocusNode(debugLabel: 'series-ep0');
 
   SeriesDetail get _series => widget.series;
+
+  @override
+  void initState() {
+    super.initState();
+    // Land on Resume/Play rather than the nav rail (ARGY-173). No-ops if the
+    // viewer moved focus while the detail loaded, or if there's nothing
+    // playable — the node has no context then, so the request goes nowhere and
+    // focus stays on the rail.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _playFocus.context != null) {
+        TvLandingFocus.maybeClaim(context, _playFocus);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -118,10 +140,10 @@ class _SeriesState extends State<_Series> {
   }
 
   List<_Playable> get _playable => [
-        for (final s in _series.seasons)
-          for (final e in s.episodes)
-            if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
-      ];
+    for (final s in _series.seasons)
+      for (final e in s.episodes)
+        if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
+  ];
 
   static bool _touched(EpisodeSummary e) =>
       (e.watched ?? false) || (e.positionSeconds ?? 0) > 5;
@@ -142,14 +164,16 @@ class _SeriesState extends State<_Series> {
     return lastTouched + 1 < playable.length ? playable[lastTouched + 1] : null;
   }
 
-  String? get _firstPlayable => _playable.isEmpty ? null : _playable.first.ep.mediaItemId;
+  String? get _firstPlayable =>
+      _playable.isEmpty ? null : _playable.first.ep.mediaItemId;
 
   @override
   Widget build(BuildContext context) {
     final series = _series;
     final resume = _resumeTarget;
-    final season =
-        series.seasons.isEmpty ? null : series.seasons[_activeSeason];
+    final season = series.seasons.isEmpty
+        ? null
+        : series.seasons[_activeSeason];
 
     return TvBackdrop(
       backdropUrl: series.backdropUrl,
@@ -284,7 +308,8 @@ class _Meta extends StatelessWidget {
         const SizedBox(height: 30),
         if (resume != null)
           TvButton(
-            label: 'Resume · S${resume!.seasonNumber} E${resume!.ep.episodeNumber}',
+            label:
+                'Resume · S${resume!.seasonNumber} E${resume!.ep.episodeNumber}',
             icon: Icons.play_arrow,
             primary: true,
             focusNode: playFocus,
@@ -303,7 +328,8 @@ class _Meta extends StatelessWidget {
         TvButton.icon(
           icon: Icons.add,
           label: 'Add to Vault',
-          onSelect: () => AddToVaultButton.showFor(context, seriesId: series.id),
+          onSelect: () =>
+              AddToVaultButton.showFor(context, seriesId: series.id),
         ),
       ],
     );
@@ -369,7 +395,8 @@ class _Episodes extends StatelessWidget {
             if (series.seasons.length > 1)
               for (var i = 0; i < series.seasons.length; i++) ...[
                 _SeasonTab(
-                  label: series.seasons[i].title ??
+                  label:
+                      series.seasons[i].title ??
                       'Season ${series.seasons[i].seasonNumber}',
                   active: i == activeSeason,
                   onSelect: () => onSelectSeason(i),
@@ -476,8 +503,10 @@ class _EpisodeTile extends ConsumerWidget {
       : 'S$seasonNumber · E${_rep.episodeNumber}';
 
   String get _title {
-    final names =
-        episodes.map((e) => episodeName(e.title)).whereType<String>().toList();
+    final names = episodes
+        .map((e) => episodeName(e.title))
+        .whereType<String>()
+        .toList();
     if (names.isNotEmpty) return names.join(' / ');
     return _combined
         ? 'Episodes ${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
@@ -504,10 +533,10 @@ class _EpisodeTile extends ConsumerWidget {
     final status = !playable
         ? 'No file linked'
         : watched
-            ? 'Watched'
-            : inProgress
-                ? '${formatRuntime((_rep.durationSeconds ?? 0) - (_rep.positionSeconds ?? 0))} left'
-                : 'Not started';
+        ? 'Watched'
+        : inProgress
+        ? '${formatRuntime((_rep.durationSeconds ?? 0) - (_rep.positionSeconds ?? 0))} left'
+        : 'Not started';
 
     return Opacity(
       opacity: playable ? 1 : 0.55,
@@ -568,7 +597,8 @@ class _EpisodeTile extends ConsumerWidget {
                               minHeight: 5,
                               backgroundColor: ArgosyColors.line3,
                               valueColor: const AlwaysStoppedAnimation(
-                                  ArgosyColors.accent),
+                                ArgosyColors.accent,
+                              ),
                             ),
                           ),
                       ],
