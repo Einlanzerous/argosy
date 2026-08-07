@@ -21,9 +21,7 @@ class _LateActionState extends State<_LateAction> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) TvLandingFocus.maybeClaim(context, widget.node);
-    });
+    TvLandingFocus.claimOnMount(context, widget.node);
   }
 
   @override
@@ -130,11 +128,12 @@ void main() {
     expect(other.hasFocus, isTrue);
   });
 
-  testWidgets('claims unconditionally with no TvLandingFocus ancestor', (
+  testWidgets('asserts when a screen forgets the TvLandingFocus wrapper', (
     tester,
   ) async {
-    // A screen that never had a landing to protect behaves as it would without
-    // the guard, rather than silently never focusing.
+    // Failing open would silently restore the focus-steal this widget exists to
+    // prevent, and a screen that forgets the wrapper would look fine until a
+    // slow load. Loud in debug, permissive in release.
     await tester.pumpWidget(
       MaterialApp(
         home: Column(
@@ -148,6 +147,38 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    expect(tester.takeException(), isAssertionError);
+  });
+
+  testWidgets('claims again after the content is torn down and rebuilt', (
+    tester,
+  ) async {
+    // An error panel and a Retry — reachable on all three screens via onRetry —
+    // remount the claiming widget. A guard latched by the first successful claim
+    // would decline here and drop the remote back on the nav rail.
+    await _pump(
+      tester,
+      rail: rail,
+      other: other,
+      action: action,
+      showAction: showAction,
+    );
+    await tester.pump();
+    showAction.value = true;
+    await tester.pump();
+    await tester.pump();
     expect(action.hasFocus, isTrue);
+
+    showAction.value = false; // error panel replaces the content
+    await tester.pump();
+    showAction.value = true; // Retry brings it back
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      action.hasFocus,
+      isTrue,
+      reason: 'the claim must not be single-shot per screen instance',
+    );
   });
 }

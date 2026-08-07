@@ -223,12 +223,7 @@ class _HeroState extends State<_Hero> {
   @override
   void initState() {
     super.initState();
-    // Post-frame: the node isn't attached to an element until this subtree has
-    // been laid out.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      TvLandingFocus.maybeClaim(context, _firstAction);
-    });
+    TvLandingFocus.claimOnMount(context, _firstAction);
   }
 
   @override

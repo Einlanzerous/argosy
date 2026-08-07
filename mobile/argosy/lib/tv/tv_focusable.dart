@@ -10,6 +10,26 @@ import '../theme/argosy_colors.dart';
 /// focusing never reflows siblings — it only grows visually. Activation fires
 /// [onSelect] on D-pad center / Enter / Space (via [ActivateIntent]) and on tap
 /// (handy on an emulator or with a mouse).
+/// How far the brass glow spreads past the focus ring.
+const double kTvFocusGlowSpread = 5;
+
+/// How far outside its own box a focused child paints, on each side.
+///
+/// The ring sits [focusOffset] outside the child and the glow spreads
+/// [kTvFocusGlowSpread] past that, then [scale] magnifies the lot about the
+/// centre. Anything that clips — a scroll viewport, a fixed-width panel — needs
+/// at least this much room or the ring is sliced off (ARGY-173).
+///
+/// [extent] is the child's width or height, whichever side is being padded.
+double tvFocusClearance(
+  double extent, {
+  double scale = 1.06,
+  double focusOffset = 5,
+}) {
+  final ring = extent + 2 * (focusOffset + kTvFocusGlowSpread);
+  return (ring * scale - extent) / 2;
+}
+
 class TvFocusable extends StatefulWidget {
   const TvFocusable({
     super.key,
@@ -134,7 +154,7 @@ class _TvFocusableState extends State<TvFocusable> {
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0x29C99A4E), // brass glow, ~0.16
-                            spreadRadius: 5,
+                            spreadRadius: kTvFocusGlowSpread,
                           ),
                         ],
                       ),

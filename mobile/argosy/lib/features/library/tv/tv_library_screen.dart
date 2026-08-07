@@ -54,11 +54,20 @@ class TvLibraryScreen extends ConsumerWidget {
   }
 }
 
-/// How far the facet rows sit in from the panel's clip edge. Sized for the
-/// focus ring: a row at scale 1.03 with focusOffset 3 and a 5px glow spread
-/// paints ~12px beyond its own box, and the scroll viewport clips at the
-/// padding edge.
+/// Clearance for a focused facet row's brass ring, which paints outside the row
+/// while the scroll viewport clips at its padding edge.
+///
+/// `tvFocusClearance(270, scale: 1.03, focusOffset: 3)` — a row's width across
+/// the panel — comes out at ~12.3px; 18 leaves margin without moving the rows,
+/// since the same amount is added back as an inset. Recheck against that helper
+/// if _FacetRow's scale or offset changes.
 const double _facetInset = 18;
+
+/// Clearance for a focused poster. Grid cells are ~211×422 at this width, and
+/// `tvFocusClearance` puts that at ~17px across and ~23px down, so the first
+/// column and top row were being clipped by the GridView's viewport.
+const double _gridInset = 20;
+const double _gridInsetTop = 24;
 
 /// The left facet rail: title block + Kind (scope) and Genre
 /// (from [libraryFacetsProvider], with counts) groups.
@@ -133,11 +142,17 @@ class _FacetPanel extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 34),
+          // 34 minus the inset below, so the first row lands where it always did.
+          const SizedBox(height: 22),
           Expanded(
             child: SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: _facetInset),
+                // Vertical inset as well as horizontal: scrolled to either end,
+                // the first and last rows' rings meet the viewport edge too.
+                padding: const EdgeInsets.symmetric(
+                  horizontal: _facetInset,
+                  vertical: _facetInset,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -316,58 +331,77 @@ class _Grid extends ConsumerWidget {
     final ctrl = ref.read(libraryFilterProvider.notifier);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(46, 56, 64, 0),
+      // Reduced by _gridInset horizontally so the grid's own padding can supply
+      // the focus-ring clearance without shifting the posters; the header below
+      // adds it back so the two stay aligned on 46/64.
+      padding: const EdgeInsets.fromLTRB(
+        46 - _gridInset,
+        56,
+        64 - _gridInset,
+        0,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _scopeTitle[filter.scope]!,
-                      style: const TextStyle(
-                        fontFamily: 'Archivo',
-                        fontSize: 34,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.7,
-                        color: ArgosyColors.cream,
+          // The grid below insets by _gridInset to give a focused poster's ring
+          // room inside the viewport; the header adds the same back so the two
+          // columns stay flush with each other.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _gridInset),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _scopeTitle[filter.scope]!,
+                        style: const TextStyle(
+                          fontFamily: 'Archivo',
+                          fontSize: 34,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.7,
+                          color: ArgosyColors.cream,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${cards.length} ${cards.length == 1 ? 'title' : 'titles'} · sorted by ${filter.sort.label}',
-                      style: const TextStyle(
-                        fontFamily: 'HankenGrotesk',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: ArgosyColors.mute,
+                      const SizedBox(height: 4),
+                      Text(
+                        '${cards.length} ${cards.length == 1 ? 'title' : 'titles'} · sorted by ${filter.sort.label}',
+                        style: const TextStyle(
+                          fontFamily: 'HankenGrotesk',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: ArgosyColors.mute,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              _SortPill(
-                sort: filter.sort,
-                onCycle: () {
-                  const values = BrowseSort.values;
-                  ctrl.setSort(values[(filter.sort.index + 1) % values.length]);
-                },
-              ),
-            ],
+                _SortPill(
+                  sort: filter.sort,
+                  onCycle: () {
+                    const values = BrowseSort.values;
+                    ctrl.setSort(
+                      values[(filter.sort.index + 1) % values.length],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 24),
+          // 24 minus the grid's top inset, so the first row sits where it did.
+          const SizedBox(height: 24 - _gridInsetTop + 6),
           Expanded(
             child: cards.isEmpty
                 ? const _Empty()
                 : GridView.builder(
-                    // Room for a focused tile: it scales 1.06 and rings ~5px out with a
-                    // 5px glow, so the first column and top row need ~18px and
-                    // ~24px respectively or the GridView clips them off.
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+                    padding: const EdgeInsets.fromLTRB(
+                      _gridInset,
+                      _gridInsetTop,
+                      _gridInset,
+                      40,
+                    ),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 6,

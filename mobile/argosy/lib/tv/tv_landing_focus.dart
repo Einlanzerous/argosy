@@ -15,29 +15,33 @@ import 'package:flutter/widgets.dart';
 /// two presses down the rail when the content lands. Claiming focus at that
 /// moment moves the remote off what they aimed at, onto a button that starts
 /// playback. Worse than the problem being solved.
-///
-/// So this records where focus first landed and whether it has moved since;
-/// [maybeClaim] is a no-op once it has.
-///
-/// Movement is tracked by listening to [FocusManager] rather than snapshotting
-/// the landing node in a post-frame callback. The focus manager applies
-/// autofocus in its *own* post-frame pass, which can run after a widget's, so a
-/// snapshot taken there comes back null — and a null landing reads as "nothing
-/// to protect", silently disabling the guard.
 class TvLandingFocus extends StatefulWidget {
   const TvLandingFocus({super.key, required this.child});
 
   final Widget child;
 
-  /// Focuses [node] unless the viewer has already moved focus since entry.
+  /// Focuses [node] after the current frame, unless the viewer has parked focus
+  /// somewhere of their own choosing.
   ///
-  /// Call from a descendant's `initState` inside a post-frame callback — the
-  /// node isn't attached to an element until its subtree has been laid out.
-  /// With no [TvLandingFocus] ancestor this focuses unconditionally, matching
-  /// the behaviour of a screen that never had a landing to protect.
-  static void maybeClaim(BuildContext context, FocusNode node) {
-    final scope = context.getInheritedWidgetOfExactType<_TvLandingFocusScope>();
-    if (scope == null || scope.untouched()) node.requestFocus();
+  /// Call from the claiming widget's `initState`. Scheduling, the
+  /// is-it-rendered check and the guard all live here so the three screens that
+  /// use this can't drift apart on any of them.
+  static void claimOnMount(BuildContext context, FocusNode node) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      // Nothing rendered the node — e.g. a series with nothing playable. Focus
+      // stays where it is rather than being requested into the void.
+      if (node.context == null) return;
+
+      final scope = context.getInheritedWidgetOfExactType<_TvLandingFocusScope>();
+      assert(
+        scope != null,
+        'TvLandingFocus.claimOnMount needs a TvLandingFocus ancestor. Without '
+        'one this claims unconditionally and will steal focus from a viewer who '
+        'moved during the load — wrap the screen body in TvLandingFocus.',
+      );
+      if (scope == null || scope.canClaim()) node.requestFocus();
+    });
   }
 
   @override
@@ -45,19 +49,37 @@ class TvLandingFocus extends StatefulWidget {
 }
 
 class _TvLandingFocusState extends State<TvLandingFocus> {
-  /// The first node to actually hold focus — in practice the nav rail's active
-  /// item, via its autofocus.
+  /// The first real node to hold focus — in practice the nav rail's active item,
+  /// via its autofocus.
+  ///
+  /// Scope nodes are skipped. A route's scope (or the root scope) can be what
+  /// holds focus for a frame before autofocus resolves, and recording *that* as
+  /// the landing would make the rail's own autofocus read as "the viewer moved",
+  /// disabling the claim for the life of the screen.
   FocusNode? _landed;
-  bool _moved = false;
 
   void _onFocusChanged() {
     final primary = FocusManager.instance.primaryFocus;
-    if (primary == null) return;
-    if (_landed == null) {
-      _landed = primary;
-    } else if (primary != _landed) {
-      _moved = true;
-    }
+    if (primary == null || primary is FocusScopeNode) return;
+    _landed ??= primary;
+  }
+
+  /// Whether the primary action may take focus right now.
+  ///
+  /// Evaluated at claim time rather than latched. A latch set by the claim
+  /// itself would make this single-shot per screen: the content going away and
+  /// coming back — an error panel and a Retry, which both detail screens and
+  /// Home can reach through `onRetry` — would then land the remote back on the
+  /// nav rail, which is the bug this exists to fix.
+  bool _canClaim() {
+    final primary = FocusManager.instance.primaryFocus;
+    // Nothing real holds focus: either it was never taken, or whatever held it
+    // has just been torn down. Claiming is the whole point in that case.
+    if (primary == null || primary is FocusScopeNode) return true;
+    if (primary.context == null) return true;
+    // Otherwise only claim from the screen's own landing spot — anywhere else
+    // is somewhere the viewer chose.
+    return identical(primary, _landed);
   }
 
   @override
@@ -74,16 +96,14 @@ class _TvLandingFocusState extends State<TvLandingFocus> {
 
   @override
   Widget build(BuildContext context) {
-    // untouched is read at claim time, not build time, so it reflects the moment
-    // the claim would happen rather than the last rebuild.
-    return _TvLandingFocusScope(untouched: () => !_moved, child: widget.child);
+    return _TvLandingFocusScope(canClaim: _canClaim, child: widget.child);
   }
 }
 
 class _TvLandingFocusScope extends InheritedWidget {
-  const _TvLandingFocusScope({required this.untouched, required super.child});
+  const _TvLandingFocusScope({required this.canClaim, required super.child});
 
-  final bool Function() untouched;
+  final bool Function() canClaim;
 
   // Nothing rebuilds on this; descendants call through it imperatively.
   @override

@@ -269,7 +269,7 @@ class _CastLine extends StatelessWidget {
   }
 }
 
-class _Actions extends ConsumerStatefulWidget {
+class _Actions extends StatefulWidget {
   const _Actions({
     required this.itemId,
     required this.resumable,
@@ -281,19 +281,17 @@ class _Actions extends ConsumerStatefulWidget {
   final PlayState? progress;
 
   @override
-  ConsumerState<_Actions> createState() => _ActionsState();
+  State<_Actions> createState() => _ActionsState();
 }
 
-class _ActionsState extends ConsumerState<_Actions> {
+class _ActionsState extends State<_Actions> {
   /// The primary action — Resume, or Play when there's nothing to resume.
   final FocusNode _primary = FocusNode(debugLabel: 'tv-movie-primary-action');
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) TvLandingFocus.maybeClaim(context, _primary);
-    });
+    TvLandingFocus.claimOnMount(context, _primary);
   }
 
   @override

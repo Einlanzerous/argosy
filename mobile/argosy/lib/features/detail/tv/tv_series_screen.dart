@@ -103,13 +103,8 @@ class _SeriesState extends State<_Series> {
     super.initState();
     // Land on Resume/Play rather than the nav rail (ARGY-173). No-ops if the
     // viewer moved focus while the detail loaded, or if there's nothing
-    // playable — the node has no context then, so the request goes nowhere and
-    // focus stays on the rail.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _playFocus.context != null) {
-        TvLandingFocus.maybeClaim(context, _playFocus);
-      }
-    });
+    // playable to render the node.
+    TvLandingFocus.claimOnMount(context, _playFocus);
   }
 
   @override
