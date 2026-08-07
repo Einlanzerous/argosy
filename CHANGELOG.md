@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.2](https://github.com/Einlanzerous/argosy/compare/v0.22.1...v0.22.2) (2026-08-07)
+
+
+### Bug Fixes
+
+* **tv:** land Home's initial focus on the hero Resume action (ARGY-173) ([#190](https://github.com/Einlanzerous/argosy/issues/190)) ([4f3da8b](https://github.com/Einlanzerous/argosy/commit/4f3da8bd016556aca7fb1cc2f60d54e302a2e1b0))
+
 ## [0.22.1](https://github.com/Einlanzerous/argosy/compare/v0.22.0...v0.22.1) (2026-08-05)
 
 
