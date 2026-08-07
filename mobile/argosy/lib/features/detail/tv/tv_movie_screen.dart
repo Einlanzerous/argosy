@@ -6,6 +6,7 @@ import '../../../router/app_router.dart';
 import '../../../theme/argosy_colors.dart';
 import '../../../tv/tv_backdrop_scaffold.dart';
 import '../../../tv/tv_button.dart';
+import '../../../tv/tv_landing_focus.dart';
 import '../../../tv/tv_nav_rail.dart';
 import '../../../tv/tv_stage.dart';
 import '../../../util/format.dart';
@@ -30,17 +31,22 @@ class TvMovieScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: ArgosyColors.bg,
       body: TvStage(
-        child: Row(
-          children: [
-            const TvNavRail(active: TvSection.library, autofocusActive: true),
-            Expanded(
-              child: AsyncView(
-                value: detail,
-                onRetry: () => ref.invalidate(movieDetailProvider(itemId)),
-                builder: (data) => _Movie(data: data),
+        // Focus starts on the rail (it exists before the async detail does),
+        // then the primary action claims it on mount unless the viewer already
+        // moved — ARGY-173, the same arrangement as TV Home.
+        child: TvLandingFocus(
+          child: Row(
+            children: [
+              const TvNavRail(active: TvSection.library, autofocusActive: true),
+              Expanded(
+                child: AsyncView(
+                  value: detail,
+                  onRetry: () => ref.invalidate(movieDetailProvider(itemId)),
+                  builder: (data) => _Movie(data: data),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -150,7 +156,11 @@ class _Movie extends StatelessWidget {
               _CastLine(cast: movie.cast),
             ],
             const SizedBox(height: 34),
-            _Actions(itemId: movie.id, resumable: _resumable, progress: data.progress),
+            _Actions(
+              itemId: movie.id,
+              resumable: _resumable,
+              progress: data.progress,
+            ),
             if (_resumable && data.progress != null) ...[
               const SizedBox(height: 22),
               _ResumeBar(percent: _percent, progress: data.progress!),
@@ -196,10 +206,12 @@ class _MetaRow extends StatelessWidget {
     final parts = <Widget>[];
     void add(Widget w) {
       if (parts.isNotEmpty) {
-        parts.add(const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Text('•', style: TextStyle(color: ArgosyColors.faint)),
-        ));
+        parts.add(
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Text('•', style: TextStyle(color: ArgosyColors.faint)),
+          ),
+        );
       }
       parts.add(w);
     }
@@ -257,7 +269,7 @@ class _CastLine extends StatelessWidget {
   }
 }
 
-class _Actions extends ConsumerWidget {
+class _Actions extends StatefulWidget {
   const _Actions({
     required this.itemId,
     required this.resumable,
@@ -269,7 +281,30 @@ class _Actions extends ConsumerWidget {
   final PlayState? progress;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  State<_Actions> createState() => _ActionsState();
+}
+
+class _ActionsState extends State<_Actions> {
+  /// The primary action — Resume, or Play when there's nothing to resume.
+  final FocusNode _primary = FocusNode(debugLabel: 'tv-movie-primary-action');
+
+  @override
+  void initState() {
+    super.initState();
+    TvLandingFocus.claimOnMount(context, _primary);
+  }
+
+  @override
+  void dispose() {
+    _primary.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final itemId = widget.itemId;
+    final resumable = widget.resumable;
+    final progress = widget.progress;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -278,6 +313,7 @@ class _Actions extends ConsumerWidget {
             label: 'Resume · ${formatClock(progress!.positionSeconds)}',
             icon: Icons.play_arrow,
             primary: true,
+            focusNode: _primary,
             onSelect: () => openPlayer(context, itemId, resume: true),
           ),
           const SizedBox(width: 18),
@@ -290,6 +326,7 @@ class _Actions extends ConsumerWidget {
             label: 'Play',
             icon: Icons.play_arrow,
             primary: true,
+            focusNode: _primary,
             onSelect: () => openPlayer(context, itemId),
           ),
         const SizedBox(width: 18),

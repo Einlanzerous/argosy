@@ -5,6 +5,7 @@ import '../../../api/artwork.dart';
 import '../../../router/app_router.dart';
 import '../../../theme/argosy_colors.dart';
 import '../../../tv/tv_focusable.dart';
+import '../../../tv/tv_landing_focus.dart';
 import '../../../tv/tv_nav_rail.dart';
 import '../../../tv/tv_rail.dart';
 import '../../../tv/tv_stage.dart';
@@ -27,22 +28,24 @@ class TvHomeScreen extends ConsumerWidget {
     // The nav rail lives *outside* the AsyncView so it exists from the first
     // frame and holds initial focus (autofocusActive) — content loads in behind
     // it. This avoids the route's modal scope self-focusing during the async gap
-    // (which kills D-pad traversal); focus starts on the rail and Right enters
-    // the content. The same pattern is used by the TV detail screens.
+    // (which kills D-pad traversal); focus starts on the rail and the hero takes
+    // it once it mounts, unless the viewer moved first (TvLandingFocus).
     return Scaffold(
       backgroundColor: ArgosyColors.bg,
       body: TvStage(
-        child: Row(
-          children: [
-            const TvNavRail(active: TvSection.home, autofocusActive: true),
-            Expanded(
-              child: AsyncView(
-                value: data,
-                onRetry: () => ref.invalidate(homeDataProvider),
-                builder: (home) => _Home(home: home),
+        child: TvLandingFocus(
+          child: Row(
+            children: [
+              const TvNavRail(active: TvSection.home, autofocusActive: true),
+              Expanded(
+                child: AsyncView(
+                  value: data,
+                  onRetry: () => ref.invalidate(homeDataProvider),
+                  builder: (home) => _Home(home: home),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -140,23 +143,27 @@ class _PageState extends State<_Page> {
 
     void posterRail(String title, List<MediaCard> cards) {
       if (cards.isEmpty) return;
-      rails.add(TvRail(
-        title: title,
-        // Fits the 2:3 poster (172×258) plus its title/subtitle without
-        // overflowing the rail row.
-        height: 340,
-        gap: 24,
-        children: [for (final c in cards) _PosterTile(card: c)],
-      ));
+      rails.add(
+        TvRail(
+          title: title,
+          // Fits the 2:3 poster (172×258) plus its title/subtitle without
+          // overflowing the rail row.
+          height: 340,
+          gap: 24,
+          children: [for (final c in cards) _PosterTile(card: c)],
+        ),
+      );
     }
 
     if (home.continueRow.isNotEmpty) {
-      rails.add(TvRail(
-        title: 'Continue Watching',
-        hint: 'pick up on any deck in your Fleet',
-        accent: true,
-        children: [for (final e in home.continueRow) _ContinueTile(entry: e)],
-      ));
+      rails.add(
+        TvRail(
+          title: 'Continue Watching',
+          hint: 'pick up on any deck in your Fleet',
+          accent: true,
+          children: [for (final e in home.continueRow) _ContinueTile(entry: e)],
+        ),
+      );
     }
     posterRail('On Deck', home.onDeck);
     posterRail('Newly Arrived', home.recent);
@@ -172,19 +179,31 @@ class _PageState extends State<_Page> {
       padding: const EdgeInsets.fromLTRB(56, 96, 64, 56),
       children: [
         if (home.hero != null) _Hero(hero: home.hero!, onFocused: _toTop),
-        for (final rail in rails) ...[
-          const SizedBox(height: 40),
-          rail,
-        ],
+        for (final rail in rails) ...[const SizedBox(height: 40), rail],
       ],
     );
   }
 }
 
 /// The hero spotlight — eyebrow, big title, the resume progress, and the
-/// Resume/Play + Details actions. The first action autofocuses so the remote
-/// lands somewhere sensible on entry.
-class _Hero extends StatelessWidget {
+/// Resume/Play + Details actions.
+///
+/// Claims focus when it first appears, so the first SELECT resumes the hero
+/// instead of re-selecting the Home nav icon you are already on (ARGY-173).
+/// It can't simply autofocus: the nav rail deliberately holds focus on the first
+/// frame because it exists before the async data does, which is what stops the
+/// route's modal scope self-focusing and killing D-pad traversal. So the hero
+/// takes focus once it has actually mounted.
+///
+/// Two things keep that from stealing focus someone else wanted:
+///
+/// * it runs from initState, not build, so a Beacon refresh or a
+///   homeDataProvider invalidation re-renders the hero without re-claiming
+///   focus from someone already browsing the rails below; and
+/// * it goes through [TvLandingFocus], which no-ops once the viewer has moved
+///   focus — so someone who D-padded down the rail during the load (four API
+///   calls' worth of time) keeps the remote where they aimed it.
+class _Hero extends StatefulWidget {
   const _Hero({required this.hero, required this.onFocused});
 
   final HomeHero hero;
@@ -193,7 +212,30 @@ class _Hero extends StatelessWidget {
   final VoidCallback onFocused;
 
   @override
+  State<_Hero> createState() => _HeroState();
+}
+
+class _HeroState extends State<_Hero> {
+  /// Attached to whichever action renders first — Resume/Play when the hero is
+  /// playable, otherwise Episodes/Details.
+  final FocusNode _firstAction = FocusNode(debugLabel: 'tv-home-hero-action');
+
+  @override
+  void initState() {
+    super.initState();
+    TvLandingFocus.claimOnMount(context, _firstAction);
+  }
+
+  @override
+  void dispose() {
+    _firstAction.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final hero = widget.hero;
+    final onFocused = widget.onFocused;
     final isSeries = hero.kind == MediaKind.series;
     // A tall block so the hero fills most of the screen and the first rail only
     // peeks in below it. The eyebrow + title sit at the top; a Spacer pushes the
@@ -261,8 +303,9 @@ class _Hero extends StatelessWidget {
                         value: hero.percent,
                         minHeight: 7,
                         backgroundColor: ArgosyColors.line3,
-                        valueColor:
-                            const AlwaysStoppedAnimation(ArgosyColors.accent),
+                        valueColor: const AlwaysStoppedAnimation(
+                          ArgosyColors.accent,
+                        ),
                       ),
                     ),
                   ),
@@ -286,11 +329,12 @@ class _Hero extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (hero.playableId != null)
+              if (hero.playableId != null) ...[
                 _HeroButton(
                   label: hero.percent != null ? 'Resume' : 'Play',
                   icon: Icons.play_arrow,
                   primary: true,
+                  focusNode: _firstAction,
                   onFocused: onFocused,
                   onSelect: () => openPlayer(
                     context,
@@ -298,10 +342,16 @@ class _Hero extends StatelessWidget {
                     resume: hero.percent != null,
                   ),
                 ),
-              const SizedBox(width: 16),
+                const SizedBox(width: 16),
+              ],
               _HeroButton(
                 label: isSeries ? 'Episodes' : 'Details',
                 primary: false,
+                // Nothing playable — this is then the first action, so it
+                // takes the landing focus instead. Defensive: _heroFrom always
+                // sets playableId today, so this is a guard against a future
+                // hero source rather than a state seen in the wild.
+                focusNode: hero.playableId == null ? _firstAction : null,
                 onFocused: onFocused,
                 onSelect: () => openDetail(context, hero.kind, hero.detailId),
               ),
@@ -320,11 +370,15 @@ class _HeroButton extends StatelessWidget {
     required this.onSelect,
     required this.onFocused,
     this.icon,
+    this.focusNode,
   });
 
   final String label;
   final bool primary;
   final VoidCallback onSelect;
+
+  /// Set on the action that should hold focus when the hero appears.
+  final FocusNode? focusNode;
 
   /// Snap the page to the top when this action takes focus (instead of
   /// ensure-visible, which pulled the hero up tight against the rails).
@@ -334,6 +388,7 @@ class _HeroButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TvFocusable(
+      focusNode: focusNode,
       borderRadius: 13,
       scale: 1.05,
       onFocusChange: (focused) {
@@ -343,9 +398,7 @@ class _HeroButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 18),
         decoration: BoxDecoration(
-          color: primary
-              ? ArgosyColors.accent
-              : const Color(0x66141413),
+          color: primary ? ArgosyColors.accent : const Color(0x66141413),
           borderRadius: BorderRadius.circular(13),
           border: primary ? null : Border.all(color: ArgosyColors.line3),
         ),
@@ -353,9 +406,11 @@ class _HeroButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon,
-                  size: 22,
-                  color: primary ? ArgosyColors.ink : ArgosyColors.cream),
+              Icon(
+                icon,
+                size: 22,
+                color: primary ? ArgosyColors.ink : ArgosyColors.cream,
+              ),
               const SizedBox(width: 11),
             ],
             Text(
@@ -466,8 +521,9 @@ class _ContinueTile extends ConsumerWidget {
                         value: entry.progress,
                         minHeight: 5,
                         backgroundColor: ArgosyColors.line3,
-                        valueColor:
-                            const AlwaysStoppedAnimation(ArgosyColors.accent),
+                        valueColor: const AlwaysStoppedAnimation(
+                          ArgosyColors.accent,
+                        ),
                       ),
                     ),
                   ],
