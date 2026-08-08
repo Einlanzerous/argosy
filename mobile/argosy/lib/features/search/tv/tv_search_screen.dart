@@ -115,10 +115,18 @@ class _TvSearchScreenState extends ConsumerState<TvSearchScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 40),
+            // The results grid carries _resultsFocusInset inside itself, so the
+            // margins around it give that much back and the tiles stay where the
+            // design puts them.
+            const SizedBox(width: 40 - _resultsFocusInset),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 64, 64, 0),
+                padding: const EdgeInsets.fromLTRB(
+                  0,
+                  64,
+                  64 - _resultsFocusInset,
+                  0,
+                ),
                 child: _Results(
                   query: _query.trim(),
                   cards: cards,
@@ -194,6 +202,12 @@ class _QueryField extends StatelessWidget {
   }
 }
 
+/// Room reserved inside the results grid for a focused tile's brass ring
+/// (ARGY-184). The grid clips at its viewport and its leftmost column sat flush
+/// against it. Covers [tvFocusClearance] for a result tile at this screen's
+/// width — 22.9px for the ~205x410 tiles five columns give.
+const double _resultsFocusInset = 24;
+
 class _Results extends StatelessWidget {
   const _Results({
     required this.query,
@@ -227,27 +241,40 @@ class _Results extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text.rich(
-          TextSpan(
-            style: const TextStyle(
-              fontFamily: 'Archivo',
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: ArgosyColors.dim,
-            ),
-            children: [
-              const TextSpan(text: 'Results for '),
-              TextSpan(
-                text: '"$query"',
-                style: const TextStyle(color: ArgosyColors.cream),
+        Padding(
+          // Lines the heading up with the grid, which starts one clearance in.
+          padding: const EdgeInsets.only(left: _resultsFocusInset),
+          child: Text.rich(
+            TextSpan(
+              style: const TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: ArgosyColors.dim,
               ),
-            ],
+              children: [
+                const TextSpan(text: 'Results for '),
+                TextSpan(
+                  text: '"$query"',
+                  style: const TextStyle(color: ArgosyColors.cream),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 24),
+        // The design's 24px under the heading, less the clearance the grid now
+        // reserves above its first row (it used to reserve 6).
+        const SizedBox(height: 24 - _resultsFocusInset + 6),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.only(top: 6, bottom: 40, right: 8),
+            // The grid clips at its viewport, so a focused tile's ring only
+            // survives if the grid carries the room for it (ARGY-184).
+            padding: const EdgeInsets.fromLTRB(
+              _resultsFocusInset,
+              _resultsFocusInset,
+              _resultsFocusInset + 8,
+              40,
+            ),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 5,
               mainAxisSpacing: 26,

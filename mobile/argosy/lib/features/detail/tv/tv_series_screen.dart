@@ -63,6 +63,13 @@ class TvSeriesScreen extends ConsumerWidget {
 /// A playable episode flattened with its season number, for resume targeting.
 typedef _Playable = ({EpisodeSummary ep, int seasonNumber});
 
+/// Room reserved inside the episode list for a focused row's brass ring
+/// (ARGY-184). The list clips at its viewport and the rows run its full width,
+/// so without this the ring is sliced on all four sides. Covers
+/// [tvFocusClearance] for a row at this screen's width — 20.1px at the 1096px
+/// the 1920×1080 [TvStage] gives the column.
+const double _episodeFocusInset = 22;
+
 class _Series extends StatefulWidget {
   const _Series({required this.series});
 
@@ -174,7 +181,10 @@ class _SeriesState extends State<_Series> {
       backdropUrl: series.backdropUrl,
       posterUrl: series.posterUrl,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(56, 56, 64, 48),
+        // The episode list carries _episodeFocusInset inside itself, so the
+        // margins around it give that much back and the rows stay where the
+        // design puts them.
+        padding: const EdgeInsets.fromLTRB(56, 56, 64 - _episodeFocusInset, 48),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -192,7 +202,7 @@ class _SeriesState extends State<_Series> {
                 ),
               ),
             ),
-            const SizedBox(width: 64),
+            const SizedBox(width: 64 - _episodeFocusInset),
             Expanded(
               child: season == null
                   ? const SizedBox.shrink()
@@ -385,38 +395,53 @@ class _Episodes extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            if (series.seasons.length > 1)
-              for (var i = 0; i < series.seasons.length; i++) ...[
-                _SeasonTab(
-                  label:
-                      series.seasons[i].title ??
-                      'Season ${series.seasons[i].seasonNumber}',
-                  active: i == activeSeason,
-                  onSelect: () => onSelectSeason(i),
+        Padding(
+          // Lines the season tabs up with the rows below, which start one
+          // clearance in.
+          padding: const EdgeInsets.symmetric(horizontal: _episodeFocusInset),
+          child: Row(
+            children: [
+              if (series.seasons.length > 1)
+                for (var i = 0; i < series.seasons.length; i++) ...[
+                  _SeasonTab(
+                    label:
+                        series.seasons[i].title ??
+                        'Season ${series.seasons[i].seasonNumber}',
+                    active: i == activeSeason,
+                    onSelect: () => onSelectSeason(i),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              const Spacer(),
+              Text(
+                '$count episode${count == 1 ? '' : 's'}',
+                style: const TextStyle(
+                  fontFamily: 'HankenGrotesk',
+                  fontSize: 16,
+                  color: ArgosyColors.mute,
                 ),
-                const SizedBox(width: 12),
-              ],
-            const Spacer(),
-            Text(
-              '$count episode${count == 1 ? '' : 's'}',
-              style: const TextStyle(
-                fontFamily: 'HankenGrotesk',
-                fontSize: 16,
-                color: ArgosyColors.mute,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 24),
+        // The design's 24px under the tabs, less the clearance the list now
+        // reserves above its first row.
+        const SizedBox(height: 24 - _episodeFocusInset),
         Expanded(
           child: Focus(
             canRequestFocus: false,
             skipTraversal: true,
             onKeyEvent: onEpisodesKey,
             child: ListView.separated(
-              padding: const EdgeInsets.only(bottom: 8),
+              // The list clips at its viewport and its rows run edge to edge, so
+              // a focused row's ring only survives if the list carries the room
+              // for it (ARGY-184).
+              padding: const EdgeInsets.fromLTRB(
+                _episodeFocusInset,
+                _episodeFocusInset,
+                _episodeFocusInset,
+                _episodeFocusInset + 8,
+              ),
               itemCount: groups.length,
               separatorBuilder: (_, _) => const SizedBox(height: 16),
               itemBuilder: (_, i) => _EpisodeTile(
