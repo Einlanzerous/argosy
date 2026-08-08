@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -45,6 +47,34 @@ const (
 	// no Retry-After; tmdbMaxBackoff caps its growth.
 	tmdbBaseBackoff = 500 * time.Millisecond
 	tmdbMaxBackoff  = 30 * time.Second
+
+	// Adaptive throttling (ARGY-170). Retrying a 429 recovers the request but
+	// pays for it in wall time, so a client that keeps offering a rate the
+	// server is refusing gets slower, not faster: ARGY-141 measured 40 req/s
+	// finishing a fixed run *behind* 25 req/s, having eaten more 429s. These
+	// knobs let the limiter find the rate the server will actually take.
+	//
+	// tmdbDecreaseFactor is the multiplicative cut applied on a 429;
+	// tmdbFloorDivisor bounds the cut relative to the configured rate so a bad
+	// minute can't park the ingest at a crawl.
+	tmdbDecreaseFactor = 0.5
+	tmdbFloorDivisor   = 8
+	// tmdbDecreaseCooldown collapses a burst of 429s into one cut. Without it,
+	// N in-flight requests failing together would multiply the cut N times and
+	// slam straight to the floor.
+	tmdbDecreaseCooldown = 2 * time.Second
+	// Recovery grows the rate by tmdbRecoverFraction of *the current rate* every
+	// tmdbRecoverInterval of clean responses, so the client probes for headroom
+	// instead of waiting for a restart to undo a cut.
+	//
+	// Relative to the current rate, not the configured one: the configured rate
+	// is exactly the number that may be wrong. A step sized against a ceiling
+	// that is 10x too high re-adds the whole overshoot in one move and the rate
+	// never settles — measured, that alone left it at 450 req/s against a server
+	// accepting 200. Scaling to the current rate makes the step small near
+	// whatever the real operating point turns out to be.
+	tmdbRecoverFraction = 0.1
+	tmdbRecoverInterval = 5 * time.Second
 )
 
 // TMDBOptions tunes the shared client beyond credentials; zero values keep
@@ -81,6 +111,37 @@ type TMDB struct {
 	retries     int
 	baseBackoff time.Duration
 	maxBackoff  time.Duration
+
+	// Adaptive throttling state (ARGY-170). configuredRate is the ceiling the
+	// operator asked for and is never exceeded; curRate is what the limiter is
+	// offering right now, which 429s pull down and clean responses push back up.
+	adaptMu        sync.Mutex
+	configuredRate float64
+	curRate        float64
+	rateFloor      float64
+	lastRateChange time.Time
+	// Adaptive timings, private so tests can shrink them like the backoffs.
+	decreaseCooldown time.Duration
+	recoverInterval  time.Duration
+	// Cumulative counters, surfaced through RequestStats for the scan status.
+	// Monotonic by design — per-run figures come from snapshotting a baseline.
+	//
+	// Split by host. api.themoviedb.org and image.tmdb.org are separate services
+	// with separate rate policies, and artwork is the *majority* of a match
+	// run's traffic — a poster and a backdrop per title, a still per episode.
+	// Folding them together makes every counter mean something other than what
+	// it says: an ingest that lost 400 stills would report 400 titles missing
+	// metadata.
+	api     surfaceCounters
+	artwork surfaceCounters
+}
+
+// surfaceCounters is one host's request accounting.
+type surfaceCounters struct {
+	requests  atomic.Int64
+	retries   atomic.Int64
+	throttled atomic.Int64
+	exhausted atomic.Int64
 }
 
 // NewTMDB returns a TMDB provider. Either credential may be empty as long as
@@ -111,12 +172,78 @@ func NewTMDB(readToken, apiKey string, opts TMDBOptions) *TMDB {
 		imageHTTP: &http.Client{Timeout: 30 * time.Second},
 		// Burst of one second's tokens: brief spikes are fine, the sustained
 		// rate is what TMDB actually polices.
-		limiter:     rate.NewLimiter(rate.Limit(rps), int(max(rps, 1))),
-		logger:      logger,
-		retries:     tmdbMaxRetries,
-		baseBackoff: tmdbBaseBackoff,
-		maxBackoff:  tmdbMaxBackoff,
+		limiter:          rate.NewLimiter(rate.Limit(rps), int(max(rps, 1))),
+		logger:           logger,
+		retries:          tmdbMaxRetries,
+		baseBackoff:      tmdbBaseBackoff,
+		maxBackoff:       tmdbMaxBackoff,
+		configuredRate:   rps,
+		curRate:          rps,
+		rateFloor:        max(rps/tmdbFloorDivisor, 1),
+		decreaseCooldown: tmdbDecreaseCooldown,
+		recoverInterval:  tmdbRecoverInterval,
 	}
+}
+
+// RequestStats reports cumulative HTTP counters and the limiter's live ceiling.
+// Safe to call from any goroutine while a match run is in flight.
+func (t *TMDB) RequestStats() RequestStats {
+	t.adaptMu.Lock()
+	cur := t.curRate
+	t.adaptMu.Unlock()
+	return RequestStats{
+		Requests:         t.api.requests.Load(),
+		Retries:          t.api.retries.Load(),
+		Throttled:        t.api.throttled.Load(),
+		Exhausted:        t.api.exhausted.Load(),
+		ArtworkRequests:  t.artwork.requests.Load(),
+		ArtworkRetries:   t.artwork.retries.Load(),
+		ArtworkThrottled: t.artwork.throttled.Load(),
+		ArtworkExhausted: t.artwork.exhausted.Load(),
+		RateLimit:        cur,
+		ConfiguredRate:   t.configuredRate,
+	}
+}
+
+// throttleDown cuts the offered rate after a 429. Cuts inside the cooldown are
+// dropped so a burst of simultaneous 429s costs one halving, not one each.
+func (t *TMDB) throttleDown(now time.Time) {
+	t.adaptMu.Lock()
+	defer t.adaptMu.Unlock()
+	if t.curRate <= t.rateFloor || now.Sub(t.lastRateChange) < t.decreaseCooldown {
+		return
+	}
+	t.curRate = max(t.curRate*tmdbDecreaseFactor, t.rateFloor)
+	t.lastRateChange = now
+	t.applyRateLocked()
+	t.logger.Warn("tmdb throttling: reducing request rate",
+		"rate", t.curRate, "configured", t.configuredRate)
+}
+
+// recover nudges the offered rate back toward the configured ceiling after a
+// clean response. Additive, so the client re-probes for headroom gradually
+// rather than stepping straight back into the rate that drew the 429.
+func (t *TMDB) recover(now time.Time) {
+	t.adaptMu.Lock()
+	defer t.adaptMu.Unlock()
+	if t.curRate >= t.configuredRate || now.Sub(t.lastRateChange) < t.recoverInterval {
+		return
+	}
+	t.curRate = min(t.curRate*(1+tmdbRecoverFraction), t.configuredRate)
+	t.lastRateChange = now
+	t.applyRateLocked()
+	if t.curRate >= t.configuredRate {
+		t.logger.Info("tmdb throttling: recovered to configured rate", "rate", t.curRate)
+	}
+}
+
+// applyRateLocked pushes curRate onto the limiter. Burst tracks the rate:
+// leaving a burst sized for the configured ceiling would let a parallel caller
+// fire a full second's worth of the *old* rate straight through a fresh cut.
+// Caller holds adaptMu.
+func (t *TMDB) applyRateLocked() {
+	t.limiter.SetLimit(rate.Limit(t.curRate))
+	t.limiter.SetBurst(int(max(t.curRate, 1)))
 }
 
 // Configured reports whether at least one credential is present.
@@ -288,7 +415,7 @@ func (t *TMDB) get(ctx context.Context, path string, q url.Values, out any) erro
 	if t.readToken != "" {
 		req.Header.Set("Authorization", "Bearer "+t.readToken)
 	}
-	resp, err := t.doPaced(t.http, req)
+	resp, err := t.doPaced(t.http, req, false)
 	if err != nil {
 		return fmt.Errorf("tmdb %s: %w", path, err)
 	}
@@ -306,8 +433,19 @@ func (t *TMDB) get(ctx context.Context, path string, q url.Values, out any) erro
 // Retry-After when present), 5xx, and transport errors with exponential
 // backoff + jitter. Other statuses (404, 401, …) are returned to the caller
 // as-is — retrying them would never succeed. Caller owns resp.Body on success.
-func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, error) {
+//
+// artwork selects which host's counters to charge, and — because only one of
+// the two hosts is the one whose rate we are controlling — whether this
+// request's outcome may move the limiter. Both surfaces still share the token
+// bucket: that is ARGY-141's decision and it stands, since a match run's
+// artwork would otherwise run unthrottled beside the API. What changed is that
+// the CDN no longer *steers* it.
+func (t *TMDB) doPaced(client *http.Client, req *http.Request, artwork bool) (*http.Response, error) {
 	ctx := req.Context()
+	counters := &t.api
+	if artwork {
+		counters = &t.artwork
+	}
 	var lastErr error
 	var delay time.Duration
 	for attempt := 0; attempt <= t.retries; attempt++ {
@@ -321,6 +459,7 @@ func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, 
 		if err := t.limiter.Wait(ctx); err != nil {
 			return nil, err
 		}
+		counters.requests.Add(1)
 		resp, err := client.Do(req.Clone(ctx))
 		if err != nil {
 			if ctx.Err() != nil {
@@ -328,6 +467,9 @@ func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, 
 			}
 			lastErr = err
 			delay = t.backoffDelay(attempt)
+			if attempt < t.retries {
+				counters.retries.Add(1)
+			}
 			t.logger.Warn("tmdb request failed, retrying", "url", req.URL.Path, "attempt", attempt+1, "delay", delay, "err", err)
 			continue
 		}
@@ -344,11 +486,38 @@ func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, 
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			if attempt < t.retries {
+				counters.retries.Add(1)
+			}
+			// Only a 429 is the server asking for a slower rate. A 5xx is the
+			// server being broken, and cutting the rate for it would throttle
+			// the ingest over an outage it can't influence.
+			if resp.StatusCode == http.StatusTooManyRequests {
+				counters.throttled.Add(1)
+				// ...and only the API's 429 is about the rate this limiter
+				// governs. The artwork CDN is a different service with its own
+				// policy; letting it halve the bucket would slow API searches on
+				// a signal api.themoviedb.org never sent, and since artwork is
+				// most of a match run's traffic it would usually be the CDN
+				// driving. Artwork still backs off per-request through the retry
+				// envelope above — it just doesn't steer the shared rate.
+				if !artwork {
+					t.throttleDown(time.Now())
+				}
+			}
 			t.logger.Warn("tmdb request throttled/failed, retrying", "url", req.URL.Path, "status", resp.StatusCode, "attempt", attempt+1, "delay", delay)
 			continue
 		}
+		// Recovery is scoped the same way, and must be: if artwork successes
+		// pushed the rate back up, the CDN would out-vote the API on the way up
+		// as well, and sustained API pushback would be masked by the artwork
+		// flowing fine beside it.
+		if !artwork {
+			t.recover(time.Now())
+		}
 		return resp, nil
 	}
+	counters.exhausted.Add(1)
 	return nil, fmt.Errorf("giving up after %d attempts: %w", t.retries+1, lastErr)
 }
 
@@ -403,7 +572,7 @@ func (t *TMDB) DownloadImage(ctx context.Context, rawURL, dest string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := t.doPaced(t.imageHTTP, req)
+	resp, err := t.doPaced(t.imageHTTP, req, true)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", rawURL, err)
 	}

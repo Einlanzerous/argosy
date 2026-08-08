@@ -60,6 +60,7 @@ lib/model/reorder_vault_request.dart
 lib/model/role.dart
 lib/model/scan_library_result.dart
 lib/model/scan_status.dart
+lib/model/scan_tmdb_stats.dart
 lib/model/search_results.dart
 lib/model/season_summary.dart
 lib/model/series_detail.dart

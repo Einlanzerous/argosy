@@ -17,6 +17,7 @@ class ScanStatus {
     this.startedAt,
     this.finishedAt,
     this.libraries = const [],
+    this.tmdb,
   });
 
   bool running;
@@ -39,12 +40,22 @@ class ScanStatus {
 
   List<ScanLibraryResult> libraries;
 
+  /// Metadata-provider traffic for the current or last sweep. Absent when no provider is configured, or the provider tracks no stats.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  ScanTMDBStats? tmdb;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is ScanStatus &&
     other.running == running &&
     other.startedAt == startedAt &&
     other.finishedAt == finishedAt &&
-    _deepEquality.equals(other.libraries, libraries);
+    _deepEquality.equals(other.libraries, libraries) &&
+    other.tmdb == tmdb;
 
   @override
   int get hashCode =>
@@ -52,10 +63,11 @@ class ScanStatus {
     (running.hashCode) +
     (startedAt == null ? 0 : startedAt!.hashCode) +
     (finishedAt == null ? 0 : finishedAt!.hashCode) +
-    (libraries.hashCode);
+    (libraries.hashCode) +
+    (tmdb == null ? 0 : tmdb!.hashCode);
 
   @override
-  String toString() => 'ScanStatus[running=$running, startedAt=$startedAt, finishedAt=$finishedAt, libraries=$libraries]';
+  String toString() => 'ScanStatus[running=$running, startedAt=$startedAt, finishedAt=$finishedAt, libraries=$libraries, tmdb=$tmdb]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -71,6 +83,11 @@ class ScanStatus {
       json[r'finishedAt'] = null;
     }
       json[r'libraries'] = this.libraries;
+    if (this.tmdb != null) {
+      json[r'tmdb'] = this.tmdb;
+    } else {
+      json[r'tmdb'] = null;
+    }
     return json;
   }
 
@@ -97,6 +114,7 @@ class ScanStatus {
         startedAt: mapDateTime(json, r'startedAt', r''),
         finishedAt: mapDateTime(json, r'finishedAt', r''),
         libraries: ScanLibraryResult.listFromJson(json[r'libraries']),
+        tmdb: ScanTMDBStats.fromJson(json[r'tmdb']),
       );
     }
     return null;

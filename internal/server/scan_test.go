@@ -65,4 +65,42 @@ func TestToAPIScanStatus(t *testing.T) {
 	if l.LibraryId.String() != "11111111-1111-1111-1111-111111111111" {
 		t.Errorf("libraryId = %s", l.LibraryId)
 	}
+	// No provider stats on the source status: the field must stay absent rather
+	// than serialize as a zeroed object, which would read as "no throttling"
+	// when the truth is "nothing measured".
+	if out.Tmdb != nil {
+		t.Errorf("tmdb = %+v, want absent when the status carries none", out.Tmdb)
+	}
+}
+
+// The ingest-visibility half of ARGY-170: the counters have to survive the trip
+// through the API mapping, or they exist only in logs — the thing the ticket
+// was raised to stop.
+func TestToAPIScanStatusCarriesTMDBStats(t *testing.T) {
+	out := toAPIScanStatus(stevedore.Status{
+		Running:   true,
+		Libraries: []stevedore.LibraryScan{},
+		TMDB: &stevedore.TMDBStats{
+			Requests: 1200, Retries: 340, Throttled: 310, Exhausted: 4,
+			ArtworkRequests: 9000, ArtworkRetries: 120, ArtworkThrottled: 95, ArtworkExhausted: 400,
+			RateLimit: 12.5, ConfiguredRate: 25,
+		},
+	})
+	if out.Tmdb == nil {
+		t.Fatal("tmdb stats dropped by the mapping")
+	}
+	if out.Tmdb.Requests != 1200 || out.Tmdb.Retries != 340 || out.Tmdb.Throttled != 310 || out.Tmdb.Exhausted != 4 {
+		t.Errorf("API counters = %+v", out.Tmdb)
+	}
+	// The two surfaces must not be transposed on the way out: 400 lost stills
+	// reported as `exhausted` reads as 400 titles with no metadata.
+	if out.Tmdb.ArtworkRequests != 9000 || out.Tmdb.ArtworkRetries != 120 ||
+		out.Tmdb.ArtworkThrottled != 95 || out.Tmdb.ArtworkExhausted != 400 {
+		t.Errorf("artwork counters = %+v", out.Tmdb)
+	}
+	// A rate below the configured one is the signal that the provider is
+	// pushing back; losing it would leave a slow ingest undiagnosable.
+	if out.Tmdb.RateLimit != 12.5 || out.Tmdb.ConfiguredRate != 25 {
+		t.Errorf("rates = %.1f/%.1f, want 12.5/25", out.Tmdb.RateLimit, out.Tmdb.ConfiguredRate)
+	}
 }

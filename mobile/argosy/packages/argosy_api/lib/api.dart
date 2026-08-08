@@ -79,6 +79,7 @@ part 'model/reorder_vault_request.dart';
 part 'model/role.dart';
 part 'model/scan_library_result.dart';
 part 'model/scan_status.dart';
+part 'model/scan_tmdb_stats.dart';
 part 'model/search_results.dart';
 part 'model/season_summary.dart';
 part 'model/series_detail.dart';
