@@ -148,7 +148,8 @@ class _PageState extends State<_Page> {
           title: title,
           // Fits the 2:3 poster (172×258) plus its title/subtitle without
           // overflowing the rail row.
-          height: 340,
+          tileWidth: 172,
+          tileHeight: 328,
           gap: 24,
           children: [for (final c in cards) _PosterTile(card: c)],
         ),
@@ -161,6 +162,8 @@ class _PageState extends State<_Page> {
           title: 'Continue Watching',
           hint: 'pick up on any deck in your Fleet',
           accent: true,
+          tileWidth: 332,
+          tileHeight: 238,
           children: [for (final e in home.continueRow) _ContinueTile(entry: e)],
         ),
       );
@@ -174,13 +177,37 @@ class _PageState extends State<_Page> {
       posterRail(row.title, row.cards);
     }
 
-    return ListView(
-      controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(56, 96, 64, 56),
-      children: [
-        if (home.hero != null) _Hero(hero: home.hero!, onFocused: _toTop),
-        for (final rail in rails) ...[const SizedBox(height: 40), rail],
-      ],
+    // Rails carry their own focus-ring clearance (kTvRailFocusInset) inside the
+    // scroller that would otherwise clip it, so the page pulls back by the same
+    // amount and hands it to the hero instead — the design's 56/64 margins, with
+    // rails and hero still flush.
+    return TvRailGroup(
+      child: ListView(
+        controller: _scroll,
+        padding: const EdgeInsets.fromLTRB(
+          56 - kTvRailFocusInset,
+          96,
+          64 - kTvRailFocusInset,
+          56,
+        ),
+        children: [
+          if (home.hero != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: kTvRailFocusInset,
+              ),
+              child: _Hero(hero: home.hero!, onFocused: _toTop),
+            ),
+          for (final (i, rail) in rails.indexed) ...[
+            // The design's 40px above a rail. Between rails, the one above now
+            // reserves kTvRailFocusInset below its tiles (it used to reserve 6),
+            // so the gap gives that back. The hero reserves nothing, so the
+            // first rail keeps the full 40.
+            SizedBox(height: i == 0 ? 40 : 40 - kTvRailFocusInset + 6),
+            rail,
+          ],
+        ],
+      ),
     );
   }
 }
