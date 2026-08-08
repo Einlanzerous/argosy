@@ -275,6 +275,8 @@ class ApiClient {
           return ScanLibraryResult.fromJson(value);
         case 'ScanStatus':
           return ScanStatus.fromJson(value);
+        case 'ScanTMDBStats':
+          return ScanTMDBStats.fromJson(value);
         case 'SearchResults':
           return SearchResults.fromJson(value);
         case 'SeasonSummary':

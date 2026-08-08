@@ -32,6 +32,16 @@ func toAPIScanStatus(s stevedore.Status) api.ScanStatus {
 		FinishedAt: s.FinishedAt,
 		Libraries:  []api.ScanLibraryResult{},
 	}
+	if t := s.TMDB; t != nil {
+		out.Tmdb = &api.ScanTMDBStats{
+			Requests:       t.Requests,
+			Retries:        t.Retries,
+			Throttled:      t.Throttled,
+			Exhausted:      t.Exhausted,
+			RateLimit:      t.RateLimit,
+			ConfiguredRate: t.ConfiguredRate,
+		}
+	}
 	for _, l := range s.Libraries {
 		r := api.ScanLibraryResult{
 			LibraryId: parseUUID(l.LibraryID),

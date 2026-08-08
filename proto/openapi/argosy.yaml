@@ -2222,6 +2222,48 @@ components:
         startedAt: { type: string, format: date-time }
         finishedAt: { type: string, format: date-time }
         libraries: { type: array, items: { $ref: "#/components/schemas/ScanLibraryResult" } }
+        tmdb:
+          allOf: [{ $ref: "#/components/schemas/ScanTMDBStats" }]
+          description: >-
+            Metadata-provider traffic for the current or last sweep. Absent when
+            no provider is configured, or the provider tracks no stats.
+
+    ScanTMDBStats:
+      type: object
+      required: [requests, retries, throttled, exhausted, rateLimit, configuredRate]
+      description: >-
+        TMDB request accounting for one scan sweep. Counters are deltas for the
+        sweep and climb live while it runs; rates are current levels.
+      properties:
+        requests:
+          type: integer
+          format: int64
+          description: HTTP round-trips sent this sweep, retries included.
+        retries:
+          type: integer
+          format: int64
+          description: Round-trips retried after a 429, 5xx, or transport error.
+        throttled:
+          type: integer
+          format: int64
+          description: The 429-only subset of retries — the provider asking for a slower rate.
+        exhausted:
+          type: integer
+          format: int64
+          description: >-
+            Requests that used every retry and failed permanently. Each one is a
+            title that went without metadata; non-zero warrants a re-match.
+        rateLimit:
+          type: number
+          format: double
+          description: >-
+            The limiter's current ceiling in req/s. Below configuredRate means
+            adaptive throttling has backed off after sustained 429s; it recovers
+            on its own as clean responses come back.
+        configuredRate:
+          type: number
+          format: double
+          description: The operator-configured ceiling in req/s (ARGOSY_TMDB_RATE).
 
     PlaybackInfo:
       type: object

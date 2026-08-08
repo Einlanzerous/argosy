@@ -186,6 +186,7 @@ Class | Method | HTTP request | Description
  - [Role](doc//Role.md)
  - [ScanLibraryResult](doc//ScanLibraryResult.md)
  - [ScanStatus](doc//ScanStatus.md)
+ - [ScanTMDBStats](doc//ScanTMDBStats.md)
  - [SearchResults](doc//SearchResults.md)
  - [SeasonSummary](doc//SeasonSummary.md)
  - [SeriesDetail](doc//SeriesDetail.md)

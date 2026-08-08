@@ -38,6 +38,35 @@ type ImageDownloader interface {
 	DownloadImage(ctx context.Context, rawURL, dest string) error
 }
 
+// RequestStats is a provider's cumulative view of its own HTTP traffic, for
+// operators watching a long ingest. Counters are monotonic for the life of the
+// client; callers wanting per-run numbers snapshot at the start and subtract
+// (see stevedore.Scheduler), which is race-free without a reset.
+type RequestStats struct {
+	// Requests counts HTTP round-trips actually sent, retries included.
+	Requests int64
+	// Retries counts round-trips that failed retryably (429, 5xx, transport)
+	// and were tried again. Throttled is the 429-only subset.
+	Retries   int64
+	Throttled int64
+	// Exhausted counts requests that used every retry and failed permanently —
+	// each one is a title that did not get metadata.
+	Exhausted int64
+	// RateLimit is the limiter's *current* ceiling in req/s, which adaptive
+	// throttling moves below ConfiguredRate while the provider is pushing back.
+	// A run that got slow shows up here as a number well under the configured
+	// one, which is otherwise only visible by grepping logs (ARGY-170).
+	RateLimit      float64
+	ConfiguredRate float64
+}
+
+// RequestStatser is implemented by providers that track the above. The
+// scheduler type-asserts for it, so a provider without pacing (or a test stub)
+// needs no stats surface at all.
+type RequestStatser interface {
+	RequestStats() RequestStats
+}
+
 // Provider looks up metadata for films and series.
 type Provider interface {
 	SearchMovie(ctx context.Context, title string, year int) (*Match, error)

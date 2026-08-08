@@ -65,4 +65,35 @@ func TestToAPIScanStatus(t *testing.T) {
 	if l.LibraryId.String() != "11111111-1111-1111-1111-111111111111" {
 		t.Errorf("libraryId = %s", l.LibraryId)
 	}
+	// No provider stats on the source status: the field must stay absent rather
+	// than serialize as a zeroed object, which would read as "no throttling"
+	// when the truth is "nothing measured".
+	if out.Tmdb != nil {
+		t.Errorf("tmdb = %+v, want absent when the status carries none", out.Tmdb)
+	}
+}
+
+// The ingest-visibility half of ARGY-170: the counters have to survive the trip
+// through the API mapping, or they exist only in logs — the thing the ticket
+// was raised to stop.
+func TestToAPIScanStatusCarriesTMDBStats(t *testing.T) {
+	out := toAPIScanStatus(stevedore.Status{
+		Running:   true,
+		Libraries: []stevedore.LibraryScan{},
+		TMDB: &stevedore.TMDBStats{
+			Requests: 1200, Retries: 340, Throttled: 310, Exhausted: 4,
+			RateLimit: 12.5, ConfiguredRate: 25,
+		},
+	})
+	if out.Tmdb == nil {
+		t.Fatal("tmdb stats dropped by the mapping")
+	}
+	if out.Tmdb.Requests != 1200 || out.Tmdb.Retries != 340 || out.Tmdb.Throttled != 310 || out.Tmdb.Exhausted != 4 {
+		t.Errorf("counters = %+v", out.Tmdb)
+	}
+	// A rate below the configured one is the signal that the provider is
+	// pushing back; losing it would leave a slow ingest undiagnosable.
+	if out.Tmdb.RateLimit != 12.5 || out.Tmdb.ConfiguredRate != 25 {
+		t.Errorf("rates = %.1f/%.1f, want 12.5/25", out.Tmdb.RateLimit, out.Tmdb.ConfiguredRate)
+	}
 }
