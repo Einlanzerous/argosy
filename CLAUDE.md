@@ -14,8 +14,22 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
 - ALWAYS read graphify-out/GRAPH_REPORT.md before reading any source files, running grep/glob searches, or answering codebase questions. The graph is your primary map of the codebase.
 - IF graphify-out/wiki/index.md EXISTS, navigate it instead of reading raw files
 - For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-- If `graphify` is not installed: `uv tool install graphifyy`
+- After modifying code, run `graphify update .` to keep *your local* graph current (AST-only, no API cost).
+- **Never commit `graphify-out/` from a feature branch.** The directory is owned by
+  `.github/workflows/graphify.yml`, which regenerates and commits it on every push
+  to `main`. A branch that also commits it conflicts as soon as anything else
+  merges — and at this repo's churn, something else always does (ARGY-185). Run
+  the update locally for your own navigation; let CI publish it. Never resolve
+  `graphify-out/` by hand — take main's copy wholesale:
+  `git checkout origin/main -- graphify-out/` works whether the path is merely
+  dirty or actually conflicted, which `git checkout --` alone does not.
+- If `graphify` is not installed: `uv tool install graphifyy==0.9.36 --with anthropic`
+  — the whole command, matching `graphify.yml`. The version keeps an older local
+  graphify from rewriting the cache under its own version directory and deleting
+  CI's (a 300-file deletion in your diff, silently downgrading the committed
+  cache); `--with anthropic` is needed because graphifyy doesn't declare it but
+  the `claude` backend imports it at runtime, so the regenerate command below
+  bails without it.
 - To regenerate the report locally: `graphify extract .` then `graphify cluster-only . --no-viz --backend=claude` (0.9.x split the report out of extract; the explicit backend keeps community naming from being skipped — if you still see "Community N" placeholders, run `graphify label . --backend=claude`). Semantic extraction needs `ANTHROPIC_API_KEY`; CI refreshes the committed report + cache on every push to main.
 
 ## Layout
