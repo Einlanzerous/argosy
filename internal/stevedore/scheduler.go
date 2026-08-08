@@ -20,6 +20,21 @@ type LibraryScan struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// TMDBStats is the metadata provider's traffic for the current (or last) sweep:
+// counters are deltas against a baseline taken when the sweep started, so they
+// answer "what has this run cost" rather than "what has the process ever done".
+// Rates are levels, not deltas — RateLimit below ConfiguredRate is the provider
+// actively throttling us, and is the first thing to look at when an ingest is
+// slower than expected (ARGY-170).
+type TMDBStats struct {
+	Requests       int64   `json:"requests"`
+	Retries        int64   `json:"retries"`
+	Throttled      int64   `json:"throttled"`
+	Exhausted      int64   `json:"exhausted"`
+	RateLimit      float64 `json:"rateLimit"`
+	ConfiguredRate float64 `json:"configuredRate"`
+}
+
 // Status is an observable snapshot of the scheduler — "the state of the
 // Manifest": whether a sweep is running and the last cycle's per-library counts.
 type Status struct {
@@ -27,6 +42,9 @@ type Status struct {
 	StartedAt  *time.Time    `json:"startedAt,omitempty"`
 	FinishedAt *time.Time    `json:"finishedAt,omitempty"`
 	Libraries  []LibraryScan `json:"libraries"`
+	// TMDB is nil when no provider is configured, or when the configured one
+	// doesn't track request stats (any non-TMDB provider, and test stubs).
+	TMDB *TMDBStats `json:"tmdb,omitempty"`
 }
 
 // Scheduler keeps the Manifest current by periodically re-running the
@@ -41,15 +59,19 @@ type Scheduler struct {
 	interval   time.Duration     // 0 disables the periodic sweep (on-demand still works)
 
 	trigger chan struct{}
+	// statser is provider when it tracks request stats, else nil. Resolved once
+	// here rather than per-Snapshot so the type assertion isn't on the read path.
+	statser metadata.RequestStatser
 
-	mu     sync.Mutex
-	status Status
+	mu       sync.Mutex
+	status   Status
+	baseline metadata.RequestStats // provider counters as of the current sweep's start
 }
 
 // NewScheduler builds a Scheduler. interval <= 0 disables periodic sweeps but
 // leaves on-demand Trigger working. provider may be nil to skip metadata matching.
 func NewScheduler(pool *pgxpool.Pool, logger *slog.Logger, artworkDir string, provider metadata.Provider, interval time.Duration) *Scheduler {
-	return &Scheduler{
+	s := &Scheduler{
 		pool:       pool,
 		logger:     logger,
 		artworkDir: artworkDir,
@@ -57,6 +79,14 @@ func NewScheduler(pool *pgxpool.Pool, logger *slog.Logger, artworkDir string, pr
 		interval:   interval,
 		trigger:    make(chan struct{}, 1),
 	}
+	// provider is an interface holding a possibly-nil concrete value; assert
+	// only when it's actually set, or the assertion succeeds on a typed nil.
+	if provider != nil {
+		if st, ok := provider.(metadata.RequestStatser); ok {
+			s.statser = st
+		}
+	}
+	return s
 }
 
 // Run drives the scheduler until ctx is cancelled. When a periodic interval is
@@ -96,14 +126,35 @@ func (s *Scheduler) Trigger() bool {
 	}
 }
 
-// Snapshot returns the current scheduler status.
+// Snapshot returns the current scheduler status. Provider stats are computed
+// here rather than stored, so polling mid-sweep shows a run's retry and 429
+// counts climbing live — the point of the endpoint during a bulk ingest, where
+// waiting for the sweep to finish to learn it was being throttled is useless.
 func (s *Scheduler) Snapshot() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Copy the slice so callers can't mutate our state.
 	out := s.status
 	out.Libraries = append([]LibraryScan(nil), s.status.Libraries...)
+	out.TMDB = s.tmdbStatsLocked()
 	return out
+}
+
+// tmdbStatsLocked returns provider traffic for the current sweep as a delta
+// against the baseline captured at its start. Caller holds s.mu.
+func (s *Scheduler) tmdbStatsLocked() *TMDBStats {
+	if s.statser == nil {
+		return nil
+	}
+	cur := s.statser.RequestStats()
+	return &TMDBStats{
+		Requests:       cur.Requests - s.baseline.Requests,
+		Retries:        cur.Retries - s.baseline.Retries,
+		Throttled:      cur.Throttled - s.baseline.Throttled,
+		Exhausted:      cur.Exhausted - s.baseline.Exhausted,
+		RateLimit:      cur.RateLimit,
+		ConfiguredRate: cur.ConfiguredRate,
+	}
 }
 
 // scanOnce runs one full sweep across every library. Per-library failures are
@@ -112,6 +163,9 @@ func (s *Scheduler) scanOnce(ctx context.Context) Status {
 	start := time.Now()
 	s.mu.Lock()
 	s.status = Status{Running: true, StartedAt: &start, Libraries: []LibraryScan{}}
+	if s.statser != nil {
+		s.baseline = s.statser.RequestStats()
+	}
 	s.mu.Unlock()
 
 	libs, err := s.libraries(ctx)
@@ -149,7 +203,13 @@ func (s *Scheduler) scanOnce(ctx context.Context) Status {
 	s.mu.Lock()
 	s.status = Status{Running: false, StartedAt: &start, FinishedAt: &end, Libraries: results}
 	snapshot := s.status
+	snapshot.TMDB = s.tmdbStatsLocked()
 	s.mu.Unlock()
+	if t := snapshot.TMDB; t != nil && t.Requests > 0 {
+		s.logger.Info("scan sweep: tmdb traffic",
+			"requests", t.Requests, "retries", t.Retries, "throttled", t.Throttled,
+			"exhausted", t.Exhausted, "rate", t.RateLimit, "configured", t.ConfiguredRate)
+	}
 	return snapshot
 }
 

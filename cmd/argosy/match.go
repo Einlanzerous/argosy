@@ -91,4 +91,13 @@ func runMatch(cfg config.Config, logger *slog.Logger, args []string) {
 		}
 		logger.Info("match complete", "library", l.name, "movies", res.Movies, "series", res.Series, "episodes", res.Episodes, "credits", res.Credits, "misses", res.Misses)
 	}
+
+	// A bulk backfill is the run most likely to be throttled and the one with no
+	// status endpoint to watch, so it reports its own TMDB accounting. A rate
+	// below the configured one means adaptive throttling backed off; a non-zero
+	// exhausted count means some titles have no metadata and want a re-run.
+	st := provider.RequestStats()
+	logger.Info("tmdb traffic", "requests", st.Requests, "retries", st.Retries,
+		"throttled", st.Throttled, "exhausted", st.Exhausted,
+		"rate", st.RateLimit, "configured", st.ConfiguredRate)
 }

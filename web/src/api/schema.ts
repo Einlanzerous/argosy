@@ -1375,6 +1375,41 @@ export interface components {
             /** Format: date-time */
             finishedAt?: string;
             libraries: components["schemas"]["ScanLibraryResult"][];
+            /** @description Metadata-provider traffic for the current or last sweep. Absent when no provider is configured, or the provider tracks no stats. */
+            tmdb?: components["schemas"]["ScanTMDBStats"];
+        };
+        /** @description TMDB request accounting for one scan sweep. Counters are deltas for the sweep and climb live while it runs; rates are current levels. */
+        ScanTMDBStats: {
+            /**
+             * Format: int64
+             * @description HTTP round-trips sent this sweep, retries included.
+             */
+            requests: number;
+            /**
+             * Format: int64
+             * @description Round-trips retried after a 429, 5xx, or transport error.
+             */
+            retries: number;
+            /**
+             * Format: int64
+             * @description The 429-only subset of retries — the provider asking for a slower rate.
+             */
+            throttled: number;
+            /**
+             * Format: int64
+             * @description Requests that used every retry and failed permanently. Each one is a title that went without metadata; non-zero warrants a re-match.
+             */
+            exhausted: number;
+            /**
+             * Format: double
+             * @description The limiter's current ceiling in req/s. Below configuredRate means adaptive throttling has backed off after sustained 429s; it recovers on its own as clean responses come back.
+             */
+            rateLimit: number;
+            /**
+             * Format: double
+             * @description The operator-configured ceiling in req/s (ARGOSY_TMDB_RATE).
+             */
+            configuredRate: number;
         };
         PlaybackInfo: {
             directPlay: boolean;

@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -45,6 +47,34 @@ const (
 	// no Retry-After; tmdbMaxBackoff caps its growth.
 	tmdbBaseBackoff = 500 * time.Millisecond
 	tmdbMaxBackoff  = 30 * time.Second
+
+	// Adaptive throttling (ARGY-170). Retrying a 429 recovers the request but
+	// pays for it in wall time, so a client that keeps offering a rate the
+	// server is refusing gets slower, not faster: ARGY-141 measured 40 req/s
+	// finishing a fixed run *behind* 25 req/s, having eaten more 429s. These
+	// knobs let the limiter find the rate the server will actually take.
+	//
+	// tmdbDecreaseFactor is the multiplicative cut applied on a 429;
+	// tmdbFloorDivisor bounds the cut relative to the configured rate so a bad
+	// minute can't park the ingest at a crawl.
+	tmdbDecreaseFactor = 0.5
+	tmdbFloorDivisor   = 8
+	// tmdbDecreaseCooldown collapses a burst of 429s into one cut. Without it,
+	// N in-flight requests failing together would multiply the cut N times and
+	// slam straight to the floor.
+	tmdbDecreaseCooldown = 2 * time.Second
+	// Recovery grows the rate by tmdbRecoverFraction of *the current rate* every
+	// tmdbRecoverInterval of clean responses, so the client probes for headroom
+	// instead of waiting for a restart to undo a cut.
+	//
+	// Relative to the current rate, not the configured one: the configured rate
+	// is exactly the number that may be wrong. A step sized against a ceiling
+	// that is 10x too high re-adds the whole overshoot in one move and the rate
+	// never settles — measured, that alone left it at 450 req/s against a server
+	// accepting 200. Scaling to the current rate makes the step small near
+	// whatever the real operating point turns out to be.
+	tmdbRecoverFraction = 0.1
+	tmdbRecoverInterval = 5 * time.Second
 )
 
 // TMDBOptions tunes the shared client beyond credentials; zero values keep
@@ -81,6 +111,24 @@ type TMDB struct {
 	retries     int
 	baseBackoff time.Duration
 	maxBackoff  time.Duration
+
+	// Adaptive throttling state (ARGY-170). configuredRate is the ceiling the
+	// operator asked for and is never exceeded; curRate is what the limiter is
+	// offering right now, which 429s pull down and clean responses push back up.
+	adaptMu        sync.Mutex
+	configuredRate float64
+	curRate        float64
+	rateFloor      float64
+	lastRateChange time.Time
+	// Adaptive timings, private so tests can shrink them like the backoffs.
+	decreaseCooldown time.Duration
+	recoverInterval  time.Duration
+	// Cumulative counters, surfaced through RequestStats for the scan status.
+	// Monotonic by design — per-run figures come from snapshotting a baseline.
+	nRequests  atomic.Int64
+	nRetries   atomic.Int64
+	nThrottled atomic.Int64
+	nExhausted atomic.Int64
 }
 
 // NewTMDB returns a TMDB provider. Either credential may be empty as long as
@@ -111,12 +159,74 @@ func NewTMDB(readToken, apiKey string, opts TMDBOptions) *TMDB {
 		imageHTTP: &http.Client{Timeout: 30 * time.Second},
 		// Burst of one second's tokens: brief spikes are fine, the sustained
 		// rate is what TMDB actually polices.
-		limiter:     rate.NewLimiter(rate.Limit(rps), int(max(rps, 1))),
-		logger:      logger,
-		retries:     tmdbMaxRetries,
-		baseBackoff: tmdbBaseBackoff,
-		maxBackoff:  tmdbMaxBackoff,
+		limiter:          rate.NewLimiter(rate.Limit(rps), int(max(rps, 1))),
+		logger:           logger,
+		retries:          tmdbMaxRetries,
+		baseBackoff:      tmdbBaseBackoff,
+		maxBackoff:       tmdbMaxBackoff,
+		configuredRate:   rps,
+		curRate:          rps,
+		rateFloor:        max(rps/tmdbFloorDivisor, 1),
+		decreaseCooldown: tmdbDecreaseCooldown,
+		recoverInterval:  tmdbRecoverInterval,
 	}
+}
+
+// RequestStats reports cumulative HTTP counters and the limiter's live ceiling.
+// Safe to call from any goroutine while a match run is in flight.
+func (t *TMDB) RequestStats() RequestStats {
+	t.adaptMu.Lock()
+	cur := t.curRate
+	t.adaptMu.Unlock()
+	return RequestStats{
+		Requests:       t.nRequests.Load(),
+		Retries:        t.nRetries.Load(),
+		Throttled:      t.nThrottled.Load(),
+		Exhausted:      t.nExhausted.Load(),
+		RateLimit:      cur,
+		ConfiguredRate: t.configuredRate,
+	}
+}
+
+// throttleDown cuts the offered rate after a 429. Cuts inside the cooldown are
+// dropped so a burst of simultaneous 429s costs one halving, not one each.
+func (t *TMDB) throttleDown(now time.Time) {
+	t.adaptMu.Lock()
+	defer t.adaptMu.Unlock()
+	if t.curRate <= t.rateFloor || now.Sub(t.lastRateChange) < t.decreaseCooldown {
+		return
+	}
+	t.curRate = max(t.curRate*tmdbDecreaseFactor, t.rateFloor)
+	t.lastRateChange = now
+	t.applyRateLocked()
+	t.logger.Warn("tmdb throttling: reducing request rate",
+		"rate", t.curRate, "configured", t.configuredRate)
+}
+
+// recover nudges the offered rate back toward the configured ceiling after a
+// clean response. Additive, so the client re-probes for headroom gradually
+// rather than stepping straight back into the rate that drew the 429.
+func (t *TMDB) recover(now time.Time) {
+	t.adaptMu.Lock()
+	defer t.adaptMu.Unlock()
+	if t.curRate >= t.configuredRate || now.Sub(t.lastRateChange) < t.recoverInterval {
+		return
+	}
+	t.curRate = min(t.curRate*(1+tmdbRecoverFraction), t.configuredRate)
+	t.lastRateChange = now
+	t.applyRateLocked()
+	if t.curRate >= t.configuredRate {
+		t.logger.Info("tmdb throttling: recovered to configured rate", "rate", t.curRate)
+	}
+}
+
+// applyRateLocked pushes curRate onto the limiter. Burst tracks the rate:
+// leaving a burst sized for the configured ceiling would let a parallel caller
+// fire a full second's worth of the *old* rate straight through a fresh cut.
+// Caller holds adaptMu.
+func (t *TMDB) applyRateLocked() {
+	t.limiter.SetLimit(rate.Limit(t.curRate))
+	t.limiter.SetBurst(int(max(t.curRate, 1)))
 }
 
 // Configured reports whether at least one credential is present.
@@ -321,6 +431,7 @@ func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, 
 		if err := t.limiter.Wait(ctx); err != nil {
 			return nil, err
 		}
+		t.nRequests.Add(1)
 		resp, err := client.Do(req.Clone(ctx))
 		if err != nil {
 			if ctx.Err() != nil {
@@ -328,6 +439,9 @@ func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, 
 			}
 			lastErr = err
 			delay = t.backoffDelay(attempt)
+			if attempt < t.retries {
+				t.nRetries.Add(1)
+			}
 			t.logger.Warn("tmdb request failed, retrying", "url", req.URL.Path, "attempt", attempt+1, "delay", delay, "err", err)
 			continue
 		}
@@ -344,11 +458,23 @@ func (t *TMDB) doPaced(client *http.Client, req *http.Request) (*http.Response, 
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			if attempt < t.retries {
+				t.nRetries.Add(1)
+			}
+			// Only a 429 is the server asking for a slower rate. A 5xx is the
+			// server being broken, and cutting the rate for it would throttle
+			// the ingest over an outage it can't influence.
+			if resp.StatusCode == http.StatusTooManyRequests {
+				t.nThrottled.Add(1)
+				t.throttleDown(time.Now())
+			}
 			t.logger.Warn("tmdb request throttled/failed, retrying", "url", req.URL.Path, "status", resp.StatusCode, "attempt", attempt+1, "delay", delay)
 			continue
 		}
+		t.recover(time.Now())
 		return resp, nil
 	}
+	t.nExhausted.Add(1)
 	return nil, fmt.Errorf("giving up after %d attempts: %w", t.retries+1, lastErr)
 }
 
