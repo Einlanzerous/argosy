@@ -24,7 +24,14 @@ jobs:
         # `claude` semantic backend imports it at runtime — inject it into
         # the tool environment so `graphify extract` doesn't bail with
         # "requires the anthropic package".
-        run: uv tool install graphifyy --with anthropic
+        #
+        # Pinned (ARGY-185). graphify writes its AST cache under a version
+        # directory, so an unpinned install lets CI and a developer's local
+        # tool disagree about which one is canonical: running `graphify update`
+        # with an older local version rewrites the cache under its own version
+        # and deletes CI's, which reads as a 300-file deletion in an unrelated
+        # PR. Keep this in step with the version named in CLAUDE.md.
+        run: uv tool install graphifyy==0.9.36 --with anthropic
 
       - name: Build knowledge graph
         env:
