@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.23.0](https://github.com/Einlanzerous/argosy/compare/v0.22.3...v0.23.0) (2026-08-08)
+
+
+### Features
+
+* **metadata:** adaptive TMDB throttling + per-sweep retry visibility (ARGY-170) ([#194](https://github.com/Einlanzerous/argosy/issues/194)) ([1983ccb](https://github.com/Einlanzerous/argosy/commit/1983ccb0b92359260bcc92804430707eae34d491))
+
+
+### Bug Fixes
+
+* **ci:** stop branches committing CI-owned graphify-out, pin graphify (ARGY-185) ([#195](https://github.com/Einlanzerous/argosy/issues/195)) ([d6bd043](https://github.com/Einlanzerous/argosy/commit/d6bd04321a4cd2b58a9c276a7c313dd45558f429))
+
 ## [0.22.3](https://github.com/Einlanzerous/argosy/compare/v0.22.2...v0.22.3) (2026-08-08)
 
 
