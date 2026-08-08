@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -335,6 +338,53 @@ func TestTMDBServerErrorDoesNotThrottle(t *testing.T) {
 	}
 }
 
+// The artwork CDN shares the token bucket (ARGY-141) but must not steer it:
+// image.tmdb.org and api.themoviedb.org are separate services with separate
+// rate policies, and for an episode-bearing library artwork is most of the
+// traffic — so letting it drive would mean the CDN usually deciding how fast we
+// may talk to the API, on a signal the API never sent.
+func TestTMDBArtworkDoesNotSteerTheRate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/search") {
+			_, _ = w.Write([]byte(`{"results":[{"id":1,"title":"Ok","poster_path":"/p.jpg"}]}`))
+			return
+		}
+		w.WriteHeader(http.StatusTooManyRequests) // every artwork fetch is refused
+	}))
+	defer srv.Close()
+
+	const configured = 100.0
+	tm := newAdaptiveTestTMDB(srv, configured)
+
+	dir := t.TempDir()
+	for i := 0; i < 4; i++ {
+		m, err := tm.SearchMovie(context.Background(), "Ok", 0)
+		if err != nil {
+			t.Fatalf("search %d failed: %v", i, err)
+		}
+		// Expected to fail — the stub refuses all artwork.
+		_ = tm.DownloadImage(context.Background(), m.PosterURL, filepath.Join(dir, "p", strconv.Itoa(i)+".jpg"))
+		time.Sleep(6 * time.Millisecond) // clear any decrease cooldown
+	}
+
+	st := tm.RequestStats()
+	if st.RateLimit != configured {
+		t.Errorf("artwork 429s moved the shared rate to %.1f, want it left at %.1f", st.RateLimit, configured)
+	}
+	// The counters must land on the right side of the split, or an operator
+	// reads lost stills as titles without metadata.
+	if st.Throttled != 0 || st.Exhausted != 0 {
+		t.Errorf("artwork failures charged to the API: throttled=%d exhausted=%d", st.Throttled, st.Exhausted)
+	}
+	if st.ArtworkThrottled == 0 || st.ArtworkExhausted != 4 {
+		t.Errorf("artwork counters = throttled %d / exhausted %d, want non-zero and 4",
+			st.ArtworkThrottled, st.ArtworkExhausted)
+	}
+	if st.Requests != 4 {
+		t.Errorf("API requests = %d, want the 4 searches only", st.Requests)
+	}
+}
+
 // The counters are what makes a slow ingest diagnosable from the scan status
 // instead of by grepping logs, so pin what each one means.
 func TestTMDBRequestStatsCounters(t *testing.T) {
@@ -400,6 +450,16 @@ func TestTMDBRequestStatsCountsExhaustion(t *testing.T) {
 	}
 	if st.Retries != int64(tmdbMaxRetries) {
 		t.Errorf("Retries = %d, want %d", st.Retries, tmdbMaxRetries)
+	}
+	// Throttled is NOT a subset of Retries, and the contract says so: the final
+	// attempt drew a 429 but was never retried. An operator computing
+	// "5xx retries = retries - throttled" on the old wording would get -1.
+	if want := int64(tmdbMaxRetries + 1); st.Throttled != want {
+		t.Errorf("Throttled = %d, want %d — every attempt drew a 429", st.Throttled, want)
+	}
+	if st.Throttled <= st.Retries {
+		t.Errorf("throttled (%d) should exceed retries (%d) when the last attempt 429s",
+			st.Throttled, st.Retries)
 	}
 }
 

@@ -17,23 +17,39 @@ class ScanTMDBStats {
     required this.retries,
     required this.throttled,
     required this.exhausted,
+    required this.artworkRequests,
+    required this.artworkRetries,
+    required this.artworkThrottled,
+    required this.artworkExhausted,
     required this.rateLimit,
     required this.configuredRate,
   });
 
-  /// HTTP round-trips sent this sweep, retries included.
+  /// API round-trips sent this sweep, retries included.
   int requests;
 
-  /// Round-trips retried after a 429, 5xx, or transport error.
+  /// API round-trips retried after a 429, 5xx, or transport error.
   int retries;
 
-  /// The 429-only subset of retries — the provider asking for a slower rate.
+  /// 429 responses from the API — it asking for a slower rate. Not a subset of retries: a request's final attempt is counted here but was never retried, so this can exceed retries.
   int throttled;
 
-  /// Requests that used every retry and failed permanently. Each one is a title that went without metadata; non-zero warrants a re-match.
+  /// API requests that used every retry and failed permanently. Each one is a title that went without metadata; non-zero warrants a re-match.
   int exhausted;
 
-  /// The limiter's current ceiling in req/s. Below configuredRate means adaptive throttling has backed off after sustained 429s; it recovers on its own as clean responses come back.
+  /// Image-CDN round-trips sent this sweep, retries included.
+  int artworkRequests;
+
+  /// Image-CDN round-trips retried after a 429, 5xx, or transport error.
+  int artworkRetries;
+
+  /// 429 responses from the image CDN. Reported but deliberately not acted on — the CDN does not steer the shared rate limit, which the API owns.
+  int artworkThrottled;
+
+  /// Artwork downloads that failed permanently. These are missing posters, backdrops or episode stills — the title itself still has its metadata.
+  int artworkExhausted;
+
+  /// The limiter's current ceiling in req/s, shared by both surfaces but steered only by the API. Below configuredRate means adaptive throttling has backed off after sustained 429s from the API; it recovers on its own as clean responses come back.
   double rateLimit;
 
   /// The operator-configured ceiling in req/s (ARGOSY_TMDB_RATE).
@@ -45,6 +61,10 @@ class ScanTMDBStats {
     other.retries == retries &&
     other.throttled == throttled &&
     other.exhausted == exhausted &&
+    other.artworkRequests == artworkRequests &&
+    other.artworkRetries == artworkRetries &&
+    other.artworkThrottled == artworkThrottled &&
+    other.artworkExhausted == artworkExhausted &&
     other.rateLimit == rateLimit &&
     other.configuredRate == configuredRate;
 
@@ -55,11 +75,15 @@ class ScanTMDBStats {
     (retries.hashCode) +
     (throttled.hashCode) +
     (exhausted.hashCode) +
+    (artworkRequests.hashCode) +
+    (artworkRetries.hashCode) +
+    (artworkThrottled.hashCode) +
+    (artworkExhausted.hashCode) +
     (rateLimit.hashCode) +
     (configuredRate.hashCode);
 
   @override
-  String toString() => 'ScanTMDBStats[requests=$requests, retries=$retries, throttled=$throttled, exhausted=$exhausted, rateLimit=$rateLimit, configuredRate=$configuredRate]';
+  String toString() => 'ScanTMDBStats[requests=$requests, retries=$retries, throttled=$throttled, exhausted=$exhausted, artworkRequests=$artworkRequests, artworkRetries=$artworkRetries, artworkThrottled=$artworkThrottled, artworkExhausted=$artworkExhausted, rateLimit=$rateLimit, configuredRate=$configuredRate]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -67,6 +91,10 @@ class ScanTMDBStats {
       json[r'retries'] = this.retries;
       json[r'throttled'] = this.throttled;
       json[r'exhausted'] = this.exhausted;
+      json[r'artworkRequests'] = this.artworkRequests;
+      json[r'artworkRetries'] = this.artworkRetries;
+      json[r'artworkThrottled'] = this.artworkThrottled;
+      json[r'artworkExhausted'] = this.artworkExhausted;
       json[r'rateLimit'] = this.rateLimit;
       json[r'configuredRate'] = this.configuredRate;
     return json;
@@ -91,6 +119,14 @@ class ScanTMDBStats {
         assert(json[r'throttled'] != null, 'Required key "ScanTMDBStats[throttled]" has a null value in JSON.');
         assert(json.containsKey(r'exhausted'), 'Required key "ScanTMDBStats[exhausted]" is missing from JSON.');
         assert(json[r'exhausted'] != null, 'Required key "ScanTMDBStats[exhausted]" has a null value in JSON.');
+        assert(json.containsKey(r'artworkRequests'), 'Required key "ScanTMDBStats[artworkRequests]" is missing from JSON.');
+        assert(json[r'artworkRequests'] != null, 'Required key "ScanTMDBStats[artworkRequests]" has a null value in JSON.');
+        assert(json.containsKey(r'artworkRetries'), 'Required key "ScanTMDBStats[artworkRetries]" is missing from JSON.');
+        assert(json[r'artworkRetries'] != null, 'Required key "ScanTMDBStats[artworkRetries]" has a null value in JSON.');
+        assert(json.containsKey(r'artworkThrottled'), 'Required key "ScanTMDBStats[artworkThrottled]" is missing from JSON.');
+        assert(json[r'artworkThrottled'] != null, 'Required key "ScanTMDBStats[artworkThrottled]" has a null value in JSON.');
+        assert(json.containsKey(r'artworkExhausted'), 'Required key "ScanTMDBStats[artworkExhausted]" is missing from JSON.');
+        assert(json[r'artworkExhausted'] != null, 'Required key "ScanTMDBStats[artworkExhausted]" has a null value in JSON.');
         assert(json.containsKey(r'rateLimit'), 'Required key "ScanTMDBStats[rateLimit]" is missing from JSON.');
         assert(json[r'rateLimit'] != null, 'Required key "ScanTMDBStats[rateLimit]" has a null value in JSON.');
         assert(json.containsKey(r'configuredRate'), 'Required key "ScanTMDBStats[configuredRate]" is missing from JSON.');
@@ -103,6 +139,10 @@ class ScanTMDBStats {
         retries: mapValueOfType<int>(json, r'retries')!,
         throttled: mapValueOfType<int>(json, r'throttled')!,
         exhausted: mapValueOfType<int>(json, r'exhausted')!,
+        artworkRequests: mapValueOfType<int>(json, r'artworkRequests')!,
+        artworkRetries: mapValueOfType<int>(json, r'artworkRetries')!,
+        artworkThrottled: mapValueOfType<int>(json, r'artworkThrottled')!,
+        artworkExhausted: mapValueOfType<int>(json, r'artworkExhausted')!,
         rateLimit: mapValueOfType<double>(json, r'rateLimit')!,
         configuredRate: mapValueOfType<double>(json, r'configuredRate')!,
       );
@@ -156,6 +196,10 @@ class ScanTMDBStats {
     'retries',
     'throttled',
     'exhausted',
+    'artworkRequests',
+    'artworkRetries',
+    'artworkThrottled',
+    'artworkExhausted',
     'rateLimit',
     'configuredRate',
   };

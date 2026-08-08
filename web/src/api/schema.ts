@@ -1378,31 +1378,54 @@ export interface components {
             /** @description Metadata-provider traffic for the current or last sweep. Absent when no provider is configured, or the provider tracks no stats. */
             tmdb?: components["schemas"]["ScanTMDBStats"];
         };
-        /** @description TMDB request accounting for one scan sweep. Counters are deltas for the sweep and climb live while it runs; rates are current levels. */
+        /**
+         * @description TMDB request accounting for one scan sweep. Counters are deltas for the sweep and climb live while it runs; rates are current levels.
+         *     The unprefixed counters cover the metadata API (api.themoviedb.org); the artwork* ones cover the image CDN (image.tmdb.org). They are reported separately because they are different services with different rate policies, and artwork is the majority of a match run's requests — a poster and a backdrop per title, plus a still per episode.
+         */
         ScanTMDBStats: {
             /**
              * Format: int64
-             * @description HTTP round-trips sent this sweep, retries included.
+             * @description API round-trips sent this sweep, retries included.
              */
             requests: number;
             /**
              * Format: int64
-             * @description Round-trips retried after a 429, 5xx, or transport error.
+             * @description API round-trips retried after a 429, 5xx, or transport error.
              */
             retries: number;
             /**
              * Format: int64
-             * @description The 429-only subset of retries — the provider asking for a slower rate.
+             * @description 429 responses from the API — it asking for a slower rate. Not a subset of retries: a request's final attempt is counted here but was never retried, so this can exceed retries.
              */
             throttled: number;
             /**
              * Format: int64
-             * @description Requests that used every retry and failed permanently. Each one is a title that went without metadata; non-zero warrants a re-match.
+             * @description API requests that used every retry and failed permanently. Each one is a title that went without metadata; non-zero warrants a re-match.
              */
             exhausted: number;
             /**
+             * Format: int64
+             * @description Image-CDN round-trips sent this sweep, retries included.
+             */
+            artworkRequests: number;
+            /**
+             * Format: int64
+             * @description Image-CDN round-trips retried after a 429, 5xx, or transport error.
+             */
+            artworkRetries: number;
+            /**
+             * Format: int64
+             * @description 429 responses from the image CDN. Reported but deliberately not acted on — the CDN does not steer the shared rate limit, which the API owns.
+             */
+            artworkThrottled: number;
+            /**
+             * Format: int64
+             * @description Artwork downloads that failed permanently. These are missing posters, backdrops or episode stills — the title itself still has its metadata.
+             */
+            artworkExhausted: number;
+            /**
              * Format: double
-             * @description The limiter's current ceiling in req/s. Below configuredRate means adaptive throttling has backed off after sustained 429s; it recovers on its own as clean responses come back.
+             * @description The limiter's current ceiling in req/s, shared by both surfaces but steered only by the API. Below configuredRate means adaptive throttling has backed off after sustained 429s from the API; it recovers on its own as clean responses come back.
              */
             rateLimit: number;
             /**

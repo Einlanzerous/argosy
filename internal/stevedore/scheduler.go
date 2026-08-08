@@ -27,12 +27,16 @@ type LibraryScan struct {
 // actively throttling us, and is the first thing to look at when an ingest is
 // slower than expected (ARGY-170).
 type TMDBStats struct {
-	Requests       int64   `json:"requests"`
-	Retries        int64   `json:"retries"`
-	Throttled      int64   `json:"throttled"`
-	Exhausted      int64   `json:"exhausted"`
-	RateLimit      float64 `json:"rateLimit"`
-	ConfiguredRate float64 `json:"configuredRate"`
+	Requests         int64   `json:"requests"`
+	Retries          int64   `json:"retries"`
+	Throttled        int64   `json:"throttled"`
+	Exhausted        int64   `json:"exhausted"`
+	ArtworkRequests  int64   `json:"artworkRequests"`
+	ArtworkRetries   int64   `json:"artworkRetries"`
+	ArtworkThrottled int64   `json:"artworkThrottled"`
+	ArtworkExhausted int64   `json:"artworkExhausted"`
+	RateLimit        float64 `json:"rateLimit"`
+	ConfiguredRate   float64 `json:"configuredRate"`
 }
 
 // Status is an observable snapshot of the scheduler — "the state of the
@@ -79,12 +83,13 @@ func NewScheduler(pool *pgxpool.Pool, logger *slog.Logger, artworkDir string, pr
 		interval:   interval,
 		trigger:    make(chan struct{}, 1),
 	}
-	// provider is an interface holding a possibly-nil concrete value; assert
-	// only when it's actually set, or the assertion succeeds on a typed nil.
-	if provider != nil {
-		if st, ok := provider.(metadata.RequestStatser); ok {
-			s.statser = st
-		}
+	// A nil interface fails this assertion on its own, so no nil guard is
+	// needed. (One wouldn't help anyway: an interface holding a typed nil is
+	// itself non-nil, so `provider != nil` passes and the assertion still
+	// succeeds — callers must not hand us one. `main.go` doesn't: it leaves
+	// the interface unset unless the client is Configured().)
+	if st, ok := provider.(metadata.RequestStatser); ok {
+		s.statser = st
 	}
 	return s
 }
@@ -148,12 +153,16 @@ func (s *Scheduler) tmdbStatsLocked() *TMDBStats {
 	}
 	cur := s.statser.RequestStats()
 	return &TMDBStats{
-		Requests:       cur.Requests - s.baseline.Requests,
-		Retries:        cur.Retries - s.baseline.Retries,
-		Throttled:      cur.Throttled - s.baseline.Throttled,
-		Exhausted:      cur.Exhausted - s.baseline.Exhausted,
-		RateLimit:      cur.RateLimit,
-		ConfiguredRate: cur.ConfiguredRate,
+		Requests:         cur.Requests - s.baseline.Requests,
+		Retries:          cur.Retries - s.baseline.Retries,
+		Throttled:        cur.Throttled - s.baseline.Throttled,
+		Exhausted:        cur.Exhausted - s.baseline.Exhausted,
+		ArtworkRequests:  cur.ArtworkRequests - s.baseline.ArtworkRequests,
+		ArtworkRetries:   cur.ArtworkRetries - s.baseline.ArtworkRetries,
+		ArtworkThrottled: cur.ArtworkThrottled - s.baseline.ArtworkThrottled,
+		ArtworkExhausted: cur.ArtworkExhausted - s.baseline.ArtworkExhausted,
+		RateLimit:        cur.RateLimit,
+		ConfiguredRate:   cur.ConfiguredRate,
 	}
 }
 

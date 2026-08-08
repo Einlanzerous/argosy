@@ -66,6 +66,7 @@ func TestSnapshotOmitsTMDBStatsWithoutAStatser(t *testing.T) {
 func TestSnapshotReportsPerSweepDelta(t *testing.T) {
 	p := &statsProvider{stats: metadata.RequestStats{
 		Requests: 1000, Retries: 200, Throttled: 150, Exhausted: 7,
+		ArtworkRequests: 5000, ArtworkRetries: 400, ArtworkThrottled: 380, ArtworkExhausted: 90,
 		RateLimit: 25, ConfiguredRate: 25,
 	}}
 	s := testScheduler(p)
@@ -74,6 +75,7 @@ func TestSnapshotReportsPerSweepDelta(t *testing.T) {
 	s.baseline = p.stats
 	p.stats = metadata.RequestStats{
 		Requests: 1030, Retries: 205, Throttled: 152, Exhausted: 8,
+		ArtworkRequests: 5400, ArtworkRetries: 410, ArtworkThrottled: 390, ArtworkExhausted: 94,
 		RateLimit: 12.5, ConfiguredRate: 25,
 	}
 
@@ -82,7 +84,13 @@ func TestSnapshotReportsPerSweepDelta(t *testing.T) {
 		t.Fatal("no stats on the snapshot")
 	}
 	if got.Requests != 30 || got.Retries != 5 || got.Throttled != 2 || got.Exhausted != 1 {
-		t.Errorf("deltas = %+v, want requests 30, retries 5, throttled 2, exhausted 1", got)
+		t.Errorf("API deltas = %+v, want requests 30, retries 5, throttled 2, exhausted 1", got)
+	}
+	// Artwork is counted separately and must delta separately — folding it into
+	// the API numbers is what made `exhausted` mean "titles without metadata"
+	// when it also counted lost episode stills.
+	if got.ArtworkRequests != 400 || got.ArtworkRetries != 10 || got.ArtworkThrottled != 10 || got.ArtworkExhausted != 4 {
+		t.Errorf("artwork deltas = %+v, want requests 400, retries 10, throttled 10, exhausted 4", got)
 	}
 	// Rates are levels, not deltas — subtracting them would be meaningless.
 	if got.RateLimit != 12.5 || got.ConfiguredRate != 25 {

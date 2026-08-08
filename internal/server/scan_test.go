@@ -82,6 +82,7 @@ func TestToAPIScanStatusCarriesTMDBStats(t *testing.T) {
 		Libraries: []stevedore.LibraryScan{},
 		TMDB: &stevedore.TMDBStats{
 			Requests: 1200, Retries: 340, Throttled: 310, Exhausted: 4,
+			ArtworkRequests: 9000, ArtworkRetries: 120, ArtworkThrottled: 95, ArtworkExhausted: 400,
 			RateLimit: 12.5, ConfiguredRate: 25,
 		},
 	})
@@ -89,7 +90,13 @@ func TestToAPIScanStatusCarriesTMDBStats(t *testing.T) {
 		t.Fatal("tmdb stats dropped by the mapping")
 	}
 	if out.Tmdb.Requests != 1200 || out.Tmdb.Retries != 340 || out.Tmdb.Throttled != 310 || out.Tmdb.Exhausted != 4 {
-		t.Errorf("counters = %+v", out.Tmdb)
+		t.Errorf("API counters = %+v", out.Tmdb)
+	}
+	// The two surfaces must not be transposed on the way out: 400 lost stills
+	// reported as `exhausted` reads as 400 titles with no metadata.
+	if out.Tmdb.ArtworkRequests != 9000 || out.Tmdb.ArtworkRetries != 120 ||
+		out.Tmdb.ArtworkThrottled != 95 || out.Tmdb.ArtworkExhausted != 400 {
+		t.Errorf("artwork counters = %+v", out.Tmdb)
 	}
 	// A rate below the configured one is the signal that the provider is
 	// pushing back; losing it would leave a slow ingest undiagnosable.

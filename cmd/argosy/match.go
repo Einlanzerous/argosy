@@ -82,22 +82,34 @@ func runMatch(cfg config.Config, logger *slog.Logger, args []string) {
 	}
 	rows.Close()
 
+	// A bulk backfill is the run most likely to be throttled and the one with no
+	// status endpoint to watch, so it reports its own TMDB accounting. A rate
+	// below the configured one means the API throttled us; a non-zero exhausted
+	// count means some titles have no metadata and want a re-run.
+	//
+	// Called explicitly on both exits rather than deferred: the failure path
+	// below ends in os.Exit, which does not run deferred functions — and a run
+	// that died partway is the one most likely to have been throttled, so it is
+	// the last one that should print nothing.
+	logTMDBTraffic := func() {
+		st := provider.RequestStats()
+		logger.Info("tmdb traffic",
+			"requests", st.Requests, "retries", st.Retries,
+			"throttled", st.Throttled, "exhausted", st.Exhausted,
+			"artworkRequests", st.ArtworkRequests, "artworkRetries", st.ArtworkRetries,
+			"artworkThrottled", st.ArtworkThrottled, "artworkExhausted", st.ArtworkExhausted,
+			"rate", st.RateLimit, "configured", st.ConfiguredRate)
+	}
+
 	matcher := stevedore.NewMatcher(pool, provider, cfg.ArtworkDir, logger)
 	for _, l := range libs {
 		res, err := matcher.MatchLibrary(ctx, l.id, *force)
 		if err != nil {
 			logger.Error("match failed", "library", l.name, "err", err)
+			logTMDBTraffic()
 			os.Exit(1)
 		}
 		logger.Info("match complete", "library", l.name, "movies", res.Movies, "series", res.Series, "episodes", res.Episodes, "credits", res.Credits, "misses", res.Misses)
 	}
-
-	// A bulk backfill is the run most likely to be throttled and the one with no
-	// status endpoint to watch, so it reports its own TMDB accounting. A rate
-	// below the configured one means adaptive throttling backed off; a non-zero
-	// exhausted count means some titles have no metadata and want a re-run.
-	st := provider.RequestStats()
-	logger.Info("tmdb traffic", "requests", st.Requests, "retries", st.Retries,
-		"throttled", st.Throttled, "exhausted", st.Exhausted,
-		"rate", st.RateLimit, "configured", st.ConfiguredRate)
+	logTMDBTraffic()
 }

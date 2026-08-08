@@ -43,19 +43,34 @@ type ImageDownloader interface {
 // client; callers wanting per-run numbers snapshot at the start and subtract
 // (see stevedore.Scheduler), which is race-free without a reset.
 type RequestStats struct {
+	// The first group counts the metadata API only (api.themoviedb.org).
+	//
 	// Requests counts HTTP round-trips actually sent, retries included.
 	Requests int64
 	// Retries counts round-trips that failed retryably (429, 5xx, transport)
-	// and were tried again. Throttled is the 429-only subset.
-	Retries   int64
+	// and were tried again.
+	Retries int64
+	// Throttled counts 429 responses received. Note this is *not* a subset of
+	// Retries: the final attempt of a request that exhausts its budget is
+	// counted here but was never retried, so Throttled can exceed Retries.
 	Throttled int64
 	// Exhausted counts requests that used every retry and failed permanently —
 	// each one is a title that did not get metadata.
 	Exhausted int64
-	// RateLimit is the limiter's *current* ceiling in req/s, which adaptive
-	// throttling moves below ConfiguredRate while the provider is pushing back.
-	// A run that got slow shows up here as a number well under the configured
-	// one, which is otherwise only visible by grepping logs (ARGY-170).
+
+	// The second group counts the artwork CDN (image.tmdb.org), which is a
+	// separate service with its own rate policy and, for an episode-bearing
+	// library, the majority of a match run's requests. Kept apart so Exhausted
+	// above means what it says: a lost still is not a title without metadata.
+	ArtworkRequests  int64
+	ArtworkRetries   int64
+	ArtworkThrottled int64
+	ArtworkExhausted int64
+	// RateLimit is the limiter's *current* ceiling in req/s, shared by both
+	// surfaces but steered only by the API's 429s. Adaptive throttling moves it
+	// below ConfiguredRate while the API is pushing back. A run that got slow
+	// shows up here as a number well under the configured one, which is
+	// otherwise only visible by grepping logs (ARGY-170).
 	RateLimit      float64
 	ConfiguredRate float64
 }
