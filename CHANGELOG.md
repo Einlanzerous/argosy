@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.3](https://github.com/Einlanzerous/argosy/compare/v0.22.2...v0.22.3) (2026-08-08)
+
+
+### Bug Fixes
+
+* **tv:** stop rails clipping the focus ring and skipping short rails (ARGY-184) ([#192](https://github.com/Einlanzerous/argosy/issues/192)) ([41b9338](https://github.com/Einlanzerous/argosy/commit/41b933833e415a2da8cce6da4af75031ec2cddb5))
+
 ## [0.22.2](https://github.com/Einlanzerous/argosy/compare/v0.22.1...v0.22.2) (2026-08-07)
 
 
