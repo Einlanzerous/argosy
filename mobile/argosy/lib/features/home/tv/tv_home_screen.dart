@@ -198,9 +198,14 @@ class _PageState extends State<_Page> {
               ),
               child: _Hero(hero: home.hero!, onFocused: _toTop),
             ),
-          // The design's 40px between rails, less the clearance a rail now
-          // reserves below its tiles (it used to reserve 6).
-          for (final rail in rails) ...[const SizedBox(height: 24), rail],
+          for (final (i, rail) in rails.indexed) ...[
+            // The design's 40px above a rail. Between rails, the one above now
+            // reserves kTvRailFocusInset below its tiles (it used to reserve 6),
+            // so the gap gives that back. The hero reserves nothing, so the
+            // first rail keeps the full 40.
+            SizedBox(height: i == 0 ? 40 : 40 - kTvRailFocusInset + 6),
+            rail,
+          ],
         ],
       ),
     );

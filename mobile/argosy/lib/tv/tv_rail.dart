@@ -136,8 +136,9 @@ class _TvRailState extends State<TvRail> {
             ],
           ),
         ),
-        // No gap widget under the header: the clearance the scroller reserves
-        // above its tiles stands in for the design's 18px.
+        // The design's 24px between the header and the first tile, less the
+        // clearance the scroller now reserves above it.
+        const SizedBox(height: 24 - kTvRailFocusInset),
         SizedBox(
           height: widget.tileHeight + 2 * kTvRailFocusInset,
           child: Focus(

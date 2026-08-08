@@ -24,6 +24,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'tv_home_fixtures.dart';
 
+/// The tile whose content includes the text [label].
+Rect _tile(WidgetTester tester, String label) => tester.getRect(
+  find.ancestor(of: find.text(label), matching: find.byType(TvFocusable)).first,
+);
+
+double _tileTop(WidgetTester tester, String label) => _tile(tester, label).top;
+
 /// The box a focused [TvFocusable] paints into: the ring sits [focusOffset]
 /// outside the content, the glow spreads past that, and the scale magnifies
 /// both about the centre.
@@ -114,6 +121,26 @@ void main() {
     _expectRingUnclipped(tester, 'R3');
   });
 
+  testWidgets('the rails stay where the design puts them', (tester) async {
+    // The clearance is reserved *inside* each rail and given back by the gaps
+    // around it, so the rails don't move. The numbers are what this fixture laid
+    // out before any of it — a rail that reserves room above its tiles without
+    // handing back the same amount drags every rail below it up too, compounding
+    // down the page, which is the easy way to get this wrong.
+    await pumpTvHome(
+      tester,
+      homeData(continueRow: 3, onDeck: 3, recent: 3),
+      scrollBy: 700,
+    );
+
+    expect(_tileTop(tester, 'C1'), 157);
+    expect(_tileTop(tester, 'D1'), 502);
+    expect(_tileTop(tester, 'R1'), 937);
+    // The one deliberate move: rails start flush with the hero at 56 from the
+    // stage edge (100 of nav rail + 56), where they used to sit 4px in.
+    expect(_tile(tester, 'C1').left, 156);
+  });
+
   testWidgets('an episode row keeps its ring inside the list', (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 1.0;
@@ -195,14 +222,7 @@ void main() {
     // The clearance is reserved *inside* the list and given back by the margins
     // around it, so the row itself doesn't move: 56 + 540 (meta) + 64 from the
     // left, and 64 from the right edge of the 1920 stage.
-    final row = tester.getRect(
-      find
-          .ancestor(
-            of: find.text('Episode 1'),
-            matching: find.byType(TvFocusable),
-          )
-          .first,
-    );
+    final row = _tile(tester, 'Episode 1');
     expect(row.left, 760);
     expect(row.right, 1920 - 64);
   });
