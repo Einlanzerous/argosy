@@ -94,6 +94,23 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
 - **Transcode sessions are reaped.** The player must survive a session vanishing
   underneath it, and must keep the session alive while paused (ARGY-107). New
   playback paths need both.
+- **One ffmpeg version, pinned in `.ffmpeg-version`.** CI, `deploy/Dockerfile`
+  and `deploy/Dockerfile.dev` all install exactly that package version, and
+  `scripts/check-ffmpeg-pin.sh` fails if the binary on PATH disagrees. The HLS
+  manifest tests assert ffmpeg's *output shape* (`.B01` in ARGY-174, the
+  `var_stream_map` naming in ARGY-127), which guards nothing if CI tests a
+  different build from the one that ships — CI used to run 6.1.1 against a prod
+  on 5.1.9 (ARGY-183). Moving the pin means moving that one file. When Debian
+  retires the pinned package the image build fails loudly; that is intended.
+- **Hardware encode is VAAPI, and availability means a real encode succeeded.**
+  ffmpeg 7 removed libmfx and reaches Intel GPUs only through the VPL runtime,
+  which supports Gen12+ — so on the Gen9.5 UHD 630 `h264_qsv` is compiled in
+  but cannot open a session, while VAAPI drives the same chip. `Probe` runs a
+  one-frame encode through each backend's own arguments rather than trusting
+  ffmpeg's encoder list, because "encoder is built and `/dev/dri` exists" is
+  true of a QSV that fails at the start of every session and silently falls back
+  to software. Don't set `LIBVA_DRIVER_NAME` in the images: it would force one
+  driver onto both GPUs and break the discrete-card fallback.
 
 ## Testing
 
@@ -101,7 +118,7 @@ CI is thorough here — more so than the other repos in the estate.
 
 | Workflow / job | Runs |
 |---|---|
-| `ci.yml` / `go` | `go vet`, `gofmt -l`, `golangci-lint`, `make test` (= `go test ./cmd/... ./internal/...`, all 47 test files) against a `postgres` service with `ffmpeg` installed, then `make go-build` |
+| `ci.yml` / `go` | Runs in `golang:1.26-trixie` — the prod runtime's base — with the `.ffmpeg-version` ffmpeg. `go vet`, `gofmt -l`, `golangci-lint`, `make test` (= `go test ./cmd/... ./internal/...`, all 50 test files) against a `postgres` service, then `make go-build` |
 | `ci.yml` / `web` | `bun run format:check`, `lint`, `build` |
 | `ci.yml` / `openapi-drift` | `make generate` + `git diff --exit-code` — regenerating the contract's consumers is enforced, not remembered |
 | `mobile.yml` | `flutter analyze`, `flutter test`, debug APK, iOS build |

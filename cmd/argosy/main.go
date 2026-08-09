@@ -107,20 +107,26 @@ func main() {
 	// The probe reports what hardware is available (QSV/VAAPI/NVENC + software)
 	// and selects by preference order; encoding resolves that to the backend
 	// actually wired up. An unknown selection degrades to software. "selected"
-	// vs "encoding" in the log make that explicit.
+	// vs "encoding" in the log make that explicit, and "device" names the render
+	// node VAAPI settled on — the probe tries each GPU in turn, so which one it
+	// picked is worth seeing when playback performance surprises you.
 	encoder := transcode.EncoderSoftware
 	if pool != nil {
-		// Per-host VAAPI GPU override (e.g. /dev/dri/renderD129 for a discrete card).
+		// Per-host VAAPI GPU override (e.g. /dev/dri/renderD129 for a discrete
+		// card). Pinning skips the probe's search rather than seeding it, so an
+		// explicit choice is honoured even if another node would also work.
 		if dev := os.Getenv("ARGOSY_VAAPI_DEVICE"); dev != "" {
-			transcode.VAAPIDevice = dev
+			transcode.PinVAAPIDevice(dev)
 		}
 		caps = transcode.Probe(context.Background(), "", cfg.EncoderPreference)
 		if cfg.ForceSoftware {
 			caps.Selected = transcode.EncoderSoftware
+			caps.Device = ""
 		}
 		encoder = transcode.ResolvedEncoder(caps.Selected)
 		tcManager = transcode.NewManager(transcode.LocalFFmpeg{}, cfg.TranscodeDir, cfg.TranscodeIdleTimeout, cfg.MaxTranscodeSessions, logger)
-		logger.Info("transcode ready", "available", caps.Available, "selected", caps.Selected, "encoding", encoder, "workDir", cfg.TranscodeDir)
+		logger.Info("transcode ready", "available", caps.Available, "selected", caps.Selected,
+			"encoding", encoder, "device", caps.Device, "workDir", cfg.TranscodeDir)
 	}
 
 	// Ballast: keep the transcode cache within budget and reclaim orphans.

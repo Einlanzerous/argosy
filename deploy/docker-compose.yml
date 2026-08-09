@@ -64,8 +64,10 @@ services:
     # so the two run side by side (the container always listens on 8096).
     ports:
       - "${ARGOSY_HOST_PORT:-8097}:8096"
-    # Intel iGPU passthrough for hardware transcode (ARGY-30). The render node is
-    # group-owned by "render"; add the container to that GID so it can open it.
+    # GPU passthrough for hardware transcode (ARGY-30, ARGY-183). Both render
+    # nodes go in: Probe prefers the Intel iGPU for VAAPI and falls back to the
+    # discrete card. The render nodes are group-owned by "render"; add the
+    # container to that GID so it can open them.
     # RENDER_GID is host-specific (`getent group render`); default matches this box.
     devices:
       - /dev/dri:/dev/dri

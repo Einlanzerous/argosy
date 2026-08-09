@@ -10,7 +10,7 @@ COMPOSE := docker compose -f deploy/docker-compose.yml
 GO_PKGS := ./cmd/... ./internal/...   # scope go tooling; keep it out of web/node_modules
 
 .PHONY: all build web-build go-build ensure-embed server-dev web-dev dev lint fmt test tidy generate clean help \
-	compose-up compose-web compose-down compose-logs compose-reset seed seed-sample docker-build
+	compose-up compose-web compose-down compose-logs compose-reset seed seed-sample docker-build check-ffmpeg
 
 all: build
 
@@ -71,6 +71,9 @@ fmt: ## Format Go and web
 
 test: ensure-embed ## Run Go tests
 	$(GO) test $(GO_PKGS)
+
+check-ffmpeg: ## Assert the local ffmpeg is the version .ffmpeg-version pins
+	bash scripts/check-ffmpeg-pin.sh
 
 tidy: ## Tidy go.mod
 	$(GO) mod tidy

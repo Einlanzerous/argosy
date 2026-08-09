@@ -11,6 +11,12 @@ permissions:
 jobs:
   go:
     runs-on: ubuntu-latest
+    # Run in the same base image the prod runtime is built from (ARGY-183), so
+    # the ffmpeg the manifest tests drive is the ffmpeg that ships. The runner's
+    # own ubuntu-latest ffmpeg was a different major version from prod's, which
+    # made TestHEVCManifestCodecs and TestMultiAudioManifestIntegration — both of
+    # which assert ffmpeg's *output shape* — guard a build nobody runs.
+    container: golang:1.26-trixie
     services:
       postgres:
         image: postgres:17
@@ -18,8 +24,6 @@ jobs:
           POSTGRES_USER: argosy
           POSTGRES_DB: argosy_test
           POSTGRES_HOST_AUTH_METHOD: trust
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U argosy"
           --health-interval 5s
@@ -31,6 +35,11 @@ jobs:
         with:
           go-version: "1.26"
           cache: true
+      # The workspace is created by the runner but the container runs as root,
+      # so git refuses to read the repo without this — which would silently turn
+      # the Makefile's `git describe` version into "dev".
+      - name: trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: prepare embed dir
         run: make ensure-embed
       - name: go vet
@@ -45,13 +54,24 @@ jobs:
           "$(go env GOPATH)/bin/golangci-lint" run ./cmd/... ./internal/...
       # The HLS manifest tests drive a real ffmpeg (libx265 included) over the
       # arg builders' output — without it they t.Skip, and the ARGY-174 codec
-      # guard silently stops guarding.
+      # guard silently stops guarding. Pinned to .ffmpeg-version, the same
+      # package version deploy/Dockerfile installs.
+      #
+      # timeout-minutes because this step once took 27 minutes on a stalled apt
+      # mirror. Runners are ephemeral, so there is no host cache to warm and
+      # every run pays the download; a stalled mirror should be a fast red
+      # rather than a half-hour wait.
       - name: install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        timeout-minutes: 5
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends "ffmpeg=$(tr -d '[:space:]' < .ffmpeg-version)"
+      - name: assert ffmpeg matches the pin
+        run: bash scripts/check-ffmpeg-pin.sh
       - name: test
         env:
           PGUSER: argosy
-          PGHOST: localhost
+          PGHOST: postgres
           PGPORT: "5432"
           PGDATABASE: argosy_test
         run: |

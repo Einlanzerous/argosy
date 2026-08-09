@@ -129,11 +129,19 @@ func vbrRateControl(idx int, r rung) []string {
 
 // qsvEncoder is the Intel Quick Sync path. It uses the software pipeline (CPU
 // decode + scale) but encodes with h264_qsv, which uploads frames to the iGPU
-// internally — an "encode-only" model. On this hardware that proved both faster
-// and far more robust than a full-GPU pipeline: libmfx's GPU scaler (scale_qsv)
-// is unimplemented, and the multi-rung GPU ladder hit surface-submission limits,
-// whereas encode-only ran the 1080p ladder ~73% faster than libx264 and a single
-// 720p rung at ~16x realtime. So QSV differs from software only in the codec.
+// internally — an "encode-only" model. On Gen9.5 under ffmpeg 5 that proved both
+// faster and far more robust than a full-GPU pipeline: libmfx's GPU scaler
+// (scale_qsv) is unimplemented, and the multi-rung GPU ladder hit
+// surface-submission limits, whereas encode-only ran the 1080p ladder ~73%
+// faster than libx264 and a single 720p rung at ~16x realtime. So QSV differs
+// from software only in the codec.
+//
+// It is inert on this box now (ARGY-183). ffmpeg 7 removed libmfx and reaches
+// Intel GPUs only through the VPL runtime, which supports Gen12+ silicon — so
+// on the Gen9.5 UHD 630 `h264_qsv` is compiled in but fails to create an MFX
+// session. Probe runs a real encode rather than trusting the encoder list, so
+// this backend simply stops being offered; VAAPI drives the same iGPU instead.
+// Kept because it is correct on Gen12+ hardware, where the probe will find it.
 //
 // If the GPU/codec can't be used at all, the session layer (Manager.run) retries
 // on software, so this never hard-fails playback.
@@ -157,21 +165,48 @@ func (qsvEncoder) videoCodec(codec string) []string {
 	return args
 }
 
-// VAAPIDevice is the DRM render node VAAPI initializes. renderD128 is the Intel
-// iGPU (also exposes VAAPI); renderD129 is the discrete AMD card. Overridable so
-// a host can target a specific GPU; a config/env knob can set it in main.
+// VAAPIDevice is the DRM render node VAAPI initializes. Probe resolves it by
+// trying each node in vaapiCandidates() order and keeping the first that
+// actually encodes; this default stands in until it does, and for callers that
+// build a Spec without probing. renderD128 is conventionally the first GPU the
+// kernel enumerates — the Intel iGPU on this box.
 var VAAPIDevice = "/dev/dri/renderD128"
 
-// vaapiEncoder is the VAAPI path (Intel/AMD). Unlike QSV — which uploads frames
-// to the GPU internally — VAAPI needs the frames explicitly uploaded to a GPU
-// surface (format=nv12,hwupload) after a CPU scale, with the device initialized
-// before the input via -vaapi_device. Verified on this box (renderD128):
-// h264_vaapi + hevc_vaapi, single-rung and multi-rung ladder.
-type vaapiEncoder struct{ softwareEncoder }
+// vaapiPinned records that VAAPIDevice was chosen explicitly rather than probed,
+// so Probe honours the operator's choice instead of searching past it.
+var vaapiPinned bool
+
+// PinVAAPIDevice fixes the VAAPI render node to dev and stops Probe searching
+// for another. Backs the ARGOSY_VAAPI_DEVICE override, for a host that wants a
+// specific GPU — e.g. keeping transcode off a card something else is using.
+func PinVAAPIDevice(dev string) {
+	VAAPIDevice = dev
+	vaapiPinned = true
+}
+
+// vaapiEncoder is the VAAPI path (Intel/AMD) and the default hardware backend.
+// Unlike QSV — which uploads frames to the GPU internally — VAAPI needs the
+// frames explicitly uploaded to a GPU surface (format=nv12,hwupload) after a CPU
+// scale, with the device initialized before the input via -vaapi_device.
+// Verified on this box: h264_vaapi + hevc_vaapi on the Intel iGPU (renderD128)
+// and on the discrete AMD card (renderD129), single-rung and multi-rung ladder.
+type vaapiEncoder struct {
+	softwareEncoder
+	// device overrides VAAPIDevice for this instance. Probe sets it to test one
+	// render node without committing the package-level choice to a node that
+	// turns out not to encode.
+	device string
+}
 
 func (vaapiEncoder) name() string { return EncoderVAAPI }
 
-func (vaapiEncoder) globalArgs() []string { return []string{"-vaapi_device", VAAPIDevice} }
+func (e vaapiEncoder) globalArgs() []string {
+	dev := e.device
+	if dev == "" {
+		dev = VAAPIDevice
+	}
+	return []string{"-vaapi_device", dev}
+}
 
 func (vaapiEncoder) scale(height int) string {
 	// CPU scale to nv12, then upload to a VAAPI surface for the GPU encoder.
