@@ -16,31 +16,43 @@ import (
 // than hand-writing a command.
 func TestProbeArgsUsesTheBackendsOwnPipeline(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		enc  videoEncoder
-		want []string
+		name  string
+		enc   videoEncoder
+		codec string
+		want  []string
 	}{
 		{
 			name: "vaapi carries the device init and the hwupload",
-			enc:  vaapiEncoder{device: "/dev/dri/renderD129"},
+			enc:  vaapiEncoder{device: "/dev/dri/renderD129"}, codec: CodecH264,
 			want: []string{"-vaapi_device /dev/dri/renderD129", "hwupload", "h264_vaapi"},
 		},
 		{
-			name: "qsv has no device init but pins nv12",
-			enc:  qsvEncoder{},
+			name: "vaapi hevc probes the hevc encoder", enc: vaapiEncoder{}, codec: CodecHEVC,
+			want: []string{"hevc_vaapi", "-vaapi_device"},
+		},
+		{
+			name: "qsv has no device init but pins nv12", enc: qsvEncoder{}, codec: CodecH264,
 			want: []string{"format=nv12", "h264_qsv"},
 		},
 		{
-			name: "software needs no hardware anything",
-			enc:  softwareEncoder{},
+			name: "software needs no hardware anything", enc: softwareEncoder{}, codec: CodecH264,
 			want: []string{"libx264"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := strings.Join(probeArgs(tc.enc), " ")
+			got := strings.Join(probeArgs(tc.enc, tc.codec), " ")
 			for _, want := range tc.want {
 				if !strings.Contains(got, want) {
 					t.Errorf("probeArgs = %q, missing %q", got, want)
+				}
+			}
+			// Rate control must be exercised too: a VAAPI driver without VBR
+			// accepts a bare CQP encode and rejects -b:v/-maxrate/-bufsize, so
+			// omitting these would pass a backend whose every rung then fails.
+			r := probeRung(tc.codec)
+			for _, want := range []string{"-b:v " + r.videoBitrate, "-maxrate " + r.maxRate, "-bufsize " + r.bufSize} {
+				if !strings.Contains(got, want) {
+					t.Errorf("probeArgs = %q, missing rate control %q", got, want)
 				}
 			}
 			// One frame, discarded: a probe that wrote a file or ran for the
@@ -49,6 +61,16 @@ func TestProbeArgsUsesTheBackendsOwnPipeline(t *testing.T) {
 				t.Errorf("probeArgs = %q, want a one-frame encode to null", got)
 			}
 		})
+	}
+}
+
+// TestProbeRungNeverUpscales keeps the trial encode shaped like a real session:
+// the probe source is 720p, so every rung it picks must scale down.
+func TestProbeRungNeverUpscales(t *testing.T) {
+	for _, codec := range []string{CodecH264, CodecHEVC} {
+		if h := probeRung(codec).height; h > 720 {
+			t.Errorf("probeRung(%q).height = %d, want <= the 720p probe source", codec, h)
+		}
 	}
 }
 
@@ -131,8 +153,10 @@ func TestProbeMatchesReality(t *testing.T) {
 	if !slices.Contains(caps.Available, caps.Selected) {
 		t.Errorf("Selected %q is not in Available %v", caps.Selected, caps.Available)
 	}
+	// Everything offered must encode *both* codecs — planPlayback routes >1080p
+	// to HEVC, so an H.264-only pass would still fail every 4K session.
 	for _, enc := range caps.Available {
-		if !encodeWorks(context.Background(), ffmpeg, encoderFor(enc)) {
+		if !encodeWorks(context.Background(), ffmpeg, encoderFor(enc), []string{CodecH264, CodecHEVC}) {
 			t.Errorf("Probe offered %q but a trial encode through it fails", enc)
 		}
 	}

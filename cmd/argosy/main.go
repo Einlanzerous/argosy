@@ -112,16 +112,28 @@ func main() {
 	// picked is worth seeing when playback performance surprises you.
 	encoder := transcode.EncoderSoftware
 	if pool != nil {
-		// Per-host VAAPI GPU override (e.g. /dev/dri/renderD129 for a discrete
-		// card). Pinning skips the probe's search rather than seeding it, so an
-		// explicit choice is honoured even if another node would also work.
-		if dev := os.Getenv("ARGOSY_VAAPI_DEVICE"); dev != "" {
-			transcode.PinVAAPIDevice(dev)
-		}
-		caps = transcode.Probe(context.Background(), "", cfg.EncoderPreference)
-		if cfg.ForceSoftware {
-			caps.Selected = transcode.EncoderSoftware
-			caps.Device = ""
+		switch {
+		case cfg.ForceSoftware:
+			// Skip the probe entirely rather than running it and discarding the
+			// answer. ARGOSY_FORCE_SOFTWARE is the escape hatch for a host whose
+			// hardware encode is broken, and the probe now runs real GPU encodes
+			// — on a wedged VA driver that is up to probeTimeout per candidate
+			// device, blocking startup before the server listens. The cost is
+			// that "available" reports only software, which is the honest answer
+			// for hardware we've been told not to use.
+			caps = transcode.Capabilities{
+				Available: []string{transcode.EncoderSoftware},
+				Selected:  transcode.EncoderSoftware,
+			}
+		default:
+			// Per-host VAAPI GPU override (e.g. /dev/dri/renderD129 for a
+			// discrete card). Pinning skips the probe's search rather than
+			// seeding it, so an explicit choice is honoured even if another node
+			// would also work.
+			if dev := os.Getenv("ARGOSY_VAAPI_DEVICE"); dev != "" {
+				transcode.PinVAAPIDevice(dev)
+			}
+			caps = transcode.Probe(context.Background(), "", cfg.EncoderPreference)
 		}
 		encoder = transcode.ResolvedEncoder(caps.Selected)
 		tcManager = transcode.NewManager(transcode.LocalFFmpeg{}, cfg.TranscodeDir, cfg.TranscodeIdleTimeout, cfg.MaxTranscodeSessions, logger)
