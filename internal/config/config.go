@@ -55,11 +55,13 @@ type Config struct {
 	TranscodeIdleTimeout time.Duration
 	// MaxTranscodeSessions caps concurrent transcode sessions (back-pressure).
 	MaxTranscodeSessions int
-	// EncoderPreference is the encoder fallback order (e.g. nvenc,qsv,vaapi,
-	// software). Empty uses the built-in default order.
+	// EncoderPreference is the encoder fallback order (e.g. nvenc,vaapi,qsv,
+	// software). Empty uses transcode.DefaultPreference.
 	EncoderPreference []string
 	// ForceSoftware pins encoding to libx264/libx265 regardless of hardware
-	// (debugging aid; see ARGY-30).
+	// (debugging aid; see ARGY-30). It skips the hardware probe rather than
+	// discarding its result, so it stays usable on a host with a wedged GPU
+	// driver — the case you most want it for (ARGY-183).
 	ForceSoftware bool
 	// TranscodeCacheBudget is the high-water mark (bytes) for the transcode
 	// cache dir; Ballast evicts idle sessions oldest-first when exceeded.

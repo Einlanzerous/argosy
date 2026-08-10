@@ -1,25 +1,26 @@
-# Dev image: Go toolchain + air (hot reload) + ffmpeg/ffprobe + Intel QSV/VAAPI.
+# Dev image: Go toolchain + air (hot reload) + ffmpeg/ffprobe + VAAPI.
 # The source tree is bind-mounted by docker-compose; this image only provides
 # the toolchain, so code edits rebuild in-container without an image rebuild.
-FROM golang:1.26-bookworm
+FROM golang:1.26-trixie
 
-# ffmpeg plus the Intel runtime for hardware encode (ARGY-30): the iHD VA driver
-# + the Media SDK (libmfx) dispatcher that h264_qsv talks to, and vainfo for
-# diagnostics. intel-media-va-driver-non-free lives in Debian's non-free.
+# Same runtime as deploy/Dockerfile, for the same reason (ARGY-183): the point
+# of pinning is that dev, CI and prod agree, so this list and that one move
+# together. VAAPI rather than QSV — ffmpeg 7 speaks only to Intel's VPL runtime,
+# which does not support the Gen9.5 iGPU. iHD drives the Intel GPU, radeonsi
+# (mesa-va-drivers) the discrete AMD card; no LIBVA_DRIVER_NAME, so libva
+# resolves the driver per render node instead of forcing one for both.
+COPY .ffmpeg-version /tmp/.ffmpeg-version
 RUN sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' \
       /etc/apt/sources.list.d/debian.sources \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      ffmpeg \
+      "ffmpeg=$(tr -d '[:space:]' </tmp/.ffmpeg-version)" \
       intel-media-va-driver-non-free \
-      libmfx1 \
+      mesa-va-drivers \
       libva2 \
       libva-drm2 \
       vainfo \
- && rm -rf /var/lib/apt/lists/*
-
-# Force the modern iHD driver (UHD 630 is Gen9.5) rather than legacy i965.
-ENV LIBVA_DRIVER_NAME=iHD
+ && rm -rf /var/lib/apt/lists/* /tmp/.ffmpeg-version
 
 # air for live reload (github.com/air-verse/air is the maintained fork).
 RUN go install github.com/air-verse/air@latest

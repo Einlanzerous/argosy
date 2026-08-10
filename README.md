@@ -78,7 +78,7 @@ argosy/
 
 - Go 1.26+
 - Bun 1+ (web toolchain — install/build/codegen)
-- `ffmpeg`/`ffprobe` on PATH for media work (optional for the scaffold; logged at startup). For hardware encode, the host also needs the GPU runtime (Intel iHD/`libmfx` for QSV/VAAPI, NVIDIA drivers for NVENC) and `/dev/dri` passthrough — the Docker images install the Intel stack; see `deploy/`.
+- `ffmpeg`/`ffprobe` on PATH for media work (optional for the scaffold; logged at startup). The version that ships is pinned in `.ffmpeg-version`; `make check-ffmpeg` tells you whether yours matches. For hardware encode the host also needs the GPU runtime — a VA driver (`intel-media-va-driver-non-free` for Intel, `mesa-va-drivers` for AMD; both are in the Docker images) or NVIDIA drivers for NVENC — plus `/dev/dri` passthrough; see `deploy/`. The hardware path is VAAPI: ffmpeg 7 dropped `libmfx`, so QSV needs a Gen12+ Intel GPU and is skipped on older silicon. Don't set `LIBVA_DRIVER_NAME` — it forces one driver onto every GPU and breaks the fallback to a second card.
 
 ## Quickstart
 
@@ -147,9 +147,9 @@ make docker-build    # -> argosy:dev
 | `TMDB_API_READ_ACCESS_KEY` / `TMDB_API_KEY` | _(unset)_ | TMDB credentials for metadata + artwork |
 | `ARGOSY_TMDB_RATE`      | `25`      | TMDB request ceiling (req/s), shared with artwork downloads |
 | `TMDB_BASE_URL` / `TMDB_IMAGE_BASE_URL` | _(unset)_ | Point the TMDB client at a stub server (testing) |
-| `ARGOSY_ENCODER_PREFERENCE` | `nvenc,qsv,vaapi,software` | Hardware-encode preference order |
-| `ARGOSY_FORCE_SOFTWARE` | `false`   | Force software (libx264/libx265) encode          |
-| `ARGOSY_VAAPI_DEVICE`   | `/dev/dri/renderD128` | VAAPI render node (e.g. a discrete GPU) |
+| `ARGOSY_ENCODER_PREFERENCE` | `nvenc,vaapi,qsv,software` | Hardware-encode preference order (VAAPI outranks QSV — see `.ffmpeg-version` / ARGY-183) |
+| `ARGOSY_FORCE_SOFTWARE` | `false`   | Force software (libx264/libx265) encode; skips the hardware probe entirely |
+| `ARGOSY_VAAPI_DEVICE`   | _(probed)_ | Pin the VAAPI render node. Unset, each `/dev/dri/renderD*` is tried in order and the first that encodes wins |
 | `ARGOSY_TRANSCODE_DIR`  | _(temp)_  | Working dir for HLS segments                     |
 | `ARGOSY_TRANSCODE_CACHE_BUDGET` | `10 GiB` | Ballast cache high-water mark (bytes)    |
 | `ARGOSY_TRANSCODE_IDLE_TIMEOUT` | `60s`  | Idle-session reap / cache TTL                   |
