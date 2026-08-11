@@ -1,0 +1,19 @@
+<!-- Status-bar / media-notification small icon (ARGY-87). The brand porthole
+     ring from tv_banner.xml, reduced to 24dp. Android masks a small icon down to
+     its alpha channel, so this must be pure white on transparent — the launcher
+     mipmap renders as a featureless blob here. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- porthole ring (outer minus inner, even-odd) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12,2 a10,10 0 1,0 0.1,0 z M12,5.3 a6.7,6.7 0 1,1 -0.1,0 z" />
+    <!-- inner dot -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,9.5 a2.5,2.5 0 1,0 0.1,0 z" />
+</vector>
