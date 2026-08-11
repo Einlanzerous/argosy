@@ -268,6 +268,19 @@ func (s *Store) GetItem(ctx context.Context, accountID, itemID string) (*api.Med
 		d.SeasonNumber = seasonNum
 		d.EpisodeNumber = epNum
 		d.EpisodeTitle = epTitle
+		// An episode's own row carries no poster or backdrop — TMDB hangs those
+		// off the series, and the per-episode art (ARGY-58) is a still, which
+		// lives on the episode row and isn't loaded here. So inherit the series'
+		// artwork rather than answering nil: a client asking for the item that's
+		// playing has nowhere else to look, which left Android's lock-screen
+		// media panel with an empty black background (ARGY-87). Only fills gaps,
+		// so an episode that does have its own art keeps it.
+		if d.PosterUrl == nil {
+			d.PosterUrl = posterURL(s.artworkBase, so, sp)
+		}
+		if d.BackdropUrl == nil {
+			d.BackdropUrl = backdropURL(s.artworkBase, so, sp)
+		}
 	}
 	return &d, nil
 }
