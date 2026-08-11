@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.1](https://github.com/Einlanzerous/argosy/compare/v0.23.0...v0.23.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* **mobile:** lock-screen media controls via MediaSession (ARGY-87) ([#199](https://github.com/Einlanzerous/argosy/issues/199)) ([a9f9fb6](https://github.com/Einlanzerous/argosy/commit/a9f9fb638378ee62d5294e74ab44da72b99ec3c6))
+* **transcode:** ffmpeg 7.1.5 on trixie, VAAPI, functional probe (ARGY-183) ([#197](https://github.com/Einlanzerous/argosy/issues/197)) ([1a80f14](https://github.com/Einlanzerous/argosy/commit/1a80f1428f67513e1e5b8039e81340147517bdd1))
+
 ## [0.23.0](https://github.com/Einlanzerous/argosy/compare/v0.22.3...v0.23.0) (2026-08-08)
 
 
