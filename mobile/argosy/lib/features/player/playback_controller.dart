@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:argosy_api/api.dart';
 import 'package:better_player_plus/better_player_plus.dart';
@@ -6,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'argosy_audio_handler.dart';
+import 'media_session_state.dart';
 import 'vtt.dart';
 
 /// Orchestrates a single playback session, mirroring the shipped web player
@@ -21,7 +24,7 @@ import 'vtt.dart';
 /// - **Seeking** under transcode is native when the target is already encoded;
 ///   otherwise the session is torn down and restarted at the new offset, so
 ///   ffmpeg re-seeks server-side. Resume takes the same restart path.
-class PlaybackController extends ChangeNotifier {
+class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
   PlaybackController({
     required this.libraryApi,
     required this.transcodeApi,
@@ -158,18 +161,72 @@ class PlaybackController extends ChangeNotifier {
   Map<String, String> get _authHeaders =>
       (token != null && token!.isNotEmpty) ? {'Authorization': 'Bearer $token'} : {};
 
-  /// Lock-screen / notification media controls + background audio (ARGY-50).
-  /// Enabling this also starts better_player_plus's `mediaPlayback` foreground
-  /// service and, as a side effect, disables the library's auto-pause-on-
-  /// background — which is exactly what we want for background playback.
+  /// better_player_plus's own now-playing integration — **off on Android, kept
+  /// on iOS** (ARGY-87).
+  ///
+  /// On Android the flag posted two separate notifications (the plugin's media3
+  /// `PlayerNotificationManager` *and* its foreground service's "Playing in
+  /// background") and attached a MediaSession token to neither, so System UI
+  /// treated them as ordinary notifications: no lock-screen transport controls,
+  /// and Do Not Disturb swallowed them. [ArgosyAudioHandler] owns a real session
+  /// there instead.
+  ///
+  /// On iOS the *same* flag drives a path that works: it activates the
+  /// AVAudioSession, begins receiving remote-control events, and populates
+  /// `MPNowPlayingInfoCenter` / `MPRemoteCommandCenter`. This is an Android bug,
+  /// so iOS is deliberately left exactly as it was.
   BetterPlayerNotificationConfiguration get _notificationConfig =>
       BetterPlayerNotificationConfiguration(
-        showNotification: true,
+        showNotification: !Platform.isAndroid,
         title: title,
         author: notificationAuthor,
         imageUrl: artworkUrl,
         activityName: 'MainActivity',
       );
+
+  /// Metadata for the media notification / lock screen.
+  NowPlaying get _nowPlaying => NowPlaying(
+        id: itemId,
+        title: title,
+        subtitle: notificationAuthor,
+        artworkUrl: artworkUrl,
+        durationSeconds: catalogDuration,
+      );
+
+  /// Where the transport currently is, in the session's terms. Order matters:
+  /// a stalled player must not report itself as playing, or the lock-screen
+  /// scrubber runs ahead of the video.
+  MediaPhase get _phase {
+    if (starting) return MediaPhase.starting;
+    final v = videoValue;
+    if (v == null) return MediaPhase.starting;
+    if (_finished) return MediaPhase.finished;
+    if (v.isBuffering) return MediaPhase.buffering;
+    return v.isPlaying ? MediaPhase.playing : MediaPhase.paused;
+  }
+
+  /// Publishes the current transport state to the media session. Cheap and
+  /// idempotent — the handler drops it if this controller has been superseded.
+  ///
+  /// Called on transport events and on the existing 10s heartbeat rather than
+  /// per frame: [PlaybackState] carries an update timestamp and System UI
+  /// extrapolates the position between pushes.
+  void _pushSession({MediaPhase? phase, double? position}) {
+    final h = argosyAudioHandler;
+    if (h == null) return;
+    h.push(
+      this,
+      mediaPlaybackState(
+        phase: phase ?? _phase,
+        positionSeconds: position ?? this.position,
+        now: _nowPlaying,
+        bufferedSeconds: baseOffset + _encodedSoFarSeconds(),
+        speed: videoValue?.speed ?? 1.0,
+      ),
+    );
+  }
+
+  bool _finished = false;
 
   /// Friendly quality stamp derived from the decoded video height, mirroring
   /// the web player's `updateQuality`: "4K" at ≥2160p, otherwise `{height}p`.
@@ -200,8 +257,22 @@ class PlaybackController extends ChangeNotifier {
         controlsConfiguration:
             const BetterPlayerControlsConfiguration(showControls: false),
         subtitlesConfiguration: _captionConfig(prefs),
+        // Keep playing when the app backgrounds — the whole point of the media
+        // session (ARGY-87). Until now this fell out of a side effect: the
+        // plugin's `_isAutomaticPlayPauseHandled()` is
+        // `!showNotification && handleLifecycle`, so setting `showNotification`
+        // for its (broken) Android notification also suppressed auto-pause. With
+        // that flag now off on Android, this has to be said out loud. No-op on
+        // iOS, where `showNotification` still covers it.
+        handleLifecycle: false,
       ),
     )..addEventsListener(_onEvent);
+
+    // Claim the media session before the transcode handshake: `_waitForPlaylist`
+    // polls for up to 20s, and the foreground service behind the session is what
+    // keeps that (and the stream after it) alive if the screen goes off.
+    argosyAudioHandler?.attach(this, _nowPlaying);
+    _pushSession(phase: MediaPhase.starting, position: offset);
 
     if (isTranscode) {
       await _startTranscodeAt(offset);
@@ -294,6 +365,9 @@ class PlaybackController extends ChangeNotifier {
     starting = true;
     fatalError = false;
     errorMessage = null;
+    // The session's position is absolute, so it has to be re-anchored the moment
+    // the offset moves — the player's own clock is about to restart from 0.
+    _pushSession(phase: MediaPhase.starting, position: offset);
     _safeNotify();
     try {
       final sess = await transcodeApi.startTranscode(
@@ -350,19 +424,36 @@ class PlaybackController extends ChangeNotifier {
 
   // --- transport -----------------------------------------------------------
 
-  Future<void> togglePlay() async {
+  /// Resumes playback. Absolute, not a toggle: media-session callbacks say what
+  /// they mean, and a lock-screen "play" arriving while a "pause" is still in
+  /// flight would double-flip a toggle back to paused.
+  @override
+  Future<void> play() async {
     final p = _player;
-    final v = videoValue;
-    if (p == null || v == null) return;
-    if (v.isPlaying) {
-      await p.pause();
-    } else {
-      await p.play();
-    }
+    if (p == null) return;
+    await p.play();
     _safeNotify();
   }
 
-  /// Seeks to [target] absolute seconds. Native when the target is already
+  /// Pauses playback. See [play] for why this isn't expressed as a toggle.
+  @override
+  Future<void> pause() async {
+    final p = _player;
+    if (p == null) return;
+    await p.pause();
+    _safeNotify();
+  }
+
+  /// Flips play/pause. For genuinely single-button surfaces — the on-screen
+  /// control and the PiP window's lone `RemoteAction`.
+  Future<void> togglePlay() async {
+    final v = videoValue;
+    if (v == null) return;
+    await (v.isPlaying ? pause() : play());
+  }
+
+  /// Seeks to [target] absolute seconds (implements [MediaSessionTarget.seekTo],
+  /// so the lock-screen scrub bar lands here too). Native when the target is already
   /// encoded (direct play, or buffered/encoded transcode); otherwise restarts
   /// the transcode at the new offset.
   ///
@@ -370,6 +461,7 @@ class PlaybackController extends ChangeNotifier {
   /// seeks within the live/DVR window under these custom controls. The encoded
   /// bound below is derived defensively from both the reported duration and the
   /// buffered ranges, so a miss only costs a (correct) transcode restart.
+  @override
   Future<void> seekTo(double target) async {
     final p = _player;
     if (p == null) return;
@@ -587,7 +679,12 @@ class PlaybackController extends ChangeNotifier {
   void _startHeartbeat() {
     _heartbeat?.cancel();
     _heartbeat = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (videoValue?.isPlaying ?? false) _flush();
+      if (videoValue?.isPlaying ?? false) {
+        _flush();
+        // Correct any drift in the session's extrapolated position — mostly
+        // from stalls, and from a transcode restart moving [baseOffset].
+        _pushSession();
+      }
     });
   }
 
@@ -637,11 +734,22 @@ class PlaybackController extends ChangeNotifier {
         // is window-scoped, so it lifts automatically once the app backgrounds
         // for audio-only / PiP — no need to react to lifecycle here.
         _setWakelock(true);
+        _finished = false;
+        _pushSession(phase: MediaPhase.playing);
         // Notify so listeners tracking play/pause (the PiP action icon sync)
         // update — better_player drives these transitions, not togglePlay.
         _safeNotify();
+      case BetterPlayerEventType.bufferingStart:
+        // Freeze the lock-screen scrubber for the length of the stall; System UI
+        // extrapolates position from the last push, so leaving it "playing"
+        // would let it drift past the video.
+        _pushSession(phase: MediaPhase.buffering);
+      case BetterPlayerEventType.bufferingEnd:
+        _pushSession();
       case BetterPlayerEventType.finished:
         _setWakelock(false);
+        _finished = true;
+        _pushSession(phase: MediaPhase.finished);
         _flush();
         _markWatched();
         // Roll into the next episode unless the viewer opted out (pref off or
@@ -652,9 +760,11 @@ class PlaybackController extends ChangeNotifier {
         _safeNotify();
       case BetterPlayerEventType.pause:
         _setWakelock(false);
+        _pushSession(phase: MediaPhase.paused);
         _flush();
         _safeNotify();
       case BetterPlayerEventType.seekTo:
+        _pushSession();
         _flush();
       default:
         break;
@@ -682,6 +792,10 @@ class PlaybackController extends ChangeNotifier {
     _disposed = true;
     _heartbeat?.cancel();
     _setWakelock(false);
+    // Identity-arbitrated: on series auto-advance this runs *after* the next
+    // episode's controller has already attached, and must not tear down its
+    // session.
+    argosyAudioHandler?.detach(this);
     _flush();
     final sid = _sessionId;
     _sessionId = null;

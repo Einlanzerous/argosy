@@ -115,6 +115,14 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
     final setup = widget.setup;
+    final labels = nowPlayingLabels(
+      title: setup.item.title,
+      seriesTitle: setup.item.seriesTitle,
+      episodeTitle: setup.item.episodeTitle,
+      seasonNumber: setup.item.seasonNumber,
+      episodeNumber: setup.item.episodeNumber,
+      year: setup.item.year,
+    );
     _controller = PlaybackController(
       libraryApi: ref.read(libraryApiProvider),
       transcodeApi: ref.read(transcodeApiProvider),
@@ -122,10 +130,11 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
       baseUrl: ref.read(baseUrlProvider),
       token: ref.read(tokenStoreProvider).token,
       itemId: setup.item.id,
-      title: setup.item.title,
-      notificationAuthor: setup.item.year?.toString(),
+      title: labels.title,
+      notificationAuthor: labels.subtitle,
+      // Backdrop first — see the phone player screen for why.
       artworkUrl: ref.read(artworkResolverProvider)(
-        setup.item.posterUrl ?? setup.item.backdropUrl,
+        setup.item.backdropUrl ?? setup.item.posterUrl,
       ),
       catalogDuration: setup.item.durationSeconds?.toDouble() ?? 0,
       isTranscode: setup.isTranscode,

@@ -1,9 +1,17 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Streaming playback + API access (transcode HLS, direct play, Beacon). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Android 13+: required for the media-playback foreground-service
          notification (lock-screen / shade transport controls) to be shown. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- The media session's foreground service (ARGY-87). Declared here rather
+         than inherited from a plugin's manifest merge: these back *our* service,
+         and FOREGROUND_SERVICE_MEDIA_PLAYBACK is mandatory at targetSdk 34+ or
+         startForeground throws SecurityException. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <!-- Android TV support (ARGY-51): advertise leanback but don't require it, and
          don't require a touchscreen, so the same APK installs on TVs and phones. -->
     <uses-feature
@@ -43,6 +51,32 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Argosy's media session: the lock-screen / Quick Settings transport
+             controls and the single notification backing them (ARGY-87). Driven
+             from Dart by ArgosyAudioHandler; audio_service requires both of
+             these to be declared by the host app rather than merged in.
+
+             `exported="true"` and the MediaBrowserService filter are what the
+             package needs to be reachable as a media browser — that also makes
+             the session discoverable to Android Auto / Assistant. -->
+        <service
+            android:name="com.ryanheise.audioservice.AudioService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback"
+            tools:ignore="Instantiatable">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService"/>
+            </intent-filter>
+        </service>
+        <!-- Headset / bluetooth / steering-wheel media keys. -->
+        <receiver
+            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </receiver>
         <!-- Render with Skia, not Impeller. Impeller's Vulkan backend mis-
              composites the video player's platform-view texture on some GPUs
              (notably the Google TV dongle's Mali): video drops out when an

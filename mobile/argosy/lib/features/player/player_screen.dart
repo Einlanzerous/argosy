@@ -117,6 +117,14 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
     final setup = widget.setup;
+    final labels = nowPlayingLabels(
+      title: setup.item.title,
+      seriesTitle: setup.item.seriesTitle,
+      episodeTitle: setup.item.episodeTitle,
+      seasonNumber: setup.item.seasonNumber,
+      episodeNumber: setup.item.episodeNumber,
+      year: setup.item.year,
+    );
     _controller = PlaybackController(
       libraryApi: ref.read(libraryApiProvider),
       transcodeApi: ref.read(transcodeApiProvider),
@@ -124,10 +132,13 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       baseUrl: ref.read(baseUrlProvider),
       token: ref.read(tokenStoreProvider).token,
       itemId: setup.item.id,
-      title: setup.item.title,
-      notificationAuthor: setup.item.year?.toString(),
+      title: labels.title,
+      notificationAuthor: labels.subtitle,
+      // Backdrop first, unlike the browse grid: Android 13+ blurs the artwork
+      // into a full-bleed lock-screen background and centre-crops it, which
+      // mangles a 2:3 poster (ARGY-87).
       artworkUrl: ref.read(artworkResolverProvider)(
-        setup.item.posterUrl ?? setup.item.backdropUrl,
+        setup.item.backdropUrl ?? setup.item.posterUrl,
       ),
       catalogDuration: setup.item.durationSeconds?.toDouble() ?? 0,
       isTranscode: setup.isTranscode,

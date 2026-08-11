@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resource shrinking is currently off (see app/build.gradle.kts, ARGY-114),
+     but audio_service resolves its notification icon by name at runtime, so a
+     future re-enable would strip ic_stat_argosy without this. Cheap insurance;
+     audio_service's own bundled icons are discarded since we never ask for them. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/*"
+    tools:discard="@drawable/audio_service_*" />

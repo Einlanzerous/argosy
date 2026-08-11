@@ -67,6 +67,39 @@ String episodeHeader(
   return parts.join(' · ');
 }
 
+/// The two lines the lock-screen / notification media controls show for the
+/// current item (ARGY-87): a primary title and a secondary line beneath it.
+///
+/// Previously the notification was handed the raw catalog title and the year,
+/// which for an episode reads as the bare filename fallback — `Futurama S01E01`.
+/// Split across the two lines the surface actually offers:
+///
+/// - episode with a resolved TMDB name → `The Series Has Landed` /
+///   `Futurama · Season 1, Ep 1`
+/// - episode without one → `Season 1, Ep 1` / `Futurama`
+/// - film → `Blade Runner` / `1982`
+///
+/// The name is never repeated across both lines. Deliberately takes primitives
+/// rather than a catalog model so it stays testable and out of the API package's
+/// import graph, mirroring [episodeHeader].
+({String title, String? subtitle}) nowPlayingLabels({
+  required String title,
+  String? seriesTitle,
+  String? episodeTitle,
+  int? seasonNumber,
+  int? episodeNumber,
+  int? year,
+}) {
+  if (seriesTitle != null && seasonNumber != null && episodeNumber != null) {
+    final slot = 'Season $seasonNumber, Ep $episodeNumber';
+    final name = episodeName(episodeTitle);
+    return name != null
+        ? (title: name, subtitle: '$seriesTitle · $slot')
+        : (title: slot, subtitle: seriesTitle);
+  }
+  return (title: formatTitle(title), subtitle: year?.toString());
+}
+
 /// Compact episode label for a card subtitle: `S1 · E1 · The World of Swords`,
 /// dropping the name when it isn't known. Deliberately omits the series title,
 /// unlike [episodeHeader] — on a card the series is already the line above, and

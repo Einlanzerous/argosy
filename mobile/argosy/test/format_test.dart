@@ -41,4 +41,62 @@ void main() {
     test('drops a zero rating', () => expect(yearRatingSubtitle(2000, 0), '2000'));
     test('null when empty', () => expect(yearRatingSubtitle(null, null), isNull));
   });
+
+  group('nowPlayingLabels', () {
+    test('a named episode leads with the episode name', () {
+      final l = nowPlayingLabels(
+        title: 'Futurama s01e02',
+        seriesTitle: 'Futurama',
+        episodeTitle: 'The Series Has Landed',
+        seasonNumber: 1,
+        episodeNumber: 2,
+      );
+      expect(l.title, 'The Series Has Landed');
+      expect(l.subtitle, 'Futurama · Season 1, Ep 2');
+    });
+
+    test('an unnamed episode leads with the slot, not the filename', () {
+      // This is the ARGY-87 symptom: the notification read "Futurama s01e01".
+      final l = nowPlayingLabels(
+        title: 'Futurama s01e01',
+        seriesTitle: 'Futurama',
+        episodeTitle: 'Futurama s01e01',
+        seasonNumber: 1,
+        episodeNumber: 1,
+      );
+      expect(l.title, 'Season 1, Ep 1');
+      expect(l.subtitle, 'Futurama');
+    });
+
+    test('the series name is never on both lines', () {
+      final l = nowPlayingLabels(
+        title: 'Futurama s01e01',
+        seriesTitle: 'Futurama',
+        seasonNumber: 1,
+        episodeNumber: 1,
+      );
+      expect(l.title, isNot(contains('Futurama')));
+      expect(l.subtitle, 'Futurama');
+    });
+
+    test('a film keeps its title and year', () {
+      final l = nowPlayingLabels(title: 'Blade Runner', year: 1982);
+      expect(l.title, 'Blade Runner');
+      expect(l.subtitle, '1982');
+    });
+
+    test('a film with no year has no second line', () {
+      expect(nowPlayingLabels(title: 'Blade Runner').subtitle, isNull);
+    });
+
+    test('partial episode metadata falls back to the film shape', () {
+      // Season without an episode number can't name a slot.
+      final l = nowPlayingLabels(
+        title: 'Some Show s01e01',
+        seriesTitle: 'Some Show',
+        seasonNumber: 1,
+      );
+      expect(l.title, 'Some Show · Season 1 Ep 1');
+    });
+  });
 }

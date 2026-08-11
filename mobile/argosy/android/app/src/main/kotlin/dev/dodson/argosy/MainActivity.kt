@@ -17,11 +17,15 @@ import android.media.MediaFormat
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+// AudioServiceActivity rather than FlutterActivity (ARGY-87): audio_service
+// requires it so the media session's foreground service can bind to the same
+// Flutter engine that's driving playback. It *is* a FlutterActivity subclass, so
+// the PiP and capability plumbing below is unaffected.
+class MainActivity : AudioServiceActivity() {
     private val channel = "dev.dodson.argosy/capabilities"
     private val pipChannel = "dev.dodson.argosy/pip"
 
