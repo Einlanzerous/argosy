@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.24.0](https://github.com/Einlanzerous/argosy/compare/v0.23.1...v0.24.0) (2026-08-14)
+
+
+### Features
+
+* **mobile:** install dev builds beside the Play build (ARGY-202) ([#202](https://github.com/Einlanzerous/argosy/issues/202)) ([09aeeff](https://github.com/Einlanzerous/argosy/commit/09aeeffcd82accdfda2c6bebc1545ae59e0b781e))
+* **mobile:** Stow — offline downloads, passthrough or packaged (ARGY-49) ([#200](https://github.com/Einlanzerous/argosy/issues/200)) ([24caca1](https://github.com/Einlanzerous/argosy/commit/24caca1c28d2d8c80c624546fdc9450697eda369))
+
+
+### Bug Fixes
+
+* **ci:** reap orphaned processes in the dev container (ARGY-200) ([#201](https://github.com/Einlanzerous/argosy/issues/201)) ([4046152](https://github.com/Einlanzerous/argosy/commit/4046152ae784e334cd949368b7319fc2fc0199bd))
+
 ## [0.23.1](https://github.com/Einlanzerous/argosy/compare/v0.23.0...v0.23.1) (2026-08-11)
 
 
