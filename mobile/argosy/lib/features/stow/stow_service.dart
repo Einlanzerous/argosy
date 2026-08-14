@@ -403,15 +403,14 @@ class StowTaskHandler extends TaskHandler {
     });
   }
 
-  void _updateNotification({bool force = false}) {
+  void _updateNotification() {
     final runner = _runner;
     final job = runner?.activeJob;
     if (runner == null || job == null) return;
     // Progress ticks several times a second; each update crosses to the
     // platform and redraws a notification nobody is reading that closely.
     final now = DateTime.now();
-    if (!force &&
-        now.difference(_lastNotification) < const Duration(seconds: 1)) {
+    if (now.difference(_lastNotification) < const Duration(seconds: 1)) {
       return;
     }
     _lastNotification = now;
