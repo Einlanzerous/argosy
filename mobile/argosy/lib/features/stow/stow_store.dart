@@ -75,26 +75,45 @@ class StowStore {
     await _reconcile();
   }
 
-  /// Drops index entries whose video file has gone (an OS cleanup, a manual
-  /// delete, a restore onto a new device). Without this the Stowed screen offers
-  /// rows that fail the moment they are tapped.
+  /// Reconciles the index against what is actually on disk.
+  ///
+  /// A finished entry whose video file has gone (an OS cleanup, a manual
+  /// delete, a restore onto a new device) is dropped — otherwise the Stowed
+  /// screen offers rows that fail the moment they are tapped. An unfinished
+  /// entry is kept as long as its `.part` survives, with its size refreshed
+  /// from disk so the storage view stays honest across restarts; once the
+  /// partial is gone there is nothing left to resume or reclaim, so the row
+  /// goes too.
   Future<void> _reconcile() async {
     final index = _index;
     if (index == null || index.isEmpty) return;
-    final missing = <String>[];
+    final drop = <String>[];
+    final resize = <String, int>{};
     for (final entry in index.values) {
-      if (!await File(await videoPath(entry)).exists()) {
-        missing.add(entry.itemId);
+      if (entry.incomplete) {
+        final part = File('${await videoPath(entry)}.part');
+        if (await part.exists()) {
+          resize[entry.itemId] = await part.length();
+        } else {
+          drop.add(entry.itemId);
+        }
+      } else if (!await File(await videoPath(entry)).exists()) {
+        drop.add(entry.itemId);
       }
     }
-    if (missing.isEmpty) return;
-    for (final id in missing) {
+    if (drop.isEmpty && resize.isEmpty) return;
+    for (final id in drop) {
       index.remove(id);
     }
+    resize.forEach((id, bytes) {
+      final e = index[id];
+      if (e != null) index[id] = e.copyWith(bytes: bytes);
+    });
     await _persist();
   }
 
-  /// Every stowed item, most recently stowed first.
+  /// Every entry — finished and unfinished alike — most recent first. The
+  /// Stowed screen renders both, since unfinished bytes still occupy the device.
   List<StowedItem> list() {
     final index = _index;
     if (index == null) return const [];
@@ -103,12 +122,25 @@ class StowStore {
     return out;
   }
 
-  StowedItem? get(String itemId) => _index?[itemId];
+  /// A *playable* stowed item. Unfinished entries are deliberately invisible
+  /// here: there is no complete file behind them, so handing one to the player
+  /// would open a path that does not exist.
+  StowedItem? get(String itemId) {
+    final entry = _index?[itemId];
+    return (entry == null || entry.incomplete) ? null : entry;
+  }
 
-  bool has(String itemId) => _index?.containsKey(itemId) ?? false;
+  /// Whether [itemId] is on the device and playable.
+  bool has(String itemId) => get(itemId) != null;
 
-  /// Total bytes held by stowed items, for the storage line on the Stowed
-  /// screen.
+  /// The unfinished entry for an item, if it has one.
+  StowedItem? partial(String itemId) {
+    final entry = _index?[itemId];
+    return (entry != null && entry.incomplete) ? entry : null;
+  }
+
+  /// Total bytes held on the device, counting partially-downloaded files —
+  /// they take up exactly as much room as finished ones.
   int totalBytes() =>
       _index?.values.fold<int>(0, (sum, e) => sum + e.bytes) ?? 0;
 
@@ -153,10 +185,14 @@ class StowStore {
     }
   }
 
-  /// Clears a half-finished download's directory without touching the index —
-  /// used when a stow is cancelled or fails partway.
+  /// Clears a half-finished download — its bytes and its index row — used when
+  /// a stow is cancelled. A finished stow is left alone.
   Future<void> discardPartial(String itemId) async {
     if (has(itemId)) return; // A finished stow; leave it alone.
+    await load();
+    if (_index!.remove(itemId) != null) {
+      await _persist();
+    }
     final root = await _ensureRoot();
     final dir = Directory('${root.path}/$itemId');
     if (await dir.exists()) {

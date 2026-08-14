@@ -158,16 +158,12 @@ void main() {
 
       final api = _FakeLibraryApi();
       await queue.flush(api);
-      expect(
-        api.watched,
-        ['a'],
-        reason: 'finishing offline must still be reported',
-      );
-      expect(
-        api.reported,
-        [('a', 2100.0)],
-        reason: 'and must not rewind the position while doing it',
-      );
+      expect(api.watched, [
+        'a',
+      ], reason: 'finishing offline must still be reported');
+      expect(api.reported, [
+        ('a', 2100.0),
+      ], reason: 'and must not rewind the position while doing it');
     });
 
     test('is a no-op for an item that was never queued', () async {

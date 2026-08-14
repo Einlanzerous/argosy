@@ -107,7 +107,8 @@ void main() {
     expect(
       second.has('a'),
       isFalse,
-      reason: 'a row with no file would offer a download that fails when tapped',
+      reason:
+          'a row with no file would offer a download that fails when tapped',
     );
   });
 
@@ -118,24 +119,120 @@ void main() {
     expect(store.list(), isEmpty);
   });
 
-  test('discardPartial clears a cancelled download but spares a finished one',
-      () async {
-    final store = newStore();
-    await store.load();
+  test(
+    'discardPartial clears a cancelled download but spares a finished one',
+    () async {
+      final store = newStore();
+      await store.load();
 
-    // A download that never finished: no index entry, but bytes on disk.
-    final dir = await store.itemDir('partial');
-    await File('${dir.path}/video.mp4.part').writeAsString('half');
-    await store.discardPartial('partial');
-    expect(await Directory('${root.path}/partial').exists(), isFalse);
+      // A download that never finished: no index entry, but bytes on disk.
+      final dir = await store.itemDir('partial');
+      await File('${dir.path}/video.mp4.part').writeAsString('half');
+      await store.discardPartial('partial');
+      expect(await Directory('${root.path}/partial').exists(), isFalse);
 
-    // A finished stow must be untouchable by the same call.
-    final done = _item('done');
-    await _writeVideo(store, done);
-    await store.put(done);
-    await store.discardPartial('done');
-    expect(store.has('done'), isTrue);
-    expect(await File(await store.videoPath(done)).exists(), isTrue);
+      // A finished stow must be untouchable by the same call.
+      final done = _item('done');
+      await _writeVideo(store, done);
+      await store.put(done);
+      await store.discardPartial('done');
+      expect(store.has('done'), isTrue);
+      expect(await File(await store.videoPath(done)).exists(), isTrue);
+    },
+  );
+
+  group('unfinished downloads', () {
+    /// Writes the `.part` an interrupted download would leave behind.
+    Future<void> writePart(StowStore store, StowedItem item, int bytes) async {
+      final dir = await store.itemDir(item.itemId);
+      await File(
+        '${dir.path}/${item.fileName}.part',
+      ).writeAsBytes(List.filled(bytes, 0));
+    }
+
+    test('counts toward storage but is never playable', () async {
+      final store = newStore();
+      await store.load();
+      final item = _item('a', bytes: 9000).copyWith(incomplete: true);
+      await writePart(store, item, 9000);
+      await store.put(item);
+
+      expect(
+        store.totalBytes(),
+        9000,
+        reason: 'the bytes are on the device whether or not the file finished',
+      );
+      expect(store.list().single.itemId, 'a', reason: 'and must be listable');
+      expect(
+        store.has('a'),
+        isFalse,
+        reason: 'there is no complete file to play',
+      );
+      expect(store.get('a'), isNull);
+      expect(store.partial('a')?.bytes, 9000);
+    });
+
+    test('survives a restart with its size refreshed from disk', () async {
+      final first = newStore();
+      await first.load();
+      final item = _item('a', bytes: 0).copyWith(incomplete: true);
+      await first.put(item);
+      // The download advanced after the row was written.
+      await writePart(first, item, 4096);
+
+      final second = newStore();
+      await second.load();
+      expect(
+        second.partial('a')?.bytes,
+        4096,
+        reason: 'the storage view must not report a stale 0 bytes',
+      );
+    });
+
+    test('is dropped once its partial is gone', () async {
+      final first = newStore();
+      await first.load();
+      final item = _item('a').copyWith(incomplete: true);
+      await writePart(first, item, 100);
+      await first.put(item);
+
+      await Directory('${root.path}/a').delete(recursive: true);
+
+      final second = newStore();
+      await second.load();
+      expect(
+        second.list(),
+        isEmpty,
+        reason: 'nothing left to resume or reclaim',
+      );
+    });
+
+    test('discardPartial removes both the bytes and the row', () async {
+      final store = newStore();
+      await store.load();
+      final item = _item('a', bytes: 500).copyWith(incomplete: true);
+      await writePart(store, item, 500);
+      await store.put(item);
+
+      await store.discardPartial('a');
+
+      expect(store.list(), isEmpty);
+      expect(store.totalBytes(), 0);
+      expect(await Directory('${root.path}/a').exists(), isFalse);
+    });
+
+    test('a finished stow completes over its own unfinished row', () async {
+      final store = newStore();
+      await store.load();
+      final started = _item('a', bytes: 0).copyWith(incomplete: true);
+      await store.put(started);
+      await _writeVideo(store, _item('a', bytes: 1234));
+      await store.put(started.copyWith(bytes: 1234, incomplete: false));
+
+      expect(store.list().length, 1, reason: 'one row, not two');
+      expect(store.has('a'), isTrue);
+      expect(store.totalBytes(), 1234);
+    });
   });
 
   test('round-trips episode fields and subtitle sidecars', () async {

@@ -47,6 +47,18 @@ class StowController extends Notifier<Map<String, StowStatus>> {
         totalBytes: _store.get(itemId)?.bytes ?? 0,
       );
     }
+    // In-flight status lives in memory, so after a restart a stow that failed
+    // partway would otherwise read as "never started" — offering Stow with no
+    // hint that gigabytes are sitting underneath it. The unfinished index entry
+    // is what survives, so report from that.
+    final partial = _store.partial(itemId);
+    if (partial != null) {
+      return StowStatus(
+        phase: StowPhase.failed,
+        receivedBytes: partial.bytes,
+        message: 'Download stopped partway — it resumes where it left off.',
+      );
+    }
     return const StowStatus.none();
   }
 
@@ -108,6 +120,31 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       final dir = await _store.itemDir(itemId);
       final target = File('${dir.path}/$fileName');
 
+      // Record the entry before a byte lands, marked unfinished. The bytes are
+      // about to exist on the device whether or not the download completes, and
+      // a row is what makes them visible in the storage total, listable, and
+      // deletable — a failed 12 GB stow would otherwise sit there unreachable.
+      final entry = StowedItem(
+        itemId: itemId,
+        title: item.title,
+        subtitleLine: subtitleLine ?? _defaultSubtitleLine(item),
+        fileName: fileName,
+        bytes: 0,
+        durationSeconds: (item.durationSeconds ?? 0).toDouble(),
+        stowedAt: DateTime.now(),
+        posterUrl: item.posterUrl,
+        // The catalog says `episode`, not `series` — a playable item is never
+        // the series itself. Anything episode-shaped rows as series so the
+        // offline list labels it the way the rest of the app does.
+        kind: item.kind == 'episode' || item.episodeNumber != null
+            ? MediaKind.series
+            : MediaKind.movie,
+        seasonNumber: item.seasonNumber,
+        episodeNumber: item.episodeNumber,
+        incomplete: true,
+      );
+      await _store.put(entry);
+
       _set(
         itemId,
         StowStatus(
@@ -133,24 +170,11 @@ class StowController extends Notifier<Map<String, StowStatus>> {
 
       final subtitles = await _downloadSubtitles(itemId, dir.path, handle);
 
+      // Finished: flip the entry to playable, with its real size and tracks.
       await _store.put(
-        StowedItem(
-          itemId: itemId,
-          title: item.title,
-          subtitleLine: subtitleLine ?? _defaultSubtitleLine(item),
-          fileName: fileName,
+        entry.copyWith(
           bytes: await target.length(),
-          durationSeconds: (item.durationSeconds ?? 0).toDouble(),
-          stowedAt: DateTime.now(),
-          posterUrl: item.posterUrl,
-          // The catalog says `episode`, not `series` — a playable item is never
-          // the series itself. Anything episode-shaped rows as series so the
-          // offline list labels it the way the rest of the app does.
-          kind: item.kind == 'episode' || item.episodeNumber != null
-              ? MediaKind.series
-              : MediaKind.movie,
-          seasonNumber: item.seasonNumber,
-          episodeNumber: item.episodeNumber,
+          incomplete: false,
           subtitles: subtitles,
         ),
       );

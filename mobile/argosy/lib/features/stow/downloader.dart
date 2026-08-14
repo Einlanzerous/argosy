@@ -106,6 +106,21 @@ Future<void> downloadFile({
     if (response.statusCode == HttpStatus.ok) {
       append = false;
       received = 0;
+    } else if (response.statusCode == HttpStatus.requestedRangeNotSatisfiable) {
+      // The partial is already at or past the end of the file — which happens
+      // if the process died between the final flush and the rename, leaving a
+      // complete `.part`. Since a failure now keeps the partial, treating this
+      // as an error would wedge the item: every retry asks for a range past
+      // EOF, gets 416, and keeps the partial that caused it. Start over from
+      // zero instead; it terminates, and the window is one rename wide.
+      await partial.delete();
+      return downloadFile(
+        url: url,
+        target: target,
+        handle: handle,
+        headers: headers,
+        onProgress: onProgress,
+      );
     } else if (response.statusCode != HttpStatus.partialContent) {
       throw HttpException('Download failed (${response.statusCode})', uri: url);
     }

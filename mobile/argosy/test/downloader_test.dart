@@ -51,6 +51,12 @@ class _RangeServer {
       var start = 0;
       if (honourRange) {
         start = int.parse(range.substring(6).split('-').first);
+        // Mirrors http.ServeContent: a start at or past EOF is unsatisfiable.
+        if (start >= body.length) {
+          req.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+          await req.response.close();
+          continue;
+        }
         req.response.statusCode = HttpStatus.partialContent;
         req.response.headers.set(
           HttpHeaders.contentRangeHeader,
@@ -170,25 +176,28 @@ void main() {
     );
   });
 
-  test('a partial with no validator is discarded rather than resumed', () async {
-    // Bytes left by a version that recorded no validator can't be proven to
-    // belong to this file, so they must not be appended to.
-    final target = File('${dir.path}/video.mp4');
-    await File('${target.path}.part').writeAsBytes(List.filled(1000, 0xBB));
+  test(
+    'a partial with no validator is discarded rather than resumed',
+    () async {
+      // Bytes left by a version that recorded no validator can't be proven to
+      // belong to this file, so they must not be appended to.
+      final target = File('${dir.path}/video.mp4');
+      await File('${target.path}.part').writeAsBytes(List.filled(1000, 0xBB));
 
-    final server = _RangeServer(body);
-    await server.start();
-    addTearDown(server.stop);
+      final server = _RangeServer(body);
+      await server.start();
+      addTearDown(server.stop);
 
-    await downloadFile(
-      url: server.url,
-      target: target,
-      handle: DownloadHandle(),
-    );
+      await downloadFile(
+        url: server.url,
+        target: target,
+        handle: DownloadHandle(),
+      );
 
-    expect(server.ranges.single, isNull, reason: 'no resume was attempted');
-    expect(await target.readAsBytes(), body);
-  });
+      expect(server.ranges.single, isNull, reason: 'no resume was attempted');
+      expect(await target.readAsBytes(), body);
+    },
+  );
 
   test('a truncated transfer is not renamed into place', () async {
     final server = _RangeServer(body)..cutAfter = 512;
@@ -226,6 +235,33 @@ void main() {
       throwsA(isA<DownloadCancelled>()),
     );
     expect(await target.exists(), isFalse);
+  });
+
+  test('a complete partial (416) restarts instead of wedging', () async {
+    // The window between the final flush and the rename: the .part holds the
+    // whole file. Asking to resume past EOF gets a 416, and since a failure now
+    // keeps the partial, treating that as an error would loop forever.
+    final target = File('${dir.path}/video.mp4');
+    await File('${target.path}.part').writeAsBytes(body);
+    await File('${target.path}.part.etag').writeAsString('"v1"');
+
+    final server = _RangeServer(body);
+    await server.start();
+    addTearDown(server.stop);
+
+    await downloadFile(
+      url: server.url,
+      target: target,
+      handle: DownloadHandle(),
+    );
+
+    expect(await target.readAsBytes(), body);
+    expect(
+      server.ranges.length,
+      2,
+      reason: 'the 416 attempt, then a clean restart from zero',
+    );
+    expect(server.ranges.last, isNull, reason: 'the retry asks for everything');
   });
 
   test('a server error surfaces rather than writing a body', () async {

@@ -56,6 +56,7 @@ class StowedItem {
     this.seasonNumber,
     this.episodeNumber,
     this.subtitles = const [],
+    this.incomplete = false,
   });
 
   final String itemId;
@@ -82,6 +83,21 @@ class StowedItem {
   final int? episodeNumber;
   final List<StowedSubtitle> subtitles;
 
+  /// True while the download is unfinished — the entry exists so the bytes on
+  /// disk are visible, countable and deletable, but there is no playable file
+  /// behind it yet.
+  ///
+  /// Recorded up front rather than only on success: a stow that fails partway
+  /// deliberately keeps its `.part` so a retry resumes, and without a row for it
+  /// those bytes would be invisible to the storage view, absent from the list,
+  /// and unreachable by delete — several gigabytes with no way to see or
+  /// reclaim them.
+  final bool incomplete;
+
+  /// Size of the finished file, or of the bytes downloaded so far while
+  /// [incomplete].
+  int get sizeOnDisk => bytes;
+
   Map<String, dynamic> toJson() => {
     'itemId': itemId,
     'title': title,
@@ -96,7 +112,29 @@ class StowedItem {
     'seasonNumber': seasonNumber,
     'episodeNumber': episodeNumber,
     'subtitles': subtitles.map((s) => s.toJson()).toList(),
+    'incomplete': incomplete,
   };
+
+  StowedItem copyWith({
+    int? bytes,
+    bool? incomplete,
+    List<StowedSubtitle>? subtitles,
+  }) => StowedItem(
+    itemId: itemId,
+    title: title,
+    fileName: fileName,
+    bytes: bytes ?? this.bytes,
+    stowedAt: stowedAt,
+    subtitleLine: subtitleLine,
+    durationSeconds: durationSeconds,
+    posterUrl: posterUrl,
+    kind: kind,
+    seriesId: seriesId,
+    seasonNumber: seasonNumber,
+    episodeNumber: episodeNumber,
+    subtitles: subtitles ?? this.subtitles,
+    incomplete: incomplete ?? this.incomplete,
+  );
 
   static StowedItem fromJson(Map<String, dynamic> json) => StowedItem(
     itemId: json['itemId'] as String,
@@ -117,6 +155,7 @@ class StowedItem {
     subtitles: (json['subtitles'] as List<dynamic>? ?? const [])
         .map((s) => StowedSubtitle.fromJson(s as Map<String, dynamic>))
         .toList(),
+    incomplete: json['incomplete'] as bool? ?? false,
   );
 }
 

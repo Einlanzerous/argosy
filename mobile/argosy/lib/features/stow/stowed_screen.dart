@@ -134,12 +134,17 @@ class _StowedRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.argosy;
-    final subtitle = [
-      if (item.subtitleLine != null && item.subtitleLine!.isNotEmpty)
-        item.subtitleLine!,
-      formatBytes(item.bytes),
-      if (item.durationSeconds > 0) formatRuntime(item.durationSeconds),
-    ].join('   •   ');
+    // An unfinished row exists to account for bytes, so it says what they are
+    // and what will happen to them rather than posing as something watchable.
+    final subtitle = item.incomplete
+        ? 'Unfinished — ${formatBytes(item.bytes)} downloaded'
+              '   •   Stow it again to resume'
+        : [
+            if (item.subtitleLine != null && item.subtitleLine!.isNotEmpty)
+              item.subtitleLine!,
+            formatBytes(item.bytes),
+            if (item.durationSeconds > 0) formatRuntime(item.durationSeconds),
+          ].join('   •   ');
 
     return Material(
       color: ArgosyColors.bg2,
@@ -148,14 +153,19 @@ class _StowedRow extends ConsumerWidget {
         borderRadius: BorderRadius.circular(tokens.radius),
         // Offline playback goes through the normal player route: it resolves the
         // local file itself, so a stowed item plays the same way online or off.
-        onTap: () => openPlayer(context, item.itemId),
+        // An unfinished download has no file behind it, so it isn't tappable.
+        onTap: item.incomplete ? null : () => openPlayer(context, item.itemId),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              const Icon(
-                Icons.offline_pin,
-                color: ArgosyColors.accentHi,
+              Icon(
+                item.incomplete
+                    ? Icons.downloading_outlined
+                    : Icons.offline_pin,
+                color: item.incomplete
+                    ? ArgosyColors.dim
+                    : ArgosyColors.accentHi,
                 size: 22,
               ),
               const SizedBox(width: 12),
@@ -201,8 +211,13 @@ class _StowedRow extends ConsumerWidget {
         backgroundColor: ArgosyColors.bg2,
         title: const Text('Remove download?'),
         content: Text(
-          '“${item.title}” will be deleted from this device, freeing '
-          '${formatBytes(item.bytes)}. It stays in your library.',
+          item.incomplete
+              ? 'The unfinished download of “${item.title}” will be '
+                    'deleted, freeing ${formatBytes(item.bytes)}. It stays in '
+                    'your library and can be stowed again from the start.'
+              : '“${item.title}” will be deleted from this device, '
+                    'freeing ${formatBytes(item.bytes)}. It stays in your '
+                    'library.',
         ),
         actions: [
           TextButton(

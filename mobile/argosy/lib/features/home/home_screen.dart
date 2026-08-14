@@ -142,7 +142,16 @@ class _StowedButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(stowedItemsProvider).value?.length ?? 0;
+    // Playable items only: the badge answers "how much can I watch offline",
+    // and an unfinished download is not an answer to that. It still shows up in
+    // The Hold itself, where the question is about storage.
+    final count =
+        ref
+            .watch(stowedItemsProvider)
+            .value
+            ?.where((e) => !e.incomplete)
+            .length ??
+        0;
     if (count == 0) return const SizedBox.shrink();
     return IconButton(
       tooltip: 'The Hold — stowed for offline',
