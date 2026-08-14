@@ -17,12 +17,17 @@ class _FileServer {
   late HttpServer _server;
   int status = HttpStatus.ok;
 
+  /// Held before answering, to keep a job running long enough for another to
+  /// queue up behind it.
+  Duration delay = Duration.zero;
+
   String get base => 'http://${_server.address.host}:${_server.port}';
 
   Future<void> start() async {
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     unawaited(() async {
       await for (final req in _server) {
+        if (delay > Duration.zero) await Future<void>.delayed(delay);
         if (status != HttpStatus.ok) {
           req.response.statusCode = status;
           await req.response.close();
@@ -279,7 +284,7 @@ void main() {
       expect(store.has(otherId), isTrue);
     });
 
-    test('ignores a second request for something already queued', () async {
+    test('starts no second download for something already queued', () async {
       final r = runner();
       await r.enqueue(job());
       await r.enqueue(job());
@@ -287,6 +292,42 @@ void main() {
 
       await store.reload();
       expect(store.list().length, 1);
+    });
+
+    test('but does answer that request, rather than going quiet', () async {
+      // Silence here is indistinguishable, to the service handshake, from the
+      // message never arriving — so it retries, times out twice, and reports a
+      // failure for a download that is queued and perfectly healthy. The window
+      // is a relaunch while something sits queued: no live status, and no index
+      // row either, so the button offers a plain Stow.
+      server.delay = const Duration(milliseconds: 300);
+      final second = StowJobRequest(
+        itemId: otherId,
+        title: 'Second Film',
+        sourcePath: 'movies/Second.mkv',
+      );
+      final r = runner();
+      await r.enqueue(job()); // becomes active, and stays there a while
+      await r.enqueue(second); // queued behind it
+
+      // Counted per item, not overall: the *active* job is emitting progress
+      // the whole time, and those ticks would satisfy a looser assertion
+      // without the queued one ever being answered.
+      int answers() => events.where((e) => e.itemId == otherId).length;
+      final before = answers();
+      await r.enqueue(second);
+      expect(
+        answers(),
+        greaterThan(before),
+        reason: 'a duplicate must be acknowledged, not swallowed',
+      );
+      expect(
+        events.lastWhere((e) => e.itemId == otherId).status?.phase,
+        StowPhase.requesting,
+      );
+
+      server.delay = Duration.zero;
+      await r.done;
     });
 
     test('empties itself once the work is done', () async {

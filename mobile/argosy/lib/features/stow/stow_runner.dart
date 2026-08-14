@@ -264,11 +264,26 @@ class StowRunner {
 
   bool get isIdle => _active == null && _pending.isEmpty;
 
-  /// Queues [job]. A second call for an item already in flight is a no-op
-  /// rather than a second download.
+  /// Queues [job]. A second call for an item already in flight starts no second
+  /// download — but it does answer.
+  ///
+  /// Answering matters because the caller may be a UI that cannot see this
+  /// queue. An app relaunched while a stow sits *queued* behind another has no
+  /// live status for it and no index row either — a row is only written once a
+  /// job becomes active — so it offers a plain Stow button, and a tap lands
+  /// here. Returning in silence is indistinguishable from the message never
+  /// arriving, which is exactly what the service handshake reads it as: it
+  /// retries, times out, and pins a "the download service didn't pick this up"
+  /// failure on something that is queued and perfectly healthy.
   Future<void> enqueue(StowJobRequest job) async {
-    if (_active?.itemId == job.itemId) return;
-    if (_pending.any((j) => j.itemId == job.itemId)) return;
+    if (_active?.itemId == job.itemId ||
+        _pending.any((j) => j.itemId == job.itemId)) {
+      _emit(
+        job.itemId,
+        _statuses[job.itemId] ?? const StowStatus(phase: StowPhase.requesting),
+      );
+      return;
+    }
     _pending.add(job);
     _emit(job.itemId, const StowStatus(phase: StowPhase.requesting));
     await _persistQueue();
