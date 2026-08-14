@@ -12,6 +12,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/beacon"
 	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/presence"
+	"github.com/Einlanzerous/argosy/internal/stow"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +28,12 @@ type handlers struct {
 	subs     *subtitle.Service
 	presence *presence.Registry
 	beacon   *beacon.Hub
+	// stow drives offline-download packaging (ARGY-49); nil disables the
+	// packaging half, leaving passthrough stows still available.
+	stow *stow.Manager
+	// stowPassthroughMax is the size ceiling for handing a source file over
+	// untouched instead of packaging a smaller copy.
+	stowPassthroughMax int64
 	// preferredLangs is the household's normalized preferred audio/subtitle
 	// language set, surfaced on PlaybackInfo so pickers can fold the rest
 	// behind "More options" (ARGY-154).
@@ -36,13 +43,16 @@ type handlers struct {
 // RegisterRoutes wires the auth-scoped browse endpoints and the public artwork
 // file server onto mux. artworkDir == "" disables artwork serving. tc may be nil
 // to disable the transcode (The Helm) endpoints; sweeper may be nil to disable
-// the cache-stats endpoint.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub, preferredLangs []string) {
+// the cache-stats endpoint; stowMgr may be nil to disable offline packaging.
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub, preferredLangs []string, stowMgr *stow.Manager, stowPassthroughMax int64) {
 	normalized := make([]string, 0, len(preferredLangs))
 	for _, l := range preferredLangs {
 		normalized = append(normalized, subtitle.LangCode(l))
 	}
-	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs, presence: pres, beacon: hub, preferredLangs: normalized}
+	if stowPassthroughMax <= 0 {
+		stowPassthroughMax = DefaultStowPassthroughMax
+	}
+	h := &handlers{store: NewStore(pool, artworkBase), logger: logger, tc: tc, caps: caps, encoder: encoder, cache: sweeper, subs: subs, presence: pres, beacon: hub, preferredLangs: normalized, stow: stowMgr, stowPassthroughMax: stowPassthroughMax}
 	mw := auth.Middleware(authStore)
 
 	mux.Handle("GET /api/v1/libraries", mw(http.HandlerFunc(h.listLibraries)))
@@ -108,6 +118,19 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 			mux.Handle("GET /api/v1/transcode/cache", mw(http.HandlerFunc(h.transcodeCache)))
 		}
 		mux.Handle("GET /api/v1/transcode/{sessionId}/{file}", mw(http.HandlerFunc(h.fileTranscode)))
+	}
+
+	// Stow: offline downloads (ARGY-49). The decision endpoint stays available
+	// even without a packaging manager — a passthrough stow needs no server-side
+	// job — but the job endpoints only exist when packaging does.
+	mux.Handle("POST /api/v1/items/{itemId}/stow", mw(http.HandlerFunc(h.stowItem)))
+	if stowMgr != nil {
+		mux.Handle("GET /api/v1/stow", mw(http.HandlerFunc(h.listStowJobs)))
+		mux.Handle("GET /api/v1/stow/{jobId}", mw(http.HandlerFunc(h.getStowJob)))
+		mux.Handle("DELETE /api/v1/stow/{jobId}", mw(http.HandlerFunc(h.deleteStowJob)))
+		// The download authenticates inline (?token=), like streaming: it runs
+		// outside the API client, in a resumable background transfer.
+		mux.Handle("GET /api/v1/stow/{jobId}/file", stowFileHandler(stowMgr, authStore, logger))
 	}
 
 	if artworkDir != "" {

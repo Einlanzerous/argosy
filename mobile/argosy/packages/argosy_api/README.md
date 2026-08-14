@@ -128,6 +128,11 @@ Class | Method | HTTP request | Description
 *LibraryApi* | [**streamItem**](doc//LibraryApi.md#streamitem) | **GET** /api/v1/items/{itemId}/stream | Direct-play media stream with HTTP range support
 *LibraryApi* | [**triggerScan**](doc//LibraryApi.md#triggerscan) | **POST** /api/v1/scan | Trigger an immediate library re-scan (\"rebuild the Manifest\")
 *LibraryApi* | [**updateVault**](doc//LibraryApi.md#updatevault) | **PATCH** /api/v1/vaults/{vaultId} | Rename / re-describe / toggle sharing (owner or admin)
+*StowApi* | [**deleteStowJob**](doc//StowApi.md#deletestowjob) | **DELETE** /api/v1/stow/{jobId} | Cancel a packaging job, or release a collected one
+*StowApi* | [**getStowFile**](doc//StowApi.md#getstowfile) | **GET** /api/v1/stow/{jobId}/file | Download a ready package
+*StowApi* | [**getStowJob**](doc//StowApi.md#getstowjob) | **GET** /api/v1/stow/{jobId} | Poll a packaging job
+*StowApi* | [**listStowJobs**](doc//StowApi.md#liststowjobs) | **GET** /api/v1/stow | Packaging jobs for the current account
+*StowApi* | [**stowItem**](doc//StowApi.md#stowitem) | **POST** /api/v1/items/{itemId}/stow | Pack an item away for offline viewing
 *SystemApi* | [**getHealth**](doc//SystemApi.md#gethealth) | **GET** /healthz | Liveness/readiness probe
 *SystemApi* | [**ping**](doc//SystemApi.md#ping) | **GET** /api/v1/ping | Service identity and version
 *TranscodeApi* | [**getTranscodeCache**](doc//TranscodeApi.md#gettranscodecache) | **GET** /api/v1/transcode/cache | Transcode cache usage (Ballast)
@@ -193,6 +198,8 @@ Class | Method | HTTP request | Description
  - [SeriesPage](doc//SeriesPage.md)
  - [SeriesSummary](doc//SeriesSummary.md)
  - [Session](doc//Session.md)
+ - [StowJob](doc//StowJob.md)
+ - [StowRequest](doc//StowRequest.md)
  - [SubtitleTrack](doc//SubtitleTrack.md)
  - [TranscodeCacheStats](doc//TranscodeCacheStats.md)
  - [TranscodeCapabilities](doc//TranscodeCapabilities.md)

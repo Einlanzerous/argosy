@@ -12,6 +12,8 @@ import '../../util/poster_gradient.dart';
 import '../../widgets/arg_chip.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
+import '../stow/stow_controller.dart';
+import '../stow/stowed_item.dart';
 import 'add_to_vault.dart';
 import 'detail_providers.dart';
 import 'detail_widgets.dart';
@@ -54,7 +56,9 @@ List<List<EpisodeSummary>> _groupEpisodes(List<EpisodeSummary> episodes) {
   final groups = <List<EpisodeSummary>>[];
   for (final e in episodes) {
     final prev = groups.isNotEmpty ? groups.last : null;
-    if (e.mediaItemId != null && prev != null && prev.first.mediaItemId == e.mediaItemId) {
+    if (e.mediaItemId != null &&
+        prev != null &&
+        prev.first.mediaItemId == e.mediaItemId) {
       prev.add(e);
     } else {
       groups.add([e]);
@@ -148,8 +152,9 @@ class _BodyState extends ConsumerState<_Body> {
   int get _resumeSeasonIndex {
     final target = _resumeTarget;
     if (target == null) return 0;
-    final i = widget.series.seasons
-        .indexWhere((s) => s.seasonNumber == target.seasonNumber);
+    final i = widget.series.seasons.indexWhere(
+      (s) => s.seasonNumber == target.seasonNumber,
+    );
     return i >= 0 ? i : 0;
   }
 
@@ -266,12 +271,12 @@ class _BodyState extends ConsumerState<_Body> {
               watched: _isWatched(group.first),
               onSet: group.first.mediaItemId == null
                   ? null
-                  : (next) => _setEpisodeWatched(group.first.mediaItemId!, next),
+                  : (next) =>
+                        _setEpisodeWatched(group.first.mediaItemId!, next),
             ),
         // Bulk controls sit under the episode list so they don't wedge empty
         // space between the season chips and the episodes (ARGY-109).
-        if (season != null &&
-            season.episodes.any((e) => e.mediaItemId != null))
+        if (season != null && season.episodes.any((e) => e.mediaItemId != null))
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Wrap(
@@ -289,14 +294,10 @@ class _BodyState extends ConsumerState<_Body> {
                   watched: _seasonAllWatched(season),
                   watchedLabel: 'Season watched',
                   markLabel: 'Mark season watched',
-                  onSet: (next) => _setSeasonWatched(
-                    season.id,
-                    [
-                      for (final e in season.episodes)
-                        if (e.mediaItemId != null) e.mediaItemId!,
-                    ],
-                    next,
-                  ),
+                  onSet: (next) => _setSeasonWatched(season.id, [
+                    for (final e in season.episodes)
+                      if (e.mediaItemId != null) e.mediaItemId!,
+                  ], next),
                 ),
               ],
             ),
@@ -434,9 +435,7 @@ class _EpisodeTile extends ConsumerWidget {
       opacity: playable ? 1 : 0.5,
       child: InkWell(
         onTap: playable ? () => openPlayer(context, _rep.mediaItemId!) : null,
-        onLongPress: playable && onSet != null
-            ? () => _showWatchedSheet(context)
-            : null,
+        onLongPress: playable ? () => _showRowSheet(context, ref) : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
           child: Row(
@@ -562,44 +561,94 @@ class _EpisodeTile extends ConsumerWidget {
     );
   }
 
-  /// Long-press context action (ARGY-122): a small sheet offering the one
-  /// watched/unwatched flip for this row. The visible affordance is the badge
-  /// on the thumbnail; the sheet is the toggle, replacing the old trailing
-  /// check button.
-  Future<void> _showWatchedSheet(BuildContext context) async {
+  /// Long-press context actions for a row (ARGY-122, extended by ARGY-49): the
+  /// watched/unwatched flip, and stowing this episode for offline viewing. The
+  /// visible affordance is the badge on the thumbnail; this sheet is where the
+  /// per-row actions live, so Stow joins it rather than adding a second control
+  /// to an already-dense row.
+  Future<void> _showRowSheet(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final flip = await showModalBottomSheet<bool>(
+    final itemId = _rep.mediaItemId!;
+    final stow = ref.read(stowControllerProvider.notifier);
+    final stowStatus = stow.statusFor(itemId);
+
+    final action = await showModalBottomSheet<_RowAction>(
       context: context,
       backgroundColor: ArgosyColors.panel,
       builder: (sheet) => SafeArea(
-        child: ListTile(
-          leading: Icon(
-            watched ? Icons.check_circle_outline : Icons.check_circle,
-            color: ArgosyColors.accent,
-          ),
-          title: Text(
-            watched
-                ? 'Mark $_episodeLabel unwatched'
-                : 'Mark $_episodeLabel watched',
-            style: Theme.of(sheet).textTheme.titleMedium,
-          ),
-          onTap: () => Navigator.of(sheet).pop(true),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onSet != null)
+              ListTile(
+                leading: Icon(
+                  watched ? Icons.check_circle_outline : Icons.check_circle,
+                  color: ArgosyColors.accent,
+                ),
+                title: Text(
+                  watched
+                      ? 'Mark $_episodeLabel unwatched'
+                      : 'Mark $_episodeLabel watched',
+                  style: Theme.of(sheet).textTheme.titleMedium,
+                ),
+                onTap: () => Navigator.of(sheet).pop(_RowAction.toggleWatched),
+              ),
+            ListTile(
+              leading: Icon(
+                stowStatus.phase == StowPhase.stowed
+                    ? Icons.offline_pin
+                    : Icons.download_for_offline_outlined,
+                color: ArgosyColors.accent,
+              ),
+              title: Text(switch (stowStatus.phase) {
+                StowPhase.stowed => 'Remove $_episodeLabel from this device',
+                StowPhase.requesting ||
+                StowPhase.packaging ||
+                StowPhase.downloading =>
+                  'Cancel download (${stowStatus.label})',
+                _ => 'Stow $_episodeLabel for offline',
+              }, style: Theme.of(sheet).textTheme.titleMedium),
+              onTap: () => Navigator.of(sheet).pop(switch (stowStatus.phase) {
+                StowPhase.stowed => _RowAction.unstow,
+                StowPhase.requesting ||
+                StowPhase.packaging ||
+                StowPhase.downloading => _RowAction.cancelStow,
+                _ => _RowAction.stow,
+              }),
+            ),
+          ],
         ),
       ),
     );
-    if (flip != true) return;
-    try {
-      await onSet!(!watched);
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text("Couldn't update watched state"),
-          backgroundColor: ArgosyColors.danger,
-        ),
-      );
+    if (action == null) return;
+
+    switch (action) {
+      case _RowAction.toggleWatched:
+        try {
+          await onSet!(!watched);
+        } catch (_) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text("Couldn't update watched state"),
+              backgroundColor: ArgosyColors.danger,
+            ),
+          );
+        }
+      case _RowAction.stow:
+        await stow.stowById(
+          itemId,
+          subtitleLine: 'S$seasonNumber · $_episodeLabel · $_displayTitle',
+        );
+      case _RowAction.cancelStow:
+        await stow.cancel(itemId);
+      case _RowAction.unstow:
+        await stow.remove(itemId);
     }
   }
 }
+
+/// The per-row long-press actions.
+enum _RowAction { toggleWatched, stow, cancelStow, unstow }
 
 /// The episode-thumbnail fallback when there's no TMDB still: a seeded gradient
 /// under the hatch texture, mirroring the web's placeholder (a flat tile looked

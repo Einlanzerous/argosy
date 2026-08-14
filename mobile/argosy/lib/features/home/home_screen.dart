@@ -15,6 +15,7 @@ import '../account/account_sheet.dart';
 import '../browse/continue_card.dart';
 import '../browse/media_card.dart';
 import '../browse/media_poster_card.dart';
+import '../stow/stow_controller.dart';
 import 'home_providers.dart';
 
 /// The Bridge — Argosy's home. A hero spotlight over Continue Watching, On
@@ -39,14 +40,20 @@ class HomeScreen extends ConsumerWidget {
             const SizedBox(width: 11),
             Text(
               'Argosy',
-              style: Theme.of(context)
-                  .appBarTheme
-                  .titleTextStyle
-                  ?.copyWith(fontSize: 23),
+              style: Theme.of(
+                context,
+              ).appBarTheme.titleTextStyle?.copyWith(fontSize: 23),
             ),
           ],
         ),
-        actions: [_AccountButton(), const SizedBox(width: 14)],
+        actions: [
+          // The Hold lives in the app bar, not behind Settings: Settings can't
+          // render without the server, and what's stowed has to be reachable
+          // precisely when there is no server (ARGY-49).
+          const _StowedButton(),
+          _AccountButton(),
+          const SizedBox(width: 14),
+        ],
       ),
       body: AsyncView(
         value: data,
@@ -125,6 +132,41 @@ class HomeScreen extends ConsumerWidget {
             ),
         ],
       );
+}
+
+/// Opens The Hold, badged with a count when anything is stowed. Hidden when
+/// nothing is — it earns its space in the bar only once it has something to
+/// show.
+class _StowedButton extends ConsumerWidget {
+  const _StowedButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Playable items only: the badge answers "how much can I watch offline",
+    // and an unfinished download is not an answer to that. It still shows up in
+    // The Hold itself, where the question is about storage.
+    final count =
+        ref
+            .watch(stowedItemsProvider)
+            .value
+            ?.where((e) => !e.incomplete)
+            .length ??
+        0;
+    if (count == 0) return const SizedBox.shrink();
+    return IconButton(
+      tooltip: 'The Hold — stowed for offline',
+      onPressed: () => openStowed(context),
+      icon: Badge.count(
+        count: count,
+        backgroundColor: ArgosyColors.accent,
+        textColor: ArgosyColors.ink,
+        child: const Icon(
+          Icons.download_for_offline_outlined,
+          color: ArgosyColors.cream,
+        ),
+      ),
+    );
+  }
 }
 
 /// The Bridge's brass identity avatar — opens the account / Fleet sheet. Neutral
@@ -244,7 +286,9 @@ class _Hero extends ConsumerWidget {
                         const SizedBox(height: 10),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: DevicePill(label: 'Left off on ${hero.deviceLabel!}'),
+                          child: DevicePill(
+                            label: 'Left off on ${hero.deviceLabel!}',
+                          ),
                         ),
                       ],
                       if (hero.percent != null) ...[

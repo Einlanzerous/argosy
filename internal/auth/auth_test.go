@@ -300,7 +300,7 @@ func TestLinkPairing(t *testing.T) {
 	}
 
 	// Pending before approval.
-	if st, err := store.LinkStatus(ctx, start.Code); err != nil || st.Status != api.Pending || st.Token != nil {
+	if st, err := store.LinkStatus(ctx, start.Code); err != nil || st.Status != api.LinkStatusResponseStatusPending || st.Token != nil {
 		t.Fatalf("pending poll = %+v (err %v)", st, err)
 	}
 
@@ -315,7 +315,7 @@ func TestLinkPairing(t *testing.T) {
 
 	// Approved poll returns a token bound to the approving account + profile.
 	st, err := store.LinkStatus(ctx, start.Code)
-	if err != nil || st.Status != api.Approved || st.Token == nil || *st.Token == "" {
+	if err != nil || st.Status != api.LinkStatusResponseStatusApproved || st.Token == nil || *st.Token == "" {
 		t.Fatalf("approved poll = %+v (err %v)", st, err)
 	}
 	tvSess, err := store.AuthenticateDevice(ctx, *st.Token)
@@ -373,7 +373,7 @@ func TestLinkPairingAnnouncedIdentity(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 	st, err := store.LinkStatus(ctx, start.Code)
-	if err != nil || st.Status != api.Pending {
+	if err != nil || st.Status != api.LinkStatusResponseStatusPending {
 		t.Fatalf("pending poll = %+v (err %v)", st, err)
 	}
 	if st.DeviceName == nil || *st.DeviceName != "Pixel 9" || st.Platform == nil || *st.Platform != "android" {
@@ -384,7 +384,7 @@ func TestLinkPairingAnnouncedIdentity(t *testing.T) {
 	if err := store.ApproveLink(ctx, sess, start.Code, ""); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
-	if st, err = store.LinkStatus(ctx, start.Code); err != nil || st.Status != api.Approved || st.Token == nil {
+	if st, err = store.LinkStatus(ctx, start.Code); err != nil || st.Status != api.LinkStatusResponseStatusApproved || st.Token == nil {
 		t.Fatalf("approved poll = %+v (err %v)", st, err)
 	}
 	devices, _ := store.ListDevices(ctx, sess)

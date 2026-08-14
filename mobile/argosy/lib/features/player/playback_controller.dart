@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../stow/offline_progress_queue.dart';
 import 'argosy_audio_handler.dart';
 import 'media_session_state.dart';
 import 'vtt.dart';
@@ -41,6 +42,9 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
     required this.prefs,
     this.notificationAuthor,
     this.artworkUrl,
+    this.localPath,
+    this.localSubtitles = const [],
+    this.offlineQueue,
   });
 
   final LibraryApi libraryApi;
@@ -65,6 +69,23 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
 
   /// Whether playback goes through an HLS transcode session vs. a direct stream.
   final bool isTranscode;
+
+  /// Absolute path to a stowed copy of this item (ARGY-49). When set, playback
+  /// reads from disk and the network is never touched — the case the whole
+  /// feature exists for.
+  final String? localPath;
+
+  /// WebVTT sidecars stowed alongside [localPath], keyed by the same track id
+  /// the picker and the saved caption preference use.
+  final List<({String id, String label, String language, String path})>
+  localSubtitles;
+
+  /// Where resume positions go when the server can't be reached. Without it an
+  /// episode watched offline still reads as unstarted once you land.
+  final OfflineProgressQueue? offlineQueue;
+
+  /// Whether this session is playing a stowed file.
+  bool get isOffline => localPath != null && localPath!.isNotEmpty;
 
   /// Whether the device advertised 4K-HEVC decode to the transcoder.
   final bool hevc;
@@ -158,8 +179,9 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
   Timer? _heartbeat;
   bool _disposed = false;
 
-  Map<String, String> get _authHeaders =>
-      (token != null && token!.isNotEmpty) ? {'Authorization': 'Bearer $token'} : {};
+  Map<String, String> get _authHeaders => (token != null && token!.isNotEmpty)
+      ? {'Authorization': 'Bearer $token'}
+      : {};
 
   /// better_player_plus's own now-playing integration — **off on Android, kept
   /// on iOS** (ARGY-87).
@@ -186,12 +208,12 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
 
   /// Metadata for the media notification / lock screen.
   NowPlaying get _nowPlaying => NowPlaying(
-        id: itemId,
-        title: title,
-        subtitle: notificationAuthor,
-        artworkUrl: artworkUrl,
-        durationSeconds: catalogDuration,
-      );
+    id: itemId,
+    title: title,
+    subtitle: notificationAuthor,
+    artworkUrl: artworkUrl,
+    durationSeconds: catalogDuration,
+  );
 
   /// Where the transport currently is, in the session's terms. Order matters:
   /// a stalled player must not report itself as playing, or the lock-screen
@@ -254,8 +276,9 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
         fit: BoxFit.contain,
         autoDispose: false,
         // The Argosy overlay supplies all transport UI; hide the built-in one.
-        controlsConfiguration:
-            const BetterPlayerControlsConfiguration(showControls: false),
+        controlsConfiguration: const BetterPlayerControlsConfiguration(
+          showControls: false,
+        ),
         subtitlesConfiguration: _captionConfig(prefs),
         // Keep playing when the app backgrounds — the whole point of the media
         // session (ARGY-87). Until now this fell out of a side effect: the
@@ -274,14 +297,18 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
     argosyAudioHandler?.attach(this, _nowPlaying);
     _pushSession(phase: MediaPhase.starting, position: offset);
 
-    if (isTranscode) {
+    if (isOffline) {
+      await _startLocal(offset);
+    } else if (isTranscode) {
       await _startTranscodeAt(offset);
     } else {
       await _startDirect(offset);
     }
     _startHeartbeat();
     _applyPreferredSubtitle();
-    if (autoAdvance) unawaited(_loadNextEpisode());
+    // Auto-advance needs the server to know what comes next; offline it simply
+    // doesn't apply, and asking would block on a socket that isn't there.
+    if (autoAdvance && !isOffline) unawaited(_loadNextEpisode());
   }
 
   /// Fetches the next episode for auto-advance. A 404 (last episode, or not a
@@ -328,6 +355,39 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
     onAdvance?.call();
   }
 
+  /// Plays a stowed file from disk (ARGY-49). Deliberately the simplest of the
+  /// three paths: no session to negotiate, no playlist to wait on, no token to
+  /// carry — the file is already here, which is exactly the property that makes
+  /// it work with the network switched off.
+  Future<void> _startLocal(double offset) async {
+    baseOffset = 0;
+    starting = true;
+    _safeNotify();
+    try {
+      // No `subtitles:` here on purpose: captions are driven through
+      // selectSubtitle → _applyActiveSubtitle like every other playback path,
+      // which keeps one selection mechanism rather than a second, parallel one
+      // the Argosy overlay has no way to control.
+      await _player!.setupDataSource(
+        BetterPlayerDataSource(
+          BetterPlayerDataSourceType.file,
+          localPath!,
+          bufferingConfiguration: _bufferingConfig,
+          notificationConfiguration: _notificationConfig,
+        ),
+      );
+      if (offset > 0) {
+        await _player!.seekTo(Duration(milliseconds: (offset * 1000).round()));
+      }
+      await _player!.play();
+    } catch (_) {
+      _fail('This stowed copy could not be played. Try stowing it again.');
+    } finally {
+      starting = false;
+      _safeNotify();
+    }
+  }
+
   Future<void> _startDirect(double offset) async {
     baseOffset = 0;
     starting = true;
@@ -336,13 +396,15 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
       // Direct play authenticates via the `?token=` URL (proven in the ARGY-77
       // spike); the Bearer header is sent too, belt-and-suspenders.
       final qp = (token != null && token!.isNotEmpty) ? '?token=$token' : '';
-      await _player!.setupDataSource(BetterPlayerDataSource(
-        BetterPlayerDataSourceType.network,
-        '$baseUrl/api/v1/items/$itemId/stream$qp',
-        headers: _authHeaders,
-        bufferingConfiguration: _bufferingConfig,
-        notificationConfiguration: _notificationConfig,
-      ));
+      await _player!.setupDataSource(
+        BetterPlayerDataSource(
+          BetterPlayerDataSourceType.network,
+          '$baseUrl/api/v1/items/$itemId/stream$qp',
+          headers: _authHeaders,
+          bufferingConfiguration: _bufferingConfig,
+          notificationConfiguration: _notificationConfig,
+        ),
+      );
       if (offset > 0) {
         await _player!.seekTo(Duration(milliseconds: (offset * 1000).round()));
       }
@@ -372,7 +434,10 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
     try {
       final sess = await transcodeApi.startTranscode(
         itemId,
-        transcodeStartRequest: TranscodeStartRequest(startAt: offset, hevc: hevc),
+        transcodeStartRequest: TranscodeStartRequest(
+          startAt: offset,
+          hevc: hevc,
+        ),
       );
       if (sess == null) {
         _fail("Couldn't start the transcoder.");
@@ -385,15 +450,17 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
         return;
       }
       if (_disposed) return;
-      await _player!.setupDataSource(BetterPlayerDataSource(
-        BetterPlayerDataSourceType.network,
-        playlistUrl,
-        videoFormat: BetterPlayerVideoFormat.hls,
-        liveStream: true,
-        headers: _authHeaders,
-        bufferingConfiguration: _bufferingConfig,
-        notificationConfiguration: _notificationConfig,
-      ));
+      await _player!.setupDataSource(
+        BetterPlayerDataSource(
+          BetterPlayerDataSourceType.network,
+          playlistUrl,
+          videoFormat: BetterPlayerVideoFormat.hls,
+          liveStream: true,
+          headers: _authHeaders,
+          bufferingConfiguration: _bufferingConfig,
+          notificationConfiguration: _notificationConfig,
+        ),
+      );
       await _player!.play();
       await _applyActiveSubtitle();
     } catch (_) {
@@ -531,7 +598,7 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
       return;
     }
     try {
-      var vtt = await libraryApi.getSubtitle(itemId, id);
+      var vtt = await _subtitleContent(id);
       if (vtt == null) return;
       if (baseOffset > 0) vtt = shiftVtt(vtt, -baseOffset);
       if (_activeSubtitleId != id || _disposed) return; // selection changed
@@ -546,6 +613,23 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
     } catch (_) {
       /* leave subtitles off on failure */
     }
+  }
+
+  /// Resolves a track's WebVTT: off the device for a stowed item, from the
+  /// server otherwise. Without the local branch a stowed episode would list its
+  /// captions and then fail to show any of them, because fetching them is the
+  /// one thing that needs the network we don't have.
+  Future<String?> _subtitleContent(String trackId) async {
+    if (isOffline) {
+      for (final s in localSubtitles) {
+        if (s.id == trackId) {
+          final file = File(s.path);
+          return await file.exists() ? await file.readAsString() : null;
+        }
+      }
+      return null;
+    }
+    return libraryApi.getSubtitle(itemId, trackId);
   }
 
   void _applyPreferredSubtitle() {
@@ -604,7 +688,10 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
 
   /// Selects an audio rendition. When [persist] the language is saved as this
   /// device's preference so it auto-applies on the next title (ARGY-129).
-  void selectAudioTrack(BetterPlayerAsmsAudioTrack track, {bool persist = true}) {
+  void selectAudioTrack(
+    BetterPlayerAsmsAudioTrack track, {
+    bool persist = true,
+  }) {
     _player?.setAudioTrack(track);
     _activeAudioTrackId = track.id;
     _preferredAudioLang = track.language;
@@ -689,30 +776,64 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
   }
 
   /// Reports the current absolute position so Beacon + Continue-Watching stay
-  /// live. Fire-and-forget; failures are swallowed.
+  /// live. Fire-and-forget, but a failure is no longer simply dropped: a
+  /// position reported into a dead socket used to vanish, so an episode watched
+  /// on a plane was still sitting at 0% on landing. It is queued instead and
+  /// sent on the next successful report (ARGY-49).
   void _flush() {
     final pos = position;
     if (pos <= 0) return;
+    final duration = catalogDuration > 0 ? catalogDuration : null;
     unawaited(
       libraryApi
           .reportProgress(
             itemId,
-            ProgressUpdate(
-              positionSeconds: pos,
-              durationSeconds: catalogDuration > 0 ? catalogDuration : null,
-            ),
+            ProgressUpdate(positionSeconds: pos, durationSeconds: duration),
           )
-          .catchError((_) => null),
+          .then((_) async {
+            // That call proved the server is reachable — a good moment to drain
+            // anything recorded while it wasn't. Retire this item's queued entry
+            // first: it is necessarily older than the position just accepted,
+            // and the server's write is last-wins, so draining it blind would
+            // rewind the resume point we just set.
+            final queue = offlineQueue;
+            if (queue == null) return;
+            await queue.settled(itemId: itemId, positionSeconds: pos);
+            await queue.flush(libraryApi);
+          })
+          .catchError((_) {
+            unawaited(
+              offlineQueue?.enqueue(
+                    itemId: itemId,
+                    positionSeconds: pos,
+                    durationSeconds: duration,
+                  ) ??
+                  Future<void>.value(),
+            );
+            return null;
+          }),
     );
   }
 
   /// Marks the episode watched on finish so it leaves Continue Watching and the
-  /// series' On-Deck advances. Fire-and-forget, mirroring the web player.
+  /// series' On-Deck advances. Queued like [_flush] when the server is out of
+  /// reach, so finishing something offline still counts.
   void _markWatched() {
     unawaited(
-      libraryApi
-          .setWatched(itemId, WatchedUpdate(watched: true))
-          .catchError((_) => null),
+      libraryApi.setWatched(itemId, WatchedUpdate(watched: true)).catchError((
+        _,
+      ) {
+        unawaited(
+          offlineQueue?.enqueue(
+                itemId: itemId,
+                positionSeconds: position,
+                durationSeconds: catalogDuration > 0 ? catalogDuration : null,
+                watched: true,
+              ) ??
+              Future<void>.value(),
+        );
+        return null;
+      }),
     );
   }
 
@@ -773,8 +894,9 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
 
   void _setWakelock(bool on) {
     // Fire-and-forget; the plugin no-ops if already in the requested state.
-    unawaited((on ? WakelockPlus.enable() : WakelockPlus.disable())
-        .catchError((_) {}));
+    unawaited(
+      (on ? WakelockPlus.enable() : WakelockPlus.disable()).catchError((_) {}),
+    );
   }
 
   void _fail(String message) {

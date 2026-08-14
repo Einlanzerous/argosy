@@ -30,6 +30,7 @@ part 'auth/http_bearer_auth.dart';
 
 part 'api/auth_api.dart';
 part 'api/library_api.dart';
+part 'api/stow_api.dart';
 part 'api/system_api.dart';
 part 'api/transcode_api.dart';
 
@@ -86,6 +87,8 @@ part 'model/series_detail.dart';
 part 'model/series_page.dart';
 part 'model/series_summary.dart';
 part 'model/session.dart';
+part 'model/stow_job.dart';
+part 'model/stow_request.dart';
 part 'model/subtitle_track.dart';
 part 'model/transcode_cache_stats.dart';
 part 'model/transcode_capabilities.dart';

@@ -8,6 +8,7 @@ import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
 import '../../util/format.dart';
 import '../../widgets/async_view.dart';
+import '../stow/stow_button.dart';
 import 'add_to_vault.dart';
 import 'detail_providers.dart';
 import 'detail_widgets.dart';
@@ -97,7 +98,7 @@ class _Body extends StatelessWidget {
               GenreTagChips(genres: movie.genres),
               const SizedBox(height: 20),
               _Actions(
-                itemId: movie.id,
+                item: movie,
                 resumable: _resumable,
                 watched: data.progress?.watched ?? false,
               ),
@@ -167,54 +168,105 @@ class _MetaRow extends StatelessWidget {
 
 class _Actions extends ConsumerWidget {
   const _Actions({
-    required this.itemId,
+    required this.item,
     required this.resumable,
     required this.watched,
   });
 
-  final String itemId;
+  final MediaItemDetail item;
   final bool resumable;
   final bool watched;
 
+  String get itemId => item.id;
+
+  /// Gap between buttons, matched to the old Wrap's spacing.
+  static const double _gap = 12;
+
+  /// Play/Resume carries more weight than the actions beside it, so it takes a
+  /// larger share of the row rather than merely being first in a line of
+  /// equals.
+  static const int _primaryFlex = 3;
+  static const int _secondaryFlex = 2;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        if (resumable) ...[
-          FilledButton.icon(
-            style: brassButtonStyle(context),
-            onPressed: () => openPlayer(context, itemId, resume: true),
-            icon: const Icon(Icons.play_arrow, size: 20),
-            label: const Text('Resume'),
-          ),
-          FilledButton.icon(
-            style: ghostButtonStyle(context),
-            onPressed: () => openPlayer(context, itemId, startOver: true),
-            icon: const Icon(Icons.replay, size: 18),
-            label: const Text('Start over'),
-          ),
-        ] else
-          FilledButton.icon(
-            style: brassButtonStyle(context),
-            onPressed: () => openPlayer(context, itemId),
-            icon: const Icon(Icons.play_arrow, size: 20),
-            label: const Text('Play'),
-          ),
-        AddToVaultButton(movieId: itemId),
-        WatchedButton(
-          watched: watched,
-          onSet: (next) async {
-            await ref
-                .read(libraryApiProvider)
-                .setWatched(itemId, WatchedUpdate(watched: next));
-            // Reflect the new watched/Resume state (and Continue Watching).
-            ref.invalidate(movieDetailProvider(itemId));
-          },
+    final primary = FilledButton.icon(
+      style: brassButtonStyle(context),
+      onPressed: () => openPlayer(context, itemId, resume: resumable),
+      icon: const Icon(Icons.play_arrow, size: 20),
+      label: Text(resumable ? 'Resume' : 'Play'),
+    );
+
+    // Ordered by how often they're reached. "Start over" only exists alongside
+    // Resume, and sits first so it stays next to the play action it qualifies.
+    final secondary = <Widget>[
+      if (resumable)
+        FilledButton.icon(
+          style: ghostButtonStyle(context),
+          onPressed: () => openPlayer(context, itemId, startOver: true),
+          icon: const Icon(Icons.replay, size: 18),
+          label: const Text('Start over'),
         ),
-      ],
+      StowButton(item: item),
+      AddToVaultButton(movieId: itemId),
+      WatchedButton(
+        watched: watched,
+        onSet: (next) async {
+          await ref
+              .read(libraryApiProvider)
+              .setWatched(itemId, WatchedUpdate(watched: next));
+          // Reflect the new watched/Resume state (and Continue Watching).
+          ref.invalidate(movieDetailProvider(itemId));
+        },
+      ),
+    ];
+
+    // Landscape has the width for one row; portrait pairs them up. Either way
+    // the buttons fill the row instead of sizing to their labels, so the block
+    // reads as a deliberate grid rather than as text of varying length — which
+    // is what the free-flowing Wrap produced (3 buttons then a lonely 4th).
+    if (MediaQuery.orientationOf(context) == Orientation.landscape) {
+      return Row(
+        children: [
+          Expanded(flex: _primaryFlex, child: primary),
+          for (final action in secondary) ...[
+            const SizedBox(width: _gap),
+            Expanded(flex: _secondaryFlex, child: action),
+          ],
+        ],
+      );
+    }
+
+    final rows = <Widget>[
+      Row(
+        children: [
+          Expanded(flex: _primaryFlex, child: primary),
+          const SizedBox(width: _gap),
+          Expanded(flex: _secondaryFlex, child: secondary.first),
+        ],
+      ),
+    ];
+    final rest = secondary.skip(1).toList();
+    for (var i = 0; i < rest.length; i += 2) {
+      rows.add(const SizedBox(height: _gap));
+      // A trailing odd button spans the full width. With Resume in play there
+      // are five actions, and a half-width button alone on the last row is the
+      // ragged look this layout exists to avoid.
+      rows.add(
+        i + 1 < rest.length
+            ? Row(
+                children: [
+                  Expanded(child: rest[i]),
+                  const SizedBox(width: _gap),
+                  Expanded(child: rest[i + 1]),
+                ],
+              )
+            : rest[i],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
     );
   }
 }

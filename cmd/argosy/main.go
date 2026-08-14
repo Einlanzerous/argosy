@@ -24,6 +24,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/Einlanzerous/argosy/internal/server"
 	"github.com/Einlanzerous/argosy/internal/stevedore"
+	"github.com/Einlanzerous/argosy/internal/stow"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/Einlanzerous/argosy/internal/version"
@@ -174,6 +175,26 @@ func main() {
 			library.LiveItems{Pool: pool, Logger: logger}, logger, time.Hour)
 	}
 
+	// Stow: offline-download packaging (ARGY-49). Needs both a database (jobs are
+	// rows, because an encode outlives every request touching it) and an ffmpeg
+	// path, so it rides along with the transcoder being enabled.
+	var stowMgr *stow.Manager
+	var stowSweeper *ballast.Sweeper
+	if pool != nil && tcManager != nil {
+		stowMgr = stow.New(pool, transcode.LocalFFmpeg{}, cfg.StowDir, encoder,
+			cfg.MaxStowJobs, cfg.StowRetention, logger)
+		// A job left mid-encode by the previous process can't be resumed from its
+		// row alone, so fail it now rather than leaving it pending forever.
+		if err := stowMgr.ResetInterrupted(context.Background()); err != nil {
+			logger.Warn("stow: resetting interrupted jobs failed", "err", err)
+		}
+		// Reclaim artifact dirs whose job is gone (cancelled, collected, swept).
+		// Budget 0: a package is never evicted for size — it was asked for, and
+		// the retention clock is what ends it.
+		stowSweeper = ballast.NewSweeper(cfg.StowDir, 0, 15*time.Minute, stowMgr, logger, 15*time.Minute)
+		logger.Info("stow ready", "workDir", cfg.StowDir, "maxJobs", cfg.MaxStowJobs)
+	}
+
 	// Presence: live playback sessions (who's watching what, where, now) — driven
 	// by the progress heartbeat, reaped on idle (ARGY-34). Feeds resume + Beacon.
 	var pres *presence.Registry
@@ -188,7 +209,7 @@ func main() {
 		hub = beacon.NewHub(pool, logger)
 	}
 
-	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper, subs, pres, hub)
+	srv, err := server.New(cfg, logger, pool, scheduler, tcManager, caps, encoder, sweeper, subs, pres, hub, stowMgr)
 	if err != nil {
 		logger.Error("failed to build server", "err", err)
 		os.Exit(1)
@@ -208,6 +229,12 @@ func main() {
 	}
 	if subSweeper != nil {
 		go subSweeper.Run(ctx)
+	}
+	if stowMgr != nil {
+		go stowMgr.Run(ctx)
+	}
+	if stowSweeper != nil {
+		go stowSweeper.Run(ctx)
 	}
 	if pres != nil {
 		go pres.Run(ctx)

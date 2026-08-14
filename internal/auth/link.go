@@ -76,11 +76,11 @@ func (s *Store) LinkStatus(ctx context.Context, code string) (api.LinkStatusResp
 	if token == nil {
 		// Echo the device-announced identity so an approving UI can show what
 		// is about to be linked before blessing the code.
-		return api.LinkStatusResponse{Status: api.Pending, DeviceName: deviceName, Platform: platform}, nil
+		return api.LinkStatusResponse{Status: api.LinkStatusResponseStatusPending, DeviceName: deviceName, Platform: platform}, nil
 	}
 	// Approved: hand the token over once, then consume the code.
 	_, _ = s.pool.Exec(ctx, `DELETE FROM link_codes WHERE code = $1`, code)
-	return api.LinkStatusResponse{Status: api.Approved, Token: token, DeviceName: deviceName, Platform: platform}, nil
+	return api.LinkStatusResponse{Status: api.LinkStatusResponseStatusApproved, Token: token, DeviceName: deviceName, Platform: platform}, nil
 }
 
 // ApproveLink links the device holding `code` to the approving session's

@@ -13,6 +13,7 @@ import '../features/player/player_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/splash/splash_screen.dart';
+import '../features/stow/stowed_screen.dart';
 import 'scaffold_with_nav.dart';
 
 /// Route paths, referenced by name everywhere instead of raw strings.
@@ -23,6 +24,7 @@ abstract final class Routes {
   static const library = '/library';
   static const search = '/search';
   static const settings = '/settings';
+  static const stowed = '/stowed';
 
   static String movie(String id) => '/movie/$id';
   static String series(String id) => '/series/$id';
@@ -53,6 +55,9 @@ void openPlayer(
 
 /// Pushes the Settings screen over the nav shell.
 void openSettings(BuildContext context) => context.push(Routes.settings);
+
+/// Pushes The Hold — what's stowed on this device (ARGY-49).
+void openStowed(BuildContext context) => context.push(Routes.stowed);
 
 /// Switches to the Search tab (its own nav-shell branch).
 void openSearch(BuildContext context) => context.go(Routes.search);
@@ -148,6 +153,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.settings,
         parentNavigatorKey: _rootKey,
         builder: (_, _) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: Routes.stowed,
+        parentNavigatorKey: _rootKey,
+        builder: (_, _) => const StowedScreen(),
       ),
     ],
   );

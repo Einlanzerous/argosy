@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:argosy_api/api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
+import '../stow/stow_controller.dart';
 
 /// Where the session stands. [unknown] is the pre-bootstrap state used to hold
 /// on the splash while we restore + validate a saved device token.
@@ -49,6 +51,10 @@ class AuthController extends Notifier<AuthStatus> {
     try {
       await ref.read(authApiProvider).getCurrentSession();
       state = AuthStatus.authenticated;
+      // The server answered, so this is the first chance to hand over anything
+      // watched while it couldn't be reached (ARGY-49) — a flight's worth of
+      // resume positions lands here rather than waiting for the next play.
+      unawaited(flushOfflineProgress(ref));
     } on ApiException catch (e) {
       if (e.code == 401) {
         await store.clearToken();
@@ -87,8 +93,10 @@ class AuthController extends Notifier<AuthStatus> {
       final detail = mapped.statusCode == null
           ? 'Check the address is correct and the server is reachable.'
           : mapped.message;
-      throw ApiFailure("Couldn't reach $url — $detail",
-          statusCode: mapped.statusCode);
+      throw ApiFailure(
+        "Couldn't reach $url — $detail",
+        statusCode: mapped.statusCode,
+      );
     }
   }
 
@@ -161,7 +169,9 @@ class AuthController extends Notifier<AuthStatus> {
     String? password,
   }) async {
     try {
-      return await ref.read(authApiProvider).switchDeviceProfile(
+      return await ref
+          .read(authApiProvider)
+          .switchDeviceProfile(
             DeviceSwitchRequest(userId: userId, password: password),
           );
     } catch (e) {

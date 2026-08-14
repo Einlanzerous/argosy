@@ -14,6 +14,7 @@ import '../../theme/argosy_colors.dart';
 import '../../theme/button_styles.dart';
 import '../../util/format.dart';
 import '../../widgets/async_view.dart';
+import '../stow/stow_controller.dart';
 import 'playback_controller.dart';
 import 'player_controls.dart';
 import 'player_providers.dart';
@@ -146,6 +147,9 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       subtitles: setup.subtitles,
       preferredLanguages: setup.preferredLanguages,
       prefs: setup.prefs,
+      localPath: setup.localPath,
+      localSubtitles: setup.localSubtitles,
+      offlineQueue: ref.read(offlineProgressQueueProvider),
     );
     _controller.onAdvance = _advanceToNext;
     _beginPlayback();
