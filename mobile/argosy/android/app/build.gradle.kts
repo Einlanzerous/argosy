@@ -27,6 +27,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    buildFeatures {
+        // AGP 9 defaults this off; the launcher label is generated per build
+        // type so the dev install is distinguishable (ARGY-202).
+        resValues = true
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "dev.dodson.argosy"
@@ -36,6 +42,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Launcher label, so the debug variant can override it below. Defined
+        // as a resValue rather than in strings.xml because a build type can
+        // replace this, but cannot replace a resource file entry.
+        resValue("string", "app_name", "Argosy")
     }
 
     signingConfigs {
@@ -50,6 +60,27 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Install beside the Play build instead of replacing it (ARGY-202).
+            //
+            // Sharing one applicationId meant a dev build evicted the app the
+            // device actually watches things on, and cost a re-pair either way
+            // (`flutter install` drops the token outright). On the verification
+            // phone that made every on-device check expensive enough to skip,
+            // which is the wrong incentive for the one class of bug CI can't
+            // see.
+            //
+            // A distinct id also means distinct storage, so the dev app keeps
+            // its own pairing, stow index and preferences — it can stay pointed
+            // at the dev server while the Play build stays on prod, rather than
+            // the two fighting over one token.
+            //
+            // Debug-only: `flutter build apk/appbundle --release` keeps the
+            // original id, so mobile-release.yml's `packageName` stays correct.
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            resValue("string", "app_name", "Argosy Dev")
+        }
         release {
             // Sign with the upload key when key.properties is present (CI tags /
             // local release builds); otherwise the debug key so dev still works.
