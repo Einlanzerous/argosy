@@ -112,8 +112,6 @@ class StowController extends Notifier<Map<String, StowStatus>> {
     // report 0 bytes for the rest of the session, and The Hold would offer to
     // free "0 B" while deleting gigabytes.
     StowedItem? started;
-    var received = 0;
-    File? partialFile;
 
     try {
       final job = await _requestPackage(itemId, handle);
@@ -133,9 +131,11 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       // not, and the row must not be rewritten to zero on the way in: a failure
       // before the first chunk arrives (the link that just died dropping again,
       // a 401 on a revoked token, a 404 on a moved source) would otherwise
-      // persist that zero, and `received` below would write it straight back.
-      partialFile = File('${target.path}.part');
-      received = await partialFile.exists() ? await partialFile.length() : 0;
+      // persist that zero, and the failure path would write it straight back.
+      final partialFile = File('${target.path}.part');
+      final resumeFrom = await partialFile.exists()
+          ? await partialFile.length()
+          : 0;
 
       // Record the entry before a byte lands, marked unfinished. The bytes are
       // about to exist on the device whether or not the download completes, and
@@ -146,7 +146,7 @@ class StowController extends Notifier<Map<String, StowStatus>> {
         title: item.title,
         subtitleLine: subtitleLine ?? _defaultSubtitleLine(item),
         fileName: fileName,
-        bytes: received,
+        bytes: resumeFrom,
         durationSeconds: (item.durationSeconds ?? 0).toDouble(),
         stowedAt: DateTime.now(),
         posterUrl: item.posterUrl,
@@ -181,7 +181,6 @@ class StowController extends Notifier<Map<String, StowStatus>> {
         handle: handle,
         headers: _authHeaders,
         onProgress: (p) {
-          received = p.received;
           _set(
             itemId,
             StowStatus(
@@ -242,15 +241,13 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       // there.
       final row = started;
       if (row != null) {
-        // Size it from the file rather than the progress counter: the download
-        // may have restarted from zero on the way through (a changed ETag, an
-        // unvalidated partial discarded, a 416), which leaves the counter
-        // describing an attempt that no longer matches what is on disk.
-        final part = partialFile;
-        final onDisk = (part != null && await part.exists())
-            ? await part.length()
-            : received;
-        await _store.put(row.copyWith(bytes: onDisk));
+        // Size it from the filesystem, never the progress counter: the
+        // download may have restarted from zero on the way through (a changed
+        // ETag, an unvalidated partial discarded, a 416), and those paths
+        // delete the partial *before* reconnecting — so a failure in that
+        // window leaves the counter describing bytes that are already gone.
+        // Falling back to it would quote gigabytes that aren't there.
+        await _store.put(row.copyWith(bytes: await _bytesOnDisk(row)));
         ref.invalidate(stowedItemsProvider);
       }
       _set(
@@ -365,6 +362,16 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       }
     }
     return out;
+  }
+
+  /// How much of an item is actually on disk right now: the partial if one is
+  /// there, the finished file if the rename already landed, else nothing.
+  Future<int> _bytesOnDisk(StowedItem row) async {
+    final video = File(await _store.videoPath(row));
+    final part = File('${video.path}.part');
+    if (await part.exists()) return part.length();
+    if (await video.exists()) return video.length();
+    return 0;
   }
 
   /// Cancels an in-flight stow and clears whatever it had written.
