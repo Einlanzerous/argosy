@@ -87,12 +87,19 @@ void main() {
   late StowStore store;
   late ProviderContainer container;
 
-  MediaItemDetail detail() => MediaItemDetail(
+  // `container` carries what the server really sends: ffprobe's format_name,
+  // which is a comma-joined list of every format sharing the demuxer, not an
+  // extension. An earlier version built the filename from it and wrote
+  // `video.mov,mp4,m4a,3gp,3g2,mj2` to a real device.
+  MediaItemDetail detail({
+    String filePath = 'movies/Test Film (2026).mp4',
+    String container = 'mov,mp4,m4a,3gp,3g2,mj2',
+  }) => MediaItemDetail(
     id: itemId,
     kind: 'movie',
     title: 'Test Film',
-    filePath: 'film.mp4',
-    container: 'mp4',
+    filePath: filePath,
+    container: container,
     durationSeconds: 120,
     reviewRequired: false,
   );
@@ -131,6 +138,43 @@ void main() {
     expect(entry.bytes, body.length);
     expect(store.totalBytes(), body.length);
     expect(await File(await store.videoPath(entry)).readAsBytes(), body);
+  });
+
+  group('passthrough filename', () {
+    test(
+      'takes the extension from the source path, not the demuxer list',
+      () async {
+        await controller().stow(detail());
+
+        await store.load();
+        expect(
+          store.get(itemId)!.fileName,
+          'video.mp4',
+          reason: 'container is a format_name list, never a file extension',
+        );
+      },
+    );
+
+    test('keeps a Matroska source as .mkv', () async {
+      await controller().stow(
+        detail(
+          filePath: 'shows/Some Show/S01E01.mkv',
+          container: 'matroska,webm',
+        ),
+      );
+
+      await store.load();
+      expect(store.get(itemId)!.fileName, 'video.mkv');
+    });
+
+    test('falls back to mp4 when the path has no usable extension', () async {
+      await controller().stow(
+        detail(filePath: 'movies/Film (2026)', container: 'matroska,webm'),
+      );
+
+      await store.load();
+      expect(store.get(itemId)!.fileName, 'video.mp4');
+    });
   });
 
   test('a failure keeps the bytes it fetched, and says so', () async {

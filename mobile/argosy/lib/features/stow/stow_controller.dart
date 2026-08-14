@@ -429,10 +429,30 @@ class StowController extends Notifier<Map<String, StowStatus>> {
   /// A package is always MP4. A passthrough keeps the source's own container,
   /// because that is literally the file being copied — handing ExoPlayer an
   /// `.mp4` that is really Matroska works by sniffing, but only by luck.
+  ///
+  /// The extension comes from the source *path*, not from `container`.
+  /// `container` is ffprobe's `format_name`, which names the demuxer rather
+  /// than the file: an mp4 reports `mov,mp4,m4a,3gp,3g2,mj2` and an mkv reports
+  /// `matroska,webm`. Using it produced real files called
+  /// `video.mov,mp4,m4a,3gp,3g2,mj2` on device — which happened to play, purely
+  /// because ExoPlayer sniffed the content, and would have been a coin flip on
+  /// a player that trusts the extension.
   String _videoFileName(StowJob job, MediaItemDetail item) {
     if (job.method == StowJobMethodEnum.package) return 'video.mp4';
-    final ext = (item.container ?? '').replaceAll('.', '').toLowerCase();
+    final ext = _sourceExtension(item.filePath);
     return ext.isEmpty ? 'video.mp4' : 'video.$ext';
+  }
+
+  /// The extension of a library-relative source path, lowercased and without
+  /// the dot. Empty when the path has none, or when what follows the dot isn't
+  /// extension-shaped — a filename like "Film (2026). Directors Cut" must not
+  /// become part of the name we write to disk.
+  static String _sourceExtension(String filePath) {
+    final slash = filePath.lastIndexOf('/');
+    final dot = filePath.lastIndexOf('.');
+    if (dot <= slash || dot == filePath.length - 1) return '';
+    final ext = filePath.substring(dot + 1).toLowerCase();
+    return RegExp(r'^[a-z0-9]{2,5}$').hasMatch(ext) ? ext : '';
   }
 
   String? _defaultSubtitleLine(MediaItemDetail item) {
