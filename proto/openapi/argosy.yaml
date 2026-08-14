@@ -1589,6 +1589,142 @@ paths:
         "503":
           description: Session still starting (no playlist yet)
 
+  /api/v1/items/{itemId}/stow:
+    post:
+      tags: [stow]
+      operationId: stowItem
+      summary: Pack an item away for offline viewing
+      description: |
+        Asks the server to make the item downloadable for offline playback
+        (ARGY-49), and returns how that will happen.
+
+        The decision is per item. A source the client can already play, at a size
+        worth keeping on a device, is handed over untouched — the response comes
+        back `method: passthrough`, `state: ready`, and a `downloadUrl` pointing
+        at the existing range-capable stream endpoint. No encode runs and no
+        server-side job exists.
+
+        Otherwise the server queues a packaging job that re-encodes the source
+        into a single progressive MP4 (H.264 8-bit + AAC, capped at 1080p) —
+        `method: package` with an `id` to poll. Repeat requests for the same item
+        join the job already running rather than starting a second encode; a job
+        that previously failed is reset and retried.
+
+        Either way the client ends up downloading exactly one file, which is what
+        makes offline playback a plain local-file path rather than an offline HLS
+        problem.
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StowRequest"
+      responses:
+        "202":
+          description: Passthrough plan, or a packaging job started/joined
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StowJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/stow:
+    get:
+      tags: [stow]
+      operationId: listStowJobs
+      summary: Packaging jobs for the current account
+      description: |
+        Only covers items that needed packaging. A passthrough stow leaves no
+        server-side state, so it never appears here — the device's own list of
+        what it has stowed is the source of truth for that.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StowJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/stow/{jobId}:
+    get:
+      tags: [stow]
+      operationId: getStowJob
+      summary: Poll a packaging job
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StowJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [stow]
+      operationId: deleteStowJob
+      summary: Cancel a packaging job, or release a collected one
+      description: |
+        Serves both ends of the job's life: it cancels an encode still in flight,
+        and it releases the server-side copy once the device has the bytes. Either
+        way the artifact is purged. Deleting the job does not touch what the
+        device already downloaded.
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204":
+          description: Cancelled and purged
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/stow/{jobId}/file:
+    get:
+      tags: [stow]
+      operationId: getStowFile
+      summary: Download a ready package
+      description: |
+        Serves the packaged MP4 with byte-range support, so an interrupted
+        download resumes instead of restarting — the difference between a 2 GB
+        download surviving a walk out of Wi-Fi range and not. Auth is the
+        per-device token via the bearer header OR a `token` query param, matching
+        the stream endpoint. Returns 409 while the job is still packaging.
+      security: []
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: token, in: query, description: "Per-device token (alternative to the bearer header).", schema: { type: string } }
+      responses:
+        "200":
+          description: The packaged MP4
+          content:
+            video/mp4:
+              schema: { type: string, format: binary }
+        "206":
+          description: Partial content (range request)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Job is not ready yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1719,6 +1855,91 @@ components:
           type: string
         progress:
           $ref: "#/components/schemas/TranscodeProgress"
+
+    StowRequest:
+      type: object
+      description: >
+        What the requesting device can play back offline. Both default to false,
+        which is the conservative reading — an unknown client gets a packaged
+        MP4, never a file it might not be able to open with no network to fall
+        back on.
+      properties:
+        hevc:
+          type: boolean
+          description: >
+            Whether the client hardware-decodes HEVC (H.265). True lets an HEVC
+            source be handed over untouched instead of re-encoded to H.264,
+            which for a big library is the difference between an instant stow and
+            a long encode.
+        matroska:
+          type: boolean
+          description: >
+            Whether the client's player handles the Matroska (.mkv) container.
+            True on Android (ExoPlayer), false on iOS (AVPlayer), which is why
+            this is asked rather than assumed — most of a typical library is mkv,
+            and the answer decides whether that library packages or passes
+            through.
+
+    StowJob:
+      type: object
+      required: [itemId, method, state]
+      description: >
+        How an item will reach the device for offline viewing. `method:
+        passthrough` is a plan, not a job — it carries no `id` and no server-side
+        state, because nothing is being made.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Job id, for polling and deletion. Absent for passthrough.
+        itemId:
+          type: string
+          format: uuid
+        method:
+          type: string
+          enum: [passthrough, package]
+          description: >
+            Whether the original file is handed over as-is (passthrough) or
+            re-encoded into a single MP4 (package).
+        state:
+          type: string
+          enum: [pending, packaging, ready, failed]
+          description: >
+            Passthrough is always `ready`. A package is `pending` while queued
+            behind the encode concurrency limit, then `packaging`, then `ready`
+            or `failed`.
+        downloadUrl:
+          type: string
+          description: >
+            Relative URL to download the file from. Present once state is
+            `ready`; the stream endpoint for a passthrough, the job's file
+            endpoint for a package.
+        bytes:
+          type: integer
+          format: int64
+          description: >
+            Size of the download in bytes — the source file for a passthrough,
+            the packaged MP4 for a package (known only once ready).
+        durationSeconds:
+          type: number
+          format: double
+          description: Source duration, so a client can render packaging progress as a percentage.
+        progressSeconds:
+          type: number
+          format: double
+          description: How far the encode has reached along the source timeline.
+        reason:
+          type: string
+          description: Human-readable explanation of why this method was chosen, for the UI and the logs.
+        error:
+          type: string
+          description: Failure detail when state is `failed`.
+        createdAt:
+          type: string
+          format: date-time
+        readyAt:
+          type: string
+          format: date-time
 
     TranscodeCacheStats:
       type: object

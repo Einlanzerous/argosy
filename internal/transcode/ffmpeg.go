@@ -38,8 +38,17 @@ func (b LocalFFmpeg) bin() string {
 // (SIGTERM then forced after WaitDelay) when ctx is cancelled, so no ffmpeg is
 // orphaned on stop/seek/shutdown.
 func (b LocalFFmpeg) Run(ctx context.Context, spec Spec, onProgress func(Progress)) error {
-	cmd := exec.CommandContext(ctx, b.bin(), buildArgs(spec)...)
-	cmd.Dir = spec.OutputDir
+	return b.exec(ctx, spec.OutputDir, buildArgs(spec), onProgress)
+}
+
+// exec runs ffmpeg with args from dir, streaming its -progress output to
+// onProgress, and blocks until it exits. Shared by the HLS session path (Run)
+// and the one-shot offline package path (Package): both want the same process
+// discipline — cwd at the output dir so relative artifact names land there, and
+// SIGTERM-then-force on ctx cancellation so nothing is orphaned.
+func (b LocalFFmpeg) exec(ctx context.Context, dir string, args []string, onProgress func(Progress)) error {
+	cmd := exec.CommandContext(ctx, b.bin(), args...)
+	cmd.Dir = dir
 	// Graceful stop: SIGTERM lets ffmpeg flush, then CommandContext force-kills
 	// after WaitDelay if it ignores the signal.
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }

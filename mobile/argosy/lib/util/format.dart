@@ -11,6 +11,25 @@ String formatRuntime(num? seconds) {
   return '${h}h ${m.toString().padLeft(2, '0')}m';
 }
 
+/// Storage size like `1.4 GB` / `812 MB`, for the on-device stow list
+/// (ARGY-49). Powers of 1024, matching what the server reports about the same
+/// files, so the two never disagree about how big a download is.
+String formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  var value = bytes / 1024;
+  var unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  // Sub-10 sizes keep a decimal, above that it's noise.
+  final text = value >= 10
+      ? value.round().toString()
+      : value.toStringAsFixed(1);
+  return '$text ${units[unit]}';
+}
+
 /// Clock like `0:42:15` from a position in seconds.
 String formatClock(num seconds) {
   final s = seconds < 0 ? 0 : seconds.floor();
@@ -104,7 +123,11 @@ String episodeHeader(
 /// dropping the name when it isn't known. Deliberately omits the series title,
 /// unlike [episodeHeader] — on a card the series is already the line above, and
 /// repeating it is the bug this exists to fix (ARGY-176). Mirrors web format.ts.
-String episodeLabel(int seasonNumber, int episodeNumber, [String? episodeTitle]) {
+String episodeLabel(
+  int seasonNumber,
+  int episodeNumber, [
+  String? episodeTitle,
+]) {
   final base = 'S$seasonNumber · E$episodeNumber';
   if (episodeTitle == null || episodeTitle.isEmpty) return base;
   return '$base · $episodeTitle';

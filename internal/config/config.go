@@ -66,6 +66,22 @@ type Config struct {
 	// TranscodeCacheBudget is the high-water mark (bytes) for the transcode
 	// cache dir; Ballast evicts idle sessions oldest-first when exceeded.
 	TranscodeCacheBudget int64
+	// StowDir is where offline-download packages are written, one directory per
+	// job (ARGY-49). Defaults to <os.TempDir>/argosy-stow.
+	StowDir string
+	// MaxStowJobs caps concurrent offline packaging encodes. Zero means 1:
+	// packaging competes with live playback for the same encoder and nobody is
+	// waiting on it in realtime, so it yields by default.
+	MaxStowJobs int
+	// StowRetention is how long a finished package is kept before the server
+	// reclaims it. Zero uses stow.DefaultRetention. The device normally releases
+	// its job as soon as the download lands, so this only catches uncollected
+	// packages.
+	StowRetention time.Duration
+	// StowPassthroughMax is the size ceiling (bytes) for handing a source file to
+	// a device untouched instead of packaging a smaller copy. Zero uses
+	// library.DefaultStowPassthroughMax.
+	StowPassthroughMax int64
 	// SubtitleDir is where converted WebVTT subtitle files are cached. Defaults
 	// to <os.TempDir>/argosy-subtitles.
 	SubtitleDir string
@@ -116,6 +132,11 @@ func Load() Config {
 		EncoderPreference:    parseList(os.Getenv("ARGOSY_ENCODER_PREFERENCE")),
 		ForceSoftware:        os.Getenv("ARGOSY_FORCE_SOFTWARE") == "1" || os.Getenv("ARGOSY_FORCE_SOFTWARE") == "true",
 		TranscodeCacheBudget: parseSize(os.Getenv("ARGOSY_TRANSCODE_CACHE_BUDGET")),
+
+		StowDir:            getenv("ARGOSY_STOW_DIR", filepath.Join(os.TempDir(), "argosy-stow")),
+		MaxStowJobs:        parseInt(os.Getenv("ARGOSY_MAX_STOW_JOBS")),
+		StowRetention:      parseDuration(os.Getenv("ARGOSY_STOW_RETENTION")),
+		StowPassthroughMax: parseSize(os.Getenv("ARGOSY_STOW_PASSTHROUGH_MAX")),
 
 		SubtitleDir:           getenv("ARGOSY_SUBTITLE_DIR", filepath.Join(os.TempDir(), "argosy-subtitles")),
 		OpenSubtitlesAPIKey:   os.Getenv("OPEN_SUBTITLES_API_KEY"),

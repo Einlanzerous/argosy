@@ -16,6 +16,7 @@ import (
 	"github.com/Einlanzerous/argosy/internal/library"
 	"github.com/Einlanzerous/argosy/internal/presence"
 	"github.com/Einlanzerous/argosy/internal/stevedore"
+	"github.com/Einlanzerous/argosy/internal/stow"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
 	"github.com/Einlanzerous/argosy/internal/version"
@@ -26,7 +27,7 @@ import (
 // API surface is generated from the OpenAPI spec in a later Phase 0 ticket.
 // pool may be nil when no database is configured; scheduler may be nil to
 // disable the scan trigger/status endpoints.
-func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *stevedore.Scheduler, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub) (*http.Server, error) {
+func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *stevedore.Scheduler, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub, stowMgr *stow.Manager) (*http.Server, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthHandler(pool))
@@ -39,7 +40,7 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 		if cfg.ProvisionToken != "" {
 			auth.RegisterProvisioning(mux, authStore, cfg.ProvisionToken)
 		}
-		library.RegisterRoutes(mux, pool, authStore, cfg.ArtworkDir, "/artwork", logger, tc, caps, encoder, sweeper, subs, pres, hub, cfg.PreferredLanguages)
+		library.RegisterRoutes(mux, pool, authStore, cfg.ArtworkDir, "/artwork", logger, tc, caps, encoder, sweeper, subs, pres, hub, cfg.PreferredLanguages, stowMgr, cfg.StowPassthroughMax)
 
 		if scheduler != nil {
 			mw := auth.Middleware(authStore)

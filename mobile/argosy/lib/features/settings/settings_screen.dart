@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
+import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
 import '../../theme/button_styles.dart';
+import '../../util/format.dart';
 import '../../widgets/async_view.dart';
 import '../account/account_providers.dart';
 import '../auth/auth_controller.dart';
 import '../home/home_providers.dart';
+import '../stow/stow_controller.dart';
+import '../stow/stowed_item.dart';
 import 'link_device_sheet.dart';
 import 'settings_controller.dart';
 
@@ -157,6 +161,20 @@ class SettingsScreen extends ConsumerWidget {
               value: UserPreferencesHomeLayoutEnum.discovery,
               selected: data.user.homeLayout,
               onSelect: (v) => _guard(context, () => ctrl.setHomeLayout(v)),
+            ),
+            const SizedBox(height: 28),
+
+            _section('Offline'),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.download_for_offline_outlined,
+                  color: ArgosyColors.dim),
+              title: const Text('The Hold',
+                  style: TextStyle(color: ArgosyColors.cream)),
+              subtitle: Text(_stowedSummary(ref.watch(stowedItemsProvider).value),
+                  style: const TextStyle(color: ArgosyColors.dim, fontSize: 12)),
+              trailing: const Icon(Icons.chevron_right, color: ArgosyColors.dim),
+              onTap: () => openStowed(context),
             ),
             const SizedBox(height: 28),
 
@@ -427,6 +445,16 @@ class SettingsScreen extends ConsumerWidget {
 }
 
 const _danger = Color(0xFFE07A5F);
+
+/// One-line summary of what's stowed, for the Settings row.
+String _stowedSummary(List<StowedItem>? items) {
+  if (items == null || items.isEmpty) {
+    return 'Nothing stowed for offline viewing yet.';
+  }
+  final bytes = items.fold<int>(0, (sum, e) => sum + e.bytes);
+  final noun = items.length == 1 ? 'item' : 'items';
+  return '${items.length} $noun · ${formatBytes(bytes)} on this device';
+}
 
 String _languageLabel(String? code) {
   for (final (label, c) in _subtitleLanguages) {

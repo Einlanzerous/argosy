@@ -8,6 +8,7 @@ import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
 import '../../util/format.dart';
 import '../../widgets/async_view.dart';
+import '../stow/stow_button.dart';
 import 'add_to_vault.dart';
 import 'detail_providers.dart';
 import 'detail_widgets.dart';
@@ -97,7 +98,7 @@ class _Body extends StatelessWidget {
               GenreTagChips(genres: movie.genres),
               const SizedBox(height: 20),
               _Actions(
-                itemId: movie.id,
+                item: movie,
                 resumable: _resumable,
                 watched: data.progress?.watched ?? false,
               ),
@@ -167,14 +168,16 @@ class _MetaRow extends StatelessWidget {
 
 class _Actions extends ConsumerWidget {
   const _Actions({
-    required this.itemId,
+    required this.item,
     required this.resumable,
     required this.watched,
   });
 
-  final String itemId;
+  final MediaItemDetail item;
   final bool resumable;
   final bool watched;
+
+  String get itemId => item.id;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -203,6 +206,7 @@ class _Actions extends ConsumerWidget {
             icon: const Icon(Icons.play_arrow, size: 20),
             label: const Text('Play'),
           ),
+        StowButton(item: item),
         AddToVaultButton(movieId: itemId),
         WatchedButton(
           watched: watched,

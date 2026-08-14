@@ -14,6 +14,7 @@ import '../../../tv/tv_button.dart';
 import '../../../tv/tv_stage.dart';
 import '../../../util/format.dart';
 import '../../../widgets/async_view.dart';
+import '../../stow/stow_controller.dart';
 import '../playback_controller.dart';
 import '../player_providers.dart';
 import '../track_sheet.dart';
@@ -142,6 +143,12 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
       subtitles: setup.subtitles,
       preferredLanguages: setup.preferredLanguages,
       prefs: setup.prefs,
+      // Stow is a phone/tablet feature, but the TV shares this controller and
+      // its setup, so the fields are passed through rather than dropped — a TV
+      // will simply never have a local copy.
+      localPath: setup.localPath,
+      localSubtitles: setup.localSubtitles,
+      offlineQueue: ref.read(offlineProgressQueueProvider),
     );
     _controller.onAdvance = _advanceToNext;
     _controller.addListener(_onState);

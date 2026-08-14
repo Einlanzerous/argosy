@@ -99,4 +99,22 @@ void main() {
       expect(l.title, 'Some Show · Season 1 Ep 1');
     });
   });
+
+  group('formatBytes', () {
+    test('reports plain bytes below a kilobyte', () {
+      expect(formatBytes(0), '0 B');
+      expect(formatBytes(999), '999 B');
+    });
+
+    test('keeps a decimal under 10 units and drops it above', () {
+      expect(formatBytes(1536), '1.5 KB');
+      expect(formatBytes(5 * 1024 * 1024), '5.0 MB');
+      expect(formatBytes(42 * 1024 * 1024), '42 MB');
+    });
+
+    test('scales up through GB — the size that matters for a stow', () {
+      expect(formatBytes(2 * 1024 * 1024 * 1024), '2.0 GB');
+      expect(formatBytes(30 * 1024 * 1024 * 1024), '30 GB');
+    });
+  });
 }

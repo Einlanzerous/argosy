@@ -1050,6 +1050,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/items/{itemId}/stow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pack an item away for offline viewing
+         * @description Asks the server to make the item downloadable for offline playback
+         *     (ARGY-49), and returns how that will happen.
+         *
+         *     The decision is per item. A source the client can already play, at a size
+         *     worth keeping on a device, is handed over untouched — the response comes
+         *     back `method: passthrough`, `state: ready`, and a `downloadUrl` pointing
+         *     at the existing range-capable stream endpoint. No encode runs and no
+         *     server-side job exists.
+         *
+         *     Otherwise the server queues a packaging job that re-encodes the source
+         *     into a single progressive MP4 (H.264 8-bit + AAC, capped at 1080p) —
+         *     `method: package` with an `id` to poll. Repeat requests for the same item
+         *     join the job already running rather than starting a second encode; a job
+         *     that previously failed is reset and retried.
+         *
+         *     Either way the client ends up downloading exactly one file, which is what
+         *     makes offline playback a plain local-file path rather than an offline HLS
+         *     problem.
+         */
+        post: operations["stowItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Packaging jobs for the current account
+         * @description Only covers items that needed packaging. A passthrough stow leaves no
+         *     server-side state, so it never appears here — the device's own list of
+         *     what it has stowed is the source of truth for that.
+         */
+        get: operations["listStowJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stow/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Poll a packaging job */
+        get: operations["getStowJob"];
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a packaging job, or release a collected one
+         * @description Serves both ends of the job's life: it cancels an encode still in flight,
+         *     and it releases the server-side copy once the device has the bytes. Either
+         *     way the artifact is purged. Deleting the job does not touch what the
+         *     device already downloaded.
+         */
+        delete: operations["deleteStowJob"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stow/{jobId}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a ready package
+         * @description Serves the packaged MP4 with byte-range support, so an interrupted
+         *     download resumes instead of restarting — the difference between a 2 GB
+         *     download surviving a walk out of Wi-Fi range and not. Auth is the
+         *     per-device token via the bearer header OR a `token` query param, matching
+         *     the stream endpoint. Returns 409 while the job is still packaging.
+         */
+        get: operations["getStowFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1102,6 +1209,58 @@ export interface components {
             playlistUrl: string;
             error?: string;
             progress: components["schemas"]["TranscodeProgress"];
+        };
+        /** @description What the requesting device can play back offline. Both default to false, which is the conservative reading — an unknown client gets a packaged MP4, never a file it might not be able to open with no network to fall back on. */
+        StowRequest: {
+            /** @description Whether the client hardware-decodes HEVC (H.265). True lets an HEVC source be handed over untouched instead of re-encoded to H.264, which for a big library is the difference between an instant stow and a long encode. */
+            hevc?: boolean;
+            /** @description Whether the client's player handles the Matroska (.mkv) container. True on Android (ExoPlayer), false on iOS (AVPlayer), which is why this is asked rather than assumed — most of a typical library is mkv, and the answer decides whether that library packages or passes through. */
+            matroska?: boolean;
+        };
+        /** @description How an item will reach the device for offline viewing. `method: passthrough` is a plan, not a job — it carries no `id` and no server-side state, because nothing is being made. */
+        StowJob: {
+            /**
+             * Format: uuid
+             * @description Job id, for polling and deletion. Absent for passthrough.
+             */
+            id?: string;
+            /** Format: uuid */
+            itemId: string;
+            /**
+             * @description Whether the original file is handed over as-is (passthrough) or re-encoded into a single MP4 (package).
+             * @enum {string}
+             */
+            method: "passthrough" | "package";
+            /**
+             * @description Passthrough is always `ready`. A package is `pending` while queued behind the encode concurrency limit, then `packaging`, then `ready` or `failed`.
+             * @enum {string}
+             */
+            state: "pending" | "packaging" | "ready" | "failed";
+            /** @description Relative URL to download the file from. Present once state is `ready`; the stream endpoint for a passthrough, the job's file endpoint for a package. */
+            downloadUrl?: string;
+            /**
+             * Format: int64
+             * @description Size of the download in bytes — the source file for a passthrough, the packaged MP4 for a package (known only once ready).
+             */
+            bytes?: number;
+            /**
+             * Format: double
+             * @description Source duration, so a client can render packaging progress as a percentage.
+             */
+            durationSeconds?: number;
+            /**
+             * Format: double
+             * @description How far the encode has reached along the source timeline.
+             */
+            progressSeconds?: number;
+            /** @description Human-readable explanation of why this method was chosen, for the UI and the logs. */
+            reason?: string;
+            /** @description Failure detail when state is `failed`. */
+            error?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            readyAt?: string;
         };
         TranscodeCacheStats: {
             /** Format: int64 */
@@ -3637,6 +3796,144 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    stowItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StowRequest"];
+            };
+        };
+        responses: {
+            /** @description Passthrough plan, or a packaging job started/joined */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StowJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listStowJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StowJob"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getStowJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StowJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteStowJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled and purged */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getStowFile: {
+        parameters: {
+            query?: {
+                /** @description Per-device token (alternative to the bearer header). */
+                token?: string;
+            };
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The packaged MP4 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                };
+            };
+            /** @description Partial content (range request) */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Job is not ready yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };

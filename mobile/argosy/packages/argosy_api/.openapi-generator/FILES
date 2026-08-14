@@ -4,6 +4,7 @@ analysis_options.yaml
 lib/api.dart
 lib/api/auth_api.dart
 lib/api/library_api.dart
+lib/api/stow_api.dart
 lib/api/system_api.dart
 lib/api/transcode_api.dart
 lib/api_client.dart
@@ -67,6 +68,8 @@ lib/model/series_detail.dart
 lib/model/series_page.dart
 lib/model/series_summary.dart
 lib/model/session.dart
+lib/model/stow_job.dart
+lib/model/stow_request.dart
 lib/model/subtitle_track.dart
 lib/model/transcode_cache_stats.dart
 lib/model/transcode_capabilities.dart

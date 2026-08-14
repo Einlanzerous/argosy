@@ -57,6 +57,12 @@ dependencies:
   # App version/build for the TV "About Argosy" screen. Already in the tree
   # transitively (better_player); promoted to a direct dep so we can import it.
   package_info_plus: ^10.1.0
+  # Where stowed downloads live on device (ARGY-49). Already in the tree
+  # transitively; promoted to a direct dep so we can import it. Application
+  # *support* directory, not documents/cache: packages must survive a reboot and
+  # must not be offered to the user as documents, but they are also not something
+  # the OS should reclaim under pressure the way it can a cache.
+  path_provider: ^2.1.6
   bonsoir: ^7.1.4
   # Lock-screen / Quick Settings transport controls (ARGY-87). Owns the platform
   # MediaSession, its MediaStyle notification and the media-playback foreground
