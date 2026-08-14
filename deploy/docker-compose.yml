@@ -31,6 +31,18 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.dev
     restart: unless-stopped
+    # Run tini as PID 1 so orphaned processes get reaped (ARGY-200). This
+    # container starts `air`, which is a build watcher, not an init: on every
+    # rebuild it kills the running argosy binary, and that binary's children
+    # (ffprobe from a scan, ffmpeg from a transcode) are re-parented to PID 1
+    # and waited on by nobody. They accumulate as zombies holding PID slots —
+    # 244 of them over eleven days — until the container can no longer fork,
+    # which surfaces as scans and transcodes failing for no visible reason.
+    # The server itself is not leaking: it runs everything through
+    # exec.CommandContext + cmd.Wait(). Only the processes that outlive it are
+    # stranded. The production image has no supervisor above the binary and is
+    # replaced wholesale on restart, so this is a dev-stack concern only.
+    init: true
     depends_on:
       db:
         condition: service_healthy
