@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
@@ -11,6 +12,10 @@ import 'platform/device_type.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // The port the download service talks back over (ARGY-201). Must be opened
+  // before anything can attach to a transfer already running — including one
+  // this launch of the app did not start.
+  FlutterForegroundTask.initCommunicationPort();
   await _initMediaSession();
   // Resolve the device type once up front so the root can synchronously pick the
   // TV (10-foot, D-pad) shell vs. the touch shell (ARGY-51).
