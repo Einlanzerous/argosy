@@ -106,6 +106,14 @@ class StowController extends Notifier<Map<String, StowStatus>> {
     _handles[itemId] = handle;
     _set(itemId, const StowStatus(phase: StowPhase.requesting));
 
+    // Kept outside the try so the failure path can record how far the download
+    // actually got. The index is only reconciled against disk at load(), which
+    // early-returns once the index is in memory — so without this the row would
+    // report 0 bytes for the rest of the session, and The Hold would offer to
+    // free "0 B" while deleting gigabytes.
+    StowedItem? started;
+    var received = 0;
+
     try {
       final job = await _requestPackage(itemId, handle);
       if (job == null) return; // cancelled
@@ -124,7 +132,7 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       // about to exist on the device whether or not the download completes, and
       // a row is what makes them visible in the storage total, listable, and
       // deletable — a failed 12 GB stow would otherwise sit there unreachable.
-      final entry = StowedItem(
+      final entry = started = StowedItem(
         itemId: itemId,
         title: item.title,
         subtitleLine: subtitleLine ?? _defaultSubtitleLine(item),
@@ -144,6 +152,7 @@ class StowController extends Notifier<Map<String, StowStatus>> {
         incomplete: true,
       );
       await _store.put(entry);
+      var lastSized = DateTime.now();
 
       _set(
         itemId,
@@ -158,14 +167,26 @@ class StowController extends Notifier<Map<String, StowStatus>> {
         target: target,
         handle: handle,
         headers: _authHeaders,
-        onProgress: (p) => _set(
-          itemId,
-          StowStatus(
-            phase: StowPhase.downloading,
-            receivedBytes: p.received,
-            totalBytes: p.total > 0 ? p.total : (job.bytes ?? 0),
-          ),
-        ),
+        onProgress: (p) {
+          received = p.received;
+          _set(
+            itemId,
+            StowStatus(
+              phase: StowPhase.downloading,
+              receivedBytes: p.received,
+              totalBytes: p.total > 0 ? p.total : (job.bytes ?? 0),
+            ),
+          );
+          // Keep the persisted size roughly current so The Hold, opened mid
+          // download, reports real numbers. Throttled well below the progress
+          // tick rate — this rewrites the index file, and the UI reads the live
+          // status anyway.
+          final now = DateTime.now();
+          if (now.difference(lastSized) >= const Duration(seconds: 3)) {
+            lastSized = now;
+            unawaited(_store.put(entry.copyWith(bytes: p.received)));
+          }
+        },
       );
 
       final subtitles = await _downloadSubtitles(itemId, dir.path, handle);
@@ -197,6 +218,16 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       // bytes (validated by the stored ETag) instead of starting a 2 GB
       // download over. The server-side job is kept for the same reason — a
       // retry then reuses the finished package rather than re-encoding it.
+      //
+      // The row does need its size written now, though: nothing else will until
+      // the next launch reconciles against disk, and until then the storage view
+      // and the delete dialog would both quote 0 B for bytes that are really
+      // there.
+      final row = started;
+      if (row != null) {
+        await _store.put(row.copyWith(bytes: received));
+        ref.invalidate(stowedItemsProvider);
+      }
       _set(
         itemId,
         StowStatus(

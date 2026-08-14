@@ -207,6 +207,37 @@ void main() {
       );
     });
 
+    test(
+      'is promoted when the rename landed but the row never flipped',
+      () async {
+        // The video is renamed into place before the row is marked complete, and
+        // the sidecar fetch runs in between. A process killed in that window
+        // leaves `incomplete: true` with no `.part` and a whole file on disk —
+        // dropping the row there would strand the entire download.
+        final first = newStore();
+        await first.load();
+        final item = _item('a', bytes: 0).copyWith(incomplete: true);
+        await first.put(item);
+        await _writeVideo(first, _item('a', bytes: 12000));
+
+        final second = newStore();
+        await second.load();
+
+        expect(
+          second.has('a'),
+          isTrue,
+          reason: 'the file is complete and playable, so the row must survive',
+        );
+        expect(
+          second.get('a')?.bytes,
+          12000,
+          reason: 'sized from the real file',
+        );
+        expect(second.totalBytes(), 12000);
+        expect(second.list().single.incomplete, isFalse);
+      },
+    );
+
     test('discardPartial removes both the bytes and the row', () async {
       final store = newStore();
       await store.load();

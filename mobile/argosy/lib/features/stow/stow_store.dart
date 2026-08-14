@@ -88,27 +88,43 @@ class StowStore {
     final index = _index;
     if (index == null || index.isEmpty) return;
     final drop = <String>[];
-    final resize = <String, int>{};
+    final replace = <String, StowedItem>{};
     for (final entry in index.values) {
-      if (entry.incomplete) {
-        final part = File('${await videoPath(entry)}.part');
-        if (await part.exists()) {
-          resize[entry.itemId] = await part.length();
-        } else {
-          drop.add(entry.itemId);
-        }
-      } else if (!await File(await videoPath(entry)).exists()) {
+      final video = File(await videoPath(entry));
+
+      if (!entry.incomplete) {
+        if (!await video.exists()) drop.add(entry.itemId);
+        continue;
+      }
+
+      // An unfinished row with the final file already in place means the
+      // download landed and only the sidecar fetch was cut short — the rename
+      // happens before the row is flipped. Promote it rather than dropping the
+      // row, which would leave the whole file on disk with nothing pointing at
+      // it: uncounted, unlisted, undeletable. Missing captions are a
+      // degradation; an unreachable film is the orphan this design exists to
+      // prevent.
+      if (await video.exists()) {
+        replace[entry.itemId] = entry.copyWith(
+          bytes: await video.length(),
+          incomplete: false,
+        );
+        continue;
+      }
+
+      final part = File('${video.path}.part');
+      if (await part.exists()) {
+        replace[entry.itemId] = entry.copyWith(bytes: await part.length());
+      } else {
+        // No final file and no partial: nothing to resume, nothing to reclaim.
         drop.add(entry.itemId);
       }
     }
-    if (drop.isEmpty && resize.isEmpty) return;
+    if (drop.isEmpty && replace.isEmpty) return;
     for (final id in drop) {
       index.remove(id);
     }
-    resize.forEach((id, bytes) {
-      final e = index[id];
-      if (e != null) index[id] = e.copyWith(bytes: bytes);
-    });
+    replace.forEach((id, entry) => index[id] = entry);
     await _persist();
   }
 
