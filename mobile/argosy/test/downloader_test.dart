@@ -16,6 +16,12 @@ class _RangeServer {
   /// Requests seen, as the raw Range header (null when absent).
   final List<String?> ranges = [];
 
+  /// `If-Range` values seen, in request order (null when absent).
+  final List<String?> ifRanges = [];
+
+  /// The entity tag served, and matched against `If-Range`.
+  String etag = '"v1"';
+
   /// When set, the connection is dropped after this many bytes — standing in
   /// for a transfer interrupted mid-flight.
   int? cutAfter;
@@ -30,10 +36,20 @@ class _RangeServer {
   Future<void> _serve() async {
     await for (final req in _server) {
       final range = req.headers.value(HttpHeaders.rangeHeader);
+      final ifRange = req.headers.value(HttpHeaders.ifRangeHeader);
       ranges.add(range);
+      ifRanges.add(ifRange);
+      req.response.headers.set(HttpHeaders.etagHeader, etag);
+
+      // Mirrors http.ServeContent: a range whose If-Range no longer matches is
+      // answered with the whole file (200), not a partial.
+      final honourRange =
+          range != null &&
+          range.startsWith('bytes=') &&
+          (ifRange == null || ifRange == etag);
 
       var start = 0;
-      if (range != null && range.startsWith('bytes=')) {
+      if (honourRange) {
         start = int.parse(range.substring(6).split('-').first);
         req.response.statusCode = HttpStatus.partialContent;
         req.response.headers.set(
@@ -98,9 +114,11 @@ void main() {
   });
 
   test('resumes from a partial instead of refetching', () async {
-    // Leave the first 1000 bytes on disk, as an interrupted attempt would.
+    // Leave the first 1000 bytes on disk, as an interrupted attempt would,
+    // alongside the validator they were fetched against.
     final target = File('${dir.path}/video.mp4');
     await File('${target.path}.part').writeAsBytes(body.sublist(0, 1000));
+    await File('${target.path}.part.etag').writeAsString('"v1"');
 
     final server = _RangeServer(body);
     await server.start();
@@ -113,11 +131,63 @@ void main() {
     );
 
     expect(server.ranges.single, 'bytes=1000-');
+    expect(server.ifRanges.single, '"v1"');
     expect(
       await target.readAsBytes(),
       body,
       reason: 'the resumed half must join the existing half exactly',
     );
+    expect(
+      await File('${target.path}.part.etag').exists(),
+      isFalse,
+      reason: 'the validator only guards a partial',
+    );
+  });
+
+  test('a changed file restarts the download instead of splicing', () async {
+    // A partial from an earlier, different file: same offset, stale validator.
+    final target = File('${dir.path}/video.mp4');
+    await File('${target.path}.part').writeAsBytes(List.filled(1000, 0xAA));
+    await File('${target.path}.part.etag').writeAsString('"v1"');
+
+    // The server now holds a re-encoded package under a new tag — a new job, a
+    // different encoder, or a rescanned source.
+    final server = _RangeServer(body)..etag = '"v2"';
+    await server.start();
+    addTearDown(server.stop);
+
+    await downloadFile(
+      url: server.url,
+      target: target,
+      handle: DownloadHandle(),
+    );
+
+    expect(server.ifRanges.single, '"v1"');
+    expect(
+      await target.readAsBytes(),
+      body,
+      reason: 'a spliced file would play until the seam and then stop',
+    );
+  });
+
+  test('a partial with no validator is discarded rather than resumed', () async {
+    // Bytes left by a version that recorded no validator can't be proven to
+    // belong to this file, so they must not be appended to.
+    final target = File('${dir.path}/video.mp4');
+    await File('${target.path}.part').writeAsBytes(List.filled(1000, 0xBB));
+
+    final server = _RangeServer(body);
+    await server.start();
+    addTearDown(server.stop);
+
+    await downloadFile(
+      url: server.url,
+      target: target,
+      handle: DownloadHandle(),
+    );
+
+    expect(server.ranges.single, isNull, reason: 'no resume was attempted');
+    expect(await target.readAsBytes(), body);
   });
 
   test('a truncated transfer is not renamed into place', () async {

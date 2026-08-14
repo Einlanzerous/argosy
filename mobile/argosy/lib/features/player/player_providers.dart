@@ -128,14 +128,25 @@ Future<PlayerSetup> _offlineSetup(
     );
   }
 
-  final progress = await lib
+  // Saved progress and device preferences are worth having when the server
+  // happens to be reachable, but a stowed file must never wait on them: these
+  // run concurrently and time out fast, because the failure that matters is not
+  // airplane mode (which errors immediately) but connected-with-no-server —
+  // hotel and plane Wi-Fi — where a request hangs instead of failing. Missing
+  // either just means starting from the top with default captions.
+  const settleWait = Duration(seconds: 4);
+  final progressF = lib
       .getProgress(itemId)
+      .timeout(settleWait)
       .then<PlayState?>((p) => p)
       .catchError((_) => null);
-  final prefs = await auth
+  final prefsF = auth
       .getDevicePreferences()
+      .timeout(settleWait)
       .then<DevicePreferences?>((p) => p)
       .catchError((_) => null);
+  final progress = await progressF;
+  final prefs = await prefsF;
 
   return (
     // A stowed item still needs catalog-shaped detail for the title bar and the

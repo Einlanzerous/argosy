@@ -122,6 +122,39 @@ class OfflineProgressQueue {
     await _persist();
   }
 
+  /// Records that a position reached the server directly, so a queued entry for
+  /// the same item can't later overwrite it with an older one.
+  ///
+  /// The server's progress write is last-wins with no monotonic guard, so
+  /// draining the queue right after a successful live report would send a stale
+  /// position over a fresher one. That is not self-correcting at the end of a
+  /// session: the final report on dispose triggers the same drain, and no
+  /// heartbeat follows to repair it — the resume point stays behind for good.
+  ///
+  /// A `watched` entry is kept rather than dropped (finishing offline still has
+  /// to be reported) but is moved forward, so it can't rewind either.
+  Future<void> settled({
+    required String itemId,
+    required double positionSeconds,
+  }) async {
+    await _load();
+    final existing = _pending![itemId];
+    if (existing == null || existing.positionSeconds > positionSeconds) return;
+
+    if (!existing.watched) {
+      _pending!.remove(itemId);
+    } else {
+      _pending![itemId] = _PendingProgress(
+        itemId: itemId,
+        positionSeconds: positionSeconds,
+        durationSeconds: existing.durationSeconds,
+        at: existing.at,
+        watched: true,
+      );
+    }
+    await _persist();
+  }
+
   /// Sends everything queued. Entries that fail stay queued for the next
   /// attempt; entries the server rejects outright (a deleted item, a 4xx) are
   /// dropped, since retrying them forever would never succeed.

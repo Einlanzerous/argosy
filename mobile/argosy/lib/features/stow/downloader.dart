@@ -57,9 +57,23 @@ Future<void> downloadFile({
   void Function(DownloadProgress)? onProgress,
 }) async {
   final partial = File('${target.path}.part');
+  // The validator the partial bytes were fetched against, stored beside them.
+  final validatorFile = File('${target.path}.part.etag');
+
   var existing = 0;
+  String? validator;
   if (await partial.exists()) {
-    existing = await partial.length();
+    if (await validatorFile.exists()) {
+      validator = (await validatorFile.readAsString()).trim();
+    }
+    if (validator != null && validator.isNotEmpty) {
+      existing = await partial.length();
+    } else {
+      // Bytes with no validator can't be proven to belong to the file we're
+      // about to fetch, and a wrong guess splices two files into one that plays
+      // until the seam. Cheaper to re-download than to ship that.
+      await partial.delete();
+    }
   }
 
   final client = http.Client();
@@ -72,12 +86,21 @@ Future<void> downloadFile({
     request.headers.addAll(headers);
     if (existing > 0) {
       request.headers['Range'] = 'bytes=$existing-';
+      // If-Range is what makes the resume safe. Without it the server honours
+      // the range against whatever the file is *now*, and a re-encoded package
+      // (a new job, a different encoder, a changed height cap) or a rescanned
+      // source appends onto bytes from a different file. The length check can't
+      // catch that — `total` is derived from the new response, so the spliced
+      // file satisfies it and gets renamed into place as playable.
+      // On a mismatch the server answers 200 with the whole file instead of
+      // 206, which the branch below already handles by starting over.
+      request.headers['If-Range'] = validator!;
     }
     final response = await client.send(request);
 
     // 206 means the server honoured the range and we append. 200 means it sent
-    // the whole file regardless (or there was nothing to resume), so anything
-    // already on disk is stale and the write starts over.
+    // the whole file regardless (no resume, or If-Range said the file changed),
+    // so anything already on disk is stale and the write starts over.
     var received = existing;
     var append = true;
     if (response.statusCode == HttpStatus.ok) {
@@ -85,6 +108,14 @@ Future<void> downloadFile({
       received = 0;
     } else if (response.statusCode != HttpStatus.partialContent) {
       throw HttpException('Download failed (${response.statusCode})', uri: url);
+    }
+
+    // Record the validator for whatever we're about to write, so a later resume
+    // can prove it is continuing the same file. Both endpoints set an ETag; a
+    // server that sends none leaves this empty and the next attempt restarts.
+    final etag = response.headers[HttpHeaders.etagHeader] ?? '';
+    if (!append || etag.isNotEmpty) {
+      await validatorFile.writeAsString(etag, flush: true);
     }
 
     final contentLength = response.contentLength ?? 0;
@@ -124,6 +155,10 @@ Future<void> downloadFile({
       await target.delete();
     }
     await partial.rename(target.path);
+    // The validator only guards a partial; once the file is whole it is noise.
+    if (await validatorFile.exists()) {
+      await validatorFile.delete();
+    }
     onProgress?.call(DownloadProgress(received, total));
   } on http.ClientException catch (_) {
     // Closing the client to cancel surfaces here; report the cancellation the

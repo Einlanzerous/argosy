@@ -1632,6 +1632,15 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          description: >
+            This item needs packaging, but the server has offline packaging
+            disabled (no transcoder). A passthrough stow still succeeds — only
+            sources that must be re-encoded are refused.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/v1/stow:
     get:

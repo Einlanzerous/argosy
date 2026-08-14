@@ -163,10 +163,16 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       _clear(itemId);
       ref.invalidate(stowedItemsProvider);
     } on DownloadCancelled {
+      // An explicit cancel means "I don't want this" — free the space.
       await _cleanUp(itemId);
       _clear(itemId);
     } catch (e) {
-      await _store.discardPartial(itemId);
+      // A *failure* deliberately keeps the partial. Wiping it here would make
+      // the resumable downloader pointless: the case it exists for is a
+      // transfer dying partway, and the retry that follows resumes from these
+      // bytes (validated by the stored ETag) instead of starting a 2 GB
+      // download over. The server-side job is kept for the same reason — a
+      // retry then reuses the finished package rather than re-encoding it.
       _set(
         itemId,
         StowStatus(

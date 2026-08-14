@@ -127,6 +127,55 @@ void main() {
     expect(await queue.pendingCount(), 0);
   });
 
+  group('settled', () {
+    test('drops a queued position a live report has overtaken', () async {
+      // Watched to 30:00 offline, then the network came back and the heartbeat
+      // reported 35:00 directly. Draining the queue blind would write 1800 over
+      // 2100 — and if the viewer closes the player right then, no further
+      // heartbeat repairs it.
+      await queue.enqueue(itemId: 'a', positionSeconds: 1800);
+      await queue.settled(itemId: 'a', positionSeconds: 2100);
+
+      expect(await queue.pendingCount(), 0);
+      final api = _FakeLibraryApi();
+      await queue.flush(api);
+      expect(api.reported, isEmpty, reason: 'nothing left to rewind with');
+    });
+
+    test('leaves a queued position that is still ahead', () async {
+      await queue.enqueue(itemId: 'a', positionSeconds: 2100);
+      await queue.settled(itemId: 'a', positionSeconds: 1800);
+
+      expect(await queue.pendingCount(), 1);
+      final api = _FakeLibraryApi();
+      await queue.flush(api);
+      expect(api.reported, [('a', 2100.0)]);
+    });
+
+    test('keeps an offline finish but moves it forward', () async {
+      await queue.enqueue(itemId: 'a', positionSeconds: 1800, watched: true);
+      await queue.settled(itemId: 'a', positionSeconds: 2100);
+
+      final api = _FakeLibraryApi();
+      await queue.flush(api);
+      expect(
+        api.watched,
+        ['a'],
+        reason: 'finishing offline must still be reported',
+      );
+      expect(
+        api.reported,
+        [('a', 2100.0)],
+        reason: 'and must not rewind the position while doing it',
+      );
+    });
+
+    test('is a no-op for an item that was never queued', () async {
+      await queue.settled(itemId: 'never', positionSeconds: 100);
+      expect(await queue.pendingCount(), 0);
+    });
+  });
+
   test('keeps an entry a 5xx failed, since that may recover', () async {
     await queue.enqueue(itemId: 'a', positionSeconds: 300);
     final api = _FakeLibraryApi()..failure = ApiException(503, 'unavailable');

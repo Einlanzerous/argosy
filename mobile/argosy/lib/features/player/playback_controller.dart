@@ -790,10 +790,16 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
             itemId,
             ProgressUpdate(positionSeconds: pos, durationSeconds: duration),
           )
-          .then((_) {
+          .then((_) async {
             // That call proved the server is reachable — a good moment to drain
-            // anything recorded while it wasn't.
-            unawaited(offlineQueue?.flush(libraryApi) ?? Future<int>.value(0));
+            // anything recorded while it wasn't. Retire this item's queued entry
+            // first: it is necessarily older than the position just accepted,
+            // and the server's write is last-wins, so draining it blind would
+            // rewind the resume point we just set.
+            final queue = offlineQueue;
+            if (queue == null) return;
+            await queue.settled(itemId: itemId, positionSeconds: pos);
+            await queue.flush(libraryApi);
           })
           .catchError((_) {
             unawaited(

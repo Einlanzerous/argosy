@@ -3825,6 +3825,15 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            /** @description This item needs packaging, but the server has offline packaging disabled (no transcoder). A passthrough stow still succeeds — only sources that must be re-encoded are refused. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listStowJobs: {

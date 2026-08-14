@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:argosy_api/api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/io_client.dart';
 
 import 'stream_urls.dart';
 import 'token_store.dart';
@@ -37,14 +40,28 @@ class BaseUrlController extends Notifier<String> {
 final baseUrlProvider =
     NotifierProvider<BaseUrlController, String>(BaseUrlController.new);
 
+/// How long a request may spend trying to reach the server before giving up.
+///
+/// The generated client sets no timeout, and `dart:io`'s
+/// `HttpClient.connectionTimeout` defaults to null — so a host that routes but
+/// has nothing listening (captive-portal Wi-Fi, a tailnet that's down, the
+/// server simply off) hangs for the OS connect timeout, which is minutes. That
+/// is the *normal* condition for a phone playing something stowed, so every
+/// call has to be bounded or the offline paths stall on a network that will
+/// never answer (ARGY-49). Long enough not to trip on a slow tailnet hop.
+const _connectTimeout = Duration(seconds: 6);
+
 /// A configured [ApiClient]: base path from [baseUrlProvider], Bearer auth fed
 /// by a live provider closure so the current token is read per-request without
-/// rebuilding the client.
+/// rebuilding the client, over a transport with a bounded connect timeout.
 final apiClientProvider = Provider<ApiClient>((ref) {
   final store = ref.watch(tokenStoreProvider);
   final basePath = ref.watch(baseUrlProvider);
   final auth = HttpBearerAuth()..accessToken = () => store.token ?? '';
-  return ApiClient(basePath: basePath, authentication: auth);
+  final httpClient = IOClient(HttpClient()..connectionTimeout = _connectTimeout);
+  ref.onDispose(httpClient.close);
+  return ApiClient(basePath: basePath, authentication: auth)
+    ..client = httpClient;
 });
 
 // Typed API surfaces, one per spec tag.
