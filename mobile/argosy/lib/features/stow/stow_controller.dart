@@ -113,6 +113,7 @@ class StowController extends Notifier<Map<String, StowStatus>> {
     // free "0 B" while deleting gigabytes.
     StowedItem? started;
     var received = 0;
+    File? partialFile;
 
     try {
       final job = await _requestPackage(itemId, handle);
@@ -128,6 +129,14 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       final dir = await _store.itemDir(itemId);
       final target = File('${dir.path}/$fileName');
 
+      // Bytes an earlier attempt already fetched. This is a retry as often as
+      // not, and the row must not be rewritten to zero on the way in: a failure
+      // before the first chunk arrives (the link that just died dropping again,
+      // a 401 on a revoked token, a 404 on a moved source) would otherwise
+      // persist that zero, and `received` below would write it straight back.
+      partialFile = File('${target.path}.part');
+      received = await partialFile.exists() ? await partialFile.length() : 0;
+
       // Record the entry before a byte lands, marked unfinished. The bytes are
       // about to exist on the device whether or not the download completes, and
       // a row is what makes them visible in the storage total, listable, and
@@ -137,7 +146,7 @@ class StowController extends Notifier<Map<String, StowStatus>> {
         title: item.title,
         subtitleLine: subtitleLine ?? _defaultSubtitleLine(item),
         fileName: fileName,
-        bytes: 0,
+        bytes: received,
         durationSeconds: (item.durationSeconds ?? 0).toDouble(),
         stowedAt: DateTime.now(),
         posterUrl: item.posterUrl,
@@ -152,6 +161,10 @@ class StowController extends Notifier<Map<String, StowStatus>> {
         incomplete: true,
       );
       await _store.put(entry);
+      // stowedItemsProvider caches, and The Hold reads it — without this the
+      // row exists on disk but no surface shows it until something else
+      // invalidates.
+      ref.invalidate(stowedItemsProvider);
       var lastSized = DateTime.now();
 
       _set(
@@ -184,7 +197,11 @@ class StowController extends Notifier<Map<String, StowStatus>> {
           final now = DateTime.now();
           if (now.difference(lastSized) >= const Duration(seconds: 3)) {
             lastSized = now;
-            unawaited(_store.put(entry.copyWith(bytes: p.received)));
+            unawaited(
+              _store
+                  .put(entry.copyWith(bytes: p.received))
+                  .then((_) => ref.invalidate(stowedItemsProvider)),
+            );
           }
         },
       );
@@ -225,7 +242,15 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       // there.
       final row = started;
       if (row != null) {
-        await _store.put(row.copyWith(bytes: received));
+        // Size it from the file rather than the progress counter: the download
+        // may have restarted from zero on the way through (a changed ETag, an
+        // unvalidated partial discarded, a 416), which leaves the counter
+        // describing an attempt that no longer matches what is on disk.
+        final part = partialFile;
+        final onDisk = (part != null && await part.exists())
+            ? await part.length()
+            : received;
+        await _store.put(row.copyWith(bytes: onDisk));
         ref.invalidate(stowedItemsProvider);
       }
       _set(
