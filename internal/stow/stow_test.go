@@ -354,7 +354,15 @@ func TestResetInterrupted(t *testing.T) {
 	if got.Err == "" {
 		t.Error("reset job carries no explanation; the user is told nothing about why it stopped")
 	}
+	// Unlike the production caller (boot, before any worker exists) this test has
+	// a live encode parked on release, and it writes its artifact under the
+	// fixture's t.TempDir(). Returning straight after the close raced that write
+	// against TempDir's RemoveAll — an intermittent "directory not empty" cleanup
+	// failure with no connection to what the test asserts. Waiting for the worker
+	// to run itself out leaves the directory quiescent; it lands on ready because
+	// finish() is indifferent to the row having been reset underneath it.
 	close(f.backend.release)
+	waitForState(t, f.mgr, f.account, job.ID, StateReady)
 }
 
 // TestConcurrencyLimitQueues checks a second item waits its turn rather than
