@@ -2,6 +2,22 @@ import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+/// Compile-time default server address, e.g.
+/// `flutter run --dart-define=ARGOSY_BASE_URL=http://10.0.0.20:8097`. Empty in
+/// release builds, where pairing is the only source.
+const kEnvBaseUrl = String.fromEnvironment('ARGOSY_BASE_URL');
+
+/// The address to talk to: what pairing stored, else the compile-time default.
+///
+/// Shared rather than restated, because more than one isolate needs the same
+/// answer. The download service resolving this differently from the UI is not a
+/// theoretical drift — it shipped: the service read the stored value alone and
+/// failed every stow with "this device is not paired with a server" on a device
+/// that was paired and working, because its address came from the dart-define
+/// (ARGY-201).
+String resolveBaseUrl(String? stored) =>
+    (stored != null && stored.isNotEmpty) ? stored : kEnvBaseUrl;
+
 /// Persists the device bearer token + the household server base URL, with an
 /// in-memory cache so they can be read synchronously.
 ///

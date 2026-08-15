@@ -435,11 +435,14 @@ class StowTaskHandler extends TaskHandler {
   /// have to be persisted alongside the queue in plain SharedPreferences to
   /// survive a restart, and the whole reason it lives in secure storage is that
   /// it is a bearer credential for the household.
+  ///
+  /// The address goes through [resolveBaseUrl] rather than being read straight
+  /// off the store, so this isolate reaches the same server the UI does.
   static Future<StowSession> _connect() async {
     final tokens = TokenStore(const FlutterSecureStorage());
     await tokens.load();
-    final baseUrl = tokens.baseUrl;
-    if (baseUrl == null || baseUrl.isEmpty) {
+    final baseUrl = resolveBaseUrl(tokens.baseUrl);
+    if (baseUrl.isEmpty) {
       throw const ApiFailure('This device is not paired with a server.');
     }
     return StowSession.connect(baseUrl: baseUrl, token: tokens.token);
