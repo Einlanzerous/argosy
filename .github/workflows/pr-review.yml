@@ -154,6 +154,11 @@ jobs:
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           ACTION: ${{ github.event.action }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          # For the release-PR rule below. All three are empty on
+          # `issue_comment`, which is fine: that path is always MANUAL.
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
 
@@ -175,6 +180,76 @@ jobs:
           FILES=$(gh pr diff "$PR_NUMBER" --name-only)
           if [ -z "$FILES" ]; then
             skip "empty diff"
+          fi
+
+          # A release PR is a generated CHANGELOG and a version stamp, opened by
+          # the release bot. There is nothing for a fresh-context reviewer to say
+          # about it, and claude-code-action refuses a bot-initiated run outright
+          # ("Workflow initiated by non-human actor: github-actions (type: Bot) —
+          # Add bot to allowed_bots list"), so without this the check is red on
+          # every release, permanently, and on exactly the PRs that most need to
+          # look trustworthy at a glance. Observed on #205 (run 31866465923):
+          # Claude never started, no execution file, and the Gate correctly
+          # called it a malfunction — correctly, and uselessly, forever.
+          #
+          # Ported from switchyard (SERV-87), with the one change that makes it
+          # work here at all. Its allow-list is the literal pair CHANGELOG.md +
+          # .release-please-manifest.json, and its own review recorded why that
+          # was safe there and would not travel: "no `extra-files` configured …
+          # adding one to stamp a version into a source file makes it
+          # reachable". Argosy is that repo — `extra-files` puts the Flutter
+          # app's version in mobile/argosy/pubspec.yaml, so a release PR here is
+          # three files, and the literal rule would never fire.
+          #
+          # So the expected set is read out of release-please-config.json rather
+          # than restated: changelog path, manifest, and every `extra-files`
+          # target. Restating it is how this silently rots the next time an
+          # extra-file is added — the skip stops matching, and the only symptom
+          # is a red check on a release nobody looks twice at.
+          #
+          # Read from the BASE ref, so a PR cannot widen its own skip by editing
+          # the config. Anything unexpected (missing file, changed schema) leaves
+          # RELEASE_FILES short, the comparison fails, and it does not skip:
+          # every failure of this rule lands on "review it" rather than "wave it
+          # through".
+          #
+          # Keyed on all three of author, branch and file list, because each one
+          # alone is a claim the other two do not enforce:
+          #
+          #   author  — the reason this rule exists is that the INITIATING ACTOR
+          #             is a bot. Branch alone would let a human push
+          #             `release-please--anything` touching exactly these files
+          #             and skip review — and per CLAUDE.md ("Release-please owns
+          #             CHANGELOG.md and versions. Don't hand-edit.") a hand-edit
+          #             of those is precisely the change worth a look.
+          #   branch  — scopes it to the release train rather than any bot.
+          #   files   — a release PR carrying anything else is real code riding a
+          #             release, which is the silent pass this must not become.
+          #
+          # The fall-through is NOT a review and says so: nothing configures
+          # `allowed_bots`, so a bot-authored PR that reaches the Review step is
+          # refused exactly as before. That red is deliberate — unreviewed code
+          # riding a release should be loud. `@claude review` forces a real
+          # review on any of these, since the initiating actor is then human.
+          if [ "$MANUAL" != "true" ] && [ "$AUTHOR_TYPE" = "Bot" ] && [[ "$HEAD_BRANCH" == release-please--* ]]; then
+            CONFIG=$(git show "$BASE_SHA:release-please-config.json" 2>/dev/null || true)
+            RELEASE_FILES=$(
+              {
+                echo '.release-please-manifest.json'
+                # Single-package layout (`packages["."]`), which is what this
+                # repo has. A multi-package config would yield nothing here, the
+                # comparison would fail, and the PR would be reviewed.
+                jq -r '
+                  (.packages["."] // {}) as $p |
+                  ($p["changelog-path"] // "CHANGELOG.md"),
+                  ($p["extra-files"][]? | if type == "string" then . else .path end)
+                ' <<<"$CONFIG" 2>/dev/null || true
+              } | sort -u
+            )
+            if [ -n "$CONFIG" ] && [ "$(sort -u <<<"$FILES")" = "$RELEASE_FILES" ]; then
+              skip "release PR (generated changelog, manifest and version stamps)"
+            fi
+            echo "::warning::Release branch carries more than the generated changelog, manifest and version stamps, so it is NOT being skipped. It will not be reviewed either: the author is a bot and claude-code-action refuses bot-initiated runs, so this run will fail at the Gate as a malfunction. That failure is deliberate — comment '@claude review' to get an actual review of it."
           fi
 
           # Docs-only changes get nothing out of a correctness reviewer. Written
