@@ -25,7 +25,9 @@ import 'vtt.dart';
 /// - **Seeking** under transcode is native when the target is already encoded;
 ///   otherwise the session is torn down and restarted at the new offset, so
 ///   ffmpeg re-seeks server-side. Resume takes the same restart path.
-class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
+class PlaybackController extends ChangeNotifier
+    with WidgetsBindingObserver
+    implements MediaSessionTarget {
   PlaybackController({
     required this.libraryApi,
     required this.transcodeApi,
@@ -45,7 +47,11 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
     this.localPath,
     this.localSubtitles = const [],
     this.offlineQueue,
-  });
+  }) {
+    // ARGY-190: the host activity can be destroyed without this controller ever
+    // being disposed — see [didChangeAppLifecycleState].
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   final LibraryApi libraryApi;
   final TranscodeApi transcodeApi;
@@ -111,6 +117,12 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
   /// Invoked when playback should roll into [nextEpisode] — on end-of-file or
   /// "Play now". The screen owns navigation, so it wires this up.
   VoidCallback? onAdvance;
+
+  /// Invoked when the host activity was destroyed under a live player
+  /// (ARGY-190). The session is already torn down by then; this exists purely so
+  /// the screen can leave the player route, because the widget tree survives the
+  /// activity and would otherwise come back to a player with no native side.
+  VoidCallback? onHostDetached;
 
   bool _advancing = false;
 
@@ -178,6 +190,7 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
 
   Timer? _heartbeat;
   bool _disposed = false;
+  bool _tornDown = false;
 
   Map<String, String> get _authHeaders => (token != null && token!.isNotEmpty)
       ? {'Authorization': 'Bearer $token'}
@@ -349,7 +362,10 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
   }
 
   void _requestAdvance() {
-    if (_advancing || nextEpisode == null) return;
+    // _tornDown: with the player gone [position] collapses to [baseOffset], so a
+    // resume that started inside the roll-over window would read as "finished"
+    // and advance the series from a screen that is already on its way out.
+    if (_advancing || _tornDown || nextEpisode == null) return;
     _advancing = true;
     _flush();
     onAdvance?.call();
@@ -909,26 +925,65 @@ class PlaybackController extends ChangeNotifier implements MediaSessionTarget {
     if (!_disposed) notifyListeners();
   }
 
+  /// Dismissing the Android PiP window finishes the host activity, and the
+  /// widget tree is never torn down with it — so [dispose] doesn't run and the
+  /// server is left holding a live ffmpeg (ARGY-190).
+  ///
+  /// The engine survives because `AudioServiceActivity` hands `FlutterActivity` a
+  /// *cached* engine (ARGY-87), which makes `shouldDestroyEngineWithHost()` false.
+  /// That keeps Dart alive to make this call — but it also means the 10s progress
+  /// heartbeat keeps running, and every report re-touches the session server-side,
+  /// so the idle reaper never collects it either. Detaching is the only signal
+  /// there is: `FlutterActivity.onDestroy` → `onDetach()` → `appIsDetached()`.
+  ///
+  /// PiP itself reports `inactive`/`paused`, never `detached`, so floating the
+  /// video doesn't trip this.
   @override
-  void dispose() {
-    _disposed = true;
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.detached || _disposed || _tornDown) return;
+    _teardown();
+    // The route has to go too: the activity is gone but this widget tree isn't,
+    // so relaunching re-attaches to the same engine and would rebuild the player
+    // screen around a controller whose native player is already disposed.
+    onHostDetached?.call();
+  }
+
+  /// Releases everything this controller owns off the widget tree. Runs once:
+  /// the detached path calls it, and so does the [dispose] that follows the pop.
+  /// The guard is not just tidiness — with [_player] gone, [position] collapses
+  /// to [baseOffset], so a second [_flush] would report the *start* of the
+  /// transcode session and rewind the resume point that the first one just saved.
+  void _teardown() {
+    if (_tornDown) return;
+    _tornDown = true;
     _heartbeat?.cancel();
+    _heartbeat = null;
     _setWakelock(false);
-    // Identity-arbitrated: on series auto-advance this runs *after* the next
-    // episode's controller has already attached, and must not tear down its
-    // session.
-    argosyAudioHandler?.detach(this);
     _flush();
+    // Ahead of the audio-handler detach: that releases the foreground service,
+    // and on the detached path the process is only alive *because* of it — a
+    // request started after it goes is racing process death.
     final sid = _sessionId;
     _sessionId = null;
     if (sid != null) {
       unawaited(transcodeApi.stopTranscode(sid).catchError((_) {}));
     }
+    // Identity-arbitrated: on series auto-advance this runs *after* the next
+    // episode's controller has already attached, and must not tear down its
+    // session.
+    argosyAudioHandler?.detach(this);
     // forceDispose: the controller is configured autoDispose:false (we own the
     // lifecycle), and a plain dispose() is a no-op in that mode — without this
     // the native player keeps playing audio after the screen is popped.
     _player?.dispose(forceDispose: true);
     _player = null;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
+    _teardown();
     super.dispose();
   }
 }
