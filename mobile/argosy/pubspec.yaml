@@ -72,6 +72,7 @@ dependencies:
   # so absolute position comes from PlaybackController, not the ExoPlayer clock.
   # Requires manifest entries + AudioServiceActivity — see AndroidManifest.xml.
   audio_service: ^0.18.19
+  flutter_foreground_task: ^10.0.0
 
 dev_dependencies:
   flutter_test:

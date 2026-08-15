@@ -8,11 +8,6 @@ import 'package:http/io_client.dart';
 import 'stream_urls.dart';
 import 'token_store.dart';
 
-/// Optional compile-time default for the server address, e.g.
-/// `flutter run --dart-define=ARGOSY_BASE_URL=http://10.0.0.20:8097`.
-/// Empty until pairing (ARGY-46) persists a real one via [TokenStore].
-const _envBaseUrl = String.fromEnvironment('ARGOSY_BASE_URL');
-
 final secureStorageProvider = Provider<FlutterSecureStorage>(
   (ref) => const FlutterSecureStorage(),
 );
@@ -29,10 +24,7 @@ final tokenStoreProvider = Provider<TokenStore>(
 /// update it.
 class BaseUrlController extends Notifier<String> {
   @override
-  String build() {
-    final stored = ref.watch(tokenStoreProvider).baseUrl;
-    return (stored != null && stored.isNotEmpty) ? stored : _envBaseUrl;
-  }
+  String build() => resolveBaseUrl(ref.watch(tokenStoreProvider).baseUrl);
 
   void set(String url) => state = url;
 }

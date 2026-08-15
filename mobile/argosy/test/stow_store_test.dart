@@ -306,4 +306,54 @@ void main() {
       endsWith('/ep/sub-track-1.vtt'),
     );
   });
+
+  group('two writers', () {
+    // The download service writes this index from its own isolate while the app
+    // is also live (ARGY-201). Each holds its own cached copy, so a write that
+    // published a stale snapshot would silently undo the other side.
+
+    test('a write does not undo one it never saw', () async {
+      final app = newStore();
+      final service = newStore();
+      await app.load();
+      await service.load();
+
+      final one = _item('one');
+      await _writeVideo(app, one);
+      await app.put(one);
+
+      // The service's cache predates that row entirely.
+      final two = _item('two');
+      await _writeVideo(service, two);
+      await service.put(two);
+
+      final reopened = newStore();
+      await reopened.load();
+      expect(
+        reopened.list().map((e) => e.itemId).toSet(),
+        {'one', 'two'},
+        reason: 'the later write must merge, not replace',
+      );
+    });
+
+    test('a delete is not resurrected by the other side', () async {
+      final app = newStore();
+      final service = newStore();
+      final gone = _item('gone');
+      await _writeVideo(app, gone);
+      await app.put(gone);
+      await service.load(); // caches the row about to be deleted
+      await app.remove('gone');
+
+      // The service records progress for something else and rewrites the index.
+      final other = _item('other');
+      await _writeVideo(service, other);
+      await service.put(other);
+
+      final reopened = newStore();
+      await reopened.load();
+      expect(reopened.has('gone'), isFalse);
+      expect(reopened.has('other'), isTrue);
+    });
+  });
 }

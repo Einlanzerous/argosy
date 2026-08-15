@@ -134,9 +134,21 @@ class _StowedRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.argosy;
+    // Downloads run in a service now (ARGY-201), so an unfinished row is as
+    // likely to be one still coming down — started, pocketed, and looked in on —
+    // as one that stopped. Telling someone to "stow it again to resume"
+    // something that is actively downloading would be nonsense, so ask.
+    final live = ref
+        .read(stowControllerProvider.notifier)
+        .statusFor(item.itemId);
+    final active = item.incomplete && live.isBusy;
     // An unfinished row exists to account for bytes, so it says what they are
     // and what will happen to them rather than posing as something watchable.
-    final subtitle = item.incomplete
+    final subtitle = active
+        ? '${live.label}   •   '
+              '${formatBytes(live.receivedBytes > 0 ? live.receivedBytes : item.bytes)}'
+              ' so far'
+        : item.incomplete
         ? 'Unfinished — ${formatBytes(item.bytes)} downloaded'
               '   •   Stow it again to resume'
         : [

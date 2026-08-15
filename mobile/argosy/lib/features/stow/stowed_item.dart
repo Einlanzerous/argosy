@@ -226,6 +226,29 @@ class StowStatus {
     }
   }
 
+  /// Serialized to cross the boundary between the download service's isolate
+  /// and the UI's (ARGY-201).
+  Map<String, dynamic> toJson() => {
+    'phase': phase.name,
+    'receivedBytes': receivedBytes,
+    'totalBytes': totalBytes,
+    'packagedSeconds': packagedSeconds,
+    'durationSeconds': durationSeconds,
+    'message': message,
+  };
+
+  static StowStatus fromJson(Map<String, dynamic> json) => StowStatus(
+    phase: StowPhase.values.firstWhere(
+      (p) => p.name == json['phase'],
+      orElse: () => StowPhase.none,
+    ),
+    receivedBytes: (json['receivedBytes'] as num?)?.toInt() ?? 0,
+    totalBytes: (json['totalBytes'] as num?)?.toInt() ?? 0,
+    packagedSeconds: (json['packagedSeconds'] as num?)?.toDouble() ?? 0,
+    durationSeconds: (json['durationSeconds'] as num?)?.toDouble() ?? 0,
+    message: json['message'] as String?,
+  );
+
   /// Short label for the button/row while work is in flight.
   String get label {
     switch (phase) {

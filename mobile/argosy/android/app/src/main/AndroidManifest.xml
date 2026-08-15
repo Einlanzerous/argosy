@@ -12,6 +12,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <!-- The download service (ARGY-201). `dataSync` is the type Android defines
+         for exactly this — moving bytes on the user's behalf — and its
+         permission is mandatory at targetSdk 34+. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <!-- Android TV support (ARGY-51): advertise leanback but don't require it, and
          don't require a touchscreen, so the same APK installs on TVs and phones. -->
     <uses-feature
@@ -68,6 +72,22 @@
                 <action android:name="android.media.browse.MediaBrowserService"/>
             </intent-filter>
         </service>
+        <!-- Stow's download service (ARGY-201): keeps a transfer running with
+             the app backgrounded or swiped out of Recents, and is what Android
+             restarts if it reclaims the process mid-download. The class name is
+             the plugin's and must not be changed; the type and its permission
+             above are what let it start at all on Android 14+. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false"/>
+        <!-- Monochrome status-bar icon for that notification, named by
+             meta-data because the plugin resolves it by name at runtime. The
+             default is the launcher icon, which Android masks to its alpha
+             channel and draws as a white blob. Shared with the media session. -->
+        <meta-data
+            android:name="dev.dodson.argosy.STOW_NOTIFICATION_ICON"
+            android:resource="@drawable/ic_stat_argosy"/>
         <!-- Headset / bluetooth / steering-wheel media keys. -->
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"

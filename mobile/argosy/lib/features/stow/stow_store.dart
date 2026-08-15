@@ -55,24 +55,36 @@ class StowStore {
   /// touches the filesystem.
   Future<void> load() async {
     if (_index != null) return;
+    _index = await _readIndex();
+    await _reconcile();
+  }
+
+  /// Re-reads the index from disk, discarding the cached copy.
+  ///
+  /// The download service writes the same file from its own isolate
+  /// (ARGY-201), so a cached index in the UI goes stale the moment a background
+  /// transfer records progress. Callers refresh through this rather than
+  /// assuming their copy is the only one.
+  Future<void> reload() async {
+    _index = null;
+    await load();
+  }
+
+  Future<Map<String, StowedItem>> _readIndex() async {
     final root = await _ensureRoot();
     final file = File('${root.path}/$_indexFile');
-    if (!await file.exists()) {
-      _index = {};
-      return;
-    }
+    if (!await file.exists()) return {};
     try {
       final decoded = jsonDecode(await file.readAsString());
       final entries = (decoded as List<dynamic>)
           .map((e) => StowedItem.fromJson(e as Map<String, dynamic>))
           .toList();
-      _index = {for (final e in entries) e.itemId: e};
+      return {for (final e in entries) e.itemId: e};
     } catch (_) {
       // A truncated or hand-edited index must not brick the feature. The files
-      // on disk are still there; reconcile() below re-finds anything playable.
-      _index = {};
+      // on disk are still there; _reconcile re-finds anything playable.
+      return {};
     }
-    await _reconcile();
   }
 
   /// Reconciles the index against what is actually on disk.
@@ -121,11 +133,12 @@ class StowStore {
       }
     }
     if (drop.isEmpty && replace.isEmpty) return;
-    for (final id in drop) {
-      index.remove(id);
-    }
-    replace.forEach((id, entry) => index[id] = entry);
-    await _persist();
+    await _mutate((current) {
+      for (final id in drop) {
+        current.remove(id);
+      }
+      replace.forEach((id, entry) => current[id] = entry);
+    });
   }
 
   /// Every entry — finished and unfinished alike — most recent first. The
@@ -185,15 +198,13 @@ class StowStore {
   /// Records a finished stow.
   Future<void> put(StowedItem item) async {
     await load();
-    _index![item.itemId] = item;
-    await _persist();
+    await _mutate((current) => current[item.itemId] = item);
   }
 
   /// Removes an item: its index entry and every file it brought with it.
   Future<void> remove(String itemId) async {
     await load();
-    _index!.remove(itemId);
-    await _persist();
+    await _mutate((current) => current.remove(itemId));
     final root = await _ensureRoot();
     final dir = Directory('${root.path}/$itemId');
     if (await dir.exists()) {
@@ -204,11 +215,17 @@ class StowStore {
   /// Clears a half-finished download — its bytes and its index row — used when
   /// a stow is cancelled. A finished stow is left alone.
   Future<void> discardPartial(String itemId) async {
-    if (has(itemId)) return; // A finished stow; leave it alone.
     await load();
-    if (_index!.remove(itemId) != null) {
-      await _persist();
-    }
+    // Whether this is a finished stow is decided against the index as it is on
+    // disk, inside the write, not against a cached copy the download service
+    // may have moved on from.
+    var finished = false;
+    await _mutate((current) {
+      final entry = current[itemId];
+      finished = entry != null && !entry.incomplete;
+      if (!finished) current.remove(itemId);
+    });
+    if (finished) return; // A finished stow; leave its files alone.
     final root = await _ensureRoot();
     final dir = Directory('${root.path}/$itemId');
     if (await dir.exists()) {
@@ -216,17 +233,46 @@ class StowStore {
     }
   }
 
-  Future<void> _persist() {
-    final snapshot = list().map((e) => e.toJson()).toList();
+  /// Applies [change] to the index and writes it out.
+  ///
+  /// The change is applied to a copy read back from disk, not to the cached
+  /// index, because two isolates write this file: the download service records
+  /// a running transfer's size while the UI is also live (ARGY-201). Writing a
+  /// stale snapshot would silently undo the other side's last change —
+  /// resurrecting a row the user just deleted, or dropping one the service just
+  /// added. Re-reading first narrows that to the width of a single write.
+  ///
+  /// A file lock would be the obvious answer and is deliberately not used: the
+  /// two isolates share a process, and POSIX advisory locks are held per
+  /// process, so both would be granted the lock at once and it would prove
+  /// nothing.
+  Future<void> _mutate(void Function(Map<String, StowedItem>) change) {
     // Chain onto the previous write rather than racing it.
     _writeLock = _writeLock.then((_) async {
-      final root = await _ensureRoot();
-      final target = File('${root.path}/$_indexFile');
-      // Write-then-rename: a crash mid-write leaves the previous index intact
-      // instead of a half-written file that reads as "nothing is stowed".
-      final tmp = File('${target.path}.tmp');
-      await tmp.writeAsString(jsonEncode(snapshot), flush: true);
-      await tmp.rename(target.path);
+      final current = await _readIndex();
+      change(current);
+      final snapshot =
+          (current.values.toList()
+                ..sort((a, b) => b.stowedAt.compareTo(a.stowedAt)))
+              .map((e) => e.toJson())
+              .toList();
+      _index = current;
+      try {
+        final root = await _ensureRoot();
+        final target = File('${root.path}/$_indexFile');
+        // Write-then-rename: a crash mid-write leaves the previous index intact
+        // instead of a half-written file that reads as "nothing is stowed".
+        final tmp = File('${target.path}.tmp');
+        await tmp.writeAsString(jsonEncode(snapshot), flush: true);
+        await tmp.rename(target.path);
+      } catch (_) {
+        // The index is a record of what is on disk, not the disk itself, and
+        // load() rebuilds it from the files that are actually there. Most of
+        // these writes are fire-and-forget progress updates from inside the
+        // download service; letting one throw into the void there would take
+        // the transfer down over a bookkeeping entry that the next launch
+        // reconstructs anyway.
+      }
     });
     return _writeLock;
   }
