@@ -189,8 +189,8 @@ jobs:
           # Add bot to allowed_bots list"), so without this the check is red on
           # every release, permanently, and on exactly the PRs that most need to
           # look trustworthy at a glance. Observed on #205 (run 31866465923):
-          # Claude never started, no execution file, and the Gate correctly
-          # called it a malfunction — correctly, and uselessly, forever.
+          # Claude never started, no execution file, the Review step failed
+          # outright and the Gate never ran — uselessly red, forever.
           #
           # Ported from switchyard (SERV-87), with the one change that makes it
           # work here at all. Its allow-list is the literal pair CHANGELOG.md +
@@ -232,13 +232,25 @@ jobs:
           # riding a release should be loud. `@claude review` forces a real
           # review on any of these, since the initiating actor is then human.
           if [ "$MANUAL" != "true" ] && [ "$AUTHOR_TYPE" = "Bot" ] && [[ "$HEAD_BRANCH" == release-please--* ]]; then
+            # Both paths are release-please's defaults AND are declared
+            # explicitly as `config-file:` / `manifest-file:` in
+            # release-please.yml. They are restated here rather than read from
+            # there, which is the one piece of coupling this rule keeps: rename
+            # either input without touching this and the expected set stops
+            # matching. That lands in the safe direction — short set, no skip,
+            # red check — but "red on every release" is the exact symptom this
+            # rule exists to remove, so change the two together.
             CONFIG=$(git show "$BASE_SHA:release-please-config.json" 2>/dev/null || true)
             RELEASE_FILES=$(
               {
                 echo '.release-please-manifest.json'
                 # Single-package layout (`packages["."]`), which is what this
-                # repo has. A multi-package config would yield nothing here, the
-                # comparison would fail, and the PR would be reviewed.
+                # repo has. A multi-package config does not yield nothing — the
+                # `// "CHANGELOG.md"` default fires against the empty object and
+                # emits the root changelog anyway. It still ends up reviewed,
+                # just by a different route: such a release PR touches
+                # packages/*/CHANGELOG.md, which this set does not contain, so
+                # the comparison fails.
                 jq -r '
                   (.packages["."] // {}) as $p |
                   ($p["changelog-path"] // "CHANGELOG.md"),
@@ -249,7 +261,13 @@ jobs:
             if [ -n "$CONFIG" ] && [ "$(sort -u <<<"$FILES")" = "$RELEASE_FILES" ]; then
               skip "release PR (generated changelog, manifest and version stamps)"
             fi
-            echo "::warning::Release branch carries more than the generated changelog, manifest and version stamps, so it is NOT being skipped. It will not be reviewed either: the author is a bot and claude-code-action refuses bot-initiated runs, so this run will fail at the Gate as a malfunction. That failure is deliberate — comment '@claude review' to get an actual review of it."
+            # Names the Review step, not the Gate. Switchyard's copy says "fail
+            # at the Gate", which is true there — post-#199 its Review is
+            # continue-on-error and the Gate classifies every path. Here the
+            # Review step fails outright and the Gate is skipped with it, so
+            # that sentence would send whoever is staring at a red release PR to
+            # a step that never ran.
+            echo "::warning::Release branch carries more than the generated changelog, manifest and version stamps, so it is NOT being skipped. It will not be reviewed either: the author is a bot and claude-code-action refuses bot-initiated runs, so the Review step will fail and the Gate will be skipped with it. That failure is deliberate — comment '@claude review' to get an actual review of it."
           fi
 
           # Docs-only changes get nothing out of a correctness reviewer. Written
