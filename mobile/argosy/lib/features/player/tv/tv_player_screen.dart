@@ -151,6 +151,11 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
       offlineQueue: ref.read(offlineProgressQueueProvider),
     );
     _controller.onAdvance = _advanceToNext;
+    // No PiP on TV, but the activity can still be destroyed under a live
+    // player, and the leak is the same (ARGY-190).
+    _controller.onHostDetached = () {
+      if (mounted) Navigator.of(context).maybePop();
+    };
     _controller.addListener(_onState);
     _beginPlayback();
 

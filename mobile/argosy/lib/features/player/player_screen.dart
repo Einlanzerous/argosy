@@ -152,8 +152,19 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       offlineQueue: ref.read(offlineProgressQueueProvider),
     );
     _controller.onAdvance = _advanceToNext;
+    _controller.onHostDetached = _leaveOnHostDetached;
     _beginPlayback();
     _setupPip();
+  }
+
+  /// The host activity was destroyed under a live player — dismissing the PiP
+  /// window is the everyday way to do it (ARGY-190). The controller has already
+  /// released the transcode session; all that's left is to leave the route,
+  /// because the widget tree outlived the activity and relaunching would
+  /// otherwise re-attach to this screen with no player behind it.
+  void _leaveOnHostDetached() {
+    if (!mounted) return;
+    Navigator.of(context).maybePop();
   }
 
   /// Series auto-advance (ARGY-93): roll into the next episode, resuming from its
