@@ -381,7 +381,6 @@ class StowRunner {
     try {
       session = await connect();
       final packaged = await _requestPackage(session, job, handle);
-      if (packaged == null) return; // cancelled
       final url = packaged.downloadUrl;
       if (url == null || url.isEmpty) {
         throw const ApiFailure(
@@ -519,8 +518,14 @@ class StowRunner {
   }
 
   /// Asks the server for a plan and, when it is packaging, waits for it.
-  /// Returns null if the stow was cancelled while waiting.
-  Future<StowJob?> _requestPackage(
+  ///
+  /// Throws [DownloadCancelled] if the stow is cancelled while waiting, rather
+  /// than reporting it some other way: cancelling has to release the server's
+  /// job, and a second way out of here is a second path that has to remember
+  /// to. It didn't — cancelling during packaging used to return quietly, so the
+  /// phone stopped polling while the server carried on encoding a 39 GB film to
+  /// the end, with nothing left to collect it.
+  Future<StowJob> _requestPackage(
     StowSession session,
     StowJobRequest job,
     DownloadHandle handle,
@@ -552,9 +557,9 @@ class StowRunner {
     // Poll until the encode finishes. No timeout: a feature-length film on a
     // software encoder legitimately takes a long time, and the user can cancel.
     while (true) {
-      if (handle.isCancelled) return null;
+      if (handle.isCancelled) throw const DownloadCancelled();
       await Future<void>.delayed(const Duration(seconds: 2));
-      if (handle.isCancelled) return null;
+      if (handle.isCancelled) throw const DownloadCancelled();
 
       final polled = await session.stow.getStowJob(jobId);
       if (polled == null) {

@@ -69,6 +69,44 @@ class _FakeStowApi extends StowApi {
   );
 }
 
+/// A stow endpoint that packages: the first call answers "packaging", every
+/// poll says the same, and it records whether the job was ever released.
+class _PackagingStowApi extends StowApi {
+  _PackagingStowApi(this.jobId);
+
+  final String jobId;
+  bool released = false;
+
+  @override
+  Future<StowJob?> stowItem(
+    String id, {
+    StowRequest? stowRequest,
+    Future<void>? abortTrigger,
+  }) async => StowJob(
+    id: jobId,
+    itemId: id,
+    method: StowJobMethodEnum.package,
+    state: StowJobStateEnum.packaging,
+    durationSeconds: 600,
+  );
+
+  @override
+  Future<StowJob?> getStowJob(String id, {Future<void>? abortTrigger}) async =>
+      StowJob(
+        id: jobId,
+        itemId: 'x',
+        method: StowJobMethodEnum.package,
+        state: StowJobStateEnum.packaging,
+        progressSeconds: 12,
+        durationSeconds: 600,
+      );
+
+  @override
+  Future<void> deleteStowJob(String id, {Future<void>? abortTrigger}) async {
+    released = true;
+  }
+}
+
 /// No subtitle tracks — the sidecar fetch is not what these tests are about.
 class _FakeLibraryApi extends LibraryApi {
   @override
@@ -246,6 +284,43 @@ void main() {
       body,
       reason: 'the resumed half must join the existing half exactly',
     );
+  });
+
+  test('cancelling during packaging releases the job on the server', () async {
+    // Otherwise the phone stops polling and the server keeps encoding to the
+    // end — on a 39 GB remux that is twenty minutes of GPU for a file nobody
+    // will collect. Verified on device: the cancel had no DELETE behind it.
+    final stowApi = _PackagingStowApi('job-1');
+    final r = StowRunner(
+      store: store,
+      onEvent: events.add,
+      connect: () async => StowSession(
+        stow: stowApi,
+        library: _FakeLibraryApi(),
+        urls: StreamUrls(server.base),
+        baseUrl: server.base,
+      ),
+    );
+
+    await r.enqueue(job());
+    // Let it reach the polling loop.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(
+      r.statuses[itemId]?.phase,
+      StowPhase.packaging,
+      reason: 'the test needs it parked in the packaging wait',
+    );
+
+    await r.cancel(itemId);
+
+    expect(
+      stowApi.released,
+      isTrue,
+      reason: "the server's job must be released, not abandoned mid-encode",
+    );
+    expect(r.isIdle, isTrue);
+    await store.reload();
+    expect(store.list(), isEmpty, reason: 'nothing half-written left behind');
   });
 
   test('cancel frees the bytes and leaves no row', () async {
