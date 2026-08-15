@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.0](https://github.com/Einlanzerous/argosy/compare/v0.24.0...v0.25.0) (2026-08-15)
+
+
+### Features
+
+* **mobile:** stow downloads that survive leaving the app (ARGY-201) ([#204](https://github.com/Einlanzerous/argosy/issues/204)) ([b69f6d5](https://github.com/Einlanzerous/argosy/commit/b69f6d5a59fdb402c286d0b27429af231534fc5e))
+
+
+### Bug Fixes
+
+* **mobile:** release the transcode when the host activity dies (ARGY-190) ([#207](https://github.com/Einlanzerous/argosy/issues/207)) ([0f9f088](https://github.com/Einlanzerous/argosy/commit/0f9f088966745977a8a65ac811a18f5ce8b80685))
+
 ## [0.24.0](https://github.com/Einlanzerous/argosy/compare/v0.23.1...v0.24.0) (2026-08-14)
 
 
