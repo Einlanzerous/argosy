@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.1](https://github.com/Einlanzerous/argosy/compare/v0.25.0...v0.25.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **ci:** wait out the encode before TestResetInterrupted returns (ARGY-205) ([#208](https://github.com/Einlanzerous/argosy/issues/208)) ([b50e9bc](https://github.com/Einlanzerous/argosy/commit/b50e9bc272cb8618650a47d95d030e53b0e35bf1))
+* **player:** give the Up Next card a real countdown (ARGY-207) ([#210](https://github.com/Einlanzerous/argosy/issues/210)) ([c5439c8](https://github.com/Einlanzerous/argosy/commit/c5439c8851a4eda4fe7188a2f23b36d5a01a542f))
+
 ## [0.25.0](https://github.com/Einlanzerous/argosy/compare/v0.24.0...v0.25.0) (2026-08-15)
 
 
