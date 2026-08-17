@@ -143,27 +143,13 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   /// The Up Next card (ARGY-93): appears in the last [PlaybackController
   /// .upNextLeadSeconds] of a series episode when auto-advance is on and a next
-  /// episode exists. The 300ms ticker keeps the countdown live; the roll-over
-  /// itself happens on end-of-file (or "Play now").
+  /// episode exists. Visibility and countdown both come from the controller,
+  /// which owns the one timer — deriving the countdown here from the playhead is
+  /// what made seeking into the window hand out a truncated one (ARGY-207).
   Widget _upNextCard(BuildContext context) {
     final next = _c.nextEpisode;
-    final duration = _c.catalogDuration;
-    if (next == null || !_c.autoAdvance || _c.upNextCancelled || duration <= 0) {
-      return const SizedBox.shrink();
-    }
-    final remaining = duration - _c.position;
-    if (remaining > PlaybackController.upNextLeadSeconds || remaining <= 0) {
-      return const SizedBox.shrink();
-    }
-    // Counts down to the early roll-over (upNextTailSeconds before the end), not
-    // to the file's end — so it ticks 10 → 0 and then advances (ARGY-90).
-    final countdown = (remaining - PlaybackController.upNextTailSeconds)
-        .ceil()
-        .clamp(
-          1,
-          PlaybackController.upNextLeadSeconds -
-              PlaybackController.upNextTailSeconds,
-        );
+    if (next == null || !_c.upNextOpen) return const SizedBox.shrink();
+    final countdown = _c.upNextCountdown;
     final code = 'S${next.seasonNumber} E${next.episodeNumber}';
     final label = (next.title != null && next.title!.isNotEmpty)
         ? '$code · ${formatTitle(next.title!)}'

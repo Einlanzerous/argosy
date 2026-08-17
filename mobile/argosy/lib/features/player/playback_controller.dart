@@ -132,12 +132,24 @@ class PlaybackController extends ChangeNotifier
   /// Seconds before the end at which the Up Next / Play Next card surfaces.
   static const upNextLeadSeconds = 40;
 
-  /// Seconds before the end at which we auto-roll into the next episode. Short of
-  /// the literal end (mirrors web ARGY-90) so the card shows a
-  /// [upNextLeadSeconds] − [upNextTailSeconds] = 15s countdown that actually
-  /// triggers the advance, rather than a timer that just mirrors the time left to
-  /// the finished event. Manual Play Next jumps immediately.
-  static const upNextTailSeconds = 25;
+  /// How long the card counts down once it opens — a real timer, not a function
+  /// of the playhead (ARGY-207). Deriving it from remaining time only looked
+  /// right on a straight playthrough, where the card happens to open exactly this
+  /// far ahead of the roll-over: seeking into the window handed out whatever was
+  /// left, down to an instant, unexplained jump for anything past it. Playing
+  /// straight through is unchanged — the card still opens 40s out and rolls with
+  /// ~25s of file left. Manual Play Next jumps immediately.
+  static const upNextCountdownSeconds = 15;
+
+  /// Whether the Up Next card should be showing, and the seconds left on its
+  /// countdown. Both players render from these rather than deriving them, so the
+  /// countdown has one owner and one timer.
+  bool upNextOpen = false;
+  int upNextCountdown = upNextCountdownSeconds;
+
+  Timer? _upNextTimer;
+  int _upNextLeftMs = 0;
+  DateTime? _upNextLastTick;
 
   /// Aggressive buffering for smoother playback on remote/flaky links, mirroring
   /// the web player's deep hls.js buffer. A remux is a single video rendition with
@@ -340,24 +352,78 @@ class PlaybackController extends ChangeNotifier
   /// Rolls into the next episode now (the Up Next "Play Next" action).
   void playNext() => _requestAdvance();
 
-  /// Credits-triggered roll-over (mirrors web ARGY-90): once playback is within
-  /// [upNextTailSeconds] of the end, advance instead of waiting for the finished
-  /// event, so the countdown actually does something. Driven by the overlay's
-  /// repaint ticker; safe to call repeatedly — [_requestAdvance] guards against
-  /// double-firing, and a dismissed card or disabled pref opts out.
+  /// Credits-triggered roll-over (mirrors web ARGY-90): opens the card once
+  /// playback is inside the last [upNextLeadSeconds], and retracts it if the
+  /// viewer seeks back out. Driven by each player's repaint ticker, since the
+  /// controller has no progress event of its own; safe to call repeatedly.
   void maybeAdvance() {
-    if (!autoAdvance || nextEpisode == null || upNextCancelled || _advancing) {
+    if (!autoAdvance ||
+        nextEpisode == null ||
+        upNextCancelled ||
+        _advancing ||
+        _tornDown) {
       return;
     }
     if (catalogDuration <= 0) return;
-    final remaining = catalogDuration - position;
-    if (remaining > 0 && remaining <= upNextTailSeconds) _requestAdvance();
+    // No `remaining > 0` floor: once the card is up it stays up over the final
+    // frame until its countdown expires, which is the whole point of the timer.
+    if (catalogDuration - position <= upNextLeadSeconds) {
+      if (!upNextOpen) _openUpNext();
+    } else if (upNextOpen) {
+      _closeUpNext();
+    }
+  }
+
+  /// Shows the card and charges the countdown, always from full. The window is
+  /// where the prompt is warranted; how long you get to answer it is not the
+  /// window's business (ARGY-207).
+  void _openUpNext() {
+    upNextOpen = true;
+    upNextCountdown = upNextCountdownSeconds;
+    _upNextLeftMs = upNextCountdownSeconds * 1000;
+    _upNextLastTick = DateTime.now();
+    _upNextTimer?.cancel();
+    _upNextTimer = Timer.periodic(
+      const Duration(milliseconds: 250),
+      (_) => _tickUpNext(),
+    );
+    _safeNotify();
+  }
+
+  void _closeUpNext() {
+    _upNextTimer?.cancel();
+    _upNextTimer = null;
+    if (!upNextOpen) return;
+    upNextOpen = false;
+    _safeNotify();
+  }
+
+  /// Burns the countdown down in real time, but holds while the viewer has
+  /// playback paused — the old position-derived countdown froze on pause for
+  /// free, and losing that would roll the episode over while they were away.
+  ///
+  /// A finished file also reports not-playing, so [_finished] is excluded from
+  /// the hold: after a seek into the last couple of seconds the countdown is the
+  /// only thing left running, and freezing it would strand the card forever.
+  void _tickUpNext() {
+    final now = DateTime.now();
+    final elapsed = now.difference(_upNextLastTick ?? now).inMilliseconds;
+    _upNextLastTick = now;
+    if (!(videoValue?.isPlaying ?? false) && !_finished) return;
+    _upNextLeftMs -= elapsed;
+    final secs = (_upNextLeftMs / 1000).ceil().clamp(1, upNextCountdownSeconds);
+    if (secs != upNextCountdown) {
+      upNextCountdown = secs;
+      _safeNotify();
+    }
+    if (_upNextLeftMs <= 0) _requestAdvance();
   }
 
   /// Dismisses the Up Next card and stops the end-of-file roll-over for this
   /// episode, leaving the player on the finished episode.
   void cancelUpNext() {
     upNextCancelled = true;
+    _closeUpNext();
     _safeNotify();
   }
 
@@ -367,6 +433,7 @@ class PlaybackController extends ChangeNotifier
     // and advance the series from a screen that is already on its way out.
     if (_advancing || _tornDown || nextEpisode == null) return;
     _advancing = true;
+    _closeUpNext();
     _flush();
     onAdvance?.call();
   }
@@ -550,6 +617,10 @@ class PlaybackController extends ChangeNotifier
     if (p == null) return;
     final max = catalogDuration > 0 ? catalogDuration : target;
     final t = target.clamp(0.0, max).toDouble();
+    // A seek is a fresh decision about where you are, so the card starts over:
+    // drop it and let the repaint ticker re-open it — with a full countdown — if
+    // the new position is still inside the window (ARGY-207).
+    _closeUpNext();
 
     if (!isTranscode) {
       await p.seekTo(Duration(milliseconds: (t * 1000).round()));
@@ -891,7 +962,15 @@ class PlaybackController extends ChangeNotifier
         _markWatched();
         // Roll into the next episode unless the viewer opted out (pref off or
         // card dismissed). Otherwise we leave the player on the finished episode.
-        if (autoAdvance && nextEpisode != null && !upNextCancelled) {
+        //
+        // Not while the card is up: the countdown owns the roll-over, and seeking
+        // into the last seconds must still buy a full 15s to answer rather than
+        // advancing the instant the file stops. The card sits over the final
+        // frame until it expires (ARGY-207).
+        if (autoAdvance &&
+            nextEpisode != null &&
+            !upNextCancelled &&
+            !upNextOpen) {
           _requestAdvance();
         }
         _safeNotify();
@@ -958,6 +1037,8 @@ class PlaybackController extends ChangeNotifier
     _tornDown = true;
     _heartbeat?.cancel();
     _heartbeat = null;
+    _upNextTimer?.cancel();
+    _upNextTimer = null;
     _setWakelock(false);
     _flush();
     // Ahead of the audio-handler detach: that releases the foreground service,

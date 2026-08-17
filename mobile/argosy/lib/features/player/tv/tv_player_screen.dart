@@ -784,21 +784,10 @@ class _UpNextCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = controller;
     final next = c.nextEpisode;
-    final duration = c.catalogDuration;
-    if (next == null || !c.autoAdvance || c.upNextCancelled || duration <= 0) {
-      return const SizedBox.shrink();
-    }
-    final remaining = duration - c.position;
-    if (remaining > PlaybackController.upNextLeadSeconds || remaining <= 0) {
-      return const SizedBox.shrink();
-    }
-    final countdown = (remaining - PlaybackController.upNextTailSeconds)
-        .ceil()
-        .clamp(
-          1,
-          PlaybackController.upNextLeadSeconds -
-              PlaybackController.upNextTailSeconds,
-        );
+    // Visibility and countdown both come from the controller, which owns the one
+    // timer — see PlaybackController.upNextCountdownSeconds (ARGY-207).
+    if (next == null || !c.upNextOpen) return const SizedBox.shrink();
+    final countdown = c.upNextCountdown;
     final code = 'S${next.seasonNumber} E${next.episodeNumber}';
     final label = (next.title != null && next.title!.isNotEmpty)
         ? '$code · ${formatTitle(next.title!)}'

@@ -198,15 +198,23 @@ const prefs = ref<DevicePreferences | null>(null)
 // runtime. creditsStart is the single seam where the chapter-marker follow-up can
 // swap this heuristic for a real marker. Manual "Play Next" jumps immediately.
 const CREDITS_LEAD_SECONDS = 40
-// Auto roll-over fires this many seconds before the literal end, so the card shows
-// a CREDITS_LEAD_SECONDS − AUTO_ADVANCE_TAIL_SECONDS = 15s countdown and then rolls
-// into the next episode with ~25s of file left, instead of sitting through the
-// tail. Viewers who want to cut even that hit Play Next.
-const AUTO_ADVANCE_TAIL_SECONDS = 25
+// How long the card counts down once it opens — a real timer, not a function of
+// the playhead (ARGY-207). Deriving it from remaining time only looked right on a
+// straight playthrough, where the card happens to open exactly this far ahead of
+// the roll-over: seeking into the window handed out whatever was left, down to an
+// instant, unexplained jump for anything past it. Playing straight through is
+// unchanged — the card still opens 40s out and rolls with ~25s of file left.
+const UP_NEXT_COUNTDOWN_SECONDS = 15
 const autoAdvance = ref(true)
 const nextEpisode = ref<OnDeckItem | null>(null)
 const upNextOpen = ref(false)
 const upNextCountdown = ref(0)
+// Milliseconds left on the countdown, and when we last charged it. Real elapsed
+// time rather than playback position, because the card has to keep counting after
+// the file ends (seek to 0:02 and there is no playback left to measure).
+let upNextRemainingMs = 0
+let upNextLastTick = 0
+let upNextTimer: ReturnType<typeof setInterval> | null = null
 // Set when the viewer dismisses the card (or auto-advance is off): suppresses the
 // card and the end-of-file roll-over for the rest of this episode.
 const upNextCancelled = ref(false)
@@ -605,6 +613,7 @@ async function waitForPlaylist(url: string): Promise<boolean> {
 onBeforeUnmount(() => {
   flush()
   if (heartbeat) clearInterval(heartbeat)
+  if (upNextTimer) clearInterval(upNextTimer)
   if (hideTimer) clearTimeout(hideTimer)
   removeSubtitleEl()
   if (hls) hls.destroy()
@@ -640,12 +649,26 @@ function bindVideo(el: HTMLVideoElement): void {
     if (hideTimer) clearTimeout(hideTimer)
     flush()
   })
-  el.addEventListener('seeked', flush)
+  el.addEventListener('seeked', () => {
+    flush()
+    // A seek is a fresh decision about where you are, so the card starts over:
+    // drop it and let maybeUpNext re-open it — with a full countdown — if the new
+    // position is still inside the window (ARGY-207).
+    closeUpNext()
+    maybeUpNext()
+  })
   el.addEventListener('ended', () => {
     void setWatched(itemId, true).catch(() => {})
     // Roll into the next episode unless the viewer opted out (pref off or card
     // dismissed). Otherwise we leave the player on the finished episode.
-    if (autoAdvance.value && nextEpisode.value && !upNextCancelled.value) advance()
+    //
+    // Not while the card is up: the countdown owns the roll-over, and seeking
+    // into the last seconds must still buy a full 15s to answer rather than
+    // advancing the instant the file stops. The card sits over the final frame
+    // until it expires.
+    if (autoAdvance.value && nextEpisode.value && !upNextCancelled.value && !upNextOpen.value) {
+      advance()
+    }
   })
   el.addEventListener('error', () => {
     // hls.js surfaces its own errors; only flag native-element failures.
@@ -675,23 +698,56 @@ function flush(): void {
   }
 }
 
-// maybeUpNext drives the "Up Next / Play Next" card from the live remaining
-// time: it appears once playback enters the credits window and retracts if the
-// viewer seeks back out of it. The countdown tracks the time left until the
-// automatic roll-over, which fires AUTO_ADVANCE_TAIL_SECONDS before the file ends
-// — credits-triggered rather than waiting for the 'ended' event (ARGY-90). The
+// maybeUpNext drives the "Up Next / Play Next" card: it appears once playback
+// enters the credits window and retracts if the viewer seeks back out of it —
+// credits-triggered rather than waiting for the 'ended' event (ARGY-90). The
 // viewer can jump immediately with Play Next or opt out with Cancel.
 function maybeUpNext(): void {
   if (!autoAdvance.value || !nextEpisode.value || upNextCancelled.value || advancing) return
   if (!duration.value) return
-  const rem = duration.value - position.value
-  if (inCredits.value && rem > 0) {
-    upNextOpen.value = true
-    upNextCountdown.value = Math.max(1, Math.ceil(rem - AUTO_ADVANCE_TAIL_SECONDS))
-    if (rem <= AUTO_ADVANCE_TAIL_SECONDS) advance()
-  } else if (!inCredits.value && upNextOpen.value) {
-    upNextOpen.value = false
+  if (inCredits.value) {
+    if (!upNextOpen.value) openUpNext()
+  } else if (upNextOpen.value) {
+    closeUpNext()
   }
+}
+
+// openUpNext shows the card and charges the countdown, always from full. The
+// window is where the prompt is warranted; how long you get to answer it is not
+// the window's business (ARGY-207).
+function openUpNext(): void {
+  upNextOpen.value = true
+  upNextRemainingMs = UP_NEXT_COUNTDOWN_SECONDS * 1000
+  upNextCountdown.value = UP_NEXT_COUNTDOWN_SECONDS
+  upNextLastTick = Date.now()
+  if (upNextTimer) clearInterval(upNextTimer)
+  upNextTimer = setInterval(tickUpNext, 250)
+}
+
+function closeUpNext(): void {
+  upNextOpen.value = false
+  if (upNextTimer) {
+    clearInterval(upNextTimer)
+    upNextTimer = null
+  }
+}
+
+// tickUpNext burns the countdown down in real time, but holds while the viewer
+// has playback paused — the old position-derived countdown froze on pause for
+// free, and losing that would roll the episode over while they were away.
+//
+// A finished file reads as paused too, so `ended` is excluded from the hold:
+// after a seek into the last couple of seconds the countdown is the only thing
+// left running, and freezing it would strand the card forever.
+function tickUpNext(): void {
+  const now = Date.now()
+  const elapsed = now - upNextLastTick
+  upNextLastTick = now
+  const el = video.value
+  if (el && el.paused && !el.ended) return
+  upNextRemainingMs -= elapsed
+  upNextCountdown.value = Math.max(1, Math.ceil(upNextRemainingMs / 1000))
+  if (upNextRemainingMs <= 0) advance()
 }
 
 // advance rolls into the next episode, resuming from its own saved position (or
@@ -700,6 +756,7 @@ function advance(): void {
   const next = nextEpisode.value
   if (advancing || !next) return
   advancing = true
+  closeUpNext()
   flush()
   // Replace (not push) so chaining through episodes doesn't stack player routes
   // on history — otherwise "back" walks into a previously-played episode (ARGY-108).
@@ -719,7 +776,7 @@ function playNext(): void {
 // cancelUpNext dismisses the card and suppresses auto-advance for the remainder
 // of this episode, leaving the player on the finished episode at the end.
 function cancelUpNext(): void {
-  upNextOpen.value = false
+  closeUpNext()
   upNextCancelled.value = true
 }
 
