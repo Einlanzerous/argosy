@@ -7,7 +7,11 @@ name: PR Review
 # failing complete reviews that overshot the cap.
 #
 # `.github/review-prompt.md` is deleted, not moved: the shared workflow fetches
-# the procedure from construct-server at the exact commit it is running.
+# the procedure from construct-server (`prompt_repo`/`prompt_ref`, defaulting to
+# `@main`), so a local copy could only ever drift out of use. It is NOT fetched
+# at the workflow's own commit — `job_workflow_sha` would have given that and is
+# empty on this Actions version, which is what 404'd the fetch on #211 — so
+# pinning `uses: ...@<tag>` means pinning `prompt_ref` to match.
 #
 # Judgement stays here in `REVIEW.md` and `CLAUDE.md`; generated artifacts in
 # `.github/review-ignore`. See construct-server's `docs/pr-reviewer.md`.
