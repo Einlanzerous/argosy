@@ -1,0 +1,34 @@
+# Paths the PR reviewer does not read (SERV-87).
+#
+# One extended regex per line, matched against the repository-relative path of
+# every changed file. `#` comments and blank lines are ignored.
+#
+# Per-repo on purpose even though the workflow is shared (SERV-92): which
+# artifacts are generated is a fact about this repository. The shared workflow
+# reads this from the BASE ref of the PR under review, so widening it in a PR
+# does not exempt that PR.
+#
+# What belongs here is regenerated artifacts, not merely large files. The test
+# is: if this file is wrong, is the fix to edit it? For a generated file the
+# answer is no — you re-run the generator — so a comment on its diff has nowhere
+# to land.
+
+# `make generate` regenerates all three clients from proto/openapi/argosy.yaml
+# in one command, so any PR touching a route pays for all of them at once:
+# 159KB of Go, 132KB of TypeScript, and an 87-file Dart package. The spec itself
+# is NOT excluded — `proto/openapi/argosy.yaml` is hand-authored and is the
+# thing worth reviewing when a route changes.
+^internal/api/argosy\.gen\.go$
+^web/src/api/schema\.ts$
+^mobile/argosy/packages/argosy_api/
+
+# The knowledge-graph cache and report. `graphify extract` writes these; 473
+# files are committed. The old local workflow carried these as a docs-only
+# exception (`docs_skip_extra`), which classified them as documentation; they
+# are generated, and this is where generated things go.
+^graphify-out/
+
+# Resolved dependency trees. What matters is which dependency moved, and that is
+# in pubspec.yaml / package.json, neither of which is excluded.
+^mobile/argosy/pubspec\.lock$
+^(web/)?bun\.lock(b)?$
