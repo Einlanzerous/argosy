@@ -63,6 +63,60 @@ func TestUserPreferences(t *testing.T) {
 	}
 }
 
+// TestLoginTimingHidesAccountExistence guards ARGY-195: verify used to return on
+// pgx.ErrNoRows before bcrypt ran, so an unknown email answered in ~0ms while a
+// known one with the wrong password took ~46ms. The responses are identical, but
+// that gap enumerates which addresses have accounts here. Both failing paths must
+// now pay the compare.
+//
+// The floor is derived from a bcrypt compare measured on this machine rather than
+// pinned in milliseconds, so the test says the same thing on a slow CI runner and
+// a fast workstation.
+func TestLoginTimingHidesAccountExistence(t *testing.T) {
+	store, ctx := testStore(t)
+	email := uniqueUsername() + "@example.test"
+	password := "pw-" + uniqueUsername() // computed, not a static secret
+
+	if _, err := store.CreateAccount(ctx, email, password, "Timing Household"); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	// One bcrypt compare at the cost hashPassword uses, for scale.
+	hash, err := hashPassword(password)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	start := time.Now()
+	_ = comparePassword(hash, "not-the-password")
+	floor := time.Since(start) / 2
+
+	// Slowness is easy to come by on a shared runner; being too fast is the bug,
+	// so take the fastest of a few samples rather than an average.
+	fastestLogin := func(email, password string) time.Duration {
+		t.Helper()
+		var best time.Duration
+		for i := range 3 {
+			start := time.Now()
+			_, err := store.Login(ctx, email, password)
+			elapsed := time.Since(start)
+			if !errors.Is(err, ErrInvalidCredentials) {
+				t.Fatalf("login(%q): got %v, want ErrInvalidCredentials", email, err)
+			}
+			if i == 0 || elapsed < best {
+				best = elapsed
+			}
+		}
+		return best
+	}
+
+	known := fastestLogin(email, "not-the-password")
+	unknown := fastestLogin("ghost-"+email, "not-the-password")
+	if known < floor || unknown < floor {
+		t.Errorf("failed login: known email %v, unknown email %v, want both >= %v (one bcrypt compare took %v)",
+			known, unknown, floor, floor*2)
+	}
+}
+
 func TestAuthFlow(t *testing.T) {
 	store, ctx := testStore(t)
 	username := uniqueUsername()

@@ -468,6 +468,45 @@ func hashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
+// dummyPasswordHash is a bcrypt hash of an unguessable value, generated at the
+// same cost hashPassword uses. verify compares against it on every path that has
+// no real hash to check, so a failed sign-in costs the same wall-clock time
+// whether or not the email exists (ARGY-195): returning early on an unknown
+// address answered in ~0ms against ~46ms of bcrypt for a known one, and that gap
+// is trivially measurable over the WAN-exposed endpoint — it enumerates which
+// addresses have accounts here. Derived from bcrypt.DefaultCost rather than
+// pinned as a literal so a future cost change carries it along; a stale dummy
+// would reopen the same gap in the other direction. The one bcrypt it costs is
+// paid at startup, not per request.
+var dummyPasswordHash = newDummyPasswordHash()
+
+func newDummyPasswordHash() []byte {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		// A fixed value does just as well: the compare's result is discarded, so
+		// all this has to be is something no password can be.
+		secret = []byte("argosy: no account holds this password")
+	}
+	hash, err := bcrypt.GenerateFromPassword(secret, bcrypt.DefaultCost)
+	if err != nil {
+		// Unreachable — the cost is in range and the input is 32 bytes — but an
+		// empty hash would silently restore the timing gap, so fail loudly.
+		panic(fmt.Sprintf("auth: generate dummy password hash: %v", err))
+	}
+	return hash
+}
+
+// comparePassword checks password against hash, spending bcrypt's time even when
+// there is no hash to check. Callers must not shorten this path (see
+// dummyPasswordHash).
+func comparePassword(hash, password string) bool {
+	if hash == "" {
+		_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(password))
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
 // checkAccountPassword reports whether password matches the account's bcrypt hash.
 func (s *Store) checkAccountPassword(ctx context.Context, accountID, password string) (bool, error) {
 	var hash string
@@ -476,10 +515,7 @@ func (s *Store) checkAccountPassword(ctx context.Context, accountID, password st
 	if err != nil {
 		return false, err
 	}
-	if hash == "" {
-		return false, nil
-	}
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil, nil
+	return comparePassword(hash, password), nil
 }
 
 // GetDevicePreferences returns a device's playback preferences, or sensible
@@ -592,12 +628,15 @@ func (s *Store) verify(ctx context.Context, email, password string) (id, name st
 		`SELECT id::text, name, coalesce(password_hash, ''), disabled_at FROM accounts WHERE lower(email) = $1`, normalizeEmail(email)).
 		Scan(&id, &name, &hash, &disabledAt)
 	if errors.Is(err, pgx.ErrNoRows) {
+		// Pay bcrypt's cost anyway so an unknown email is indistinguishable from
+		// a known one with the wrong password (ARGY-195).
+		_ = comparePassword("", password)
 		return "", "", ErrInvalidCredentials
 	}
 	if err != nil {
 		return "", "", err
 	}
-	if hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
+	if !comparePassword(hash, password) {
 		return "", "", ErrInvalidCredentials
 	}
 	// Checked after the password so only the account's real holder learns it
