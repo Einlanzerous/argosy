@@ -766,7 +766,6 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-
   /api/v1/admin/accounts/{accountId}:
     patch:
       tags: [auth]
@@ -842,6 +841,7 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+
   /api/v1/libraries:
     get:
       tags: [library]
