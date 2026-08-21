@@ -38,6 +38,13 @@ func sessionActor(sess api.Session) auditEntry {
 	}
 }
 
+// provisionActor is sessionActor's counterpart for the X-Provision-Token
+// caller (Purser): there is no account or profile behind the token, so the
+// actor is the service itself and the id fields stay empty.
+func provisionActor() auditEntry {
+	return auditEntry{actorType: actorProvision}
+}
+
 // audit appends e to the trail. Best-effort by design: the action itself has
 // already happened (writes here are not transactional with it, matching how
 // the rest of this store sequences its statements), so a failed insert must

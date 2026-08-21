@@ -91,7 +91,17 @@ func (s *Store) lifecycleTarget(ctx context.Context, accountID string) (email st
 // row the account owns but stops sign-in (verify) and device authentication
 // (AuthenticateDevice) immediately; re-enabling restores both. Idempotent — a
 // second disable doesn't move the timestamp.
-func (s *Store) SetAccountDisabled(ctx context.Context, sess api.Session, accountID string, disabled bool) (api.AccountSummary, error) {
+//
+// This is the revoke primitive the provisioning service offboards with
+// (ARGY-187) as well as the owner's disable switch, so it takes the audit
+// actor rather than a session: there is no session behind an X-Provision-Token
+// call. Note what it deliberately does *not* do — revoke the account's device
+// rows. AuthenticateDevice already refuses them while the account is disabled,
+// and leaving the rows intact is what lets a re-enable restore the Fleet
+// instead of making the member re-pair every device (contrast
+// ResetAccountPassword, where the credential may be in someone else's hands
+// and the pairings really are suspect).
+func (s *Store) SetAccountDisabled(ctx context.Context, actor auditEntry, accountID string, disabled bool) (api.AccountSummary, error) {
 	email, err := s.lifecycleTarget(ctx, accountID)
 	if err != nil {
 		return api.AccountSummary{}, err
@@ -106,13 +116,12 @@ func (s *Store) SetAccountDisabled(ctx context.Context, sess api.Session, accoun
 	if err != nil {
 		return api.AccountSummary{}, err
 	}
-	e := sessionActor(sess)
-	e.action, e.targetType, e.targetID = "account.disable", "account", accountID
+	actor.action, actor.targetType, actor.targetID = "account.disable", "account", accountID
 	if !disabled {
-		e.action = "account.enable"
+		actor.action = "account.enable"
 	}
-	e.detail = map[string]any{"email": email}
-	s.audit(ctx, e)
+	actor.detail = map[string]any{"email": email}
+	s.audit(ctx, actor)
 	return acc, nil
 }
 
@@ -143,14 +152,16 @@ func (s *Store) DeleteAccount(ctx context.Context, actor auditEntry, accountID s
 }
 
 // DeprovisionAccountByEmail is DeleteAccount keyed the way the provisioning
-// service addresses people (ARGY-86 parity with createAccount/lookupAccount):
-// Purser knows emails, not Argosy account ids.
+// service originally addressed people (ARGY-86 parity with createAccount).
+// Superseded by the id-keyed admin routes (ARGY-187) now that Purser records
+// the account id at creation, but kept: it is a released endpoint, and an
+// operator holding only an email still has a way in.
 func (s *Store) DeprovisionAccountByEmail(ctx context.Context, email string) error {
 	acc, err := s.AccountByEmail(ctx, email)
 	if err != nil {
 		return err
 	}
-	return s.DeleteAccount(ctx, auditEntry{actorType: actorProvision}, acc.Id.String())
+	return s.DeleteAccount(ctx, provisionActor(), acc.Id.String())
 }
 
 // ResetAccountPassword replaces the account's password with a fresh generated
