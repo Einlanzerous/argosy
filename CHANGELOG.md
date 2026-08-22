@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.26.0](https://github.com/Einlanzerous/argosy/compare/v0.25.1...v0.26.0) (2026-08-22)
+
+
+### Features
+
+* **auth:** id-keyed admin revoke + purge so Purser can offboard (ARGY-187) ([#214](https://github.com/Einlanzerous/argosy/issues/214)) ([6c32dda](https://github.com/Einlanzerous/argosy/commit/6c32dda2e4e649aa2a79efb719387c197c471c26))
+
+
+### Bug Fixes
+
+* **auth:** pay bcrypt's cost on an unknown email too (ARGY-195) ([#213](https://github.com/Einlanzerous/argosy/issues/213)) ([aac5343](https://github.com/Einlanzerous/argosy/commit/aac53438758c4d12438b499a2ac53c09d5cbf9b0))
+* **server:** drain Beacon streams on shutdown (ARGY-194) ([#216](https://github.com/Einlanzerous/argosy/issues/216)) ([8ca3e31](https://github.com/Einlanzerous/argosy/commit/8ca3e31ddeff406d39a14b7c89d7ea7a1f6df431))
+
 ## [0.25.1](https://github.com/Einlanzerous/argosy/compare/v0.25.0...v0.25.1) (2026-08-17)
 
 
