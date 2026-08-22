@@ -26,9 +26,11 @@ type Config struct {
 	// not the specific email, so renaming a login never re-triggers it).
 	AdminEmail    string
 	AdminPassword string
-	// ProvisionToken, when set, enables POST /api/v1/admin/accounts for
-	// machine-to-machine account creation (Purser, ARGY-132). Requests must
-	// present it in the X-Provision-Token header. Empty disables the route.
+	// ProvisionToken, when set, enables the /api/v1/admin/accounts surface for
+	// machine-to-machine account lifecycle (Purser): create (ARGY-132), look up
+	// (ARGY-163), revoke and purge (ARGY-187). Requests must present it in the
+	// X-Provision-Token header. Empty leaves the routes unregistered, so an
+	// unconfigured server answers 404 rather than 401.
 	ProvisionToken string
 	// TMDB credentials for metadata matching (either is sufficient).
 	TMDBReadToken string

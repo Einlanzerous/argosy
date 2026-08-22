@@ -423,12 +423,36 @@ export interface paths {
         post: operations["createAccount"];
         /**
          * Delete an account by email (service-to-service deprovisioning)
-         * @description The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set.
+         * @description The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. Prefer the id-keyed pair under /api/v1/admin/accounts/{accountId} (ARGY-187): a caller that recorded the account id at creation shouldn't have to re-resolve it from an email the member may since have changed, and revoking beats deleting.
          */
         delete: operations["deprovisionAccount"];
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{accountId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an account by id (service-to-service purge)
+         * @description The destructive counterpart to revokeProvisionedAccount (ARGY-187): removes the account and everything cascading from it — profiles, devices, watch history, vaults, preferences. Reserve it for an explicit purge; an offboard that only needs to take access away should PATCH `disabled: true` instead. Keyed by account id, which is what Purser records at creation (ARGY-163); the email-keyed deprovisionAccount is the older equivalent. Effectively idempotent — a repeat call answers 404, which the caller reads as "nothing left to revoke". An account that still owns libraries is refused with 409, as is the instance owner's. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set.
+         */
+        delete: operations["deleteProvisionedAccount"];
+        options?: never;
+        head?: never;
+        /**
+         * Disable or restore an account (service-to-service revoke)
+         * @description The revoke Purser's `offboard` maps to (ARGY-187), keyed by the account id it recorded at creation rather than by email. `disabled: true` takes access away without destroying anything: sign-in is refused and every paired device stops authenticating immediately, because device authentication joins on the account being enabled — the device rows are left intact, so `disabled: false` restores the Fleet rather than making the member re-pair. That reversibility is why this, not delete, is the primitive an offboard should use; Argosy owns real user state (profiles, watch history, device pairings) that a mistaken offboard shouldn't burn. Idempotent: re-disabling an already-disabled account leaves the original timestamp. The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set.
+         */
+        patch: operations["revokeProvisionedAccount"];
         trace?: never;
     };
     "/api/v1/libraries": {
@@ -2712,6 +2736,60 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteProvisionedAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    revokeProvisionedAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The account in its new state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSummary"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

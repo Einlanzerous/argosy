@@ -46,8 +46,8 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 	// managing them is the instance owner's power (ARGY-167), not household
 	// admin's.
 	mux.Handle("GET /api/v1/auth/accounts", requireOwner(store, handleListAccounts(store)))
-	mux.Handle("PATCH /api/v1/auth/accounts/{accountId}", requireOwner(store, handleUpdateAccount(store)))
-	mux.Handle("DELETE /api/v1/auth/accounts/{accountId}", requireOwner(store, handleDeleteAccount(store)))
+	mux.Handle("PATCH /api/v1/auth/accounts/{accountId}", requireOwner(store, handleUpdateAccount(store, sessionActorOf)))
+	mux.Handle("DELETE /api/v1/auth/accounts/{accountId}", requireOwner(store, handleDeleteAccount(store, sessionActorOf)))
 	mux.Handle("POST /api/v1/auth/accounts/{accountId}/password-reset", requireOwner(store, handleResetAccountPassword(store)))
 	// Device code-pairing (ARGY-112, PIN-first ARGY-123): start + poll are
 	// unauthenticated (a device with no session yet); approve is any
@@ -70,7 +70,26 @@ func RegisterProvisioning(mux *http.ServeMux, store *Store, token string) {
 	mux.Handle("POST /api/v1/admin/accounts", requireProvisionToken(token, handleCreateAccount(store)))
 	mux.Handle("GET /api/v1/admin/accounts", requireProvisionToken(token, handleLookupAccount(store)))
 	mux.Handle("DELETE /api/v1/admin/accounts", requireProvisionToken(token, handleDeprovisionAccount(store)))
+	// Taking access away, keyed by the account id the caller recorded at
+	// creation (ARGY-187). These reuse the owner routes' handlers with the
+	// provisioning actor: one code path, two ways of proving you may call it.
+	mux.Handle("PATCH /api/v1/admin/accounts/{accountId}", requireProvisionToken(token, handleUpdateAccount(store, provisionActorOf)))
+	mux.Handle("DELETE /api/v1/admin/accounts/{accountId}", requireProvisionToken(token, handleDeleteAccount(store, provisionActorOf)))
 }
+
+// actorOf names the audit actor behind a lifecycle request. The same handler
+// serves the owner's session-gated routes and the provisioning token's, and
+// this is the only thing that differs between them — so the trail records
+// which one actually made the change instead of attributing Purser's offboards
+// to nobody.
+type actorOf func(*http.Request) auditEntry
+
+func sessionActorOf(r *http.Request) auditEntry {
+	sess, _ := SessionFromContext(r.Context())
+	return sessionActor(sess)
+}
+
+func provisionActorOf(*http.Request) auditEntry { return provisionActor() }
 
 func requireProvisionToken(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,9 +155,12 @@ func handleListAccounts(store *Store) http.HandlerFunc {
 	}
 }
 
-func handleUpdateAccount(store *Store) http.HandlerFunc {
+// handleUpdateAccount disables or restores an account. Behind the owner gate
+// it is the household-management switch; behind the provisioning token it is
+// the revoke an offboard maps to (ARGY-187), which is the reversible primitive
+// callers should reach for before handleDeleteAccount's cascade.
+func handleUpdateAccount(store *Store, actor actorOf) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sess, _ := SessionFromContext(r.Context())
 		id, err := uuid.Parse(r.PathValue("accountId"))
 		if err != nil {
 			httpx.Error(w, http.StatusBadRequest, "invalid account id")
@@ -148,7 +170,7 @@ func handleUpdateAccount(store *Store) http.HandlerFunc {
 		if !decode(w, r, &req) {
 			return
 		}
-		acc, err := store.SetAccountDisabled(r.Context(), sess, id.String(), req.Disabled)
+		acc, err := store.SetAccountDisabled(r.Context(), actor(r), id.String(), req.Disabled)
 		if err != nil {
 			writeAuthError(w, err)
 			return
@@ -157,15 +179,17 @@ func handleUpdateAccount(store *Store) http.HandlerFunc {
 	}
 }
 
-func handleDeleteAccount(store *Store) http.HandlerFunc {
+// handleDeleteAccount purges an account and everything cascading from it. A
+// repeat call answers 404 — already gone reads as done to a caller reconciling
+// state (ARGY-187), which is what makes a re-run of an offboard cheap.
+func handleDeleteAccount(store *Store, actor actorOf) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sess, _ := SessionFromContext(r.Context())
 		id, err := uuid.Parse(r.PathValue("accountId"))
 		if err != nil {
 			httpx.Error(w, http.StatusBadRequest, "invalid account id")
 			return
 		}
-		if err := store.DeleteAccount(r.Context(), sessionActor(sess), id.String()); err != nil {
+		if err := store.DeleteAccount(r.Context(), actor(r), id.String()); err != nil {
 			writeAuthError(w, err)
 			return
 		}

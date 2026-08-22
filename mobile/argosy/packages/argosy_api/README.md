@@ -74,6 +74,7 @@ Class | Method | HTTP request | Description
 *AuthApi* | [**createProfile**](doc//AuthApi.md#createprofile) | **POST** /api/v1/auth/profiles | Create a profile (admin only)
 *AuthApi* | [**deleteAccount**](doc//AuthApi.md#deleteaccount) | **DELETE** /api/v1/auth/accounts/{accountId} | Delete an account and everything it owns (owner only)
 *AuthApi* | [**deleteProfile**](doc//AuthApi.md#deleteprofile) | **DELETE** /api/v1/auth/profiles/{userId} | Delete a profile (admin only)
+*AuthApi* | [**deleteProvisionedAccount**](doc//AuthApi.md#deleteprovisionedaccount) | **DELETE** /api/v1/admin/accounts/{accountId} | Delete an account by id (service-to-service purge)
 *AuthApi* | [**deprovisionAccount**](doc//AuthApi.md#deprovisionaccount) | **DELETE** /api/v1/admin/accounts | Delete an account by email (service-to-service deprovisioning)
 *AuthApi* | [**getCurrentSession**](doc//AuthApi.md#getcurrentsession) | **GET** /api/v1/auth/me | Resolve the current (account, profile, device) from the token
 *AuthApi* | [**getDevicePreferences**](doc//AuthApi.md#getdevicepreferences) | **GET** /api/v1/preferences | Get the calling device's playback preferences
@@ -88,6 +89,7 @@ Class | Method | HTTP request | Description
 *AuthApi* | [**renameDevice**](doc//AuthApi.md#renamedevice) | **PATCH** /api/v1/auth/devices/{deviceId} | Rename a device in the Fleet
 *AuthApi* | [**resetAccountPassword**](doc//AuthApi.md#resetaccountpassword) | **POST** /api/v1/auth/accounts/{accountId}/password-reset | Reset an account's password to a fresh generated one (owner only)
 *AuthApi* | [**revokeDevice**](doc//AuthApi.md#revokedevice) | **DELETE** /api/v1/auth/devices/{deviceId} | Revoke a device token (\"retire from the Fleet\")
+*AuthApi* | [**revokeProvisionedAccount**](doc//AuthApi.md#revokeprovisionedaccount) | **PATCH** /api/v1/admin/accounts/{accountId} | Disable or restore an account (service-to-service revoke)
 *AuthApi* | [**setDevicePreferences**](doc//AuthApi.md#setdevicepreferences) | **PUT** /api/v1/preferences | Update the calling device's playback preferences
 *AuthApi* | [**setUserPreferences**](doc//AuthApi.md#setuserpreferences) | **PUT** /api/v1/user/preferences | Update the calling profile's account-wide preferences
 *AuthApi* | [**startLink**](doc//AuthApi.md#startlink) | **POST** /api/v1/auth/link/start | Begin code-pairing — mint a short code for the new device to display

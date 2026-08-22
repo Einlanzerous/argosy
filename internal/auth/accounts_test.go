@@ -2,11 +2,13 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/google/uuid"
@@ -92,7 +94,7 @@ func TestAccountLifecycle(t *testing.T) {
 		t.Fatalf("device auth while enabled: %v", err)
 	}
 
-	acc, err := store.SetAccountDisabled(ctx, sess, memberID, true)
+	acc, err := store.SetAccountDisabled(ctx, sessionActor(sess), memberID, true)
 	if err != nil || !acc.Disabled {
 		t.Fatalf("disable = %+v, %v", acc, err)
 	}
@@ -108,7 +110,7 @@ func TestAccountLifecycle(t *testing.T) {
 	}
 
 	// Re-enable restores both sign-in and the device token.
-	if acc, err := store.SetAccountDisabled(ctx, sess, memberID, false); err != nil || acc.Disabled {
+	if acc, err := store.SetAccountDisabled(ctx, sessionActor(sess), memberID, false); err != nil || acc.Disabled {
 		t.Fatalf("enable = %+v, %v", acc, err)
 	}
 	if _, err := store.Login(ctx, email, password); err != nil {
@@ -163,7 +165,7 @@ func TestAccountLifecycleOwnerGuard(t *testing.T) {
 	store, ctx := testStore(t)
 	sess, ownerID := ownerSession(ctx, t, store)
 
-	if _, err := store.SetAccountDisabled(ctx, sess, ownerID, true); !errors.Is(err, ErrOwnerAccount) {
+	if _, err := store.SetAccountDisabled(ctx, sessionActor(sess), ownerID, true); !errors.Is(err, ErrOwnerAccount) {
 		t.Errorf("disable owner = %v, want ErrOwnerAccount", err)
 	}
 	if err := store.DeleteAccount(ctx, sessionActor(sess), ownerID); !errors.Is(err, ErrOwnerAccount) {
@@ -179,7 +181,7 @@ func TestAccountLifecycleOwnerGuard(t *testing.T) {
 	}
 
 	// A random id that exists nowhere answers not-found, not a guard error.
-	if _, err := store.SetAccountDisabled(ctx, sess, "00000000-0000-0000-0000-000000000000", true); !errors.Is(err, ErrNotFound) {
+	if _, err := store.SetAccountDisabled(ctx, sessionActor(sess), "00000000-0000-0000-0000-000000000000", true); !errors.Is(err, ErrNotFound) {
 		t.Errorf("disable missing account = %v, want ErrNotFound", err)
 	}
 }
@@ -296,4 +298,159 @@ func TestDeprovisionAccountByEmail(t *testing.T) {
 	if err := store.DeprovisionAccountByEmail(ctx, "nobody-"+email); !errors.Is(err, ErrNotFound) {
 		t.Errorf("deprovision unknown email = %v, want ErrNotFound", err)
 	}
+}
+
+// TestProvisionRevokeAccount covers the id-keyed revoke Purser's offboard maps
+// to (ARGY-187): disabling takes access away from every surface at once, and
+// restoring gives it back *without* a re-pair — the property that makes revoke
+// the right offboard primitive for a service holding real user state.
+func TestProvisionRevokeAccount(t *testing.T) {
+	store, ctx := testStore(t)
+	_, _ = ownerSession(ctx, t, store)
+	member, email, password, profile := seedMember(ctx, t, store)
+	id := member.Id.String()
+
+	reg, err := store.RegisterDevice(ctx, api.DeviceRegistrationRequest{
+		Email: email, Password: password, UserId: &profile.Id, DeviceName: "offboard-test",
+	})
+	if err != nil {
+		t.Fatalf("register device: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	RegisterProvisioning(mux, store, "sekrit")
+
+	rec := provision(t, mux, http.MethodPatch, "/api/v1/admin/accounts/"+id, `{"disabled":true}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("revoke = %d (%s), want 200", rec.Code, rec.Body)
+	}
+	var acc api.AccountSummary
+	if err := json.Unmarshal(rec.Body.Bytes(), &acc); err != nil || !acc.Disabled {
+		t.Fatalf("revoke body = %s (err %v), want disabled", rec.Body, err)
+	}
+	if _, err := store.Login(ctx, email, password); !errors.Is(err, ErrAccountDisabled) {
+		t.Errorf("login after revoke = %v, want ErrAccountDisabled", err)
+	}
+	if _, err := store.AuthenticateDevice(ctx, reg.Token); !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("device auth after revoke = %v, want ErrInvalidCredentials", err)
+	}
+
+	// Re-running an offboard must be cheap: a second revoke is a no-op, not an
+	// error, and must not restamp disabled_at.
+	var first time.Time
+	if err := store.pool.QueryRow(ctx, `SELECT disabled_at FROM accounts WHERE id = $1`, id).Scan(&first); err != nil {
+		t.Fatalf("read disabled_at: %v", err)
+	}
+	if rec := provision(t, mux, http.MethodPatch, "/api/v1/admin/accounts/"+id, `{"disabled":true}`); rec.Code != http.StatusOK {
+		t.Fatalf("repeat revoke = %d (%s), want 200", rec.Code, rec.Body)
+	}
+	var second time.Time
+	if err := store.pool.QueryRow(ctx, `SELECT disabled_at FROM accounts WHERE id = $1`, id).Scan(&second); err != nil {
+		t.Fatalf("re-read disabled_at: %v", err)
+	}
+	if !first.Equal(second) {
+		t.Errorf("repeat revoke moved disabled_at from %v to %v", first, second)
+	}
+
+	// Restoring must bring the existing pairing back, not force a re-pair.
+	if rec := provision(t, mux, http.MethodPatch, "/api/v1/admin/accounts/"+id, `{"disabled":false}`); rec.Code != http.StatusOK {
+		t.Fatalf("restore = %d (%s), want 200", rec.Code, rec.Body)
+	}
+	if _, err := store.AuthenticateDevice(ctx, reg.Token); err != nil {
+		t.Errorf("device auth after restore: %v", err)
+	}
+
+	var n int
+	if err := store.pool.QueryRow(ctx,
+		`SELECT count(*) FROM audit_log WHERE action IN ('account.disable', 'account.enable')
+		 AND actor_type = 'provision' AND target_id = $1`, id).Scan(&n); err != nil || n != 3 {
+		t.Errorf("provision-actor revoke audit rows = %d (err %v), want 3", n, err)
+	}
+}
+
+// TestProvisionDeleteAccountByID covers the purge half (ARGY-187). The repeat
+// call's 404 is the contract the caller reads as "nothing left to revoke", so
+// it is asserted rather than merely tolerated.
+func TestProvisionDeleteAccountByID(t *testing.T) {
+	store, ctx := testStore(t)
+	_, ownerID := ownerSession(ctx, t, store)
+	member, email, _, _ := seedMember(ctx, t, store)
+	id := member.Id.String()
+
+	mux := http.NewServeMux()
+	RegisterProvisioning(mux, store, "sekrit")
+
+	if rec := provision(t, mux, http.MethodDelete, "/api/v1/admin/accounts/"+id, ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d (%s), want 204", rec.Code, rec.Body)
+	}
+	if _, err := store.AccountByEmail(ctx, email); !errors.Is(err, ErrNotFound) {
+		t.Errorf("lookup after delete = %v, want ErrNotFound", err)
+	}
+	if rec := provision(t, mux, http.MethodDelete, "/api/v1/admin/accounts/"+id, ""); rec.Code != http.StatusNotFound {
+		t.Errorf("repeat delete = %d, want 404", rec.Code)
+	}
+
+	var n int
+	if err := store.pool.QueryRow(ctx,
+		`SELECT count(*) FROM audit_log WHERE action = 'account.delete' AND actor_type = 'provision' AND target_id = $1`,
+		id).Scan(&n); err != nil || n != 1 {
+		t.Errorf("provision-actor delete audit rows = %d (err %v), want 1", n, err)
+	}
+
+	// The owner guard has to hold on the provisioning surface too — a token
+	// leak must not be able to delete the instance out from under itself.
+	if rec := provision(t, mux, http.MethodDelete, "/api/v1/admin/accounts/"+ownerID, ""); rec.Code != http.StatusConflict {
+		t.Errorf("delete owner = %d, want 409", rec.Code)
+	}
+	if rec := provision(t, mux, http.MethodPatch, "/api/v1/admin/accounts/"+ownerID, `{"disabled":true}`); rec.Code != http.StatusConflict {
+		t.Errorf("revoke owner = %d, want 409", rec.Code)
+	}
+}
+
+// TestProvisionAccountRoutesWiring locks the gate and the argument handling on
+// the id-keyed routes: no token is 401 (not 404), and a malformed id is 400
+// rather than reaching the store.
+func TestProvisionAccountRoutesWiring(t *testing.T) {
+	store, ctx := testStore(t)
+	_, _ = ownerSession(ctx, t, store)
+	member, email, _, _ := seedMember(ctx, t, store)
+	id := member.Id.String()
+
+	mux := http.NewServeMux()
+	RegisterProvisioning(mux, store, "sekrit")
+
+	routes := []struct{ method, path, body string }{
+		{http.MethodPatch, "/api/v1/admin/accounts/" + id, `{"disabled":true}`},
+		{http.MethodDelete, "/api/v1/admin/accounts/" + id, ""},
+	}
+	for _, r := range routes {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(r.method, r.path, strings.NewReader(r.body)))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s %s without token = %d, want 401", r.method, r.path, rec.Code)
+		}
+
+		bad := strings.Replace(r.path, id, "not-a-uuid", 1)
+		if rec := provision(t, mux, r.method, bad, r.body); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s %s = %d, want 400", r.method, bad, rec.Code)
+		}
+	}
+
+	// The released email-keyed delete shares a prefix with the new id-keyed one
+	// and must keep routing to its own handler. Deleting a real account proves
+	// it: had the {accountId} pattern swallowed the bare path, or the
+	// registration been dropped, this would 404 instead of 204.
+	if rec := provision(t, mux, http.MethodDelete, "/api/v1/admin/accounts?email="+email, ""); rec.Code != http.StatusNoContent {
+		t.Errorf("email-keyed delete = %d, want 204 from its own handler", rec.Code)
+	}
+}
+
+// provision issues an authorized request against the provisioning mux.
+func provision(t *testing.T, mux *http.ServeMux, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("X-Provision-Token", "sekrit")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
 }

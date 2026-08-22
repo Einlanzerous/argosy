@@ -741,7 +741,10 @@ paths:
         offboarded, taking profiles, devices, history and preferences with it
         (DB cascade). The instance owner's account is refused with 409. Gated
         on the same X-Provision-Token, and registered only when
-        ARGOSY_PROVISION_TOKEN is set.
+        ARGOSY_PROVISION_TOKEN is set. Prefer the id-keyed pair under
+        /api/v1/admin/accounts/{accountId} (ARGY-187): a caller that recorded
+        the account id at creation shouldn't have to re-resolve it from an
+        email the member may since have changed, and revoking beats deleting.
       security:
         - provisionToken: []
       parameters:
@@ -751,6 +754,82 @@ paths:
           schema:
             type: string
           description: The account email. Matched case-insensitively.
+      responses:
+        "204":
+          description: Account deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/admin/accounts/{accountId}:
+    patch:
+      tags: [auth]
+      operationId: revokeProvisionedAccount
+      summary: Disable or restore an account (service-to-service revoke)
+      description: >
+        The revoke Purser's `offboard` maps to (ARGY-187), keyed by the account
+        id it recorded at creation rather than by email. `disabled: true` takes
+        access away without destroying anything: sign-in is refused and every
+        paired device stops authenticating immediately, because device
+        authentication joins on the account being enabled — the device rows are
+        left intact, so `disabled: false` restores the Fleet rather than making
+        the member re-pair. That reversibility is why this, not delete, is the
+        primitive an offboard should use; Argosy owns real user state (profiles,
+        watch history, device pairings) that a mistaken offboard shouldn't burn.
+        Idempotent: re-disabling an already-disabled account leaves the original
+        timestamp. The instance owner's account is refused with 409. Gated on
+        the same X-Provision-Token, and registered only when
+        ARGOSY_PROVISION_TOKEN is set.
+      security:
+        - provisionToken: []
+      parameters:
+        - { name: accountId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountUpdateRequest"
+      responses:
+        "200":
+          description: The account in its new state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [auth]
+      operationId: deleteProvisionedAccount
+      summary: Delete an account by id (service-to-service purge)
+      description: >
+        The destructive counterpart to revokeProvisionedAccount (ARGY-187):
+        removes the account and everything cascading from it — profiles,
+        devices, watch history, vaults, preferences. Reserve it for an explicit
+        purge; an offboard that only needs to take access away should PATCH
+        `disabled: true` instead. Keyed by account id, which is what Purser
+        records at creation (ARGY-163); the email-keyed deprovisionAccount is
+        the older equivalent. Effectively idempotent — a repeat call answers
+        404, which the caller reads as "nothing left to revoke". An account
+        that still owns libraries is refused with 409, as is the instance
+        owner's. Gated on the same X-Provision-Token, and registered only when
+        ARGOSY_PROVISION_TOKEN is set.
+      security:
+        - provisionToken: []
+      parameters:
+        - { name: accountId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
         "204":
           description: Account deleted

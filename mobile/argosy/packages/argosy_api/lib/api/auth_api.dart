@@ -329,9 +329,59 @@ class AuthApi {
     }
   }
 
+  /// Delete an account by id (service-to-service purge)
+  ///
+  /// The destructive counterpart to revokeProvisionedAccount (ARGY-187): removes the account and everything cascading from it — profiles, devices, watch history, vaults, preferences. Reserve it for an explicit purge; an offboard that only needs to take access away should PATCH `disabled: true` instead. Keyed by account id, which is what Purser records at creation (ARGY-163); the email-keyed deprovisionAccount is the older equivalent. Effectively idempotent — a repeat call answers 404, which the caller reads as \"nothing left to revoke\". An account that still owns libraries is refused with 409, as is the instance owner's. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  Future<Response> deleteProvisionedAccountWithHttpInfo(String accountId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/admin/accounts/{accountId}'
+      .replaceAll('{accountId}', accountId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'DELETE',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Delete an account by id (service-to-service purge)
+  ///
+  /// The destructive counterpart to revokeProvisionedAccount (ARGY-187): removes the account and everything cascading from it — profiles, devices, watch history, vaults, preferences. Reserve it for an explicit purge; an offboard that only needs to take access away should PATCH `disabled: true` instead. Keyed by account id, which is what Purser records at creation (ARGY-163); the email-keyed deprovisionAccount is the older equivalent. Effectively idempotent — a repeat call answers 404, which the caller reads as \"nothing left to revoke\". An account that still owns libraries is refused with 409, as is the instance owner's. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  Future<void> deleteProvisionedAccount(String accountId, { Future<void>? abortTrigger, }) async {
+    final response = await deleteProvisionedAccountWithHttpInfo(accountId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Delete an account by email (service-to-service deprovisioning)
   ///
-  /// The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  /// The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. Prefer the id-keyed pair under /api/v1/admin/accounts/{accountId} (ARGY-187): a caller that recorded the account id at creation shouldn't have to re-resolve it from an email the member may since have changed, and revoking beats deleting. 
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -369,7 +419,7 @@ class AuthApi {
 
   /// Delete an account by email (service-to-service deprovisioning)
   ///
-  /// The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  /// The teardown companion to createAccount (ARGY-86): lets the provisioning service remove the account it created when a member is offboarded, taking profiles, devices, history and preferences with it (DB cascade). The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. Prefer the id-keyed pair under /api/v1/admin/accounts/{accountId} (ARGY-187): a caller that recorded the account id at creation shouldn't have to re-resolve it from an email the member may since have changed, and revoking beats deleting. 
   ///
   /// Parameters:
   ///
@@ -1062,6 +1112,68 @@ class AuthApi {
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+  }
+
+  /// Disable or restore an account (service-to-service revoke)
+  ///
+  /// The revoke Purser's `offboard` maps to (ARGY-187), keyed by the account id it recorded at creation rather than by email. `disabled: true` takes access away without destroying anything: sign-in is refused and every paired device stops authenticating immediately, because device authentication joins on the account being enabled — the device rows are left intact, so `disabled: false` restores the Fleet rather than making the member re-pair. That reversibility is why this, not delete, is the primitive an offboard should use; Argosy owns real user state (profiles, watch history, device pairings) that a mistaken offboard shouldn't burn. Idempotent: re-disabling an already-disabled account leaves the original timestamp. The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  ///
+  /// * [AccountUpdateRequest] accountUpdateRequest (required):
+  Future<Response> revokeProvisionedAccountWithHttpInfo(String accountId, AccountUpdateRequest accountUpdateRequest, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/admin/accounts/{accountId}'
+      .replaceAll('{accountId}', accountId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = accountUpdateRequest;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'PATCH',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Disable or restore an account (service-to-service revoke)
+  ///
+  /// The revoke Purser's `offboard` maps to (ARGY-187), keyed by the account id it recorded at creation rather than by email. `disabled: true` takes access away without destroying anything: sign-in is refused and every paired device stops authenticating immediately, because device authentication joins on the account being enabled — the device rows are left intact, so `disabled: false` restores the Fleet rather than making the member re-pair. That reversibility is why this, not delete, is the primitive an offboard should use; Argosy owns real user state (profiles, watch history, device pairings) that a mistaken offboard shouldn't burn. Idempotent: re-disabling an already-disabled account leaves the original timestamp. The instance owner's account is refused with 409. Gated on the same X-Provision-Token, and registered only when ARGOSY_PROVISION_TOKEN is set. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] accountId (required):
+  ///
+  /// * [AccountUpdateRequest] accountUpdateRequest (required):
+  Future<AccountSummary?> revokeProvisionedAccount(String accountId, AccountUpdateRequest accountUpdateRequest, { Future<void>? abortTrigger, }) async {
+    final response = await revokeProvisionedAccountWithHttpInfo(accountId, accountUpdateRequest, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AccountSummary',) as AccountSummary;
+    
+    }
+    return null;
   }
 
   /// Update the calling device's playback preferences
