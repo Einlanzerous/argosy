@@ -60,11 +60,20 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 	}
 	mux.Handle("/", spa)
 
-	return &http.Server{
+	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           withLogging(logger, mux),
 		ReadHeaderTimeout: 10 * time.Second,
-	}, nil
+	}
+	// Beacon streams are long-lived and therefore never idle, and Shutdown waits
+	// for idle without cancelling request contexts — so without this a single
+	// connected client held every shutdown to its full deadline (ARGY-194). The
+	// hook runs at the *start* of Shutdown, which is exactly when the streams
+	// need to be told to unwind.
+	if hub != nil {
+		srv.RegisterOnShutdown(hub.Close)
+	}
+	return srv, nil
 }
 
 // healthHandler reports readiness. When a database is configured, it pings it

@@ -53,6 +53,12 @@ func beaconHandler(authStore *auth.Store, hub *beacon.Hub) http.HandlerFunc {
 			select {
 			case <-ctx.Done():
 				return
+			case <-hub.Drain():
+				// The server is shutting down. Returning here lets the connection
+				// go idle so http.Server.Shutdown completes in milliseconds instead
+				// of burning its whole deadline on a stream that is never idle
+				// (ARGY-194). EventSource reconnects on its own once we're back.
+				return
 			case <-ping.C:
 				if _, err := w.Write([]byte(": ping\n\n")); err != nil {
 					return

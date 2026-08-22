@@ -113,3 +113,27 @@ func TestSlowConsumerDoesNotBlock(t *testing.T) {
 		t.Fatal("fanout blocked on a slow consumer")
 	}
 }
+
+// TestDrainClosesOnClose covers the signal SSE handlers select on so that
+// http.Server.Shutdown isn't held to its deadline by a stream that is never
+// idle (ARGY-194). Close is wired to RegisterOnShutdown, which can fire more
+// than once, so it has to be idempotent rather than panic on a second close.
+func TestDrainClosesOnClose(t *testing.T) {
+	h := NewHub(nil, nil)
+
+	select {
+	case <-h.Drain():
+		t.Fatal("drain is closed before shutdown; every stream would exit immediately")
+	default:
+	}
+
+	h.Close()
+
+	select {
+	case <-h.Drain():
+	case <-time.After(time.Second):
+		t.Fatal("drain still open after Close; shutdown would burn its whole deadline")
+	}
+
+	h.Close() // must not panic
+}
