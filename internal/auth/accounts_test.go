@@ -181,7 +181,13 @@ func TestAccountLifecycleOwnerGuard(t *testing.T) {
 	}
 
 	// A random id that exists nowhere answers not-found, not a guard error.
-	if _, err := store.SetAccountDisabled(ctx, sessionActor(sess), "00000000-0000-0000-0000-000000000000", true); !errors.Is(err, ErrNotFound) {
+	// Random really means random: this read "00000000-0000-0000-0000-000000000000"
+	// until ARGY-211, and that is the one id in the estate that is NOT nowhere —
+	// internal/library's stow fixture inserts an account under it, because
+	// accountOf resolves an unauthenticated request to the zero uuid. Suites
+	// share one database and `make test` runs packages concurrently, so the row
+	// existed for the SELECT and was gone by the UPDATE, surfacing pgx.ErrNoRows.
+	if _, err := store.SetAccountDisabled(ctx, sessionActor(sess), uuid.NewString(), true); !errors.Is(err, ErrNotFound) {
 		t.Errorf("disable missing account = %v, want ErrNotFound", err)
 	}
 }
