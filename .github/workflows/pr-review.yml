@@ -21,9 +21,10 @@ on:
   # that conflicts with its base produces no `pull_request` runs at all, so a PR
   # born conflicting — as #194 was, against `graphify-out/` (ARGY-185) — never
   # got its unconditional review, and every later `synchronize` was skipped for
-  # lacking `review:always`. Green checks, nothing read. The real fix is in the
-  # shared workflow, which now reviews any PR no review has ever been posted on
-  # (SERV-126); this is the cheap second door for the close/reopen path.
+  # lacking `review:always`. Green checks, nothing read. The real fix is the
+  # shared workflow's, in construct-server#141 (SERV-126): triage reviews any PR
+  # that no review has ever been posted on, whatever the action. This is the
+  # cheap second door, for the close/reopen path.
   #
   # Deliberately NOT `pull_request_target`, which would sidestep the conflict
   # dependency entirely: it runs against the base ref and carries a worse
