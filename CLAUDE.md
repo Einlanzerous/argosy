@@ -68,6 +68,13 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
   its token is dead and signs the device out, so returning it for a bad
   password logs someone out of a device that was fine. Easy to undo by reaching
   for the more obvious status code.
+- **A failed sign-in costs the same whether the email exists.** `verify` used to
+  return on `pgx.ErrNoRows` before bcrypt ran, so an unknown address answered in
+  ~0ms against ~46ms for a known one with the wrong password — identical
+  responses, but the timing enumerated the household over the WAN-exposed
+  endpoint (ARGY-195). Every no-hash path goes through `comparePassword`, which
+  compares against `dummyPasswordHash` so the cost is paid regardless. An early
+  return added "for the case where there's nothing to check" reopens it.
 - **Reset revokes devices; self-serve change does not.** Changing your own
   password proves you hold the current one. An owner-driven *reset* means the
   credential was lost or leaked, and a leaked password may already have paired
