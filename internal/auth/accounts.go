@@ -113,6 +113,14 @@ func (s *Store) SetAccountDisabled(ctx context.Context, actor auditEntry, accoun
 	acc, err := scanAccountSummary(s.pool.QueryRow(ctx,
 		`UPDATE accounts a SET `+set+`, updated_at = now() WHERE a.id = $1
 		 RETURNING `+accountSummaryCols, accountID))
+	// lifecycleTarget already answered not-found for an id that was absent, so
+	// reaching here with no rows means the account was deleted between the two
+	// statements. Same answer, or the caller gets a raw pgx error where it asked
+	// a question about an account: not-found is a 404, an unmapped ErrNoRows is
+	// a 500 (ARGY-211).
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.AccountSummary{}, ErrNotFound
+	}
 	if err != nil {
 		return api.AccountSummary{}, err
 	}
