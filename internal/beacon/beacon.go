@@ -44,11 +44,36 @@ type Hub struct {
 	mu     sync.Mutex
 	subs   map[int]*subscriber
 	nextID int
+
+	drain     chan struct{}
+	closeOnce sync.Once
 }
 
 // NewHub returns a Beacon hub over the connection pool.
 func NewHub(pool *pgxpool.Pool, logger *slog.Logger) *Hub {
-	return &Hub{pool: pool, logger: logger, subs: make(map[int]*subscriber)}
+	return &Hub{
+		pool:   pool,
+		logger: logger,
+		subs:   make(map[int]*subscriber),
+		drain:  make(chan struct{}),
+	}
+}
+
+// Drain is closed when the process is shutting down. An SSE handler selects on
+// it alongside the request context so its stream ends promptly (ARGY-194).
+//
+// http.Server.Shutdown waits for connections to go *idle* and does not cancel
+// in-flight request contexts, so a Beacon stream — which is always mid-handler,
+// never idle — held every shutdown to its full 10s deadline. Docker's default
+// stop timeout is also 10s, so any deploy with a client connected was a SIGKILL
+// at the buzzer rather than a graceful stop.
+func (h *Hub) Drain() <-chan struct{} { return h.drain }
+
+// Close signals every open stream to end. Idempotent, because it is wired to
+// http.Server.RegisterOnShutdown and Shutdown may be called more than once.
+// Subscribers are left to remove themselves as their handlers unwind.
+func (h *Hub) Close() {
+	h.closeOnce.Do(func() { close(h.drain) })
 }
 
 // Publish broadcasts an event via Postgres NOTIFY; the LISTEN loop fans it out.
