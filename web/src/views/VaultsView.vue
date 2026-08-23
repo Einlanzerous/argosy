@@ -41,9 +41,9 @@ onMounted(() => {
   <div class="vaults">
     <header class="head">
       <div>
-        <div class="eyebrow">The Hold</div>
-        <h1>Vaults</h1>
-        <div class="count">Your curated cargo — collections of films &amp; series</div>
+        <div class="arg-eyebrow">The Hold</div>
+        <h1 class="arg-page-title">Vaults</h1>
+        <div class="arg-count">Your curated cargo — collections of films &amp; series</div>
       </div>
       <button class="new" type="button" @click="creating = !creating">＋ New Vault</button>
     </header>
@@ -72,7 +72,7 @@ onMounted(() => {
       </RouterLink>
     </div>
 
-    <div v-else-if="!loading" class="empty">
+    <div v-else-if="!loading" class="arg-empty">
       <h2>No vaults yet</h2>
       <p>Create a vault to start curating collections — favorites, a rewatch list, anything.</p>
     </div>
@@ -89,22 +89,6 @@ onMounted(() => {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-}
-.eyebrow {
-  font: 700 11px var(--arg-display);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--arg-accent);
-}
-h1 {
-  margin: 10px 0 0;
-  font: 800 clamp(30px, 3.4vw, 40px) var(--arg-display);
-  letter-spacing: -0.02em;
-}
-.count {
-  margin-top: 4px;
-  font: 500 13px var(--arg-body);
-  color: var(--arg-dim);
 }
 .new {
   padding: 11px 20px;
@@ -208,17 +192,5 @@ h1 {
   margin-top: auto;
   font: 500 12px var(--arg-body);
   color: var(--arg-faint);
-}
-.empty {
-  margin-top: 60px;
-  text-align: center;
-  color: var(--arg-dim);
-}
-.empty h2 {
-  font: 800 22px var(--arg-display);
-}
-.empty p {
-  margin-top: 8px;
-  font: 400 14px var(--arg-body);
 }
 </style>
