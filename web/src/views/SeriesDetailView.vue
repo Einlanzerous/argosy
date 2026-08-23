@@ -197,9 +197,15 @@ const resumeSeasonIndex = computed(() => {
   return i >= 0 ? i : 0
 })
 
+// resumeTarget is two different things: the episode you're part-way through, or
+// the next, untouched one after it. Only the first is a "Resume" — calling an
+// unstarted episode that was the point of ARGY-214. The season is left out of
+// the label because the season tabs sit directly below and already show it.
 const resumeLabel = computed(() => {
   const t = resumeTarget.value
-  return t ? `Resume Season ${t.seasonNumber} Ep ${t.ep.episodeNumber}` : ''
+  if (!t) return ''
+  const n = t.ep.episodeNumber
+  return epInProgress(t.ep) ? `Resume Episode ${n}` : `Next Episode ${n}`
 })
 
 function resumeSeries(): void {

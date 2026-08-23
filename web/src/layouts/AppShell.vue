@@ -10,9 +10,12 @@ const router = useRouter()
 const session = useSessionStore()
 const menuOpen = ref(false)
 
-// Home and Library are full-bleed (their own backdrops sit under the floating
-// bar); other screens get padded so content clears the fixed bar.
-const fullBleed = computed(() => ['home', 'library'].includes(String(route.name)))
+// Home, Library and the two detail screens are full-bleed (their own backdrops
+// sit under the floating bar); other screens get padded so content clears the
+// fixed bar. Full-bleed views own their below-hero padding themselves.
+const fullBleed = computed(() =>
+  ['home', 'library', 'movie', 'series'].includes(String(route.name)),
+)
 const initial = computed(() => (session.profileName || 'Argosy').charAt(0).toUpperCase())
 const isAdmin = computed(() => session.session?.role === 'admin')
 

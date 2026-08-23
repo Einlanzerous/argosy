@@ -78,15 +78,12 @@ watch(
 <template>
   <DetailScaffold
     v-if="movie"
-    layout="poster"
     :title="movie.title"
     :backdrop-url="movie.backdropUrl"
     :poster-url="movie.posterUrl"
     :overview="movie.overview"
     :cast="movie.cast"
     :genres="movie.genres"
-    :min-height="726"
-    :min-height-narrow="456"
   >
     <template #meta>
       <span>{{ movie.year ?? '—' }}</span>
