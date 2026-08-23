@@ -36,3 +36,19 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
     secrets: inherit
+
+  # Same reason as mobile-release above, for the GHCR image (SERV-125). publish.yml
+  # runs on every push to main for :latest and sha-<short>, but its semver tags need
+  # a release, and the `on: push: tags` trigger that was supposed to supply one had
+  # never fired in the repo's history — GITHUB_TOKEN-authored tags create no events.
+  # So no versioned image had ever been published, and construct-server had to pin
+  # this service by sha instead of by major.minor.
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    permissions:
+      contents: read
+      packages: write
