@@ -48,7 +48,7 @@ func main() {
 		}
 	}
 
-	logger.Info("starting argosy", "version", version.Version, "addr", cfg.Addr)
+	logger.Info("starting argosy", "version", version.Get().Version, "addr", cfg.Addr)
 
 	// Best-effort: log the media toolchain so its absence is obvious at startup.
 	mediatool.LogVersions(context.Background(), logger)

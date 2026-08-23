@@ -191,7 +191,40 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Build identity for /healthz (ARGY-213) — see deploy/Dockerfile.
+          #
+          # Both read the values THIS workflow already resolved above, and
+          # neither may be re-derived from the `github` context. That is not a
+          # style preference; both obvious spellings are wrong here:
+          #
+          #   github.ref_type == 'tag'   The release path is the `workflow_call`
+          #                              from release-please.yml, and a called
+          #                              workflow inherits the CALLER's context —
+          #                              a job running on push-to-main. So
+          #                              ref_type is `branch` on exactly the path
+          #                              that publishes a release, VERSION would
+          #                              arrive empty, and the released image
+          #                              would report "dev" against a 0.25.1
+          #                              label. A permanent claimed_not_confirmed
+          #                              row, which is what ARGY-213 exists to
+          #                              prevent.
+          #
+          #   github.sha                 The workflow's ref, which on a
+          #                              back-publish is main's tip and not the
+          #                              tag being built — the same reason the
+          #                              "Record the commit actually built" step
+          #                              above overrides the revision label with
+          #                              REVISION. Using it here would stamp the
+          #                              label with one commit and the binary
+          #                              with another, and the binary's is the
+          #                              half the ledger is supposed to trust.
+          #
+          # SEMVER is empty by construction on a branch build and regex-validated
+          # otherwise, so `internal/version` maps the empty case to "dev" — the
+          # `latest` leak the old form guarded against cannot occur, because
+          # SEMVER is never the string `latest`.
           build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
+            VERSION=${{ env.SEMVER }}
+            GIT_SHA=${{ env.REVISION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

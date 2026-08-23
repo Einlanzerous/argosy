@@ -135,7 +135,7 @@ Class | Method | HTTP request | Description
 *StowApi* | [**getStowJob**](doc//StowApi.md#getstowjob) | **GET** /api/v1/stow/{jobId} | Poll a packaging job
 *StowApi* | [**listStowJobs**](doc//StowApi.md#liststowjobs) | **GET** /api/v1/stow | Packaging jobs for the current account
 *StowApi* | [**stowItem**](doc//StowApi.md#stowitem) | **POST** /api/v1/items/{itemId}/stow | Pack an item away for offline viewing
-*SystemApi* | [**getHealth**](doc//SystemApi.md#gethealth) | **GET** /healthz | Liveness/readiness probe
+*SystemApi* | [**getHealth**](doc//SystemApi.md#gethealth) | **GET** /healthz | Readiness probe and build identity
 *SystemApi* | [**ping**](doc//SystemApi.md#ping) | **GET** /api/v1/ping | Service identity and version
 *TranscodeApi* | [**getTranscodeCache**](doc//TranscodeApi.md#gettranscodecache) | **GET** /api/v1/transcode/cache | Transcode cache usage (Ballast)
 *TranscodeApi* | [**getTranscodeCapabilities**](doc//TranscodeApi.md#gettranscodecapabilities) | **GET** /api/v1/transcode/capabilities | Encoders available on this host and the selected one
@@ -168,6 +168,7 @@ Class | Method | HTTP request | Description
  - [EpisodeSummary](doc//EpisodeSummary.md)
  - [Error](doc//Error.md)
  - [Facet](doc//Facet.md)
+ - [HealthResponse](doc//HealthResponse.md)
  - [LinkApproveRequest](doc//LinkApproveRequest.md)
  - [LinkStartRequest](doc//LinkStartRequest.md)
  - [LinkStartResponse](doc//LinkStartResponse.md)

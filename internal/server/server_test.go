@@ -47,8 +47,18 @@ func TestHealthHandlerNoDB(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if rec.Body.String() != "ok" {
-		t.Errorf("body = %q, want %q", rec.Body.String(), "ok")
+	// The body is JSON since ARGY-213, not the bare string "ok". Switchyard's
+	// delivery reconciler reads `version` + `sha` off this endpoint and treated
+	// the old text/plain answer as "speaks, but reports no version". The full
+	// shape — including the identity on the 503 branch — is covered in
+	// health_test.go; this asserts only that the no-database path still reports
+	// healthy.
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("body is not JSON: %v (body=%q)", err, rec.Body.String())
+	}
+	if body["status"] != "ok" {
+		t.Errorf("status = %v, want %q", body["status"], "ok")
 	}
 }
 

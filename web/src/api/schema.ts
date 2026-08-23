@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Liveness/readiness probe */
+        /**
+         * Readiness probe and build identity
+         * @description Returns 200 when the database is reachable and 503 when it is not. The body shape is IDENTICAL on both paths: a degraded service is still running a version, and it is the one most worth identifying, so `version` and `sha` must be readable from the 503 branch too. `version` is bare semver or the literal `dev`; `sha` is null when the build supplied none. Neither is ever inferred.
+         */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -1312,6 +1315,23 @@ export interface components {
             /** @description The encoder chosen by the configured preference order. */
             selected: string;
         };
+        HealthResponse: {
+            /**
+             * @example ok
+             * @enum {string}
+             */
+            status: "ok" | "degraded";
+            /**
+             * @description Bare semver, or the literal "dev" for a build no release cut. Never carries a "v" prefix: it is compared with strict equality against the image's org.opencontainers.image.version label, which is stamped bare, and a prefix would never match.
+             * @example 0.25.1
+             */
+            version: string;
+            /**
+             * @description The full 40-character commit, or null when the build supplied none. Never abbreviated — the cross-service comparison is an equality test, not a prefix match.
+             * @example 5611a6c78a11e5f04a1c087c8cb9c2c138a3e8d5
+             */
+            sha: string | null;
+        };
         PingResponse: {
             /** @example argosy */
             service: string;
@@ -1997,21 +2017,23 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Service is healthy */
+            /** @description The database is reachable */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": string;
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
-            /** @description A dependency (e.g. the database) is unavailable */
+            /** @description A dependency (the database) is unavailable. Identical body shape. */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
             };
         };
     };

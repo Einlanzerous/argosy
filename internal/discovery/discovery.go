@@ -31,7 +31,7 @@ func Advertise(ctx context.Context, addr, serverName string, logger *slog.Logger
 	}
 	txt := []string{
 		"name=" + serverName,
-		"version=" + version.Version,
+		"version=" + version.Get().Version,
 		"api=/api/v1",
 	}
 	srv, err := zeroconf.Register(serverName, ServiceType, "local.", port, txt, nil)

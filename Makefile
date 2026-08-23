@@ -4,8 +4,15 @@ BUN ?= bun
 WEB := web
 EMBED_DIR := internal/webui/dist
 BIN := bin/argosy
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -X github.com/Einlanzerous/argosy/internal/version.Version=$(VERSION)
+# `sed 's/^v//'` is not cosmetic (ARGY-213). `git describe` returns the tag as
+# written — `v0.25.1` — and that is what /healthz would then report, while the
+# image label carries the bare `0.25.1`. Switchyard compares the two with strict
+# equality, so a "v" is a permanent `claimed_not_confirmed` row. Stripping it
+# locally keeps one spelling everywhere the version is produced.
+VERSION ?= $(shell (git describe --tags --always --dirty 2>/dev/null || echo dev) | sed 's/^v//')
+COMMIT  ?= $(shell git rev-parse HEAD 2>/dev/null)
+LDFLAGS := -X github.com/Einlanzerous/argosy/internal/version.Version=$(VERSION) \
+           -X github.com/Einlanzerous/argosy/internal/version.Commit=$(COMMIT)
 COMPOSE := docker compose -f deploy/docker-compose.yml
 GO_PKGS := ./cmd/... ./internal/...   # scope go tooling; keep it out of web/node_modules
 
