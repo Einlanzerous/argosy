@@ -193,23 +193,38 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           # Build identity for /healthz (ARGY-213) — see deploy/Dockerfile.
           #
-          # VERSION is passed ONLY on a tag build. On a push to main
-          # `steps.meta.outputs.version` is the literal `latest`, which names a
-          # moving target rather than a build — /api/v1/ping has been reporting
-          # that string. Storing it as an identity would have it compared
-          # against the image label and disagree for ever. Blank instead, which
-          # `internal/version` maps to "dev".
+          # Both read the values THIS workflow already resolved above, and
+          # neither may be re-derived from the `github` context. That is not a
+          # style preference; both obvious spellings are wrong here:
           #
-          # On a tag build metadata-action's `version` output is already the
-          # BARE semver (`0.25.1`), matching the image label character for
-          # character. That agreement is the whole point: the reconciler
-          # observes this string and the deploy reporter reports the label, and
-          # the matrix compares the two as identities.
+          #   github.ref_type == 'tag'   The release path is the `workflow_call`
+          #                              from release-please.yml, and a called
+          #                              workflow inherits the CALLER's context —
+          #                              a job running on push-to-main. So
+          #                              ref_type is `branch` on exactly the path
+          #                              that publishes a release, VERSION would
+          #                              arrive empty, and the released image
+          #                              would report "dev" against a 0.25.1
+          #                              label. A permanent claimed_not_confirmed
+          #                              row, which is what ARGY-213 exists to
+          #                              prevent.
           #
-          # GIT_SHA rides both paths. A main build has a real commit and should
-          # say so; it just has no release to name.
+          #   github.sha                 The workflow's ref, which on a
+          #                              back-publish is main's tip and not the
+          #                              tag being built — the same reason the
+          #                              "Record the commit actually built" step
+          #                              above overrides the revision label with
+          #                              REVISION. Using it here would stamp the
+          #                              label with one commit and the binary
+          #                              with another, and the binary's is the
+          #                              half the ledger is supposed to trust.
+          #
+          # SEMVER is empty by construction on a branch build and regex-validated
+          # otherwise, so `internal/version` maps the empty case to "dev" — the
+          # `latest` leak the old form guarded against cannot occur, because
+          # SEMVER is never the string `latest`.
           build-args: |
-            VERSION=${{ github.ref_type == 'tag' && steps.meta.outputs.version || '' }}
-            GIT_SHA=${{ github.sha }}
+            VERSION=${{ env.SEMVER }}
+            GIT_SHA=${{ env.REVISION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

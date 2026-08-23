@@ -9,7 +9,7 @@ BIN := bin/argosy
 # image label carries the bare `0.25.1`. Switchyard compares the two with strict
 # equality, so a "v" is a permanent `claimed_not_confirmed` row. Stripping it
 # locally keeps one spelling everywhere the version is produced.
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
+VERSION ?= $(shell (git describe --tags --always --dirty 2>/dev/null || echo dev) | sed 's/^v//')
 COMMIT  ?= $(shell git rev-parse HEAD 2>/dev/null)
 LDFLAGS := -X github.com/Einlanzerous/argosy/internal/version.Version=$(VERSION) \
            -X github.com/Einlanzerous/argosy/internal/version.Commit=$(COMMIT)

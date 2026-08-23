@@ -37,6 +37,21 @@ var Version = DevVersion
 // turn the cross-service comparison into a prefix problem.
 var Commit = ""
 
+// ── Read these through Get(), never directly ──────────────────────────────
+//
+// `Version` and `Commit` are the RAW linker inputs, and a blank build links an
+// empty string into both — over the defaults above, not instead of them. Only
+// `Get()` applies the blank-to-dev rule, so a caller that reads `Version`
+// directly reports "" where it means "dev".
+//
+// That is not hypothetical: every reader in this repo was doing exactly that
+// before the health contract landed, and it was invisible while the Docker ARG
+// still defaulted to a non-empty placeholder. Emptying that default is what
+// made the bypass reachable.
+//
+// They stay exported because `Get()`'s rule has to be exercised from sibling
+// packages' tests. Treat that as a seam for tests, not a public read path.
+
 // Identity is the (version, sha) pair as /healthz reports it.
 //
 // `sha` is a *string pointer so an absent commit marshals to JSON `null` rather
