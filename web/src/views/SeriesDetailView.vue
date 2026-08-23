@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
-import BackButton from '@/components/BackButton.vue'
+import DetailScaffold from '@/components/DetailScaffold.vue'
 import AddToVault from '@/components/AddToVault.vue'
 import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
@@ -19,9 +19,6 @@ const series = ref<SeriesDetail | null>(null)
 const notFound = ref(false)
 const activeSeason = ref(0)
 
-const heroStyle = computed(() =>
-  posterStyle(series.value?.backdropUrl ?? series.value?.posterUrl, series.value?.title ?? ''),
-)
 const season = computed(() => series.value?.seasons[activeSeason.value] ?? null)
 
 const firstPlayable = computed(() => {
@@ -251,38 +248,34 @@ watch(
 </script>
 
 <template>
-  <div v-if="series">
-    <section class="hero" :style="heroStyle">
-      <div class="arg-hatch hatch" />
-      <div class="shade" />
-      <BackButton class="hero-back" fallback="library" />
-      <div class="body">
-        <h1>{{ series.title }}</h1>
-        <div class="meta">
-          <span>{{ series.year ?? '—' }}</span>
-          <span class="sep">•</span>
-          <span>{{ series.seasons.length }} seasons</span>
-        </div>
-        <p v-if="series.overview" class="synopsis">{{ series.overview }}</p>
-        <p v-if="series.cast?.length" class="cast">
-          <span class="cast-label">Cast</span>{{ series.cast.join(', ') }}
-        </p>
-        <div class="actions">
-          <template v-if="resumeTarget">
-            <button class="play" type="button" @click="resumeSeries">
-              <span>▶</span> {{ resumeLabel }}
-            </button>
-            <button class="ghost" type="button" :disabled="!firstPlayable" @click="startOverSeries">
-              Start Over
-            </button>
-          </template>
-          <button v-else class="play" type="button" :disabled="!firstPlayable" @click="playFirst">
-            <span>▶</span> Play
-          </button>
-          <AddToVault v-if="series" :series-id="series.id" />
-        </div>
-      </div>
-    </section>
+  <DetailScaffold
+    v-if="series"
+    :title="series.title"
+    :backdrop-url="series.backdropUrl"
+    :poster-url="series.posterUrl"
+    :overview="series.overview"
+    :cast="series.cast"
+  >
+    <template #meta>
+      <span>{{ series.year ?? '—' }}</span>
+      <span class="sep">•</span>
+      <span>{{ series.seasons.length }} seasons</span>
+    </template>
+
+    <template #actions>
+      <template v-if="resumeTarget">
+        <button class="arg-play" type="button" @click="resumeSeries">
+          <span>▶</span> {{ resumeLabel }}
+        </button>
+        <button class="arg-ghost" type="button" :disabled="!firstPlayable" @click="startOverSeries">
+          Start Over
+        </button>
+      </template>
+      <button v-else class="arg-play" type="button" :disabled="!firstPlayable" @click="playFirst">
+        <span>▶</span> Play
+      </button>
+      <AddToVault :series-id="series.id" />
+    </template>
 
     <div v-if="series.seasons.length" class="tabs">
       <button
@@ -376,130 +369,12 @@ watch(
         </button>
       </div>
     </div>
-  </div>
+  </DetailScaffold>
 
-  <div v-else-if="notFound" class="missing">That series isn't in the Manifest.</div>
+  <div v-else-if="notFound" class="arg-missing">That series isn't in the Manifest.</div>
 </template>
 
 <style scoped>
-.hero {
-  position: relative;
-  border-radius: var(--arg-r-xl);
-  overflow: hidden;
-  border: 1px solid var(--arg-line);
-  min-height: 605px;
-}
-.hatch {
-  position: absolute;
-  inset: 0;
-}
-.shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    0deg,
-    #171717 4%,
-    rgba(23, 23, 23, 0.5) 55%,
-    rgba(23, 23, 23, 0.15) 100%
-  );
-}
-/* Quadrant 1: top-left of the hero, aligned with the body's 40px inset. */
-.hero-back {
-  position: absolute;
-  top: 50px;
-  left: 40px;
-  z-index: 3;
-}
-.body {
-  position: relative;
-  /* Extra top padding reserves room for the back button (top:50 + 40h) so the
-     title always clears it even when the overview makes the content tall. */
-  padding: 104px 40px 34px;
-  min-height: 605px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-h1 {
-  margin: 0;
-  font: 800 40px/1.04 var(--arg-display);
-  letter-spacing: -0.02em;
-}
-.meta {
-  margin-top: 10px;
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  font: 600 13px var(--arg-body);
-  color: var(--arg-dim);
-}
-.sep {
-  opacity: 0.4;
-}
-.kind {
-  color: var(--arg-accent);
-}
-.synopsis {
-  margin-top: 16px;
-  max-width: 620px;
-  font: 400 14.5px/1.6 var(--arg-body);
-  color: #c4c4bc;
-}
-.cast {
-  margin-top: 14px;
-  max-width: 620px;
-  font: 400 13.5px/1.6 var(--arg-body);
-  color: var(--arg-soft-2);
-}
-.cast-label {
-  margin-right: 10px;
-  font: 700 11px var(--arg-display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--arg-dim);
-}
-.actions {
-  margin-top: 22px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.play {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 13px 26px;
-  border: none;
-  border-radius: var(--arg-r);
-  background: var(--arg-accent);
-  color: var(--arg-bg);
-  font: 700 15px var(--arg-display);
-  cursor: pointer;
-}
-.play:hover {
-  background: var(--arg-accent-hi);
-}
-.play:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.ghost {
-  padding: 13px 22px;
-  border: 1px solid var(--arg-line-2);
-  border-radius: var(--arg-r);
-  background: rgba(20, 20, 19, 0.4);
-  color: var(--arg-cream);
-  font: 600 14px var(--arg-body);
-  cursor: pointer;
-}
-.ghost:hover {
-  border-color: var(--arg-accent);
-}
-.ghost:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 .tabs {
   margin-top: 22px;
   display: flex;
@@ -716,18 +591,5 @@ h1 {
 .ep-watch:disabled {
   opacity: 0.5;
   cursor: default;
-}
-.missing {
-  padding: 80px 0;
-  text-align: center;
-  color: var(--arg-dim);
-  font: 500 15px var(--arg-body);
-}
-/* Keep the enlarged hero from dominating narrow viewports. */
-@media (max-width: 720px) {
-  .hero,
-  .body {
-    min-height: 380px;
-  }
 }
 </style>

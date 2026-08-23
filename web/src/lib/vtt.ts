@@ -1,3 +1,13 @@
+// Splits WebVTT text into cue blocks, each already broken into lines and paired
+// with the index of its "-->" timing line (-1 for a header or note block). Left
+// to the caller to decide whether to strip CRs first — shiftVtt must not.
+function vttBlocks(text: string): { lines: string[]; tIdx: number }[] {
+  return text.split(/\n[ \t]*\n/).map((block) => {
+    const lines = block.split('\n')
+    return { lines, tIdx: lines.findIndex((l) => l.includes('-->')) }
+  })
+}
+
 // WebVTT cue timestamps are in absolute media time. Under a server-side
 // transcode seek the HLS timeline restarts at `baseOffset`, so the <video>'s
 // currentTime is relative to that offset. shiftVtt rewrites the cue timings by
@@ -5,13 +15,12 @@
 // cues that end before zero are dropped. Direct play passes delta 0 (no-op).
 export function shiftVtt(text: string, deltaSeconds: number): string {
   if (!deltaSeconds) return text
-  const blocks = text.split(/\n[ \t]*\n/)
   const out: string[] = []
-  for (const block of blocks) {
-    const lines = block.split('\n')
-    const tIdx = lines.findIndex((l) => l.includes('-->'))
+  // Not CR-stripped: shiftVtt rewrites timings in place and hands the rest of
+  // the document back byte-for-byte.
+  for (const { lines, tIdx } of vttBlocks(text)) {
     if (tIdx === -1) {
-      out.push(block) // header or note block — leave untouched
+      out.push(lines.join('\n')) // header or note block — leave untouched
       continue
     }
     const shifted = shiftTimingLine(lines[tIdx], deltaSeconds)
@@ -47,10 +56,7 @@ export interface VttCue {
 // parse a <track src> blob and fire its load event at the right time.
 export function parseVttCues(text: string): VttCue[] {
   const cues: VttCue[] = []
-  const blocks = text.replace(/\r/g, '').split(/\n[ \t]*\n/)
-  for (const block of blocks) {
-    const lines = block.split('\n')
-    const tIdx = lines.findIndex((l) => l.includes('-->'))
+  for (const { lines, tIdx } of vttBlocks(text.replace(/\r/g, ''))) {
     if (tIdx === -1) continue // header or note block
     const [left, right] = lines[tIdx].split('-->')
     if (right === undefined) continue

@@ -70,7 +70,7 @@ async function createAndAdd(): Promise<void> {
 </script>
 
 <template>
-  <button ref="triggerEl" class="trigger" type="button" @click="toggle">
+  <button ref="triggerEl" class="arg-ghost" type="button" @click="toggle">
     <span>＋</span> {{ flash || 'Add to Vault' }}
   </button>
   <Teleport to="body">
@@ -96,22 +96,6 @@ async function createAndAdd(): Promise<void> {
 </template>
 
 <style scoped>
-/* Matches the secondary "Start Over"/ghost buttons on the detail pages. */
-.trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 13px 22px;
-  border-radius: var(--arg-r);
-  border: 1px solid var(--arg-line-2);
-  background: rgba(20, 20, 19, 0.4);
-  color: var(--arg-cream);
-  font: 600 14px var(--arg-body);
-  cursor: pointer;
-}
-.trigger:hover {
-  border-color: var(--arg-accent);
-}
 .atv-scrim {
   position: fixed;
   inset: 0;

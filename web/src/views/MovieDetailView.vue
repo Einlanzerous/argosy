@@ -2,11 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api/client'
-import BackButton from '@/components/BackButton.vue'
+import DetailScaffold from '@/components/DetailScaffold.vue'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import AddToVault from '@/components/AddToVault.vue'
-import { posterStyle } from '@/lib/poster'
 import { formatRuntime, formatClock } from '@/lib/format'
 import { getMovies, type MovieSummary } from '@/lib/manifest'
 import { getProgress, setWatched, type PlayState } from '@/lib/playback'
@@ -20,13 +19,6 @@ const movie = ref<MovieDetail | null>(null)
 const related = ref<MovieSummary[]>([])
 const progress = ref<PlayState | null>(null)
 const notFound = ref(false)
-
-// The full-screen hero prefers the landscape backdrop; the small poster tile
-// stays the portrait poster.
-const heroStyle = computed(() =>
-  posterStyle(movie.value?.backdropUrl ?? movie.value?.posterUrl, movie.value?.title ?? ''),
-)
-const posterTile = computed(() => posterStyle(movie.value?.posterUrl, movie.value?.title ?? ''))
 
 // In-progress when there's a saved, unfinished position — drives Resume + Start
 // over (and the progress bar) instead of a bare Play.
@@ -84,75 +76,69 @@ watch(
 </script>
 
 <template>
-  <div v-if="movie">
-    <section class="hero" :style="heroStyle">
-      <div class="arg-hatch hatch" />
-      <div class="shade" />
-      <BackButton class="hero-back" fallback="library" />
-      <div class="body">
-        <div class="poster" :style="posterTile">
-          <div class="poster-title">{{ movie.title }}</div>
-        </div>
-        <div class="info">
-          <h1>{{ movie.title }}</h1>
-          <div class="meta">
-            <span>{{ movie.year ?? '—' }}</span>
-            <span class="sep">•</span>
-            <span>{{ formatRuntime(movie.durationSeconds) }}</span>
-            <span v-if="movie.container" class="sep">•</span>
-            <span v-if="movie.container" class="badge">{{ movie.container.toUpperCase() }}</span>
-            <span class="sep">•</span>
-            <span class="kind">{{ movie.kind === 'movie' ? 'Film' : movie.kind }}</span>
-          </div>
-          <p v-if="movie.overview" class="synopsis">{{ movie.overview }}</p>
-          <p v-if="movie.cast?.length" class="cast">
-            <span class="cast-label">Cast</span>{{ movie.cast.join(', ') }}
-          </p>
-          <div v-if="movie.genres?.length" class="tags">
-            <span v-for="g in movie.genres ?? []" :key="`g-${g}`" class="tag">{{ g }}</span>
-          </div>
-          <div class="actions">
-            <template v-if="resumable">
-              <RouterLink
-                class="play"
-                :to="{ name: 'player', params: { id: movie.id }, query: { resume: '1' } }"
-              >
-                <span>▶</span> Resume
-              </RouterLink>
-              <RouterLink
-                class="ghost"
-                :to="{ name: 'player', params: { id: movie.id }, query: { start: '1' } }"
-              >
-                Start over
-              </RouterLink>
-            </template>
-            <RouterLink v-else class="play" :to="{ name: 'player', params: { id: movie.id } }">
-              <span>▶</span> Play
-            </RouterLink>
-            <AddToVault :movie-id="movie.id" />
-            <button
-              class="ghost mark"
-              :class="{ on: isWatched }"
-              type="button"
-              :disabled="marking"
-              @click="toggleWatched"
-            >
-              {{ isWatched ? '✓ Watched' : 'Mark watched' }}
-            </button>
-          </div>
-          <div v-if="resumable && progress" class="resume-bar">
-            <div class="track"><div class="fill" :style="{ width: `${percent}%` }" /></div>
-            <span
-              >{{ Math.round(percent) }}% · resume at
-              {{ formatClock(progress.positionSeconds) }}</span
-            >
-          </div>
-          <p v-if="movie.reviewRequired" class="review">
-            ⚑ Flagged for review — metadata may be incomplete.
-          </p>
-        </div>
+  <DetailScaffold
+    v-if="movie"
+    layout="poster"
+    :title="movie.title"
+    :backdrop-url="movie.backdropUrl"
+    :poster-url="movie.posterUrl"
+    :overview="movie.overview"
+    :cast="movie.cast"
+    :genres="movie.genres"
+    :min-height="726"
+    :min-height-narrow="456"
+  >
+    <template #meta>
+      <span>{{ movie.year ?? '—' }}</span>
+      <span class="sep">•</span>
+      <span>{{ formatRuntime(movie.durationSeconds) }}</span>
+      <span v-if="movie.container" class="sep">•</span>
+      <span v-if="movie.container" class="badge">{{ movie.container.toUpperCase() }}</span>
+      <span class="sep">•</span>
+      <span class="kind">{{ movie.kind === 'movie' ? 'Film' : movie.kind }}</span>
+    </template>
+
+    <template #actions>
+      <template v-if="resumable">
+        <RouterLink
+          class="arg-play"
+          :to="{ name: 'player', params: { id: movie.id }, query: { resume: '1' } }"
+        >
+          <span>▶</span> Resume
+        </RouterLink>
+        <RouterLink
+          class="arg-ghost"
+          :to="{ name: 'player', params: { id: movie.id }, query: { start: '1' } }"
+        >
+          Start over
+        </RouterLink>
+      </template>
+      <RouterLink v-else class="arg-play" :to="{ name: 'player', params: { id: movie.id } }">
+        <span>▶</span> Play
+      </RouterLink>
+      <AddToVault :movie-id="movie.id" />
+      <button
+        class="arg-ghost mark"
+        :class="{ on: isWatched }"
+        type="button"
+        :disabled="marking"
+        @click="toggleWatched"
+      >
+        {{ isWatched ? '✓ Watched' : 'Mark watched' }}
+      </button>
+    </template>
+
+    <template #extra>
+      <div v-if="resumable && progress" class="resume-bar">
+        <div class="track"><div class="fill" :style="{ width: `${percent}%` }" /></div>
+        <span
+          >{{ Math.round(percent) }}% · resume at {{ formatClock(progress.positionSeconds) }}</span
+        >
       </div>
-    </section>
+      <p v-if="movie.reviewRequired" class="review">
+        ⚑ Flagged for review — metadata may be incomplete.
+      </p>
+    </template>
 
     <PosterRail v-if="related.length" label="More like this">
       <PosterCard
@@ -168,181 +154,15 @@ watch(
         :to="{ name: 'movie', params: { id: r.id } }"
       />
     </PosterRail>
-  </div>
+  </DetailScaffold>
 
-  <div v-else-if="notFound" class="missing">That title isn't in the Manifest.</div>
+  <div v-else-if="notFound" class="arg-missing">That title isn't in the Manifest.</div>
 </template>
 
 <style scoped>
-.hero {
-  position: relative;
-  border-radius: var(--arg-r-xl);
-  overflow: hidden;
-  border: 1px solid var(--arg-line);
-  min-height: 726px; /* films run ~20% taller than the series hero (605px) */
-}
-.hatch {
-  position: absolute;
-  inset: 0;
-}
-.shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    0deg,
-    #171717 4%,
-    rgba(23, 23, 23, 0.5) 50%,
-    rgba(23, 23, 23, 0.15) 100%
-  );
-}
-/* Quadrant 1: top-left of the hero, aligned with the poster's left edge (the
-   hero body's 40px inset) so it sits above the art, left of the title. */
-.hero-back {
-  position: absolute;
-  top: 50px;
-  left: 40px;
-  z-index: 3;
-}
-.body {
-  position: relative;
-  padding: 48px 40px 36px;
-  display: flex;
-  gap: 30px;
-  align-items: flex-end;
-  min-height: 726px; /* films run ~20% taller than the series hero (605px) */
-}
-.poster {
-  flex: none;
-  width: 158px;
-  aspect-ratio: 2 / 3;
-  border-radius: 9px;
-  border: 1px solid var(--arg-line-2);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-  position: relative;
-  overflow: hidden;
-}
-.poster-title {
-  position: absolute;
-  left: 11px;
-  right: 11px;
-  bottom: 13px;
-  font: 800 15px/1.05 var(--arg-display);
-}
-.info {
-  flex: 1;
-}
-h1 {
-  margin: 0;
-  font: 800 40px/1.04 var(--arg-display);
-  letter-spacing: -0.02em;
-}
-.meta {
-  margin-top: 10px;
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  font: 600 13px var(--arg-body);
-  color: var(--arg-dim);
-}
-.sep {
-  opacity: 0.4;
-}
-.badge {
-  padding: 2px 7px;
-  border: 1px solid var(--arg-line-3);
-  border-radius: 5px;
-  font-size: 11px;
-}
-.kind {
-  color: var(--arg-accent);
-}
-.synopsis {
-  margin-top: 18px;
-  max-width: 620px;
-  font: 400 15px/1.65 var(--arg-body);
-  color: #c4c4bc;
-}
-.cast {
-  margin-top: 14px;
-  max-width: 620px;
-  font: 400 13.5px/1.6 var(--arg-body);
-  color: var(--arg-soft-2);
-}
-.cast-label {
-  margin-right: 10px;
-  font: 700 11px var(--arg-display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--arg-dim);
-}
-.tags {
-  margin-top: 16px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.tag {
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: rgba(234, 234, 229, 0.07);
-  font: 600 11.5px var(--arg-body);
-  color: #a8a89f;
-}
-.actions {
-  margin-top: 24px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-.play {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 14px 28px;
-  border: none;
-  border-radius: var(--arg-r);
-  background: var(--arg-accent);
-  color: var(--arg-bg);
-  font: 700 15px var(--arg-display);
-  cursor: pointer;
-}
-.play:hover {
-  background: var(--arg-accent-hi);
-}
-.ghost {
-  display: flex;
-  align-items: center;
-  padding: 14px 22px;
-  border: 1px solid var(--arg-line-2);
-  border-radius: var(--arg-r);
-  background: rgba(20, 20, 19, 0.4);
-  color: var(--arg-cream);
-  font: 600 14px var(--arg-body);
-  cursor: pointer;
-}
-.ghost:hover {
-  border-color: var(--arg-cream);
-}
-.ghost:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 .mark.on {
   border-color: rgba(201, 154, 78, 0.5);
   color: var(--arg-accent);
-}
-.vault {
-  width: 48px;
-  height: 48px;
-  border: 1px solid var(--arg-line-3);
-  border-radius: var(--arg-r);
-  background: rgba(20, 20, 19, 0.4);
-  color: var(--arg-cream);
-  font: 400 18px var(--arg-display);
-  cursor: pointer;
-}
-.vault:hover {
-  border-color: var(--arg-accent);
 }
 .resume-bar {
   margin-top: 16px;
@@ -373,18 +193,5 @@ h1 {
   margin-top: 16px;
   font: 500 12.5px var(--arg-body);
   color: var(--arg-accent-soft);
-}
-.missing {
-  padding: 80px 0;
-  text-align: center;
-  color: var(--arg-dim);
-  font: 500 15px var(--arg-body);
-}
-/* Keep the enlarged hero from dominating narrow viewports. */
-@media (max-width: 720px) {
-  .hero,
-  .body {
-    min-height: 456px; /* keep the ~20%-over-series ratio on narrow viewports (series 380px) */
-  }
 }
 </style>

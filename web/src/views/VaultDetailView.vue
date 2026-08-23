@@ -147,13 +147,13 @@ watch(vaultId, load)
         </div>
       </div>
 
-      <div v-else class="empty">
+      <div v-else class="arg-empty">
         <h2>This vault is empty</h2>
         <p>Open any film or series and use “Add to Vault” to start filling it.</p>
       </div>
     </template>
 
-    <div v-else-if="!loading" class="empty"><h2>Vault not found</h2></div>
+    <div v-else-if="!loading" class="arg-empty"><h2>Vault not found</h2></div>
   </div>
 </template>
 
@@ -251,17 +251,5 @@ h1 {
 .controls button.rm:hover {
   border-color: #b4513a;
   color: #e9836c;
-}
-.empty {
-  margin-top: 60px;
-  text-align: center;
-  color: var(--arg-dim);
-}
-.empty h2 {
-  font: 800 22px var(--arg-display);
-}
-.empty p {
-  margin-top: 8px;
-  font: 400 14px var(--arg-body);
 }
 </style>

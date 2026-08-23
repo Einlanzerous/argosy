@@ -226,9 +226,9 @@ watch(
     <div class="content">
       <header class="head">
         <div class="title-block">
-          <div class="eyebrow">The Manifest</div>
-          <h1>{{ libTitle }}</h1>
-          <div class="count">{{ cards.length }} titles in the hold</div>
+          <div class="arg-eyebrow">The Manifest</div>
+          <h1 class="arg-page-title">{{ libTitle }}</h1>
+          <div class="arg-count">{{ cards.length }} titles in the hold</div>
         </div>
       </header>
 
@@ -419,22 +419,6 @@ watch(
 }
 .title-block {
   flex: none;
-}
-.eyebrow {
-  font: 700 11px var(--arg-display);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--arg-accent);
-}
-h1 {
-  margin: 10px 0 0;
-  font: 800 clamp(30px, 3.4vw, 40px) var(--arg-display);
-  letter-spacing: -0.02em;
-}
-.count {
-  margin-top: 4px;
-  font: 500 13px var(--arg-body);
-  color: var(--arg-dim);
 }
 .controls {
   margin-top: 22px;
