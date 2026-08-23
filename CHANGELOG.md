@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.26.0](https://github.com/Einlanzerous/argosy/compare/v0.25.1...v0.26.0) (2026-08-23)
+
+
+### Features
+
+* **auth:** id-keyed admin revoke + purge so Purser can offboard (ARGY-187) ([#214](https://github.com/Einlanzerous/argosy/issues/214)) ([6c32dda](https://github.com/Einlanzerous/argosy/commit/6c32dda2e4e649aa2a79efb719387c197c471c26))
+* **health:** make /healthz speak the build-identity contract (ARGY-213) ([#221](https://github.com/Einlanzerous/argosy/issues/221)) ([fcc2717](https://github.com/Einlanzerous/argosy/commit/fcc2717884676cfaac41aab204602aa527bb7556))
+
+
+### Bug Fixes
+
+* **auth:** pay bcrypt's cost on an unknown email too (ARGY-195) ([#213](https://github.com/Einlanzerous/argosy/issues/213)) ([aac5343](https://github.com/Einlanzerous/argosy/commit/aac53438758c4d12438b499a2ac53c09d5cbf9b0))
+* **auth:** stop the lifecycle guard test claiming an id another package owns (ARGY-211) ([#218](https://github.com/Einlanzerous/argosy/issues/218)) ([43f9de0](https://github.com/Einlanzerous/argosy/commit/43f9de0252e7faf438312af607b87b60c5d307fd))
+* **ci:** publish semver image tags from the release run (SERV-125) ([#219](https://github.com/Einlanzerous/argosy/issues/219)) ([e32032a](https://github.com/Einlanzerous/argosy/commit/e32032af8c80328c53356aedba99700d323abe43))
+* **ci:** trigger review on reopen, since a conflicting PR never fires opened (ARGY-186) ([#217](https://github.com/Einlanzerous/argosy/issues/217)) ([9604e9e](https://github.com/Einlanzerous/argosy/commit/9604e9e44a1f201823bf9e5cd5d03fa7fe9208ba))
+* **server:** drain Beacon streams on shutdown (ARGY-194) ([#216](https://github.com/Einlanzerous/argosy/issues/216)) ([8ca3e31](https://github.com/Einlanzerous/argosy/commit/8ca3e31ddeff406d39a14b7c89d7ea7a1f6df431))
+
 ## [0.25.1](https://github.com/Einlanzerous/argosy/compare/v0.25.0...v0.25.1) (2026-08-17)
 
 
