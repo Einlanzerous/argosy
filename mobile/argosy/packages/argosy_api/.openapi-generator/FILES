@@ -36,6 +36,7 @@ lib/model/device_switch_request.dart
 lib/model/episode_summary.dart
 lib/model/error.dart
 lib/model/facet.dart
+lib/model/health_response.dart
 lib/model/link_approve_request.dart
 lib/model/link_start_request.dart
 lib/model/link_start_response.dart

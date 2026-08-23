@@ -16,7 +16,9 @@ class SystemApi {
 
   final ApiClient apiClient;
 
-  /// Liveness/readiness probe
+  /// Readiness probe and build identity
+  ///
+  /// Returns 200 when the database is reachable and 503 when it is not. The body shape is IDENTICAL on both paths: a degraded service is still running a version, and it is the one most worth identifying, so `version` and `sha` must be readable from the 503 branch too. `version` is bare semver or the literal `dev`; `sha` is null when the build supplied none. Neither is ever inferred.
   ///
   /// Note: This method returns the HTTP [Response].
   Future<Response> getHealthWithHttpInfo({ Future<void>? abortTrigger, }) async {
@@ -45,8 +47,10 @@ class SystemApi {
     );
   }
 
-  /// Liveness/readiness probe
-  Future<String?> getHealth({ Future<void>? abortTrigger, }) async {
+  /// Readiness probe and build identity
+  ///
+  /// Returns 200 when the database is reachable and 503 when it is not. The body shape is IDENTICAL on both paths: a degraded service is still running a version, and it is the one most worth identifying, so `version` and `sha` must be readable from the 503 branch too. `version` is bare semver or the literal `dev`; `sha` is null when the build supplied none. Neither is ever inferred.
+  Future<HealthResponse?> getHealth({ Future<void>? abortTrigger, }) async {
     final response = await getHealthWithHttpInfo(abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -55,7 +59,7 @@ class SystemApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'String',) as String;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'HealthResponse',) as HealthResponse;
     
     }
     return null;

@@ -225,6 +225,8 @@ class ApiClient {
           return Error.fromJson(value);
         case 'Facet':
           return Facet.fromJson(value);
+        case 'HealthResponse':
+          return HealthResponse.fromJson(value);
         case 'LinkApproveRequest':
           return LinkApproveRequest.fromJson(value);
         case 'LinkStartRequest':

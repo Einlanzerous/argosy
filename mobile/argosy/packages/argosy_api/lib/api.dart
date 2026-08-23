@@ -55,6 +55,7 @@ part 'model/device_switch_request.dart';
 part 'model/episode_summary.dart';
 part 'model/error.dart';
 part 'model/facet.dart';
+part 'model/health_response.dart';
 part 'model/link_approve_request.dart';
 part 'model/link_start_request.dart';
 part 'model/link_start_response.dart';
