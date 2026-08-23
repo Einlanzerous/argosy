@@ -4,35 +4,36 @@ name: publish
 # binary + ffmpeg/QSV runtime) and pushes it to GHCR. construct-server pins this
 # image in versions.env.
 #
-# THREE ENTRYPOINTS, and only two of them publish semver tags:
+# FOUR ENTRYPOINTS, and the semver tags come from three of them:
 #
 #   push to main      :latest and sha-<short>. No semver — main is not a release.
 #   workflow_call     the semver tags, called by release-please.yml in the same
 #                     run that cut the release. This is the real release path.
-#   workflow_dispatch re-publish an existing tag by hand. Run it against a tag
-#                     ref and the version is read from the ref.
+#   workflow_dispatch pass a `tag` to publish that release's image; leave it empty
+#                     to rebuild the dispatched branch.
+#   push of a v* tag  a tag pushed by a HUMAN, which does create events.
 #
-# WHY THERE IS NO `on: push: tags` ANY MORE (SERV-125). There was, and the
-# comment above it claimed "release-please tags (v*) publish the semver tags".
-# That never happened once — every run of this workflow, as far back as the
-# listing went, was `event=push, branch=main`, and no semver tag has ever
-# existed for this image. release-please cuts the tag using GITHUB_TOKEN, and
-# GitHub deliberately does not create workflow runs from events authored by that
-# token. So the tag landed and nothing fired, silently, through v0.25.1.
+# WHY THE RELEASE PATH IS A CALL (SERV-125). `on: push: tags` was the only route
+# to the semver tags, and the comment above it claimed release-please supplied
+# them. It never fired once — every run of this workflow, as far back as the
+# listing went, was `event=push, branch=main`, and no semver tag has ever existed
+# for this image. release-please cuts the tag using GITHUB_TOKEN, and GitHub
+# deliberately creates no workflow runs from events that token authored. So the
+# tag landed and nothing happened, silently, through v0.25.1.
 #
 # The consequence was downstream: construct-server pins first-party images by
 # major.minor so patch releases flow in on a pull, and with no semver image this
-# one had to be pinned to a sha instead — no patch float, and a rollback history
+# one had to be pinned by sha instead — no patch float, and a rollback history
 # that reads as a list of hashes.
 #
-# mobile-release.yml already worked around exactly this, and says so in its own
-# header. The fix here is the same one: be CALLED from release-please.yml in the
-# push-to-main run that cut the tag, rather than waiting for a tag event that
-# cannot arrive. A trigger that depends on nothing is worth more than a trigger
-# that is merely usually true.
+# The tag trigger is KEPT rather than deleted, for the same reason
+# mobile-release.yml keeps its own: it is dead only for bot-pushed tags, and a
+# human pushing `v*` with their own credentials does create an event. What it
+# cannot be is the *release* path, because the release tag is always the bot's.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_call:
     inputs:
       tag:
@@ -45,6 +46,20 @@ on:
         default: false
         type: boolean
   workflow_dispatch:
+    inputs:
+      tag:
+        # A DISPATCH INPUT, not a dispatched tag ref, and the difference is the
+        # whole point. `workflow_dispatch` reads the workflow definition from the
+        # ref you dispatch — so dispatching this file at `v0.25.1` runs the copy
+        # of it that existed at v0.25.1, which has no dispatch trigger at all and
+        # answers `422 Workflow does not have 'workflow_dispatch' trigger`. Every
+        # tag cut before this landed is in that state, which is exactly the set a
+        # back-publish is for. Taking the tag as an input runs THIS file, from
+        # main, against an old tag. mobile-release.yml already does it this way.
+        description: "Release tag to publish (e.g. v0.25.1). Empty rebuilds the dispatched branch."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -54,14 +69,10 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve the release version
-        # Empty on an ordinary main push, and that emptiness is the signal that
-        # this build gets :latest and sha-<short> and no semver tags.
-        #
-        # `github.ref_type` covers the dispatch case: run this workflow against a
-        # tag ref and the version comes from the ref itself, so there is no
-        # second input that can disagree with the ref being built. That is what
-        # back-publishes a release cut before this file was fixed.
+      - name: Resolve the version and the commit to build
+        # SEMVER empty is the signal that this build gets :latest and sha-<short>
+        # and no semver tags. BUILD_REF is what gets checked out, so a
+        # back-publish builds the tagged commit and not main's tip.
         #
         # Inputs reach the shell through env rather than being interpolated into
         # the script body — a `run:` block that pastes ${{ }} inline executes
@@ -71,16 +82,17 @@ jobs:
           CALLED_TAG: ${{ inputs.tag }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
           # A tag that reads back empty must be an ERROR here, not a fallback.
           # Without this, a broken `tag_name` output would land in the `else`
-          # branch above, publish :latest and sha-<short>, and go green having
-          # published no semver tag at all — which is precisely the silent
-          # failure this workflow was fixed for, rebuilt out of new parts.
-          # argosy has already been bitten by the sibling case once, reading
-          # `.--tag_name` on a root component and getting an empty string.
+          # branch below, publish :latest and sha-<short>, and go green having
+          # published no semver tag at all — precisely the silent failure this
+          # workflow was fixed for, rebuilt out of new parts. argosy has already
+          # been bitten by the sibling case once, reading `.--tag_name` on a root
+          # component and getting an empty string.
           if [ "${FROM_RELEASE:-false}" = "true" ] && [ -z "${CALLED_TAG:-}" ]; then
             echo "Error: called from the release run, but the tag is empty."
             echo "release-please's tag_name output read back empty. Refusing to"
@@ -89,39 +101,47 @@ jobs:
           fi
 
           if [ -n "${CALLED_TAG:-}" ]; then
-            version="${CALLED_TAG#v}"
-            source="workflow_call (tag $CALLED_TAG)"
+            version="${CALLED_TAG#v}"; build_ref="$CALLED_TAG"
+            source="tag input ($CALLED_TAG)"
           elif [ "$REF_TYPE" = tag ]; then
-            version="${REF_NAME#v}"
-            source="dispatched at tag $REF_NAME"
+            version="${REF_NAME#v}"; build_ref="$SHA"
+            source="pushed tag $REF_NAME"
           else
-            version=""
+            version=""; build_ref="$SHA"
             source="branch build — no semver tags"
           fi
 
           # A malformed version must not reach the tag list. docker/metadata-action
           # skips a value it cannot parse with a warning, so the build would go
-          # green having published no semver tag at all — which is the exact
-          # failure this workflow is being fixed for, arriving by a new route.
+          # green having published no semver tag — the same silent-green failure
+          # arriving by a new route.
           if [ -n "$version" ] && ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
             echo "Error: '$version' is not a semver, so no semver image tag would be published."
-            echo "Dispatch this workflow against a v* tag ref, or call it with a v* tag."
             exit 1
           fi
 
-          echo "SEMVER=$version" >> "$GITHUB_ENV"
+          {
+            echo "SEMVER=$version"
+            echo "BUILD_REF=$build_ref"
+          } >> "$GITHUB_ENV"
           echo "Version source: $source"
           echo "Semver tags: ${version:-<none>}"
+          echo "Building: $build_ref"
 
       - uses: actions/checkout@v4
         with:
-          # Build the commit the sha- tag and the revision label claim. On a push
-          # these already agree; on a dispatch `github.sha` is the ref resolved
-          # when the run started, so pinning to it keeps the image, its tag and
-          # its label describing one commit. A revision that can be wrong is
-          # worse than none — construct-server compares revisions rather than
-          # digests precisely because digests lie (SERV-88).
-          ref: ${{ github.sha }}
+          ref: ${{ env.BUILD_REF }}
+
+      - name: Record the commit actually built
+        # `github.sha` is the workflow's ref, which on a back-publish is main's
+        # tip and NOT the tag being built. metadata-action derives
+        # org.opencontainers.image.revision from it, so left alone the image
+        # would be stamped with a commit it does not contain. construct-server
+        # compares that label rather than the digest precisely because digests
+        # lie (SERV-88); a revision that lies too would take the last honest
+        # answer away.
+        run: echo "REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -132,29 +152,38 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/einlanzerous/argosy
-          # `value=` is required rather than optional here: this workflow now runs
-          # in the context of a push to main even when it is publishing a release,
-          # so there is no tag ref for type=semver to parse. Left to its default it
-          # would find `refs/heads/main`, fail to read a version out of it, and
-          # publish nothing — silently, which is how this file got into this state.
+
+          # `latest=false` is load-bearing, not tidying. The default is
+          # `latest=auto`, which emits :latest by ITSELF whenever a type=semver
+          # entry produces a non-prerelease version — independently of the
+          # type=raw entry below being disabled. That would put :latest on every
+          # release build, and worse, on a back-publish: re-publishing an older
+          # release would silently walk :latest backwards onto older code with no
+          # versions.env change to show for it. With this off, the type=raw line
+          # is the sole and fully-stated policy for that tag.
+          flavor: latest=false
+
+          # `value=` is required rather than optional: the release build runs in
+          # a push-to-main context, so there is no tag ref for type=semver to
+          # parse. Left to its default it would find `refs/heads/main`, fail to
+          # read a version out of it, and publish nothing — silently, which is
+          # how this file got into this state.
           #
-          # The two halves are mutually exclusive on purpose: a RELEASE build
-          # publishes the semver tags and nothing else, an ordinary main push
-          # publishes :latest and sha-<short> and nothing else. Both fire for a
-          # release — the release-please merge commit is itself a push to main, so
-          # the push run and the run called from release-please.yml build the same
-          # commit seconds apart. Splitting the tag sets means they never race to
-          # write the same tag, and the one that ends up on :latest is not decided
-          # by which build finished first.
-          #
-          # `github.ref` rather than the {{is_default_branch}} template because
-          # this has to combine with SEMVER, and the two are evaluated by different
-          # things — ${{ }} by GitHub before the action starts, {{ }} by the action.
+          # The two halves are mutually exclusive: a RELEASE build publishes the
+          # semver tags and nothing else, an ordinary main push publishes :latest
+          # and sha-<short> and nothing else. Both fire for a release — the
+          # release-please merge commit is itself a push to main — so splitting
+          # the tag sets means they never race to write the same tag, and which
+          # build finished first does not decide what :latest points at.
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.SEMVER == '' }}
             type=sha,format=short,enable=${{ env.SEMVER == '' }}
             type=semver,pattern={{version}},value=${{ env.SEMVER }},enable=${{ env.SEMVER != '' }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.SEMVER }},enable=${{ env.SEMVER != '' }}
+
+          # Custom labels override the generated ones of the same key.
+          labels: |
+            org.opencontainers.image.revision=${{ env.REVISION }}
       - uses: docker/build-push-action@v6
         with:
           context: .
