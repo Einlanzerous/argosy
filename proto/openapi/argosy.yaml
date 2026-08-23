@@ -19,18 +19,29 @@ paths:
     get:
       tags: [system]
       operationId: getHealth
-      summary: Liveness/readiness probe
+      summary: Readiness probe and build identity
+      description: >-
+        Returns 200 when the database is reachable and 503 when it is not.
+        The body shape is IDENTICAL on both paths: a degraded service is still
+        running a version, and it is the one most worth identifying, so
+        `version` and `sha` must be readable from the 503 branch too.
+        `version` is bare semver or the literal `dev`; `sha` is null when the
+        build supplied none. Neither is ever inferred.
       security: []
       responses:
         "200":
-          description: Service is healthy
+          description: The database is reachable
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: ok
+                $ref: "#/components/schemas/HealthResponse"
         "503":
-          description: A dependency (e.g. the database) is unavailable
+          description: >-
+            A dependency (the database) is unavailable. Identical body shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
 
   /api/v1/ping:
     get:
@@ -2071,6 +2082,38 @@ components:
         selected:
           type: string
           description: The encoder chosen by the configured preference order.
+
+    # The /healthz body — the SWY-192 build-identity contract that Switchyard's
+    # delivery reconciler reads to record what is actually running (ARGY-213).
+    #
+    # `status` is "ok" on the 200 and "degraded" on the 503; the other two are
+    # present and identical on both, which is the point of the contract. A
+    # service whose database has just gone away is exactly the one whose build
+    # you want named.
+    HealthResponse:
+      type: object
+      required: [status, version, sha]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+        version:
+          description: >-
+            Bare semver, or the literal "dev" for a build no release cut. Never
+            carries a "v" prefix: it is compared with strict equality against
+            the image's org.opencontainers.image.version label, which is
+            stamped bare, and a prefix would never match.
+          type: string
+          example: 0.25.1
+        sha:
+          description: >-
+            The full 40-character commit, or null when the build supplied none.
+            Never abbreviated — the cross-service comparison is an equality
+            test, not a prefix match.
+          type: string
+          nullable: true
+          example: 5611a6c78a11e5f04a1c087c8cb9c2c138a3e8d5
 
     PingResponse:
       type: object

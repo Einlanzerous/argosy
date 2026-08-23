@@ -76,20 +76,53 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 	return srv, nil
 }
 
-// healthHandler reports readiness. When a database is configured, it pings it
-// and returns 503 if it's unreachable.
+// healthResponse is the body of `GET /healthz`, identical on the 200 and the
+// 503 path.
+//
+// ── Why this stopped being text/plain (ARGY-213) ───────────────────────────
+//
+// Switchyard's delivery reconciler polls this endpoint and records what is
+// actually running — the observed half of the estate's delivery ledger (SWY-192
+// defines the contract; SERV-128 owns the rollout). It answered `ok` as
+// text/plain, which the reconciler reads as "answered, reports no version": not
+// a failure, but nothing it can record either. Its health-contract.ts names
+// argosy explicitly as the reference case for that state.
+//
+// The identity rides BOTH branches, and argosy is the estate's clearest example
+// of why the contract insists on that. This endpoint really does go 503 when
+// Postgres is unreachable, and that is precisely the moment someone wants to
+// know which build is running. /api/v1/ping has no 503 path at all, so pointing
+// the ledger there instead — the cheaper option — would have reported a green
+// identity for a service whose database was down.
+//
+//	version  bare semver ("0.25.1") or the literal "dev". Never a "v" prefix —
+//	         compared with strict equality against the image's
+//	         org.opencontainers.image.version label, which is stamped bare.
+//	sha      the full 40-char commit, or JSON null. Never abbreviated.
+type healthResponse struct {
+	Status  string  `json:"status"`
+	Version string  `json:"version"`
+	SHA     *string `json:"sha"`
+}
+
+// healthHandler reports readiness and build identity. When a database is
+// configured, it pings it and returns 503 if it's unreachable — with the same
+// body shape, so the version stays readable on the failing path.
 func healthHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		id := version.Get()
+		body := healthResponse{Status: "ok", Version: id.Version, SHA: id.SHA}
+
 		if pool != nil {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 			defer cancel()
 			if err := pool.Ping(ctx); err != nil {
-				http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+				body.Status = "degraded"
+				httpx.JSON(w, http.StatusServiceUnavailable, body)
 				return
 			}
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+		httpx.JSON(w, http.StatusOK, body)
 	}
 }
 
@@ -97,6 +130,6 @@ func handlePing(w http.ResponseWriter, _ *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{
 		"service": "argosy",
 		"status":  "ok",
-		"version": version.Version,
+		"version": version.Get().Version,
 	})
 }

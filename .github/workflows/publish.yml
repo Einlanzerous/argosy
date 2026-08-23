@@ -191,7 +191,25 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Build identity for /healthz (ARGY-213) — see deploy/Dockerfile.
+          #
+          # VERSION is passed ONLY on a tag build. On a push to main
+          # `steps.meta.outputs.version` is the literal `latest`, which names a
+          # moving target rather than a build — /api/v1/ping has been reporting
+          # that string. Storing it as an identity would have it compared
+          # against the image label and disagree for ever. Blank instead, which
+          # `internal/version` maps to "dev".
+          #
+          # On a tag build metadata-action's `version` output is already the
+          # BARE semver (`0.25.1`), matching the image label character for
+          # character. That agreement is the whole point: the reconciler
+          # observes this string and the deploy reporter reports the label, and
+          # the matrix compares the two as identities.
+          #
+          # GIT_SHA rides both paths. A main build has a real commit and should
+          # say so; it just has no release to name.
           build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
+            VERSION=${{ github.ref_type == 'tag' && steps.meta.outputs.version || '' }}
+            GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
