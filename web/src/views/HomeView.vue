@@ -230,8 +230,8 @@ onUnmounted(() => {
   <div>
     <section v-if="hero" class="hero">
       <div class="hero-art" :style="heroStyle" />
-      <div class="shade-l" />
-      <div class="shade-b" />
+      <div class="arg-hero-shade-l" />
+      <div class="arg-hero-shade-b" />
       <div class="hero-body">
         <div class="eyebrow"><span>⇄</span> {{ hero.eyebrow }}</div>
         <div v-if="hero.device" class="dev-pill">⇄ Left off on {{ hero.device.name }}</div>
@@ -405,23 +405,6 @@ onUnmounted(() => {
 .hero-art {
   position: absolute;
   inset: 0;
-}
-.shade-l {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    rgba(20, 20, 19, 0.95) 0%,
-    rgba(20, 20, 19, 0.6) 44%,
-    rgba(20, 20, 19, 0) 78%
-  );
-}
-.shade-b {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(0deg, #171717 2%, rgba(23, 23, 23, 0.5) 26%, rgba(23, 23, 23, 0) 60%);
 }
 .hero-body {
   position: relative;

@@ -152,10 +152,35 @@ select {
   cursor: default;
 }
 
+/* The full-bleed hero's scrims (ARGY-214). Backdrops are photographs, so the
+   text over them needs its own contrast: .arg-hero-shade-l darkens the left,
+   where the copy sits, and .arg-hero-shade-b fades the bottom into the page so
+   the art ends on the divider rather than a hard edge. Global because Home and
+   the detail hero draw the same treatment and must not drift apart. */
+.arg-hero-shade-l,
+.arg-hero-shade-b {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.arg-hero-shade-l {
+  background: linear-gradient(
+    90deg,
+    rgba(20, 20, 19, 0.95) 0%,
+    rgba(20, 20, 19, 0.6) 44%,
+    rgba(20, 20, 19, 0) 78%
+  );
+}
+.arg-hero-shade-b {
+  background: linear-gradient(0deg, #171717 2%, rgba(23, 23, 23, 0.5) 26%, rgba(23, 23, 23, 0) 60%);
+}
+
 /* "Nothing here" copy: .arg-missing for a whole page that resolved to nothing,
-   .arg-empty for a populated page whose list happens to be empty. */
+   .arg-empty for a populated page whose list happens to be empty. Its top
+   padding clears the floating bar, since both callers are full-bleed pages
+   with no container padding of their own. */
 .arg-missing {
-  padding: 80px 0;
+  padding: 160px 40px 80px;
   text-align: center;
   color: var(--arg-dim);
   font: 500 15px var(--arg-body);

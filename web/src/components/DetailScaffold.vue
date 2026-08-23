@@ -3,149 +3,103 @@ import { computed } from 'vue'
 import BackButton from '@/components/BackButton.vue'
 import { posterStyle } from '@/lib/poster'
 
-// The shared anatomy of a detail page (ARGY-111): a backdrop hero carrying the
-// back button, an optional poster tile, the title / meta / synopsis / cast
-// column, and the action row — with the type-specific bits (a film's playback
-// controls, a series' seasons and episodes) supplied through slots. Movie and
-// Series detail had each hand-rolled this scaffold and the copies had drifted
-// apart in a dozen small ways, which is what this component exists to stop.
+// The shared anatomy of a detail page (ARGY-111), drawn as the app's full-bleed
+// hero (ARGY-214): the backdrop runs edge to edge beneath the floating bar,
+// scrims carry the text, and the art fades into the divider that separates the
+// hero from whatever the caller puts below it. The type-specific parts — a
+// film's playback controls, a series' seasons and episodes — arrive as slots.
 const props = withDefaults(
   defineProps<{
     title: string
     /** Hero art. Prefers the landscape backdrop, falling back to the poster. */
     backdropUrl?: string | null
-    /** Art for the poster tile, and the hero's fallback backdrop. Supplying it
-        does not by itself draw the tile — see `layout`. */
+    /** Only the hero's fallback art now; the portrait tile it used to fill was
+        dropped in ARGY-214 — it duplicated the backdrop behind it. */
     posterUrl?: string | null
-    /** 'poster' sets the portrait tile beside the text column; 'stacked' (the
-        default) runs the text column alone across the hero. A film with no
-        cached artwork still wants the tile, holding its gradient placeholder,
-        so the layout is an explicit choice rather than inferred from posterUrl. */
-    layout?: 'poster' | 'stacked'
     overview?: string | null
     cast?: string[] | null
     genres?: string[] | null
     /** Where the back button lands on a cold/deep load with no history. */
     backFallback?: string
-    /** Hero height. Films deliberately run ~20% taller than the series hero. */
-    minHeight?: number
-    /** Hero height under the 720px breakpoint, where the full one dominates. */
-    minHeightNarrow?: number
   }>(),
   {
     backdropUrl: null,
     posterUrl: null,
-    layout: 'stacked',
     overview: null,
     cast: null,
     genres: null,
     backFallback: 'library',
-    minHeight: 605,
-    minHeightNarrow: 380,
   },
 )
 
-// The heights ride in as custom properties rather than plain inline styles so
-// the narrow-viewport media query can still override them (inline always wins).
-const heroStyle = computed(() => ({
-  ...posterStyle(props.backdropUrl ?? props.posterUrl, props.title),
-  '--hero-min': `${props.minHeight}px`,
-  '--hero-min-narrow': `${props.minHeightNarrow}px`,
-}))
-const posterTile = computed(() => posterStyle(props.posterUrl, props.title))
+const heroStyle = computed(() => posterStyle(props.backdropUrl ?? props.posterUrl, props.title))
 </script>
 
 <template>
   <div>
     <section class="hero" :style="heroStyle">
       <div class="arg-hatch hatch" />
-      <div class="shade" />
+      <div class="arg-hero-shade-l" />
+      <div class="arg-hero-shade-b" />
       <BackButton class="hero-back" :fallback="backFallback" />
       <div class="body">
-        <div v-if="layout === 'poster'" class="poster" :style="posterTile">
-          <div class="poster-title">{{ title }}</div>
+        <h1>{{ title }}</h1>
+        <div class="meta"><slot name="meta" /></div>
+        <p v-if="overview" class="synopsis">{{ overview }}</p>
+        <p v-if="cast?.length" class="cast">
+          <span class="cast-label">Cast</span>{{ cast.join(', ') }}
+        </p>
+        <div v-if="genres?.length" class="tags">
+          <span v-for="g in genres" :key="`g-${g}`" class="tag">{{ g }}</span>
         </div>
-        <div class="info">
-          <h1>{{ title }}</h1>
-          <div class="meta"><slot name="meta" /></div>
-          <p v-if="overview" class="synopsis">{{ overview }}</p>
-          <p v-if="cast?.length" class="cast">
-            <span class="cast-label">Cast</span>{{ cast.join(', ') }}
-          </p>
-          <div v-if="genres?.length" class="tags">
-            <span v-for="g in genres" :key="`g-${g}`" class="tag">{{ g }}</span>
-          </div>
-          <div class="actions"><slot name="actions" /></div>
-          <!-- Anything that hangs below the buttons: a resume bar, a review flag. -->
-          <slot name="extra" />
-        </div>
+        <div class="actions"><slot name="actions" /></div>
+        <!-- Anything that hangs below the buttons: a resume bar, a review flag. -->
+        <slot name="extra" />
       </div>
     </section>
 
-    <!-- Everything under the hero: a related rail, season tabs and episodes. -->
-    <slot />
+    <!-- Everything under the hero: a related rail, season tabs and episodes.
+         The route is full-bleed, so the page's side padding lives here. -->
+    <div class="below"><slot /></div>
   </div>
 </template>
 
 <style scoped>
 .hero {
   position: relative;
-  border-radius: var(--arg-r-xl);
+  /* Viewport-relative so the showcase keeps its proportion on a phone and on
+     the TV, rather than being a pixel height tuned to one desktop. 86vh lands
+     near the intended ~35% over the old fixed 605px on a 1080p display (whose
+     browser viewport is ~950px, not 1080), while staying under a full screen
+     so the divider below stays in view and shows there is more to scroll to. */
+  min-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   overflow: hidden;
-  border: 1px solid var(--arg-line);
-  min-height: var(--hero-min);
+  /* The line the art fades down onto, splitting hero from content below. */
+  border-bottom: 1px solid var(--arg-line);
 }
 .hatch {
   position: absolute;
   inset: 0;
 }
-.shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    0deg,
-    #171717 4%,
-    rgba(23, 23, 23, 0.5) 50%,
-    rgba(23, 23, 23, 0.15) 100%
-  );
-}
-/* Quadrant 1: top-left of the hero, aligned with the body's 40px inset so it
-   sits above the art, left of the title. */
+/* Clear of the floating bar (fixed, ~84px tall) now that the hero starts at the
+   top of the viewport instead of below the shell's padding. */
 .hero-back {
   position: absolute;
-  top: 50px;
+  top: 96px;
   left: 40px;
   z-index: 3;
 }
 .body {
   position: relative;
-  /* The top padding reserves room for the back button (top:50 + 40h) so the
-     title always clears it when tall content outgrows the hero's min-height. */
-  padding: 104px 40px 36px;
-  min-height: var(--hero-min);
-  display: flex;
-  gap: 30px;
-  align-items: flex-end;
-}
-.poster {
-  flex: none;
-  width: 158px;
-  aspect-ratio: 2 / 3;
-  border-radius: 9px;
-  border: 1px solid var(--arg-line-2);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-  position: relative;
-  overflow: hidden;
-}
-.poster-title {
-  position: absolute;
-  left: 11px;
-  right: 11px;
-  bottom: 13px;
-  font: 800 15px/1.05 var(--arg-display);
-}
-.info {
-  flex: 1;
+  z-index: 2;
+  /* Top padding keeps the title clear of the back button when long copy
+     outgrows the hero; the column is bottom-aligned until then. */
+  padding: 136px 40px 64px;
+  /* Holds the copy inside the left scrim, where it stays legible. */
+  max-width: 760px;
 }
 h1 {
   margin: 0;
@@ -175,10 +129,7 @@ h1 {
   color: var(--arg-accent);
 }
 /* These two are <p>, so they carry a UA margin-bottom. Zeroing it makes every
-   gap in this column come from one explicit margin-top: the old markup had the
-   film's paragraphs collapsing against their neighbour and the series' not
-   (they were flex items, which never collapse), so the same rules spaced the
-   two pages differently. */
+   gap in this column come from one explicit margin-top. */
 .synopsis {
   margin: 18px 0 0;
   max-width: 620px;
@@ -218,11 +169,7 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
 }
-/* Keep the hero from dominating narrow viewports. */
-@media (max-width: 720px) {
-  .hero,
-  .body {
-    min-height: var(--hero-min-narrow);
-  }
+.below {
+  padding: 0 40px 90px;
 }
 </style>
