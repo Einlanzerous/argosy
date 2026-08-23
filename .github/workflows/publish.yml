@@ -115,7 +115,7 @@ jobs:
           # skips a value it cannot parse with a warning, so the build would go
           # green having published no semver tag — the same silent-green failure
           # arriving by a new route.
-          if [ -n "$version" ] && ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+          if [ -n "$version" ] && ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Error: '$version' is not a semver, so no semver image tag would be published."
             exit 1
           fi
