@@ -39,6 +39,11 @@ on:
         description: "Release tag to publish (e.g. v0.25.1)"
         required: true
         type: string
+      from_release:
+        description: "Set by release-please.yml. Makes an empty tag a hard failure rather than a silent no-semver build."
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
 
 permissions:
@@ -62,11 +67,27 @@ jobs:
         # the script body — a `run:` block that pastes ${{ }} inline executes
         # whatever it contains.
         env:
+          FROM_RELEASE: ${{ inputs.from_release }}
           CALLED_TAG: ${{ inputs.tag }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
         run: |
           set -euo pipefail
+
+          # A tag that reads back empty must be an ERROR here, not a fallback.
+          # Without this, a broken `tag_name` output would land in the `else`
+          # branch above, publish :latest and sha-<short>, and go green having
+          # published no semver tag at all — which is precisely the silent
+          # failure this workflow was fixed for, rebuilt out of new parts.
+          # argosy has already been bitten by the sibling case once, reading
+          # `.--tag_name` on a root component and getting an empty string.
+          if [ "${FROM_RELEASE:-false}" = "true" ] && [ -z "${CALLED_TAG:-}" ]; then
+            echo "Error: called from the release run, but the tag is empty."
+            echo "release-please's tag_name output read back empty. Refusing to"
+            echo "publish an unversioned image from a release run."
+            exit 1
+          fi
+
           if [ -n "${CALLED_TAG:-}" ]; then
             version="${CALLED_TAG#v}"
             source="workflow_call (tag $CALLED_TAG)"
