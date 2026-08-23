@@ -36,3 +36,26 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
     secrets: inherit
+
+  # Same reason as mobile-release above, for the GHCR image (SERV-125). publish.yml
+  # runs on every push to main for :latest and sha-<short>, but its semver tags need
+  # a release, and the `on: push: tags` trigger that was supposed to supply one had
+  # never fired in the repo's history — GITHUB_TOKEN-authored tags create no events.
+  # So no versioned image had ever been published, and construct-server had to pin
+  # this service by sha instead of by major.minor.
+  publish:
+    needs: release-please
+    # `!= 'false'` rather than `== 'true'`, deliberately. release-please answers
+    # exactly one of those two on a healthy run, so the third case — an output
+    # that reads back EMPTY because it was renamed or wrongly prefixed — is a
+    # real possibility, and under `== 'true'` it skips this job on every push
+    # without a word. That is the same silent-skip shape as the bug being fixed.
+    # This way a broken output runs the job and fails it loudly instead.
+    if: needs.release-please.outputs.releases_created != 'false'
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+      from_release: true
+    permissions:
+      contents: read
+      packages: write
