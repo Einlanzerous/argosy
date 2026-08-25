@@ -162,7 +162,7 @@ func buildRemuxArgs(spec Spec) []string {
 	} else {
 		args = append(args, "-c:a", "copy")
 	}
-	if multiAudio(spec) {
+	if multiAudio(spec) || needsCodecDeclaration(spec) {
 		// One video variant sharing the audio group across every rendition. A
 		// copied video stream has no encoder bitrate, so ffmpeg can't compute the
 		// master playlist's BANDWIDTH and omits the video EXT-X-STREAM-INF
@@ -199,7 +199,12 @@ func buildSingleTranscodeArgs(spec Spec, enc videoEncoder, codec string, r rung)
 	args = append(args, enc.videoCodec(codec)...)
 	args = append(args, enc.rateControl(-1, r)...)
 	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
-	if multiAudio(spec) {
+	// An HEVC output needs its codec declared for the same reason a copy does
+	// (see needsCodecDeclaration). planPlayback only picks HEVC above 1080p, and
+	// every such height yields 2+ rungs, so a single-rung HEVC encode does not
+	// arise today — this keeps the two single-variant exits consistent rather
+	// than leaving one of them a trap for a future ladder change.
+	if multiAudio(spec) || needsCodecDeclaration(spec) {
 		return append(args, hlsMasterTail(audioGroupVSM(1, spec.AudioTracks))...)
 	}
 	return append(args, singleOutputTail()...)
@@ -336,6 +341,42 @@ func bandwidthHint(height int) string {
 // EXT-X-MEDIA audio-group path (ARGY-126). With 0–1 tracks the builders keep the
 // original single-audio output byte-for-byte.
 func multiAudio(spec Spec) bool { return len(spec.AudioTracks) >= 2 }
+
+// needsCodecDeclaration reports whether this spec must emit a *master* playlist
+// purely so the output declares CODECS, even though one audio track would
+// otherwise take the cheaper single-variant path.
+//
+// A copied HEVC stream is the case. singleOutputTail writes a media playlist,
+// which carries no CODECS at all, and one init.mp4 muxing hvc1 video with mp4a
+// audio. hls.js then has nothing declared to work from and cannot recover the
+// codec from the init segment either — it logs
+//
+//	[passthrough-remuxer]: Unhandled video codec "hvc1" in mp4 MAP
+//
+// falls back to the bare 4CC, and calls addSourceBuffer with
+// `video/mp4;codecs=mp4a.40.2,hvc1`. That is not a valid HEVC codec string —
+// profile, level and constraint bytes are all missing — so browsers reject it
+// ("MediaSource.addSourceBuffer: Can't play type"), the error is fatal, and
+// playback dies on segment 0 (ARGY-218).
+//
+// The master path writes CODECS="hvc1.<profile>.4.L<level>.B01", which
+// NormalizePlaylist repairs to ".B0" on the way out (ARGY-174). hls.js prefers
+// that declared string over its own parse, so the SourceBuffer is created with
+// a string the browser accepts. This is the shape multi-audio HEVC has always
+// used, and the only HEVC shape observed playing.
+//
+// Restricted to HEVC deliberately. H.264 remuxes are unaffected — hls.js parses
+// avc1 out of the init segment correctly — and they are the common single-audio
+// case, so leaving them on the byte-for-byte original output keeps this fix off
+// a path that already works.
+//
+// Requires at least one enumerated track: audioGroupVSM builds the audio group
+// from AudioTracks, and with none it would emit a video variant referencing an
+// empty group. A source with no stored ffprobe JSON lands there, and falls
+// through to the single-variant output as before.
+func needsCodecDeclaration(spec Spec) bool {
+	return resolveCodec(spec.VideoCodec) == CodecHEVC && len(spec.AudioTracks) > 0
+}
 
 // audioMaps returns the -map flags for the audio streams: every selectable
 // source track on the multi-audio path (one output stream each, in track order),

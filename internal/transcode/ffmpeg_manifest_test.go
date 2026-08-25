@@ -92,11 +92,17 @@ func TestMultiAudioManifestIntegration(t *testing.T) {
 // that every strict codec-string parser rejects — so hls.js drops the variant
 // and fails the manifest before requesting a segment.
 //
-// Two shapes reach that state, and both are covered here: the multi-audio remux
-// that surfaced the bug, and the multi-rung ladder, which emits a master for a
-// *single*-audio source too. Only a lone-variant media playlist escapes, having
-// no CODECS at all — which is why single-audio remuxes were the only HEVC that
-// ever played.
+// Every HEVC shape now emits a master, and all three are covered here: the
+// multi-audio remux that surfaced the bug, the multi-rung ladder (which emits a
+// master for a *single*-audio source too), and the single-audio remux.
+//
+// That last one used to escape into a lone-variant media playlist carrying no
+// CODECS at all. Escaping this bug did not make it play — it made it fail
+// earlier and less legibly: with nothing declared, hls.js falls back to parsing
+// the init segment, cannot read an HEVC codec out of it, and asks for a bare
+// "hvc1" SourceBuffer that browsers refuse (ARGY-218). It is on the master path
+// now precisely so it has a CODECS string to declare, which is what puts it
+// under this test.
 //
 // The assertion is on the bytes a client actually receives: what ffmpeg wrote,
 // run through NormalizePlaylist the way fileTranscode serves it.
@@ -132,6 +138,17 @@ func TestHEVCManifestCodecs(t *testing.T) {
 			name: "single-audio hevc ladder",
 			spec: Spec{
 				Source: src, Encoder: EncoderSoftware, VideoCodec: CodecHEVC, SourceHeight: 1080,
+			},
+		},
+		{
+			// The ARGY-218 case. Before the fix this wrote a media playlist with no
+			// CODECS at all, so codecsAttr finds nothing and the test fails here —
+			// which is the regression this case exists to catch.
+			name: "single-audio hevc remux",
+			spec: Spec{
+				Source: src, Method: MethodRemux, VideoCodec: CodecHEVC,
+				TranscodeAudio: true, SourceHeight: 240,
+				AudioTracks: []AudioTrack{{Index: 0, Language: "en", Default: true}},
 			},
 		},
 	} {

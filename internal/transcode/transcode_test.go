@@ -412,12 +412,20 @@ func TestBuildArgsLadderMultiAudio(t *testing.T) {
 	}
 }
 
+// oneTrack is a lone English audio stream — the single-audio case.
+var oneTrack = []AudioTrack{{Index: 0, Language: "en", Default: true}}
+
 func TestBuildArgsSingleAudioTrackUnchanged(t *testing.T) {
 	// A lone audio track is not the multi-rendition case: output stays the simple
 	// single-variant layout (no master playlist, no audio group).
+	//
+	// The zero-value VideoCodec resolves to H.264, and that matters here: an HEVC
+	// copy takes the master path regardless of track count so it can declare
+	// CODECS (ARGY-218). This test pins the H.264 side of that split — the common
+	// single-audio remux, which must keep the cheaper layout.
 	args := buildArgs(Spec{
 		Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
-		AudioTracks: []AudioTrack{{Index: 0, Language: "en", Default: true}},
+		AudioTracks: oneTrack,
 	})
 	joined := strings.Join(args, " ")
 	for _, bad := range []string{"var_stream_map", "agroup", "%v"} {
@@ -427,6 +435,76 @@ func TestBuildArgsSingleAudioTrackUnchanged(t *testing.T) {
 	}
 	if !strings.Contains(joined, "-map 0:a:0") {
 		t.Errorf("single audio track should map 0:a:0\nargs: %s", joined)
+	}
+}
+
+func TestBuildArgsRemuxSingleAudioHEVCEmitsMaster(t *testing.T) {
+	// ARGY-218: a copied HEVC stream must land in a master playlist so the output
+	// declares CODECS. A media playlist declares none, and hls.js cannot recover
+	// an HEVC codec string from the init segment — it asks for a bare "hvc1"
+	// SourceBuffer, which browsers reject, killing playback on segment 0.
+	args := buildArgs(Spec{
+		Source: "/m/4k.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+		VideoCodec: CodecHEVC, TranscodeAudio: true, SourceHeight: 2160,
+		AudioTracks: oneTrack,
+	})
+	joined := strings.Join(args, " ")
+	for _, want := range []string{
+		"-var_stream_map", "agroup", "-master_pl_name index.m3u8",
+		"init_%v.mp4", "stream_%v_%05d.m4s",
+		// A copied stream carries no encoder bitrate, so without this hint ffmpeg
+		// cannot compute BANDWIDTH and omits the video EXT-X-STREAM-INF — leaving
+		// a master with no video variant, and so no CODECS either.
+		"-b:v 20M",
+		// Still a copy: the point is the manifest, not a re-encode.
+		"-c:v copy", "-tag:v hvc1",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("single-audio HEVC remux missing %q\nargs: %s", want, joined)
+		}
+	}
+	for _, bad := range []string{"libx265", "hevc_qsv", "hevc_vaapi"} {
+		if strings.Contains(joined, bad) {
+			t.Errorf("single-audio HEVC remux must not re-encode, found %q\nargs: %s", bad, joined)
+		}
+	}
+}
+
+func TestBuildArgsRemuxHEVCWithoutEnumeratedTracksStaysSingle(t *testing.T) {
+	// audioGroupVSM builds the audio group out of AudioTracks; with none it would
+	// emit a video variant pointing at an empty group. A source whose ffprobe JSON
+	// was never stored lands here, so it keeps the pre-ARGY-218 single-variant
+	// output rather than a master that references nothing.
+	args := buildArgs(Spec{
+		Source: "/m/4k.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+		VideoCodec: CodecHEVC, TranscodeAudio: true, SourceHeight: 2160,
+	})
+	joined := strings.Join(args, " ")
+	for _, bad := range []string{"var_stream_map", "agroup", "%v"} {
+		if strings.Contains(joined, bad) {
+			t.Errorf("HEVC remux with no enumerated tracks must stay single-variant, found %q\nargs: %s", bad, joined)
+		}
+	}
+}
+
+func TestBuildArgsSingleRungHEVCEmitsMaster(t *testing.T) {
+	// The same CODECS requirement applies to an HEVC *encode* that collapses to
+	// one rung. planPlayback only picks HEVC above 1080p and every such height
+	// yields 2+ rungs, so this does not arise today — the branch exists to keep
+	// both single-variant exits consistent, and this pins it.
+	args := buildArgs(Spec{
+		Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodTranscode,
+		Encoder: EncoderSoftware, VideoCodec: CodecHEVC, SourceHeight: 720,
+		AudioTracks: oneTrack,
+	})
+	joined := strings.Join(args, " ")
+	if len(rungsForCodec(720, CodecHEVC)) != 1 {
+		t.Fatalf("test premise broken: 720p HEVC no longer collapses to one rung")
+	}
+	for _, want := range []string{"-var_stream_map", "agroup", "-master_pl_name index.m3u8"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("single-rung HEVC encode missing %q\nargs: %s", want, joined)
+		}
 	}
 }
 
