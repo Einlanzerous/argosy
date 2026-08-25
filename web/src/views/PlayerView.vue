@@ -436,8 +436,20 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
     sawFragment = false
   }
   if (transcodeSessionId) {
-    void stopTranscode(transcodeSessionId).catch(() => {})
+    // Await the teardown before starting its replacement. Session ids are
+    // deterministic in (account, item, ⌊startAt⌋, encoder, codec, method) and the
+    // server *joins* a live session with a matching id — so a restart at the same
+    // offset, which is every error recovery, would otherwise POST, rejoin the very
+    // session this DELETE is still in flight to destroy, and be killed by it. That
+    // showed up in production as `DELETE 204` followed by `index.m3u8 404`, and as
+    // bursts of ten concurrent DELETEs for one id (ARGY-220).
+    //
+    // Cheap: the wait is dwarfed by waitForPlaylist below, which polls until
+    // ffmpeg has written the first playlist. Clear the id first so a failed stop
+    // can't leave us pointing at a session we've already abandoned.
+    const stopping = transcodeSessionId
     transcodeSessionId = ''
+    await stopTranscode(stopping).catch(() => {})
   }
   baseOffset.value = offset
   starting.value = true
@@ -539,6 +551,11 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
       // configured default into a measurement worth carrying forward.
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
         sawFragment = true
+        // A buffered fragment is also what re-arms recovery: it is the first
+        // proof the restarted session is actually playable, so a *later* reap
+        // gets its own attempt (ARGY-107). Deliberately not the `play` event —
+        // see the ERROR handler below.
+        recovering = false
       })
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
         if (!hlsDebug.value || !hls) return
@@ -565,8 +582,17 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         if (!data.fatal) return
         // The idle reaper purges a transcode session that went quiet (e.g. a long
         // pause), so its next segment 404s. Rather than dying, restart the
-        // transcode from the current position and keep playing (ARGY-107). One
-        // attempt: if it fails again before playback resumes, surface the error.
+        // transcode from the current position and keep playing (ARGY-107).
+        //
+        // One attempt, and `recovering` is what bounds it: it is cleared only by
+        // FRAG_BUFFERED, so a restart that never manages to buffer anything
+        // cannot arm a second attempt and falls through to the error below. It
+        // used to be cleared on the `play` event, which every restart fires the
+        // moment MANIFEST_PARSED calls el.play() — before a frame decodes. For a
+        // failure that recurs each time, the flag was therefore always false
+        // again by the next error, and "one attempt" became an unbounded loop:
+        // ~35 restarts in 20s against the server, and a player that spins forever
+        // instead of ever showing the message below (ARGY-220).
         const v = video.value
         if (mode === 'transcode' && v && !recovering) {
           recovering = true
@@ -639,7 +665,9 @@ function bindVideo(el: HTMLVideoElement): void {
   })
   el.addEventListener('play', () => {
     playing.value = true
-    recovering = false // playback resumed → re-arm recovery for a future reap
+    // NB: recovery is re-armed on FRAG_BUFFERED, not here. `play` fires when
+    // playback is *requested*, which a restart always does, so clearing the flag
+    // here re-armed the guard before a single frame decoded (ARGY-220).
     poke()
   })
   el.addEventListener('pause', () => {
