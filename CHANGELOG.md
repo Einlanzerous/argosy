@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.27.0](https://github.com/Einlanzerous/argosy/compare/v0.26.0...v0.27.0) (2026-08-26)
+
+
+### Features
+
+* **detail:** full-bleed hero for film and series, minus the duplicate poster (ARGY-214) ([#222](https://github.com/Einlanzerous/argosy/issues/222)) ([8845c6e](https://github.com/Einlanzerous/argosy/commit/8845c6e5f5eb65261821c450ebdf7f3d256370e2))
+
+
+### Bug Fixes
+
+* **player:** bound transcode recovery and stop it racing its own teardown (ARGY-220) ([#225](https://github.com/Einlanzerous/argosy/issues/225)) ([fd30fbc](https://github.com/Einlanzerous/argosy/commit/fd30fbc27130e314c70ecb7e0847795601428abc))
+* **transcode:** declare CODECS for single-audio HEVC remuxes (ARGY-218) ([#224](https://github.com/Einlanzerous/argosy/issues/224)) ([cf9f481](https://github.com/Einlanzerous/argosy/commit/cf9f4818337ec1e2e5e53f2231b42e8cccf366f8))
+
 ## [0.26.0](https://github.com/Einlanzerous/argosy/compare/v0.25.1...v0.26.0) (2026-08-23)
 
 
