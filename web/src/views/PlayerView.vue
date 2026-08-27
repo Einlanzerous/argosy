@@ -311,8 +311,10 @@ let hls: Hls | null = null
 // (ARGY-177). Only then is the estimate worth carrying to the next instance.
 let sawFragment = false
 let heartbeat: ReturnType<typeof setInterval> | null = null
-// Guards a single transparent recovery after a reaped/expired transcode session
-// (ARGY-107); re-armed once playback demonstrably advances (see recoveryFrom).
+// True only while a recovery restart is actually in flight, so a second fatal
+// error arriving mid-restart is dropped as a duplicate rather than racing a
+// second teardown. Cleared when startTranscodeAt settles, success or not —
+// whether the new session is any good is recoveryAttempts' question.
 let recovering = false
 // Absolute media position the in-flight recovery restarted from. Playing PAST it
 // is the only thing that distinguishes a session that works from one that is
@@ -620,24 +622,25 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // pause), so its next segment 404s. Rather than dying, restart the
         // transcode from the current position and keep playing (ARGY-107).
         //
-        // Bounded two ways, because the interesting failures are the ones where
-        // the recovery itself keeps failing. `recovering` stops re-entry while a
-        // restart is in flight; `recoveryAttempts` caps how many restarts a
-        // stream gets without ever playing. Only real forward progress clears
-        // either (see recoveryFrom), so a stream that cannot be decoded burns
-        // through the cap in two attempts and lands on the message below rather
-        // than restarting for as long as the tab stays open.
+        // The two flags answer different questions and are kept apart on purpose.
+        // `recovering` is "a restart is already in flight", so a second fatal
+        // arriving in the same tick — two renditions failing together, say — is a
+        // duplicate to drop, NOT a reason to give up on an attempt still running.
+        // `recoveryAttempts` is "how many restarts has this stream had without
+        // ever playing", and it alone decides when to stop, because it is the one
+        // that cannot be cleared by anything short of real forward progress.
         const v = video.value
-        if (mode === 'transcode' && v && !recovering && recoveryAttempts < maxRecoveryAttempts) {
-          recovering = true
-          recoveryAttempts++
-          const pos = baseOffset.value + v.currentTime
-          recoveryFrom = pos
-          // Defer so we don't tear down hls inside its own error callback.
-          setTimeout(() => void startTranscodeAt(v, pos), 0)
-          return
-        }
-        if (recoveryAttempts >= maxRecoveryAttempts) {
+        if (mode === 'transcode' && v) {
+          if (recovering) return
+          if (recoveryAttempts < maxRecoveryAttempts) {
+            recovering = true
+            recoveryAttempts++
+            const pos = baseOffset.value + v.currentTime
+            recoveryFrom = pos
+            // Defer so we don't tear down hls inside its own error callback.
+            setTimeout(() => void startTranscodeAt(v, pos), 0)
+            return
+          }
           // Worth saying out loud: a give-up is the one moment where the console
           // is the only record that this happened at all. Server-side visibility
           // needs ARGY-219.
@@ -659,6 +662,14 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
     }
   } finally {
     starting.value = false
+    // The restart is no longer in flight, whatever came of it. `recovering`
+    // means exactly that and nothing more — whether the new session is any GOOD
+    // is `recoveryAttempts`' question, and it is only answered by playback
+    // actually advancing. Leaving this set until progress would conflate the two:
+    // the next fatal error would find `recovering` still true, skip the attempt
+    // it was owed, and surface the terminal message after one try instead of the
+    // cap (ARGY-223 review).
+    recovering = false
   }
 }
 
