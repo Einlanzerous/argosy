@@ -154,8 +154,9 @@ func buildRemuxArgs(spec Spec) []string {
 	args = append(args, audioMaps(spec)...)
 	args = append(args, "-c:v", "copy")
 	if resolveCodec(spec.VideoCodec) == CodecHEVC {
-		// Copied HEVC needs the hvc1 sample-entry tag for fMP4/MSE playback.
-		args = append(args, "-tag:v", "hvc1")
+		// Copied HEVC needs the hvc1 sample-entry tag for fMP4/MSE playback, and
+		// hevcParamSetBSF to make the tag true (see below).
+		args = append(args, "-tag:v", "hvc1", "-bsf:v", hevcParamSetBSF)
 	}
 	if spec.TranscodeAudio {
 		args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
@@ -342,6 +343,50 @@ func bandwidthHint(height int) string {
 // original single-audio output byte-for-byte.
 func multiAudio(spec Spec) bool { return len(spec.AudioTracks) >= 2 }
 
+// hevcParamSetBSF is applied to every copied HEVC stream so the fMP4 gets a
+// complete hvcC (the decoder configuration record) in its init segment.
+//
+// The `hvc1` sample-entry tag promises the parameter sets — VPS/SPS/PPS — live
+// in that record rather than in the bitstream. ffmpeg keeps that promise by
+// copying the source's decoder config through, which works only when the source
+// container carries one. Some sources don't: a Matroska CodecPrivate is allowed
+// to be a bare 23-byte HEVCDecoderConfigurationRecord with numOfArrays = 0,
+// leaving the parameter sets in-band ahead of each keyframe. Handed one of
+// those, ffmpeg cannot honour hvc1's completeness requirement — and instead of
+// failing, it writes an *empty* hvcC: an 8-byte box, header and no payload, with
+// no warning at any log level.
+//
+// The result is undecodable by anything. There is no lengthSizeMinusOne, so the
+// samples cannot even be split into NAL units — `ffmpeg -i` on the concatenated
+// init + segment reports "Error splitting the input into NAL units" against our
+// own output. In the browser it surfaces one step later than that sounds: MSE
+// parses containers, not bitstreams, so the SourceBuffer is created and segment
+// 0 appends and buffers, and only then does the media element report "could not
+// be decoded" (ARGY-222).
+//
+// hls.js makes the same failure look like a codec-string bug, which is the trap
+// here. With nothing in the hvcC to parse it logs
+//
+//	[passthrough-remuxer]: Unhandled video codec "hvc1" in mp4 MAP
+//
+// falls back to the bare 4CC, and then substitutes a hardcoded placeholder —
+// `hvc1.1.6.L120.90`, Main profile at level 4.0 — for the accurate CODECS string
+// we declared (ARGY-218 put that string in the manifest, and it is discarded
+// here). So the console shows a SourceBuffer opened at the wrong profile and
+// level, and the tempting fix is to argue hls.js out of the substitution. It
+// would not have helped: the placeholder is a symptom of the empty hvcC, and the
+// bitstream stays undecodable however it is labelled.
+//
+// hevc_mp4toannexb converts the copied samples to Annex B, which puts the
+// in-band parameter sets where the muxer looks for them; it then rebuilds the
+// hvcC from the bitstream on the way back into fMP4. Applied unconditionally to
+// the copy path rather than gated on the source shape, because it changes
+// nothing where it isn't needed: a source that already carries complete
+// parameter sets comes out with the same codec string either way (verified on
+// both Matroska shapes and on an already-Annex-B mpegts source). It is a
+// bitstream filter — no re-encode, so true 4K passes through untouched.
+const hevcParamSetBSF = "hevc_mp4toannexb"
+
 // needsCodecDeclaration reports whether this spec must emit a *master* playlist
 // purely so the output declares CODECS, even though one audio track would
 // otherwise take the cheaper single-variant path.
@@ -360,15 +405,21 @@ func multiAudio(spec Spec) bool { return len(spec.AudioTracks) >= 2 }
 // playback dies on segment 0 (ARGY-218).
 //
 // The master path writes CODECS="hvc1.<profile>.4.L<level>.B01", which
-// NormalizePlaylist repairs to ".B0" on the way out (ARGY-174). hls.js prefers
-// that declared string over its own parse, so the SourceBuffer is created with
-// a string the browser accepts. This is the shape multi-audio HEVC has always
+// NormalizePlaylist repairs to ".B0" on the way out (ARGY-174), giving hls.js a
+// declared string to fall back on. This is the shape multi-audio HEVC has always
 // used, and the only HEVC shape observed playing.
 //
-// Restricted to HEVC deliberately. H.264 remuxes are unaffected — hls.js parses
-// avc1 out of the init segment correctly — and they are the common single-audio
-// case, so leaving them on the byte-for-byte original output keeps this fix off
-// a path that already works.
+// The "cannot recover the codec from the init segment" half of that has since
+// been fixed at its source: the init segment carried an *empty* hvcC, which is
+// why there was nothing to parse. See hevcParamSetBSF (ARGY-222) — a complete
+// hvcC is what actually makes the stream decodable, and hls.js prefers its own
+// parse of it over the declared CODECS anyway. This function now guards only the
+// missing-attribute half.
+//
+// Restricted to HEVC deliberately. H.264 remuxes are unaffected — ffmpeg writes
+// a complete avcC and hls.js parses avc1 out of it correctly — and they are the
+// common single-audio case, so leaving them on the byte-for-byte original output
+// keeps this fix off a path that already works.
 //
 // Requires at least one enumerated track: audioGroupVSM builds the audio group
 // from AudioTracks, and with none it would emit a video variant referencing an
