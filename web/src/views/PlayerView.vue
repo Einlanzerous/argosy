@@ -311,9 +311,45 @@ let hls: Hls | null = null
 // (ARGY-177). Only then is the estimate worth carrying to the next instance.
 let sawFragment = false
 let heartbeat: ReturnType<typeof setInterval> | null = null
-// Guards a single transparent recovery after a reaped/expired transcode session
-// (ARGY-107); re-armed once playback resumes.
+// True only while a recovery restart is actually in flight, so a second fatal
+// error arriving mid-restart is dropped as a duplicate rather than racing a
+// second teardown. Cleared when startTranscodeAt settles, success or not —
+// whether the new session is any good is recoveryAttempts' question.
 let recovering = false
+// Absolute media position the in-flight recovery restarted from. Playing PAST it
+// is the only thing that distinguishes a session that works from one that is
+// dying, and it is what re-arms recovery for a future reap.
+//
+// Two cheaper signals have now been tried and both were wrong, in the same way:
+// they fire on a restart that is about to fail. `play` fires when playback is
+// *requested*, before a frame decodes (ARGY-220). FRAG_BUFFERED fires when bytes
+// reach the buffer, which happens even when the MediaSource is already erroring —
+// segment 0 appends cleanly and only then does the decoder give up (ARGY-223).
+let recoveryFrom = 0
+// Consecutive recoveries that never produced forward playback. `recovering` alone
+// cannot bound the loop: it only prevents re-entry while a restart is in flight,
+// so anything that clears it re-arms an unlimited number of attempts. This counter
+// is the backstop that does not depend on choosing the right signal — which is
+// worth having, because the last two choices cost a production incident each.
+let recoveryAttempts = 0
+// Two, not one: the reaped-session case (ARGY-107) legitimately needs a retry, and
+// a second covers a reap landing during the first. Beyond that a failure is not
+// transient and retrying it is just load.
+const maxRecoveryAttempts = 2
+// Forward progress worth believing. Long enough not to trip on a timeupdate that
+// fires while the element settles at the seek target, short enough that a stream
+// which really is playing clears it within the first second.
+const recoveryProgressSeconds = 0.5
+
+// resetRecovery gives a deliberately-started stream a clean retry budget, marking
+// `from` as the position it has to beat to count as playing. Called from the
+// viewer-driven entry points only — never from the recovery path itself, which
+// would defeat the cap it exists to enforce.
+function resetRecovery(from: number): void {
+  recovering = false
+  recoveryAttempts = 0
+  recoveryFrom = from
+}
 let transcodeSessionId = ''
 
 // What the fill/knob render: the drag preview while scrubbing, otherwise live time.
@@ -402,6 +438,11 @@ onMounted(async () => {
 async function playFrom(offset: number): Promise<void> {
   const el = video.value
   if (!el) return
+  // A deliberate start — first play, a resume choice, or an auto-advance into
+  // the next episode — is a fresh subject, so it gets a fresh retry budget. The
+  // cap exists to stop one broken stream looping, not to hold a spent count
+  // against whatever the viewer plays next in the same mounted player.
+  resetRecovery(offset)
   if (mode === 'direct') {
     attachDirect(el)
     baseOffset.value = 0
@@ -551,11 +592,8 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
       // configured default into a measurement worth carrying forward.
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
         sawFragment = true
-        // A buffered fragment is also what re-arms recovery: it is the first
-        // proof the restarted session is actually playable, so a *later* reap
-        // gets its own attempt (ARGY-107). Deliberately not the `play` event —
-        // see the ERROR handler below.
-        recovering = false
+        // NB: this deliberately does NOT re-arm recovery. A fragment reaching the
+        // buffer says nothing about whether it can be decoded — see recoveryFrom.
       })
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
         if (!hlsDebug.value || !hls) return
@@ -584,22 +622,31 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
         // pause), so its next segment 404s. Rather than dying, restart the
         // transcode from the current position and keep playing (ARGY-107).
         //
-        // One attempt, and `recovering` is what bounds it: it is cleared only by
-        // FRAG_BUFFERED, so a restart that never manages to buffer anything
-        // cannot arm a second attempt and falls through to the error below. It
-        // used to be cleared on the `play` event, which every restart fires the
-        // moment MANIFEST_PARSED calls el.play() — before a frame decodes. For a
-        // failure that recurs each time, the flag was therefore always false
-        // again by the next error, and "one attempt" became an unbounded loop:
-        // ~35 restarts in 20s against the server, and a player that spins forever
-        // instead of ever showing the message below (ARGY-220).
+        // The two flags answer different questions and are kept apart on purpose.
+        // `recovering` is "a restart is already in flight", so a second fatal
+        // arriving in the same tick — two renditions failing together, say — is a
+        // duplicate to drop, NOT a reason to give up on an attempt still running.
+        // `recoveryAttempts` is "how many restarts has this stream had without
+        // ever playing", and it alone decides when to stop, because it is the one
+        // that cannot be cleared by anything short of real forward progress.
         const v = video.value
-        if (mode === 'transcode' && v && !recovering) {
-          recovering = true
-          const pos = baseOffset.value + v.currentTime
-          // Defer so we don't tear down hls inside its own error callback.
-          setTimeout(() => void startTranscodeAt(v, pos), 0)
-          return
+        if (mode === 'transcode' && v) {
+          if (recovering) return
+          if (recoveryAttempts < maxRecoveryAttempts) {
+            recovering = true
+            recoveryAttempts++
+            const pos = baseOffset.value + v.currentTime
+            recoveryFrom = pos
+            // Defer so we don't tear down hls inside its own error callback.
+            setTimeout(() => void startTranscodeAt(v, pos), 0)
+            return
+          }
+          // Worth saying out loud: a give-up is the one moment where the console
+          // is the only record that this happened at all. Server-side visibility
+          // needs ARGY-219.
+          console.warn(
+            `[argosy] giving up after ${recoveryAttempts} recovery attempts without playback`,
+          )
         }
         error.value = 'This stream could not be played.'
       })
@@ -615,6 +662,14 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
     }
   } finally {
     starting.value = false
+    // The restart is no longer in flight, whatever came of it. `recovering`
+    // means exactly that and nothing more — whether the new session is any GOOD
+    // is `recoveryAttempts`' question, and it is only answered by playback
+    // actually advancing. Leaving this set until progress would conflate the two:
+    // the next fatal error would find `recovering` still true, skip the attempt
+    // it was owed, and surface the terminal message after one try instead of the
+    // cap (ARGY-223 review).
+    recovering = false
   }
 }
 
@@ -661,13 +716,22 @@ function bindVideo(el: HTMLVideoElement): void {
   el.addEventListener('resize', () => updateQuality(el))
   el.addEventListener('timeupdate', () => {
     position.value = baseOffset.value + el.currentTime
+    // Playing past where the recovery restarted from is the proof that the new
+    // session actually decodes, so this is what re-arms recovery for a future
+    // reap (ARGY-107) and clears the attempt count. Compared in absolute media
+    // position because a restart resets el.currentTime to 0 and moves baseOffset
+    // — currentTime alone would look like it went backwards every time.
+    if (recoveryAttempts > 0 && position.value > recoveryFrom + recoveryProgressSeconds) {
+      recovering = false
+      recoveryAttempts = 0
+    }
     maybeUpNext()
   })
   el.addEventListener('play', () => {
     playing.value = true
-    // NB: recovery is re-armed on FRAG_BUFFERED, not here. `play` fires when
-    // playback is *requested*, which a restart always does, so clearing the flag
-    // here re-armed the guard before a single frame decoded (ARGY-220).
+    // NB: recovery is re-armed by forward progress in `timeupdate`, not here.
+    // `play` fires when playback is *requested*, which a restart always does, so
+    // clearing the flag here re-armed the guard before a frame decoded (ARGY-220).
     poke()
   })
   el.addEventListener('pause', () => {
@@ -897,6 +961,10 @@ async function seekTo(t: number): Promise<void> {
   if (rel >= 0 && rel <= buffered) {
     el.currentTime = rel
   } else {
+    // A seek is the viewer asking for somewhere else, so it also earns a fresh
+    // retry budget — a spent count from an earlier position should not make the
+    // next seek fail on its first error.
+    resetRecovery(t)
     await startTranscodeAt(el, t)
   }
 }
