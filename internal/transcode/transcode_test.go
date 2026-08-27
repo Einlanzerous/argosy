@@ -440,9 +440,9 @@ func TestBuildArgsSingleAudioTrackUnchanged(t *testing.T) {
 
 func TestBuildArgsRemuxSingleAudioHEVCEmitsMaster(t *testing.T) {
 	// ARGY-218: a copied HEVC stream must land in a master playlist so the output
-	// declares CODECS. A media playlist declares none, and hls.js cannot recover
-	// an HEVC codec string from the init segment — it asks for a bare "hvc1"
-	// SourceBuffer, which browsers reject, killing playback on segment 0.
+	// declares CODECS. A media playlist declares none, and at the time the init
+	// segment offered no codec either (ARGY-222) — so hls.js asked for a bare
+	// "hvc1" SourceBuffer, which browsers reject, killing playback on segment 0.
 	args := buildArgs(Spec{
 		Source: "/m/4k.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
 		VideoCodec: CodecHEVC, TranscodeAudio: true, SourceHeight: 2160,
@@ -467,6 +467,51 @@ func TestBuildArgsRemuxSingleAudioHEVCEmitsMaster(t *testing.T) {
 		if strings.Contains(joined, bad) {
 			t.Errorf("single-audio HEVC remux must not re-encode, found %q\nargs: %s", bad, joined)
 		}
+	}
+}
+
+func TestBuildArgsRemuxHEVCCarriesParamSetBSF(t *testing.T) {
+	// ARGY-222: every copied HEVC stream gets hevc_mp4toannexb, whatever the
+	// track count or playlist shape, because the hvc1 tag is a promise the muxer
+	// can only keep when the parameter sets are reachable. Without it a source
+	// that keeps them in-band yields an empty hvcC and an undecodable stream.
+	for _, tc := range []struct {
+		name string
+		spec Spec
+	}{
+		{"single audio", Spec{
+			Source: "/m/4k.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+			VideoCodec: CodecHEVC, TranscodeAudio: true, SourceHeight: 2160,
+			AudioTracks: oneTrack,
+		}},
+		{"multi audio", Spec{
+			Source: "/m/4k.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+			VideoCodec: CodecHEVC, TranscodeAudio: true, SourceHeight: 2160,
+			AudioTracks: dubSub,
+		}},
+		{"no enumerated tracks", Spec{
+			Source: "/m/4k.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+			VideoCodec: CodecHEVC, TranscodeAudio: true, SourceHeight: 2160,
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			joined := strings.Join(buildArgs(tc.spec), " ")
+			if !strings.Contains(joined, "-bsf:v "+hevcParamSetBSF) {
+				t.Errorf("HEVC remux missing -bsf:v %s\nargs: %s", hevcParamSetBSF, joined)
+			}
+		})
+	}
+}
+
+func TestBuildArgsRemuxH264HasNoBSF(t *testing.T) {
+	// The filter is HEVC-only. An H.264 copy already gets a complete avcC, and
+	// this is the common remux — keep it on the arguments it has always used.
+	joined := strings.Join(buildArgs(Spec{
+		Source: "/m/a.mkv", OutputDir: "/tmp/out", Method: MethodRemux,
+		AudioTracks: oneTrack,
+	}), " ")
+	if strings.Contains(joined, "-bsf:v") {
+		t.Errorf("H.264 remux must not carry a bitstream filter\nargs: %s", joined)
 	}
 }
 
