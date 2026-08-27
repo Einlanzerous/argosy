@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.2](https://github.com/Einlanzerous/argosy/compare/v0.27.1...v0.27.2) (2026-08-27)
+
+
+### Bug Fixes
+
+* **transcode:** rebuild the hvcC for HEVC copies with in-band parameter sets (ARGY-222) ([#228](https://github.com/Einlanzerous/argosy/issues/228)) ([dda7350](https://github.com/Einlanzerous/argosy/commit/dda735026ba0bd9f9ad068b059086f3f1314a6be))
+
 ## [0.27.1](https://github.com/Einlanzerous/argosy/compare/v0.27.0...v0.27.1) (2026-08-27)
 
 
