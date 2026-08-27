@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.1](https://github.com/Einlanzerous/argosy/compare/v0.27.0...v0.27.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **player:** cap transcode recovery retries instead of trusting a signal (ARGY-223) ([#226](https://github.com/Einlanzerous/argosy/issues/226)) ([e5afbee](https://github.com/Einlanzerous/argosy/commit/e5afbee1e7bc161fcec9603a55c87326b9c738a5))
+
 ## [0.27.0](https://github.com/Einlanzerous/argosy/compare/v0.26.0...v0.27.0) (2026-08-26)
 
 
