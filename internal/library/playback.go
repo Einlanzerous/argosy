@@ -102,12 +102,17 @@ type transcodePlan struct {
 // 10-bit H.264 stays blocked outright: an HEVC probe says nothing about High 10,
 // and browser hardware support for it is far thinner. VP9/AV1 10-bit stay
 // copyable — those are broadly hardware-decoded.
-func planPlayback(videoCodec, audioCodec string, clientHEVC, clientHEVCHardware, highBitDepth bool, height int) transcodePlan {
+//
+// burnIn — the viewer selected an image subtitle track — overrides all of it.
+// PGS/VOBSUB are bitmaps with no text form, so the only way to show them is to
+// paint them into the frames, and a stream with something painted onto it is by
+// definition not the stream that was there to copy (ARGY-59).
+func planPlayback(videoCodec, audioCodec string, clientHEVC, clientHEVCHardware, highBitDepth, burnIn bool, height int) transcodePlan {
 	v := strings.ToLower(videoCodec)
 	audioOK := audioCodec == "" || directAudio[strings.ToLower(audioCodec)]
 	hevcTenBitOK := isHEVC(v) && clientHEVC && clientHEVCHardware && height > 1080
 	highDepthBlocked := highBitDepth && !hevcTenBitOK && (isHEVC(v) || v == "h264" || v == "avc1")
-	copyVideo := !highDepthBlocked && (directVideo[v] || (clientHEVC && isHEVC(v)))
+	copyVideo := !burnIn && !highDepthBlocked && (directVideo[v] || (clientHEVC && isHEVC(v)))
 
 	if copyVideo {
 		p := transcodePlan{method: methodRemux, videoCodec: transcode.CodecH264, transcodeAudio: !audioOK}
@@ -137,6 +142,11 @@ func planPlayback(videoCodec, audioCodec string, clientHEVC, clientHEVCHardware,
 	}
 	if highDepthBlocked {
 		p.reason = "re-encoding 10-bit " + videoCodec + " to 8-bit " + p.videoCodec + " for reliable client decode"
+	}
+	if burnIn {
+		// Stated last because it is the reason the copy was refused, whatever
+		// the other flags would have allowed on their own.
+		p.reason += "; burning in the selected image subtitle track"
 	}
 	return p
 }

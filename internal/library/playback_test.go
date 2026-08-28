@@ -1,6 +1,7 @@
 package library
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Einlanzerous/argosy/internal/transcode"
@@ -82,11 +83,51 @@ func TestPlanPlayback(t *testing.T) {
 		{"vp9 10-bit remux", "vp9", "opus", false, false, true, 2160, methodRemux, transcode.CodecH264, false},
 	}
 	for _, c := range cases {
-		p := planPlayback(c.video, c.audio, c.clientHEVC, c.clientHEVCHW, c.highBitDepth, c.height)
+		// Burn-in off throughout: this table is about codec and bit-depth
+		// negotiation. TestPlanPlaybackBurnIn covers the override.
+		p := planPlayback(c.video, c.audio, c.clientHEVC, c.clientHEVCHW, c.highBitDepth, false, c.height)
 		if p.method != c.wantMethod || p.videoCodec != c.wantCodec || p.transcodeAudio != c.wantTransAudio {
 			t.Errorf("%s: planPlayback(%q,%q,hevc=%v,hw=%v,10bit=%v,%d) = {%s %s audio=%v}, want {%s %s audio=%v}",
 				c.name, c.video, c.audio, c.clientHEVC, c.clientHEVCHW, c.highBitDepth, c.height,
 				p.method, p.videoCodec, p.transcodeAudio, c.wantMethod, c.wantCodec, c.wantTransAudio)
+		}
+	}
+}
+
+// TestPlanPlaybackBurnIn covers the ARGY-59 override: an image subtitle is drawn
+// into the frames, so every case that would otherwise have been copied has to
+// re-encode instead. These are exactly the rows of the table above that came
+// back methodRemux — including the true-4K HEVC passthrough, which is the most
+// expensive thing burn-in gives up and the one most worth stating outright.
+func TestPlanPlaybackBurnIn(t *testing.T) {
+	cases := []struct {
+		name         string
+		video, audio string
+		clientHEVC   bool
+		clientHEVCHW bool
+		highBitDepth bool
+		height       int
+		wantCodec    string
+	}{
+		{"h264+aac, would have remuxed", "h264", "aac", false, false, false, 1080, transcode.CodecH264},
+		{"hevc 4k client, would have copied at native res", "hevc", "aac", true, false, false, 2160, transcode.CodecHEVC},
+		{"hevc 10-bit 4k hw client, would have kept HDR", "hevc", "aac", true, true, true, 2160, transcode.CodecHEVC},
+		{"vp9 10-bit, would have remuxed", "vp9", "opus", false, false, true, 2160, transcode.CodecH264},
+		// A source that was already being re-encoded is unaffected in method; the
+		// burn-in just rides along on the encode it was getting anyway.
+		{"mpeg2 4k client already encoding", "mpeg2video", "aac", true, false, false, 2160, transcode.CodecHEVC},
+	}
+	for _, c := range cases {
+		p := planPlayback(c.video, c.audio, c.clientHEVC, c.clientHEVCHW, c.highBitDepth, true, c.height)
+		if p.method != methodTranscode {
+			t.Errorf("%s: method = %q, want %q (a burned-in subtitle rewrites the picture, so nothing can be copied)",
+				c.name, p.method, methodTranscode)
+		}
+		if p.videoCodec != c.wantCodec {
+			t.Errorf("%s: codec = %q, want %q", c.name, p.videoCodec, c.wantCodec)
+		}
+		if !strings.Contains(p.reason, "burning in") {
+			t.Errorf("%s: reason = %q, want it to say why the copy was refused", c.name, p.reason)
 		}
 	}
 }

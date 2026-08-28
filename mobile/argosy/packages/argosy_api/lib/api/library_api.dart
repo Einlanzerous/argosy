@@ -1369,7 +1369,7 @@ class LibraryApi {
 
   /// Available subtitle tracks for an item
   ///
-  /// Lists subtitle tracks resolved through the priority chain: embedded text tracks (from the container) plus OpenSubtitles candidates when configured. Each track's `id` is fetched as WebVTT from the sibling endpoint. 
+  /// Lists subtitle tracks resolved through the priority chain: embedded text tracks (from the container) plus OpenSubtitles candidates when configured. Each track's `id` is fetched as WebVTT from the sibling endpoint.  Image-based tracks (PGS/VOBSUB/DVB) are listed last and flagged with `burnIn`. They have no WebVTT form — the sibling endpoint refuses their ids — and are shown by burning them into the video during a transcode (ARGY-59). They never count as language coverage, so an OpenSubtitles text candidate is still offered for a language that only has an image track. 
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1405,7 +1405,7 @@ class LibraryApi {
 
   /// Available subtitle tracks for an item
   ///
-  /// Lists subtitle tracks resolved through the priority chain: embedded text tracks (from the container) plus OpenSubtitles candidates when configured. Each track's `id` is fetched as WebVTT from the sibling endpoint. 
+  /// Lists subtitle tracks resolved through the priority chain: embedded text tracks (from the container) plus OpenSubtitles candidates when configured. Each track's `id` is fetched as WebVTT from the sibling endpoint.  Image-based tracks (PGS/VOBSUB/DVB) are listed last and flagged with `burnIn`. They have no WebVTT form — the sibling endpoint refuses their ids — and are shown by burning them into the video during a transcode (ARGY-59). They never count as language coverage, so an OpenSubtitles text candidate is still offered for a language that only has an image track. 
   ///
   /// Parameters:
   ///

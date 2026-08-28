@@ -121,6 +121,21 @@ const resumeFrom = ref(0)
 const subtitleTracks = ref<SubtitleTrack[]>([])
 const activeSubtitle = ref<string | null>(null)
 const subMenuOpen = ref(false)
+// The image subtitle currently painted into the video, if any (ARGY-59). It is
+// separate from activeSubtitle because it lives on the other side of the
+// pipeline: a text track is fetched as WebVTT and drawn by the browser, so it
+// changes instantly, while this one is an argument to ffmpeg and changing it
+// means restarting the session.
+const burnInTrack = ref<string | null>(null)
+// True while the session is being restarted to add or drop a burned-in track —
+// the picker says so, because this is the one subtitle change that isn't
+// instant.
+const burnInSwitching = ref(false)
+function isBurnIn(trackId: string | null): boolean {
+  if (!trackId) return false
+  return subtitleTracks.value.find((t) => t.id === trackId)?.burnIn === true
+}
+const hasBurnInTracks = computed(() => subtitleTracks.value.some((t) => t.burnIn))
 // Audio-track selection (ARGY-128). The server now emits one HLS audio rendition
 // per source language (ARGY-127); hls.js surfaces them and switches in-session
 // with no rebuffer. The manifest NAME is ffmpeg-generated ("audio_N"), so labels
@@ -303,6 +318,11 @@ let hideTimer: ReturnType<typeof setTimeout> | null = null
 // play seeks natively (offset stays 0); a transcode seek restarts ffmpeg at the
 // new offset, so the HLS timeline's 0 maps to baseOffset in the media.
 let mode: 'direct' | 'transcode' = 'direct'
+// What this item plays as when nothing is burned in. Burning in an image
+// subtitle forces a transcode even for a file that direct-plays, so the original
+// answer is kept to restore when the viewer turns the subtitle off again
+// (ARGY-59).
+let nativeMode: 'direct' | 'transcode' = 'direct'
 const baseOffset = ref(0)
 let directAttached = false
 let hls: Hls | null = null
@@ -410,7 +430,8 @@ onMounted(async () => {
   // The true total runtime comes from the catalog; an HLS event playlist only
   // knows the encoded-so-far length, so never trust el.duration for transcodes.
   duration.value = item.value?.durationSeconds ?? 0
-  mode = playback && !playback.directPlay ? 'transcode' : 'direct'
+  nativeMode = playback && !playback.directPlay ? 'transcode' : 'direct'
+  mode = nativeMode
   bindVideo(el)
 
   // Intent from the entry point: ?resume jumps straight to the saved position,
@@ -495,7 +516,7 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
   baseOffset.value = offset
   starting.value = true
   try {
-    const sess = await startTranscode(itemId, offset).catch(() => null)
+    const sess = await startTranscode(itemId, offset, burnInTrack.value).catch(() => null)
     if (!sess) {
       error.value = "Couldn't start transcoding this title. The server may be at capacity."
       return
@@ -972,12 +993,64 @@ async function seekTo(t: number): Promise<void> {
 // selectSubtitle switches the active track (null = off). Selection persists
 // across transcode restarts via reapplySubtitle, and (when persist) is saved as
 // this device's preference so it auto-applies on the next title.
+//
+// An image track (ARGY-59) is the exception: there is no WebVTT to load, the
+// subtitle is drawn by the encoder, so switching one on or off restarts the
+// session from the current position. Playback jumps back a moment while ffmpeg
+// warms up — unavoidable, since the frames themselves have to be re-made.
 async function selectSubtitle(trackId: string | null, persist = true): Promise<void> {
   subMenuOpen.value = false
+  const wasBurnIn = burnInTrack.value
+  const wantsBurnIn = isBurnIn(trackId) ? trackId : null
   activeSubtitle.value = trackId
   removeSubtitleEl()
-  if (trackId) await applySubtitle(trackId)
+  if (wantsBurnIn !== wasBurnIn) {
+    await switchBurnIn(wantsBurnIn)
+  } else if (trackId && !wantsBurnIn) {
+    await applySubtitle(trackId)
+  }
   if (persist) void savePreferredSubtitle(trackId)
+}
+
+// switchBurnIn re-encodes the stream with (or without) an image subtitle drawn
+// into it, resuming where the viewer was. The server keys sessions on the burned
+// track, so this starts a new one rather than joining the running session.
+async function switchBurnIn(trackId: string | null): Promise<void> {
+  const el = video.value
+  if (!el) return
+  const resumeAt = position.value
+  burnInTrack.value = trackId
+  // A direct-play file has to become a transcode to carry a burned-in subtitle,
+  // and go back to direct play when it's turned off.
+  mode = trackId ? 'transcode' : nativeMode
+  burnInSwitching.value = true
+  try {
+    if (mode === 'direct') {
+      // Back to the original file: drop the HLS session and seek natively.
+      if (hls) {
+        hls.destroy()
+        hls = null
+        sawFragment = false
+      }
+      if (transcodeSessionId) {
+        const stopping = transcodeSessionId
+        transcodeSessionId = ''
+        await stopTranscode(stopping).catch(() => {})
+      }
+      baseOffset.value = 0
+      // hls.attachMedia replaced the element's src with its own blob, so the
+      // file has to be re-attached even though it was attached once already.
+      directAttached = false
+      attachDirect(el)
+      el.currentTime = resumeAt
+      void el.play().catch(() => {})
+      return
+    }
+    resetRecovery(resumeAt)
+    await startTranscodeAt(el, resumeAt)
+  } finally {
+    burnInSwitching.value = false
+  }
 }
 
 // savePreferredSubtitle persists the subtitle choice for this device. Turning
@@ -1038,7 +1111,11 @@ function applyPreferredSubtitle(): void {
   if (activeSubtitle.value) return
   const p = prefs.value
   if (!p?.subtitleEnabled || !p.subtitleLanguage) return
-  const match = subtitleTracks.value.find((t) => t.language === p.subtitleLanguage)
+  // Burn-in is never automatic: it costs a re-encode and can't be switched off
+  // without another one, so it only ever happens because the viewer asked for it
+  // in this session (ARGY-59). A saved "English subtitles on" must not silently
+  // turn a passthrough 4K stream into a transcode on the next title.
+  const match = subtitleTracks.value.find((t) => t.language === p.subtitleLanguage && !t.burnIn)
   if (match) void selectSubtitle(match.id, false)
 }
 
@@ -1114,6 +1191,9 @@ async function applySubtitle(trackId: string): Promise<void> {
   const el = video.value
   const track = subtitleTracks.value.find((t) => t.id === trackId)
   if (!el || !track) return
+  // An image track is already in the picture; there is no WebVTT to fetch, and
+  // asking for one is a 502 from an endpoint that refuses it by design.
+  if (track.burnIn) return
   try {
     const token = getToken()
     const r = await fetch(subtitleUrl(itemId, trackId), {
@@ -1431,11 +1511,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                   class="cc-item"
                   :class="{ sel: activeSubtitle === t.id }"
                   type="button"
+                  :disabled="burnInSwitching"
+                  :title="
+                    t.burnIn
+                      ? 'Picture-based subtitles. Turning these on re-encodes the stream, so playback restarts.'
+                      : undefined
+                  "
                   @click="selectSubtitle(t.id)"
                 >
                   <span class="cc-label">
                     {{ t.label }}
-                    <span class="cc-src">{{
+                    <span v-if="t.burnIn" class="cc-src cc-burn">Burned in</span>
+                    <span v-else class="cc-src">{{
                       t.source === 'opensubtitles' ? 'OpenSubtitles' : 'Embedded'
                     }}</span>
                   </span>
@@ -1453,6 +1540,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                   <span class="cc-chev">{{ subMoreOpen ? '▴' : '▾' }}</span>
                 </button>
               </div>
+              <p v-if="burnInSwitching" class="cc-note">Restarting the stream…</p>
+              <p v-else-if="hasBurnInTracks" class="cc-note">
+                “Burned in” subtitles are pictures, not text — they’re painted into the video, so
+                switching them on or off restarts playback.
+              </p>
 
               <div class="cc-head cc-style-head">Caption style</div>
               <div class="cc-style-row">
@@ -2117,6 +2209,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .cc-src {
   font: 500 10.5px var(--arg-body);
   color: var(--arg-dim);
+}
+/* An image subtitle costs a re-encode, so its row says what it is rather than
+   where it came from — the choice is different in kind, not in source (ARGY-59). */
+.cc-src.cc-burn {
+  color: var(--arg-accent);
+}
+.cc-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* The one line of explanation under the track list, for a choice whose cost
+   isn't obvious from its label. */
+.cc-note {
+  margin: 6px 11px 2px;
+  font: 500 11px var(--arg-body);
+  color: var(--arg-dim);
+  line-height: 1.4;
 }
 .cc-check {
   color: var(--arg-accent);

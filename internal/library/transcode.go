@@ -105,6 +105,10 @@ type transcodeSource struct {
 	// audioTracks are the source's selectable audio streams (dub/sub); passed to
 	// the transcoder to emit multi-rendition HLS when there's more than one.
 	audioTracks []transcode.AudioTrack
+	// technical is the stored ffprobe JSON, kept so a requested burn-in subtitle
+	// can be resolved against this item's own streams rather than trusted
+	// (ARGY-59).
+	technical []byte
 }
 
 // audioTracksFromTechnical enumerates the source's audio streams from the stored
@@ -174,6 +178,7 @@ func (s *Store) itemSource(ctx context.Context, accountID, itemID string) (src t
 		video:        video,
 		audio:        audio,
 		audioTracks:  audioTracksFromTechnical(technical),
+		technical:    technical,
 	}, true, nil
 }
 
@@ -212,10 +217,26 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	// that predates ARGY-178, which reads as false and keeps the old behaviour.
 	clientHEVCHardware := body.HevcHardware != nil && *body.HevcHardware
 
+	// An image subtitle the viewer picked explicitly, to be drawn into the video
+	// (ARGY-59). Resolved against this item's own streams: the index reaches an
+	// ffmpeg filtergraph, so a bad one has to be refused here rather than
+	// discovered as a session that fails to start.
+	burnIn := 0
+	if body.BurnInSubtitle != nil && *body.BurnInSubtitle != "" {
+		idx, ok := subtitle.BurnInStream(src.technical, *body.BurnInSubtitle)
+		if !ok {
+			httpx.Error(w, http.StatusBadRequest, "no such image subtitle track on this item")
+			return
+		}
+		burnIn = idx
+	}
+
 	// Decide the cheapest playable recipe: copy the video whenever the client can
 	// play it (true 4K for HEVC clients), transcoding only the audio if needed;
-	// otherwise re-encode (to HEVC for >1080p capable clients, else H.264).
-	plan := planPlayback(src.video, src.audio, clientHEVC, clientHEVCHardware, src.highBitDepth, src.height)
+	// otherwise re-encode (to HEVC for >1080p capable clients, else H.264). A
+	// burn-in rules the copy out — the overlay changes the picture.
+	plan := planPlayback(src.video, src.audio, clientHEVC, clientHEVCHardware, src.highBitDepth,
+		burnIn > 0, src.height)
 	mode := transcode.MethodTranscode
 	if plan.method != methodTranscode {
 		mode = transcode.MethodRemux
@@ -223,7 +244,8 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("transcode decision", "item", itemID, "method", mode, "codec", plan.videoCodec,
 		"transcodeAudio", plan.transcodeAudio, "reason", plan.reason, "container", filepath.Ext(src.path),
 		"video", src.video, "audio", src.audio, "height", src.height, "clientHevc", clientHEVC,
-		"clientHevcHardware", clientHEVCHardware, "highBitDepth", src.highBitDepth)
+		"clientHevcHardware", clientHEVCHardware, "highBitDepth", src.highBitDepth,
+		"burnInSubtitle", burnIn)
 
 	var startAt float64
 	if body.StartAt != nil && *body.StartAt > 0 {
@@ -241,6 +263,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		VideoCodec:     plan.videoCodec,
 		TranscodeAudio: plan.transcodeAudio,
 		AudioTracks:    src.audioTracks,
+		BurnInSubtitle: burnIn,
 	})
 	if errors.Is(err, transcode.ErrAtCapacity) {
 		httpx.Error(w, http.StatusServiceUnavailable, "server at transcode capacity, try again shortly")

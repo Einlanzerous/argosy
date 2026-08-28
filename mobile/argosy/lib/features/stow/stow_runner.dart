@@ -603,6 +603,11 @@ class StowRunner {
     final out = <StowedSubtitle>[];
     for (final track in tracks) {
       if (handle.isCancelled) break;
+      // Image subtitles have no WebVTT form (ARGY-59). Fetching one costs a
+      // request and a 30-second timeout to earn a refusal, and there is nothing
+      // an offline copy could do with it — the burn-in happens server-side, at
+      // playback.
+      if (track.burnIn == true) continue;
       final fileName = 'sub-${_safeName(track.id)}.vtt';
       try {
         // Bounded: a caption fetch that hangs would hold the whole stow — and,
