@@ -91,6 +91,10 @@ EXPOSE 8096
 # surfaces. Without it argosy sits on assert-healthy.sh's "cannot be seen to
 # fail" list, which is how interlock-worker stayed invisibly dead.
 #
+# It also refuses a container configured with NO database at all, which /healthz
+# cannot report on its own — see cmd/argosy/healthcheck.go. That process serves
+# the SPA shell and 404s every API route while answering 200 "ok".
+#
 # It buys visibility, not self-healing: `restart: unless-stopped` restarts
 # EXITED containers, not unhealthy ones. `docker ps`, assert-healthy.sh and the
 # deploy gate are the consumers.

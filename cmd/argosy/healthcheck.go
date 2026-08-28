@@ -33,6 +33,32 @@ const probeTimeout = 4 * time.Second
 // exited containers, not unhealthy ones. This buys visibility — `docker ps`,
 // construct-server's assert-healthy.sh, the deploy gate — and that is the point.
 func runHealthcheck(cfg config.Config) int {
+	// A container serving without a database is not healthy, and /healthz cannot
+	// say so on its own: healthHandler only pings when a pool exists, so the
+	// no-database process answers 200 "ok" unconditionally. Meanwhile main.go
+	// has logged a warning and carried on, and server.New has left the entire
+	// auth, library and browse surface unregistered — every API route 404s.
+	//
+	// That is the "cannot be seen to fail" state this ticket exists to close,
+	// surviving in the one configuration where nothing else catches it either:
+	// green in `docker ps`, green in assert-healthy.sh, green at the deploy
+	// gate, and serving nothing but the SPA shell. A *wrong* database address
+	// fails db.Migrate and exits the container, which is visible; a MISSING one
+	// is silent, so it is the case worth checking for.
+	//
+	// The check is here rather than in the endpoint deliberately. The probe runs
+	// in the container and reads the same environment the server did, so it can
+	// tell "configured" from "not configured" without touching the /healthz
+	// contract that Switchyard's delivery reconciler parses (ARGY-213).
+	//
+	// This is why the nil-pool mode stays a local affordance: `make server-dev`
+	// runs the binary on the host and the dev stack builds Dockerfile.dev, so
+	// neither goes anywhere near this HEALTHCHECK.
+	if cfg.DatabaseURL == "" {
+		fmt.Fprintln(os.Stderr, "unhealthy: no database configured; the API surface is not registered")
+		return 1
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
 
