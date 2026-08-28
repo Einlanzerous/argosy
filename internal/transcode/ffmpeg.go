@@ -132,10 +132,32 @@ func rungsForCodec(sourceHeight int, codec string) []rung {
 // re-encode), while a transcode re-encodes through the bitrate ladder. Paths
 // are relative — ffmpeg runs with cwd == spec.OutputDir.
 func buildArgs(spec Spec) []string {
-	if spec.Method == MethodRemux {
+	// A burned-in subtitle rewrites the pixels, so there is nothing to copy: the
+	// decision engine already routes these to the transcode path, and this makes
+	// a mistaken remux impossible rather than merely unlikely (ARGY-59).
+	if spec.Method == MethodRemux && !spec.burnsIn() {
 		return buildRemuxArgs(spec)
 	}
 	return buildTranscodeArgs(spec)
+}
+
+// videoSource is the filtergraph head that produces the video to encode: the
+// source stream, with an image subtitle drawn over it when one is selected.
+// ffmpeg decodes a bitmap subtitle stream into video frames when it is used as a
+// filter input (its sub2video path), so the overlay is a plain two-input filter.
+//
+// The subtitle is composited at source resolution, before any rung scaling: PGS
+// and VOBSUB bitmaps are authored against the source frame, so scaling the
+// composited picture keeps the captions in proportion on every rung, while
+// scaling first would leave them oversized.
+func videoSource(spec Spec) string {
+	if !spec.burnsIn() {
+		return "[0:v]"
+	}
+	// The link label takes the absolute stream index, which is what the track id
+	// carries — no mapping between ffprobe's numbering and a subtitle-relative
+	// one, and so no way for the two to drift apart.
+	return fmt.Sprintf("[0:v:0][0:%d]overlay", spec.BurnInSubtitle)
 }
 
 // buildRemuxArgs copies the source video into a single-variant CMAF HLS without
@@ -194,9 +216,19 @@ func buildTranscodeArgs(spec Spec) []string {
 
 func buildSingleTranscodeArgs(spec Spec, enc videoEncoder, codec string, r rung) []string {
 	args := inputArgs(spec, enc)
-	args = append(args, "-map", "0:v:0")
-	args = append(args, audioMaps(spec)...)
-	args = append(args, "-vf", enc.scale(r.height))
+	if spec.burnsIn() {
+		// Two inputs (video + subtitle) means a filter_complex rather than -vf,
+		// and the encoded video is then the graph's output label instead of the
+		// source stream.
+		args = append(args, "-filter_complex",
+			fmt.Sprintf("%s,%s[vout]", videoSource(spec), enc.scale(r.height)))
+		args = append(args, "-map", "[vout]")
+		args = append(args, audioMaps(spec)...)
+	} else {
+		args = append(args, "-map", "0:v:0")
+		args = append(args, audioMaps(spec)...)
+		args = append(args, "-vf", enc.scale(r.height))
+	}
 	args = append(args, enc.videoCodec(codec)...)
 	args = append(args, enc.rateControl(-1, r)...)
 	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
@@ -216,9 +248,11 @@ func buildLadderArgs(spec Spec, enc videoEncoder, codec string, rungs []rung) []
 	args := inputArgs(spec, enc)
 
 	// Split the video once and scale each branch to its rung height (-2 keeps
-	// the width even and preserves aspect ratio).
+	// the width even and preserves aspect ratio). With a burned-in subtitle the
+	// overlay happens once, before the split, so every rung shares one composite
+	// instead of compositing per rung.
 	var fc strings.Builder
-	fmt.Fprintf(&fc, "[0:v]split=%d", n)
+	fmt.Fprintf(&fc, "%ssplit=%d", ladderHead(spec), n)
 	for i := range rungs {
 		fmt.Fprintf(&fc, "[v%d]", i)
 	}
@@ -261,6 +295,16 @@ func buildLadderArgs(spec Spec, enc videoEncoder, codec string, rungs []rung) []
 		vsm = b.String()
 	}
 	return append(args, hlsMasterTail(vsm)...)
+}
+
+// ladderHead is the filtergraph prefix feeding the split: a bare source label
+// needs no separator, while the overlay chain is joined to the split with a
+// comma like any other filter.
+func ladderHead(spec Spec) string {
+	if spec.burnsIn() {
+		return videoSource(spec) + ","
+	}
+	return videoSource(spec)
 }
 
 func inputArgs(spec Spec, enc videoEncoder) []string {

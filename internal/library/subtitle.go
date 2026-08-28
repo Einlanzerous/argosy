@@ -119,6 +119,14 @@ func subtitleFileHandler(store *Store, subs *subtitle.Service, authStore *auth.S
 		}
 
 		path, err := subs.VTT(r.Context(), t, r.PathValue("trackId"))
+		if errors.Is(err, subtitle.ErrImageTrack) {
+			// An image track is listed but has no WebVTT form (ARGY-59). That is
+			// the client asking for the wrong thing, not the server failing to
+			// deliver something it owes — and it is not worth an ERROR line in
+			// the log every time one is requested.
+			httpx.Error(w, http.StatusBadRequest, "this track is an image subtitle; play it with burnInSubtitle instead")
+			return
+		}
 		if err != nil {
 			logger.Error("subtitle: produce vtt failed", "item", t.ItemID, "track", r.PathValue("trackId"), "err", err)
 			httpx.Error(w, http.StatusBadGateway, "subtitle unavailable")

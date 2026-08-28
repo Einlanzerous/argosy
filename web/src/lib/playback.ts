@@ -102,13 +102,24 @@ export async function supportsHevcInHardware(): Promise<boolean> {
 // the client's HEVC capability so 4K HEVC can be passed through (copied) rather
 // than re-encoded, and whether that decode is in hardware so a 10-bit source can
 // keep its bit depth and HDR.
+//
+// burnInSubtitle names an image subtitle track (a SubtitleTrack with burnIn set)
+// to paint into the video. It costs the passthrough — the server has to
+// re-encode to draw on the frames — so it is sent only when the viewer picks
+// such a track, and a different value starts a different session (ARGY-59).
 export async function startTranscode(
   itemId: string,
   startAt = 0,
+  burnInSubtitle: string | null = null,
 ): Promise<TranscodeSession | null> {
   const { data } = await api.POST('/api/v1/items/{itemId}/transcode', {
     params: { path: { itemId } },
-    body: { startAt, hevc: supportsHevc(), hevcHardware: await supportsHevcInHardware() },
+    body: {
+      startAt,
+      hevc: supportsHevc(),
+      hevcHardware: await supportsHevcInHardware(),
+      ...(burnInSubtitle ? { burnInSubtitle } : {}),
+    },
   })
   return data ?? null
 }

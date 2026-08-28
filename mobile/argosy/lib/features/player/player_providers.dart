@@ -64,9 +64,16 @@ final playerSetupProvider = FutureProvider.autoDispose.family<PlayerSetup, Strin
       .getDevicePreferences()
       .then<DevicePreferences?>((p) => p)
       .catchError((_) => null);
+  // Image subtitles (burnIn) are dropped here rather than shown and refused
+  // later: the phone and TV players have no burn-in flow yet, and every path
+  // below this line — the track sheet, the saved-language auto-select, the
+  // offline stow — would treat one as a WebVTT track and fetch a URL the server
+  // declines by design. Web offers them; ARGY-59 tracks the mobile half.
   final subsF = lib
       .listSubtitles(itemId)
-      .then<List<SubtitleTrack>?>((s) => s)
+      .then<List<SubtitleTrack>?>(
+        (s) => s?.where((t) => t.burnIn != true).toList(),
+      )
       .catchError((_) => null);
   final hevcF = DeviceCapabilities.supportsHevc4k();
 

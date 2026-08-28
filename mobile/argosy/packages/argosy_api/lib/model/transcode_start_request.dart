@@ -16,6 +16,7 @@ class TranscodeStartRequest {
     this.startAt,
     this.hevc,
     this.hevcHardware,
+    this.burnInSubtitle,
   });
 
   /// Seek offset in seconds (default 0).
@@ -45,21 +46,32 @@ class TranscodeStartRequest {
   ///
   bool? hevcHardware;
 
+  /// Id of an image-based subtitle track (a SubtitleTrack with burnIn true, e.g. \"burn:6\") to draw into the video frames. Image subtitles are bitmaps, so there is no WebVTT to hand a <track> element and the only way to show them is to paint them into the picture during the encode (ARGY-59). Doing so forces a full re-encode — the video stream can no longer be copied — and the result cannot be switched off without restarting the session, so send it only when the viewer picks such a track explicitly. Unset (the default) burns in nothing. An id that isn't an image subtitle stream of this item is a 400. 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? burnInSubtitle;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is TranscodeStartRequest &&
     other.startAt == startAt &&
     other.hevc == hevc &&
-    other.hevcHardware == hevcHardware;
+    other.hevcHardware == hevcHardware &&
+    other.burnInSubtitle == burnInSubtitle;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (startAt == null ? 0 : startAt!.hashCode) +
     (hevc == null ? 0 : hevc!.hashCode) +
-    (hevcHardware == null ? 0 : hevcHardware!.hashCode);
+    (hevcHardware == null ? 0 : hevcHardware!.hashCode) +
+    (burnInSubtitle == null ? 0 : burnInSubtitle!.hashCode);
 
   @override
-  String toString() => 'TranscodeStartRequest[startAt=$startAt, hevc=$hevc, hevcHardware=$hevcHardware]';
+  String toString() => 'TranscodeStartRequest[startAt=$startAt, hevc=$hevc, hevcHardware=$hevcHardware, burnInSubtitle=$burnInSubtitle]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -77,6 +89,11 @@ class TranscodeStartRequest {
       json[r'hevcHardware'] = this.hevcHardware;
     } else {
       json[r'hevcHardware'] = null;
+    }
+    if (this.burnInSubtitle != null) {
+      json[r'burnInSubtitle'] = this.burnInSubtitle;
+    } else {
+      json[r'burnInSubtitle'] = null;
     }
     return json;
   }
@@ -99,6 +116,7 @@ class TranscodeStartRequest {
         startAt: mapValueOfType<double>(json, r'startAt'),
         hevc: mapValueOfType<bool>(json, r'hevc'),
         hevcHardware: mapValueOfType<bool>(json, r'hevcHardware'),
+        burnInSubtitle: mapValueOfType<String>(json, r'burnInSubtitle'),
       );
     }
     return null;

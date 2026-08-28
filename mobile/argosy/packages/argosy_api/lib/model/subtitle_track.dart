@@ -19,6 +19,7 @@ class SubtitleTrack {
     required this.label,
     required this.forced,
     required this.default_,
+    this.burnIn,
   });
 
   /// Track handle for the WebVTT endpoint (e.g. \"embedded:3\", \"os:12345\").
@@ -36,6 +37,15 @@ class SubtitleTrack {
 
   bool default_;
 
+  /// This track is image-based (PGS/VOBSUB/DVB) rather than text, so it has no WebVTT form: the subtitles endpoint will refuse its id. It can only be shown by burning it into the video during a transcode — POST /items/{itemId}/transcode with burnInSubtitle set to this id (ARGY-59). That costs a full re-encode and cannot be toggled off mid-session, so a client should present it as a distinct, deliberate choice rather than mixing it in with the text tracks. Absent or false means an ordinary text track. 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? burnIn;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is SubtitleTrack &&
     other.id == id &&
@@ -43,7 +53,8 @@ class SubtitleTrack {
     other.language == language &&
     other.label == label &&
     other.forced == forced &&
-    other.default_ == default_;
+    other.default_ == default_ &&
+    other.burnIn == burnIn;
 
   @override
   int get hashCode =>
@@ -53,10 +64,11 @@ class SubtitleTrack {
     (language.hashCode) +
     (label.hashCode) +
     (forced.hashCode) +
-    (default_.hashCode);
+    (default_.hashCode) +
+    (burnIn == null ? 0 : burnIn!.hashCode);
 
   @override
-  String toString() => 'SubtitleTrack[id=$id, source_=$source_, language=$language, label=$label, forced=$forced, default_=$default_]';
+  String toString() => 'SubtitleTrack[id=$id, source_=$source_, language=$language, label=$label, forced=$forced, default_=$default_, burnIn=$burnIn]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -66,6 +78,11 @@ class SubtitleTrack {
       json[r'label'] = this.label;
       json[r'forced'] = this.forced;
       json[r'default'] = this.default_;
+    if (this.burnIn != null) {
+      json[r'burnIn'] = this.burnIn;
+    } else {
+      json[r'burnIn'] = null;
+    }
     return json;
   }
 
@@ -102,6 +119,7 @@ class SubtitleTrack {
         label: mapValueOfType<String>(json, r'label')!,
         forced: mapValueOfType<bool>(json, r'forced')!,
         default_: mapValueOfType<bool>(json, r'default')!,
+        burnIn: mapValueOfType<bool>(json, r'burnIn'),
       );
     }
     return null;

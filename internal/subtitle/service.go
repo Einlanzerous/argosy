@@ -3,6 +3,7 @@ package subtitle
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -25,11 +26,19 @@ const maxExternalTracks = 3
 var trackIDRe = regexp.MustCompile(`^(embedded|os):\d+$`)
 
 // textSubCodecs are the embedded subtitle codecs we can convert to WebVTT.
-// Image-based codecs (hdmv_pgs_subtitle, dvd_subtitle, dvb_subtitle) need OCR or
-// burn-in (ARGY-59) and are excluded.
 var textSubCodecs = map[string]bool{
 	"subrip": true, "srt": true, "ass": true, "ssa": true,
 	"mov_text": true, "webvtt": true, "text": true,
+}
+
+// imageSubCodecs are the embedded subtitle codecs that carry rendered bitmaps
+// rather than characters. There is nothing to convert to WebVTT without OCR, so
+// they are offered as burn-in tracks instead: the transcoder paints them into
+// the frames (ARGY-59). Blu-ray rips are PGS, DVD rips are dvd_subtitle, and
+// broadcast captures are dvb_subtitle; xsub is the DivX-era form.
+var imageSubCodecs = map[string]bool{
+	"hdmv_pgs_subtitle": true, "dvd_subtitle": true,
+	"dvb_subtitle": true, "xsub": true,
 }
 
 // Target is everything needed to resolve subtitles for one media item.
@@ -45,13 +54,22 @@ type Target struct {
 
 // Track is one selectable subtitle, embedded or external.
 type Track struct {
-	ID       string `json:"id"`       // "embedded:<idx>" | "os:<fileID>"
+	ID       string `json:"id"`       // "embedded:<idx>" | "os:<fileID>" | "burn:<idx>"
 	Source   string `json:"source"`   // "embedded" | "opensubtitles"
 	Language string `json:"language"` // BCP-47 code (e.g. "en")
 	Label    string `json:"label"`    // human label for the picker
 	Forced   bool   `json:"forced"`
 	Default  bool   `json:"default"`
+	// BurnIn marks an image-based track, which has no WebVTT form and is shown
+	// by re-encoding it into the video (ARGY-59). Omitted for text tracks, so
+	// their JSON is unchanged.
+	BurnIn bool `json:"burnIn,omitempty"`
 }
+
+// ErrImageTrack is returned by VTT for a burn-in track. It is a refusal by
+// design, not a failure to produce something that should exist, so callers can
+// answer 400 rather than reporting an upstream problem they cannot fix.
+var ErrImageTrack = errors.New("subtitle: image track has no WebVTT form")
 
 // searchTTL bounds how often the same item re-queries OpenSubtitles — List runs
 // on every player open, and results barely change between openings.
@@ -85,18 +103,27 @@ func NewService(os *OpenSubtitles, cacheDir string, langs []string, logger *slog
 
 // List returns the available subtitle tracks for an item: embedded text tracks
 // (from ffprobe), plus OpenSubtitles candidates only for wanted languages that
-// no embedded track covers (ARGY-153). A failed external search degrades to
-// embedded-only rather than erroring the whole list.
+// no embedded track covers (ARGY-153), plus any image-based tracks as burn-in
+// candidates (ARGY-59). A failed external search degrades to embedded-only
+// rather than erroring the whole list.
+//
+// Image tracks come last and never count as coverage. A burn-in costs a full
+// re-encode and can't be switched off mid-session, so a text subtitle in the
+// same language — including one fetched from OpenSubtitles — is strictly the
+// better answer, and treating the image track as "this language is handled"
+// would suppress the search that finds it.
 func (s *Service) List(ctx context.Context, t Target) []Track {
 	tracks := embeddedTracks(t.Technical)
+	images := imageTracks(t.Technical)
 	if s.os == nil || !s.os.Configured() {
-		return tracks
+		return append(tracks, images...)
 	}
 	missing := missingLangs(tracks, s.langs)
 	if len(missing) == 0 {
-		return tracks
+		return append(tracks, images...)
 	}
-	return append(tracks, s.externalTracks(ctx, t, missing)...)
+	tracks = append(tracks, s.externalTracks(ctx, t, missing)...)
+	return append(tracks, images...)
 }
 
 // missingLangs returns the wanted languages no embedded track covers. Forced
@@ -192,6 +219,12 @@ func (s *Service) externalTracks(ctx context.Context, t Target, langs []string) 
 // path on disk. Production is atomic (temp file + rename), so concurrent callers
 // are safe.
 func (s *Service) VTT(ctx context.Context, t Target, trackID string) (string, error) {
+	if strings.HasPrefix(trackID, BurnInPrefix) {
+		// Listed by List, but deliberately not servable here: it is a bitmap.
+		// Say so, rather than letting it fall through to the generic "invalid
+		// track id" a typo produces (ARGY-59).
+		return "", fmt.Errorf("%w: track %q is burned in during transcode", ErrImageTrack, trackID)
+	}
 	if !trackIDRe.MatchString(trackID) {
 		return "", fmt.Errorf("invalid track id %q", trackID)
 	}
@@ -264,33 +297,50 @@ func (s *Service) fetchExternal(ctx context.Context, fileIDStr, dest string) err
 	return f.Close()
 }
 
-// embeddedTracks enumerates text-based subtitle streams from the stored ffprobe
-// JSON. Image-based streams are skipped (left to burn-in, ARGY-59).
-func embeddedTracks(technical json.RawMessage) []Track {
+// subtitleStream is one subtitle stream as ffprobe describes it.
+type subtitleStream struct {
+	Index     int    `json:"index"`
+	CodecType string `json:"codec_type"`
+	CodecName string `json:"codec_name"`
+	Tags      struct {
+		Language string `json:"language"`
+		Title    string `json:"title"`
+	} `json:"tags"`
+	Disposition struct {
+		Default int `json:"default"`
+		Forced  int `json:"forced"`
+	} `json:"disposition"`
+}
+
+// subtitleStreams pulls every subtitle stream out of the stored ffprobe JSON,
+// in file order. Index is ffprobe's absolute stream index, which is what both
+// the extraction map (`0:<idx>`) and the burn-in filtergraph link (`[0:<idx>]`)
+// address.
+func subtitleStreams(technical json.RawMessage) []subtitleStream {
 	var doc struct {
-		Streams []struct {
-			Index     int    `json:"index"`
-			CodecType string `json:"codec_type"`
-			CodecName string `json:"codec_name"`
-			Tags      struct {
-				Language string `json:"language"`
-				Title    string `json:"title"`
-			} `json:"tags"`
-			Disposition struct {
-				Default int `json:"default"`
-				Forced  int `json:"forced"`
-			} `json:"disposition"`
-		} `json:"streams"`
+		Streams []subtitleStream `json:"streams"`
 	}
-	tracks := []Track{}
 	if len(technical) == 0 {
-		return tracks
+		return nil
 	}
 	if err := json.Unmarshal(technical, &doc); err != nil {
-		return tracks
+		return nil
 	}
+	var out []subtitleStream
 	for _, st := range doc.Streams {
-		if st.CodecType != "subtitle" || !textSubCodecs[st.CodecName] {
+		if st.CodecType == "subtitle" {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
+// embeddedTracks enumerates text-based subtitle streams from the stored ffprobe
+// JSON. Image-based streams are enumerated separately, by imageTracks.
+func embeddedTracks(technical json.RawMessage) []Track {
+	tracks := []Track{}
+	for _, st := range subtitleStreams(technical) {
+		if !textSubCodecs[st.CodecName] {
 			continue
 		}
 		lang := langCode(st.Tags.Language)
@@ -304,6 +354,62 @@ func embeddedTracks(technical json.RawMessage) []Track {
 		})
 	}
 	return tracks
+}
+
+// imageTracks enumerates image-based subtitle streams as burn-in candidates
+// (ARGY-59). Their ids carry the `burn:` prefix rather than `embedded:` so that
+// nothing can route one into the WebVTT path by accident: trackIDRe rejects
+// them, so the subtitles endpoint refuses the id instead of shelling out to
+// ffmpeg to convert a bitmap into text and failing there.
+func imageTracks(technical json.RawMessage) []Track {
+	var tracks []Track
+	for _, st := range subtitleStreams(technical) {
+		if !imageSubCodecs[st.CodecName] {
+			continue
+		}
+		lang := langCode(st.Tags.Language)
+		tracks = append(tracks, Track{
+			ID:       BurnInPrefix + strconv.Itoa(st.Index),
+			Source:   "embedded",
+			Language: lang,
+			Label:    embeddedLabel(st.Tags.Title, lang, st.Disposition.Forced == 1),
+			Forced:   st.Disposition.Forced == 1,
+			Default:  st.Disposition.Default == 1,
+			BurnIn:   true,
+		})
+	}
+	return tracks
+}
+
+// BurnInPrefix marks a track id as an image subtitle to be drawn into the video
+// rather than served as WebVTT.
+const BurnInPrefix = "burn:"
+
+// BurnInStream resolves a burn-in track id against an item's stored ffprobe JSON
+// and returns the absolute source stream index to overlay. ok is false for
+// anything that is not a `burn:<n>` id naming an image subtitle stream of *this*
+// item.
+//
+// It validates against the item rather than just parsing the id because the
+// index goes straight into an ffmpeg filtergraph. A caller that passed
+// "burn:0" — the video — would otherwise build a graph that consumes the video
+// stream twice and fails at session start, and one that passed a text stream's
+// index would silently produce a video with nothing drawn on it.
+func BurnInStream(technical json.RawMessage, trackID string) (int, bool) {
+	arg, ok := strings.CutPrefix(trackID, BurnInPrefix)
+	if !ok {
+		return 0, false
+	}
+	idx, err := strconv.Atoi(arg)
+	if err != nil {
+		return 0, false
+	}
+	for _, st := range subtitleStreams(technical) {
+		if st.Index == idx && imageSubCodecs[st.CodecName] {
+			return idx, true
+		}
+	}
+	return 0, false
 }
 
 func embeddedLabel(title, lang string, forced bool) string {

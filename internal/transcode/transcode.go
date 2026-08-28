@@ -91,7 +91,16 @@ type Spec struct {
 	// builders emit multi-rendition HLS (ARGY-126); 0–1 keeps the single-audio
 	// output unchanged.
 	AudioTracks []AudioTrack
+	// BurnInSubtitle is the absolute source stream index of an image subtitle
+	// (PGS/VOBSUB) to draw into the video (ARGY-59). Zero means none: stream 0
+	// is the video, so it can never name a subtitle. A set value forces the
+	// re-encode path — the overlay changes the pixels, so there is nothing left
+	// to copy.
+	BurnInSubtitle int
 }
+
+// burnsIn reports whether this spec draws an image subtitle into the video.
+func (s Spec) burnsIn() bool { return s.BurnInSubtitle > 0 }
 
 // StartRequest is the caller-facing request to begin (or join) a session.
 type StartRequest struct {
@@ -105,6 +114,7 @@ type StartRequest struct {
 	VideoCodec     string       // output/copied video codec (CodecH264/CodecHEVC)
 	TranscodeAudio bool         // remux: re-encode audio to AAC instead of copying
 	AudioTracks    []AudioTrack // source audio streams; 2+ → multi-rendition HLS
+	BurnInSubtitle int          // source stream index of an image subtitle to burn in; 0 = none
 }
 
 // Session is an immutable snapshot of a transcode session's public state,
@@ -281,9 +291,12 @@ func NewManager(backend Backend, workDir string, idleTTL time.Duration, maxSess 
 func sessionID(req StartRequest) string {
 	// Codec + method are part of the key so clients that negotiated different
 	// outputs (e.g. an HEVC-capable client remuxing 4K vs one transcoding to
-	// H.264 1080p) get distinct sessions rather than colliding on one.
-	key := fmt.Sprintf("%s|%s|%d|%s|%s|%s", req.AccountID, req.ItemID, int64(req.StartAt),
-		req.Encoder, resolveCodec(req.VideoCodec), req.Method)
+	// H.264 1080p) get distinct sessions rather than colliding on one. So is the
+	// burned-in subtitle: the picture differs, so turning captions on must start
+	// its own encode rather than join the one already running without them
+	// (ARGY-59).
+	key := fmt.Sprintf("%s|%s|%d|%s|%s|%s|%d", req.AccountID, req.ItemID, int64(req.StartAt),
+		req.Encoder, resolveCodec(req.VideoCodec), req.Method, req.BurnInSubtitle)
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])[:16]
 }
@@ -327,6 +340,7 @@ func (m *Manager) Start(req StartRequest) (Session, error) {
 		SessionID: id, Source: req.Source, OutputDir: outputDir,
 		StartAt: req.StartAt, Encoder: req.Encoder, SourceHeight: req.SourceHeight, Method: method,
 		VideoCodec: req.VideoCodec, TranscodeAudio: req.TranscodeAudio, AudioTracks: req.AudioTracks,
+		BurnInSubtitle: req.BurnInSubtitle,
 	})
 	return s.snapshot(), nil
 }

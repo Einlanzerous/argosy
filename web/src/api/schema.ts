@@ -723,6 +723,13 @@ export interface paths {
          * @description Lists subtitle tracks resolved through the priority chain: embedded text
          *     tracks (from the container) plus OpenSubtitles candidates when configured.
          *     Each track's `id` is fetched as WebVTT from the sibling endpoint.
+         *
+         *     Image-based tracks (PGS/VOBSUB/DVB) are listed last and flagged with
+         *     `burnIn`. They have no WebVTT form — the sibling endpoint refuses their
+         *     ids — and are shown by burning them into the video during a transcode
+         *     (ARGY-59). They never count as language coverage, so an OpenSubtitles
+         *     text candidate is still offered for a language that only has an image
+         *     track.
          */
         get: operations["listSubtitles"];
         put?: never;
@@ -1201,6 +1208,8 @@ export interface components {
             hevc?: boolean;
             /** @description MediaCapabilities.decodingInfo's view of whether this client decodes 10-bit HEVC (Main 10) in hardware — both `smooth` and `powerEfficient`. Read it asymmetrically: false is meaningful (the device has recorded decode stats and they are bad), while true is weak, because browsers report any supported configuration as smooth and powerEfficient until stats have been recorded on the device. The server treats it as a veto rather than a licence: a true only permits a 10-bit HEVC source to keep its bit depth and HDR above 1080p, where such a copy has been observed playing smoothly (ARGY-178). Absent or false re-encodes to 8-bit, which is the pre-ARGY-178 behaviour. */
             hevcHardware?: boolean;
+            /** @description Id of an image-based subtitle track (a SubtitleTrack with burnIn true, e.g. "burn:6") to draw into the video frames. Image subtitles are bitmaps, so there is no WebVTT to hand a <track> element and the only way to show them is to paint them into the picture during the encode (ARGY-59). Doing so forces a full re-encode — the video stream can no longer be copied — and the result cannot be switched off without restarting the session, so send it only when the viewer picks such a track explicitly. Unset (the default) burns in nothing. An id that isn't an image subtitle stream of this item is a 400. */
+            burnInSubtitle?: string;
         };
         TranscodeProgress: {
             /**
@@ -1308,6 +1317,8 @@ export interface components {
             label: string;
             forced: boolean;
             default: boolean;
+            /** @description This track is image-based (PGS/VOBSUB/DVB) rather than text, so it has no WebVTT form: the subtitles endpoint will refuse its id. It can only be shown by burning it into the video during a transcode — POST /items/{itemId}/transcode with burnInSubtitle set to this id (ARGY-59). That costs a full re-encode and cannot be toggled off mid-session, so a client should present it as a distinct, deliberate choice rather than mixing it in with the text tracks. Absent or false means an ordinary text track. */
+            burnIn?: boolean;
         };
         TranscodeCapabilities: {
             /** @description Encoder backends usable on this host (always includes "software"). */
