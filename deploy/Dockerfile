@@ -82,4 +82,38 @@ RUN sed -i 's/Components: main/Components: main contrib non-free non-free-firmwa
 COPY --from=build /out/argosy /usr/local/bin/argosy
 ENV ARGOSY_ADDR=":8096"
 EXPOSE 8096
+
+# Health probe (ARGY-216). argosy is the one first-party service whose /healthz
+# has a branch that genuinely fires — it answers 503 when Postgres is
+# unreachable, where every sibling's endpoint is liveness-only and answers 200
+# unconditionally. So this is not a formality: it separates "process up,
+# database gone" from "process up, database fine", the state nothing else
+# surfaces. Without it argosy sits on assert-healthy.sh's "cannot be seen to
+# fail" list, which is how interlock-worker stayed invisibly dead.
+#
+# It also refuses a container configured with NO database at all, which /healthz
+# cannot report on its own — see cmd/argosy/healthcheck.go. That process serves
+# the SPA shell and 404s every API route while answering 200 "ok".
+#
+# It buys visibility, not self-healing: `restart: unless-stopped` restarts
+# EXITED containers, not unhealthy ones. `docker ps`, assert-healthy.sh and the
+# deploy gate are the consumers.
+#
+# The probe is the binary itself because this image has no HTTP client at all —
+# no curl, no wget, not even busybox — and adding one would mean a package to
+# track plus a second definition of "healthy" written in shell. `argosy
+# healthcheck` reads the contract the handler writes, and a test drives both
+# halves together (internal/server/health_test.go) so they cannot drift.
+#
+# It is declared here rather than only in construct-server's compose so the
+# image is probeable wherever it runs; a compose-level healthcheck overrides
+# this one, so a better probe later is still free to land there.
+#
+# start-period covers migrations plus transcode.Probe, which runs a real one-
+# frame encode on each render node before the server listens (ARGY-183).
+# --timeout exceeds the probe's own 4s deadline so a slow answer is reported by
+# the probe in its own words instead of being killed with an empty health log.
+HEALTHCHECK --interval=30s --timeout=6s --start-period=90s --retries=3 \
+  CMD ["argosy", "healthcheck"]
+
 ENTRYPOINT ["argosy"]
