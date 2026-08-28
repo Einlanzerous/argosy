@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.0](https://github.com/Einlanzerous/argosy/compare/v0.27.2...v0.28.0) (2026-08-28)
+
+
+### Features
+
+* **health:** give the container a healthcheck that can be seen to fail (ARGY-216) ([#230](https://github.com/Einlanzerous/argosy/issues/230)) ([34a0898](https://github.com/Einlanzerous/argosy/commit/34a0898c14dadb10600b1c9c783a93ffb5764859))
+* **subtitle:** burn image subtitles into the video on request (ARGY-59) ([#232](https://github.com/Einlanzerous/argosy/issues/232)) ([3749e80](https://github.com/Einlanzerous/argosy/commit/3749e80d711ca35d2bff3a7f18648461dca876a6))
+
 ## [0.27.2](https://github.com/Einlanzerous/argosy/compare/v0.27.1...v0.27.2) (2026-08-27)
 
 
