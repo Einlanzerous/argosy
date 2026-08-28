@@ -31,12 +31,26 @@ func (r *statusRecorder) Flush() {
 func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
 // withLogging logs one structured line per request.
+//
+// A SUCCESSFUL /healthz drops to Debug (ARGY-216). The container probes itself
+// every 30s and Switchyard's delivery reconciler polls the same endpoint, so at
+// Info the two together bury `docker logs argosy` under thousands of
+// `path=/healthz status=200` lines a day — and the whole point of adding a
+// healthcheck was to make this container's state easier to see, not harder.
+//
+// Only the 200 is quietened. A /healthz that answers anything else is the
+// degraded database branch, which is exactly the line someone wants to find
+// when they go looking, so it stays at Info alongside every other request.
 func withLogging(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		logger.Info("request",
+		level := slog.LevelInfo
+		if r.URL.Path == "/healthz" && rec.status == http.StatusOK {
+			level = slog.LevelDebug
+		}
+		logger.Log(r.Context(), level, "request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
