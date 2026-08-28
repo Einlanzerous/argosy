@@ -1044,6 +1044,11 @@ async function switchBurnIn(trackId: string | null): Promise<void> {
       attachDirect(el)
       el.currentTime = resumeAt
       void el.play().catch(() => {})
+      // The transcode path reapplies the active caption at the end of
+      // startTranscodeAt; this branch has to do it too, or switching straight
+      // from a burned-in track to a text one leaves the row ticked with the cue
+      // element already torn down and nothing fetching the new VTT.
+      reapplySubtitle()
       return
     }
     resetRecovery(resumeAt)
@@ -1499,6 +1504,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 class="cc-item"
                 :class="{ sel: !activeSubtitle }"
                 type="button"
+                :disabled="burnInSwitching"
                 @click="selectSubtitle(null)"
               >
                 <span class="cc-label">Off</span>
