@@ -2,6 +2,7 @@ import 'package:argosy_api/api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
+import '../../api/device_preferences_copy.dart';
 import '../home/home_providers.dart';
 
 /// The two preference scopes the Settings screen edits: per-device playback
@@ -40,88 +41,30 @@ class SettingsController extends AsyncNotifier<SettingsData> {
     }
   }
 
-  // Each device mutator rebuilds the whole DevicePreferences from the current
-  // one (the generated model has no copyWith) and persists it.
+  // Each device mutator clones the current preferences and sets only its own
+  // field, so adding a preference cannot silently drop it here (ARGY-208).
   DevicePreferences get _device => state.value!.device;
 
-  Future<void> setSubtitlesEnabled(bool enabled) => _saveDevice(DevicePreferences(
-        subtitleEnabled: enabled,
-        subtitleLanguage: _device.subtitleLanguage,
-        audioLanguage: _device.audioLanguage,
-        captionScale: _device.captionScale,
-        captionColor: _device.captionColor,
-        captionBackground: _device.captionBackground,
-        captionPosition: _device.captionPosition,
-        seriesAutoAdvance: _device.seriesAutoAdvance,
-      ));
+  Future<void> setSubtitlesEnabled(bool enabled) =>
+      _saveDevice(_device.copy()..subtitleEnabled = enabled);
 
-  Future<void> setSubtitleLanguage(String? language) => _saveDevice(DevicePreferences(
-        subtitleEnabled: _device.subtitleEnabled,
-        subtitleLanguage: language,
-        audioLanguage: _device.audioLanguage,
-        captionScale: _device.captionScale,
-        captionColor: _device.captionColor,
-        captionBackground: _device.captionBackground,
-        captionPosition: _device.captionPosition,
-        seriesAutoAdvance: _device.seriesAutoAdvance,
-      ));
+  Future<void> setSubtitleLanguage(String? language) =>
+      _saveDevice(_device.copy()..subtitleLanguage = language);
 
-  Future<void> setCaptionScale(double scale) => _saveDevice(DevicePreferences(
-        subtitleEnabled: _device.subtitleEnabled,
-        subtitleLanguage: _device.subtitleLanguage,
-        audioLanguage: _device.audioLanguage,
-        captionScale: scale,
-        captionColor: _device.captionColor,
-        captionBackground: _device.captionBackground,
-        captionPosition: _device.captionPosition,
-        seriesAutoAdvance: _device.seriesAutoAdvance,
-      ));
+  Future<void> setCaptionScale(double scale) =>
+      _saveDevice(_device.copy()..captionScale = scale);
 
-  Future<void> setCaptionColor(String hex) => _saveDevice(DevicePreferences(
-        subtitleEnabled: _device.subtitleEnabled,
-        subtitleLanguage: _device.subtitleLanguage,
-        audioLanguage: _device.audioLanguage,
-        captionScale: _device.captionScale,
-        captionColor: hex,
-        captionBackground: _device.captionBackground,
-        captionPosition: _device.captionPosition,
-        seriesAutoAdvance: _device.seriesAutoAdvance,
-      ));
+  Future<void> setCaptionColor(String hex) =>
+      _saveDevice(_device.copy()..captionColor = hex);
 
   Future<void> setCaptionBackground(DevicePreferencesCaptionBackgroundEnum bg) =>
-      _saveDevice(DevicePreferences(
-        subtitleEnabled: _device.subtitleEnabled,
-        subtitleLanguage: _device.subtitleLanguage,
-        audioLanguage: _device.audioLanguage,
-        captionScale: _device.captionScale,
-        captionColor: _device.captionColor,
-        captionBackground: bg,
-        captionPosition: _device.captionPosition,
-        seriesAutoAdvance: _device.seriesAutoAdvance,
-      ));
+      _saveDevice(_device.copy()..captionBackground = bg);
 
   Future<void> setCaptionPosition(DevicePreferencesCaptionPositionEnum pos) =>
-      _saveDevice(DevicePreferences(
-        subtitleEnabled: _device.subtitleEnabled,
-        subtitleLanguage: _device.subtitleLanguage,
-        audioLanguage: _device.audioLanguage,
-        captionScale: _device.captionScale,
-        captionColor: _device.captionColor,
-        captionBackground: _device.captionBackground,
-        captionPosition: pos,
-        seriesAutoAdvance: _device.seriesAutoAdvance,
-      ));
+      _saveDevice(_device.copy()..captionPosition = pos);
 
-  Future<void> setSeriesAutoAdvance(bool enabled) => _saveDevice(DevicePreferences(
-        subtitleEnabled: _device.subtitleEnabled,
-        subtitleLanguage: _device.subtitleLanguage,
-        audioLanguage: _device.audioLanguage,
-        captionScale: _device.captionScale,
-        captionColor: _device.captionColor,
-        captionBackground: _device.captionBackground,
-        captionPosition: _device.captionPosition,
-        seriesAutoAdvance: enabled,
-      ));
+  Future<void> setSeriesAutoAdvance(bool enabled) =>
+      _saveDevice(_device.copy()..seriesAutoAdvance = enabled);
 
   Future<void> setHomeLayout(UserPreferencesHomeLayoutEnum layout) async {
     final current = state.value;
