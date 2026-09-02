@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../api/device_preferences_copy.dart';
 import '../stow/offline_progress_queue.dart';
 import 'argosy_audio_handler.dart';
 import 'media_session_state.dart';
@@ -741,16 +742,12 @@ class PlaybackController extends ChangeNotifier
         }
       }
     }
-    final next = DevicePreferences(
-      subtitleEnabled: trackId != null,
-      subtitleLanguage: track?.language ?? prefs?.subtitleLanguage,
-      audioLanguage: prefs?.audioLanguage,
-      captionScale: prefs?.captionScale,
-      captionColor: prefs?.captionColor,
-      captionBackground: prefs?.captionBackground,
-      // Preserve auto-advance so changing subtitles mid-playback doesn't reset it.
-      seriesAutoAdvance: prefs?.seriesAutoAdvance,
-    );
+    // Clone-and-mutate so this save can only touch what it owns. Rebuilding the
+    // whole object by hand is what dropped captionPosition and reset the
+    // viewer's caption placement on every track change (ARGY-208).
+    final next = (prefs ?? DevicePreferences(subtitleEnabled: false)).copy()
+      ..subtitleEnabled = trackId != null
+      ..subtitleLanguage = track?.language ?? prefs?.subtitleLanguage;
     prefs = next;
     try {
       await authApi.setDevicePreferences(next);
@@ -814,16 +811,8 @@ class PlaybackController extends ChangeNotifier
   }
 
   Future<void> _savePreferredAudio(String? lang) async {
-    final next = DevicePreferences(
-      subtitleEnabled: prefs?.subtitleEnabled ?? false,
-      subtitleLanguage: prefs?.subtitleLanguage,
-      audioLanguage: lang ?? prefs?.audioLanguage,
-      captionScale: prefs?.captionScale,
-      captionColor: prefs?.captionColor,
-      captionBackground: prefs?.captionBackground,
-      captionPosition: prefs?.captionPosition,
-      seriesAutoAdvance: prefs?.seriesAutoAdvance,
-    );
+    final next = (prefs ?? DevicePreferences(subtitleEnabled: false)).copy()
+      ..audioLanguage = lang ?? prefs?.audioLanguage;
     prefs = next;
     try {
       await authApi.setDevicePreferences(next);
