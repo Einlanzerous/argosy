@@ -184,8 +184,6 @@ class AuthController extends Notifier<AuthStatus> {
     state = AuthStatus.unauthenticated;
   }
 
-  /// Accepts `host`, `host:port`, or a full URL; defaults to http, strips a
-  /// trailing slash. Returns null when nothing usable is left.
   /// Ordered base-URL candidates for a typed server address, likeliest first.
   /// Empty when the input can't be a server address at all.
   ///
@@ -228,8 +226,18 @@ class AuthController extends Notifier<AuthStatus> {
   /// exists to prevent, and it is how this household actually connects.
   static bool isPrivateHost(String host) {
     final h = host.toLowerCase();
-    if (h == 'localhost' || h == '::1') return true;
-    if (h.startsWith('fe80:')) return true;
+    if (h == 'localhost') return true;
+    // IPv6 first: `Uri.host` strips the brackets, so these arrive as a bare
+    // address with colons and no dot. Deciding them here keeps the single-label
+    // rule below from reading a *public* v6 literal as a TLD-less name and
+    // handing it a cleartext fallback — loopback, link-local (fe80::/10) and
+    // unique-local (fc00::/7, i.e. an fc/fd prefix) are the only private ones.
+    if (h.contains(':')) {
+      return h == '::1' ||
+          h.startsWith('fe80:') ||
+          h.startsWith('fc') ||
+          h.startsWith('fd');
+    }
     if (!h.contains('.')) return true;
     if (h.endsWith('.local') ||
         h.endsWith('.internal') ||

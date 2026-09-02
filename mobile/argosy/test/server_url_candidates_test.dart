@@ -97,6 +97,10 @@ void main() {
         'argosy.local',
         'construct.ts.net',
         'imperial-construct',
+        '::1', // IPv6 loopback
+        'fe80::1', // IPv6 link-local
+        'fd00::1', // IPv6 unique-local (fc00::/7)
+        'fc00::1',
       ]) {
         expect(AuthController.isPrivateHost(h), isTrue, reason: h);
       }
@@ -112,9 +116,25 @@ void main() {
         '100.63.0.1', // just outside 100.64/10
         '100.128.0.1',
         '11.0.0.1',
+        // A public IPv6 literal has no dot either, so dot-absence alone must
+        // not read it as a TLD-less private name and offer it cleartext.
+        '2001:db8::1',
+        '2606:4700::1111',
+        '::ffff:8.8.8.8',
       ]) {
         expect(AuthController.isPrivateHost(h), isFalse, reason: h);
       }
+    });
+
+    test('a public IPv6 server is never offered a cleartext fallback', () {
+      expect(AuthController.serverUrlCandidates('[2001:db8::1]:8097'), [
+        'https://[2001:db8::1]:8097',
+      ]);
+      // ...while the loopback and tailnet-shaped ones still get one.
+      expect(AuthController.serverUrlCandidates('[::1]:8096'), [
+        'https://[::1]:8096',
+        'http://[::1]:8096',
+      ]);
     });
   });
 
