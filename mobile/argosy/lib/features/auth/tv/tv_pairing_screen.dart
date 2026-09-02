@@ -257,8 +257,10 @@ class _TvPairingScreenState extends ConsumerState<TvPairingScreen> {
       },
       _Step.server => (
           'Connect to your server',
-          'Tip: on home Wi-Fi use the LAN IP (e.g. 10.0.0.45:8096). A Tailscale '
-              'name only works if this TV is on the tailnet too.',
+          'Tip: no need to type http:// — a remote address is tried over HTTPS, '
+              'and a LAN or tailnet one (e.g. 10.0.0.45:8096) falls back to '
+              'plain HTTP. A Tailscale name only works if this TV is on the '
+              'tailnet too.',
         ),
       _Step.signIn => ('Welcome aboard', 'Sign in to reach your library.'),
       _Step.pair => ('Who’s aboard?', 'Pick a profile — this TV joins your Fleet.'),

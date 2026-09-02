@@ -265,13 +265,15 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
             onSubmitted: (_) => _submitServer(),
             decoration: const InputDecoration(
               labelText: 'Server address',
-              hintText: 'http://10.0.0.20:8097',
+              hintText: 'argosy.example.com or 10.0.0.20:8097',
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            'Tip: on home Wi-Fi use the LAN IP (e.g. 10.0.0.45:8096). A '
-            'Tailscale name only works if this device is on the tailnet too.',
+            'Tip: no need to type http:// — a remote address is tried over '
+            'HTTPS, and a LAN or tailnet one (e.g. 10.0.0.45:8096) falls back '
+            'to plain HTTP. A Tailscale name only works if this device is on '
+            'the tailnet too.',
             textAlign: TextAlign.center,
             style: text.bodySmall?.copyWith(color: ArgosyColors.mute),
           ),
