@@ -66,6 +66,39 @@ final transcodeApiProvider =
 final systemApiProvider =
     Provider<SystemApi>((ref) => SystemApi(ref.watch(apiClientProvider)));
 
+/// Answers whether a *candidate* server address responds, without disturbing
+/// the configured one. Manual server entry probes before it commits (ARGY-192),
+/// so it needs a client aimed somewhere other than [baseUrlProvider].
+///
+/// A provider so tests can substitute a fake instead of reaching the network.
+typedef ServerProbe =
+    Future<({bool ok, String? detail})> Function(String baseUrl);
+
+/// Shorter than [_connectTimeout]: this runs up to twice in a row while someone
+/// waits on a "Continue" spinner, and a candidate that isn't listening is the
+/// expected outcome rather than an error.
+const _probeTimeout = Duration(seconds: 3);
+
+final serverProbeProvider = Provider<ServerProbe>((ref) => _probeServer);
+
+Future<({bool ok, String? detail})> _probeServer(String baseUrl) async {
+  final httpClient = IOClient(HttpClient()..connectionTimeout = _probeTimeout);
+  try {
+    // `/api/v1/ping` is unauthenticated (`security: []`), so this answers
+    // before there are any credentials to answer with.
+    await SystemApi(ApiClient(basePath: baseUrl)..client = httpClient)
+        .ping()
+        .timeout(_probeTimeout);
+    return (ok: true, detail: null);
+  } catch (e) {
+    // Keep why it failed: a server that answers 500 is a different problem
+    // from one that isn't there, and the caller reports the last candidate's.
+    return (ok: false, detail: mapApiError(e).message);
+  } finally {
+    httpClient.close();
+  }
+}
+
 /// URL builder for the `?token=`-authenticated streaming/SSE endpoints, using
 /// the current base URL + token.
 final streamUrlsProvider = Provider<StreamUrls>((ref) {

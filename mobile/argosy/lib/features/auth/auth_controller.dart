@@ -70,34 +70,33 @@ class AuthController extends Notifier<AuthStatus> {
   /// Persist + activate the household server address, then verify it's
   /// reachable. Throws [ApiFailure] if the address is unusable.
   Future<void> setServer(String rawUrl) async {
-    final url = _normalizeServerUrl(rawUrl);
-    if (url == null) {
+    final candidates = serverUrlCandidates(rawUrl);
+    if (candidates.isEmpty) {
       throw const ApiFailure(
-        'Enter a valid server address, e.g. http://10.0.0.20:8097',
+        'Enter a valid server address, e.g. argosy.example.com or '
+        '10.0.0.20:8097',
       );
     }
-    await ref.read(tokenStoreProvider).setBaseUrl(url);
-    ref.read(baseUrlProvider.notifier).set(url);
-    try {
-      // Bounded: the generated client has no request timeout, and a host that
-      // silently drops packets (client/AP isolation) would otherwise hang the
-      // "Continue" spinner for the OS connect timeout — minutes, not seconds.
-      await ref
-          .read(systemApiProvider)
-          .ping()
-          .timeout(const Duration(seconds: 8));
-    } catch (e) {
-      // Name the address we actually tried — a wrong/typo'd/concatenated URL
-      // otherwise looks like a generic network failure.
-      final mapped = mapApiError(e);
-      final detail = mapped.statusCode == null
-          ? 'Check the address is correct and the server is reachable.'
-          : mapped.message;
-      throw ApiFailure(
-        "Couldn't reach $url — $detail",
-        statusCode: mapped.statusCode,
-      );
+    // Probe before committing: the address is only stored once something at the
+    // other end answers, so a failed guess doesn't leave the app pointed at a
+    // host that isn't there.
+    final probe = ref.read(serverProbeProvider);
+    String? detail;
+    for (final url in candidates) {
+      final result = await probe(url);
+      if (result.ok) {
+        await ref.read(tokenStoreProvider).setBaseUrl(url);
+        ref.read(baseUrlProvider.notifier).set(url);
+        return;
+      }
+      detail = result.detail;
     }
+    // Name the addresses we actually tried — with a scheme guessed on the
+    // user's behalf, "couldn't connect" alone doesn't say what was attempted.
+    throw ApiFailure(
+      "Couldn't reach ${candidates.join(' or ')} — "
+      '${detail ?? 'check the address is correct and the server is reachable.'}',
+    );
   }
 
   /// Step 1 — authenticate the household account; returns its profiles to pick.
@@ -185,18 +184,78 @@ class AuthController extends Notifier<AuthStatus> {
     state = AuthStatus.unauthenticated;
   }
 
-  /// Accepts `host`, `host:port`, or a full URL; defaults to http, strips a
-  /// trailing slash. Returns null when nothing usable is left.
-  static String? _normalizeServerUrl(String raw) {
-    var s = raw.trim();
-    if (s.isEmpty) return null;
-    if (!s.contains('://')) s = 'http://$s';
+  /// Ordered base-URL candidates for a typed server address, likeliest first.
+  /// Empty when the input can't be a server address at all.
+  ///
+  /// An explicit scheme is always honoured as typed — one candidate, no
+  /// guessing. A bare hostname used to become `http://…` unconditionally, which
+  /// aims at plain HTTP on port 80 and fails outright against an HTTPS-only
+  /// edge: `argosy.zerogravity.industries` answers only on 443, so port 80
+  /// returns a connection failure rather than a redirect, and the user got an
+  /// eight-second spinner and a generic network error (ARGY-192).
+  ///
+  /// So a bare host is tried as HTTPS first and falls back to cleartext **only
+  /// when the host is private** ([isPrivateHost]). A public FQDN is never
+  /// silently downgraded to HTTP; the LAN and the tailnet are the only cases
+  /// that legitimately need it.
+  static List<String> serverUrlCandidates(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return const [];
     // Reject malformed input like a doubled scheme (e.g. text concatenated onto
     // a stale value) rather than silently aiming at the wrong host.
-    if ('://'.allMatches(s).length > 1) return null;
-    final uri = Uri.tryParse(s);
-    if (uri == null || uri.host.isEmpty) return null;
-    return s.endsWith('/') ? s.substring(0, s.length - 1) : s;
+    if ('://'.allMatches(s).length > 1) return const [];
+    final hasScheme = s.contains('://');
+    final parsed = Uri.tryParse(hasScheme ? s : 'https://$s');
+    if (parsed == null || parsed.host.isEmpty) return const [];
+    String trim(String u) => u.endsWith('/') ? u.substring(0, u.length - 1) : u;
+    if (hasScheme) return [trim(s)];
+    return [
+      trim('https://$s'),
+      if (isPrivateHost(parsed.host)) trim('http://$s'),
+    ];
+  }
+
+  /// Whether cleartext is acceptable for [host] — true only for addresses that
+  /// cannot be reached from the public internet, so guessing `http://` for one
+  /// can't put a household's credentials on the open wire.
+  ///
+  /// Beyond the RFC1918/loopback/link-local literals: a single-label name
+  /// (`imperial-construct`) has no TLD and so cannot be a public FQDN, and
+  /// Tailscale's MagicDNS names and CGNAT range carry their own WireGuard
+  /// encryption — plain HTTP inside the tailnet isn't the downgrade this rule
+  /// exists to prevent, and it is how this household actually connects.
+  static bool isPrivateHost(String host) {
+    final h = host.toLowerCase();
+    if (h == 'localhost') return true;
+    // IPv6 first: `Uri.host` strips the brackets, so these arrive as a bare
+    // address with colons and no dot. Deciding them here keeps the single-label
+    // rule below from reading a *public* v6 literal as a TLD-less name and
+    // handing it a cleartext fallback — loopback, link-local (fe80::/10) and
+    // unique-local (fc00::/7, i.e. an fc/fd prefix) are the only private ones.
+    if (h.contains(':')) {
+      return h == '::1' ||
+          h.startsWith('fe80:') ||
+          h.startsWith('fc') ||
+          h.startsWith('fd');
+    }
+    if (!h.contains('.')) return true;
+    if (h.endsWith('.local') ||
+        h.endsWith('.internal') ||
+        h.endsWith('.ts.net')) {
+      return true;
+    }
+    final parts = h.split('.');
+    if (parts.length != 4) return false;
+    final octets = parts.map(int.tryParse).toList();
+    if (octets.any((o) => o == null || o < 0 || o > 255)) return false;
+    final a = octets[0]!;
+    final b = octets[1]!;
+    if (a == 10 || a == 127) return true;
+    if (a == 192 && b == 168) return true;
+    if (a == 172 && b >= 16 && b <= 31) return true;
+    if (a == 169 && b == 254) return true;
+    if (a == 100 && b >= 64 && b <= 127) return true; // CGNAT / Tailscale
+    return false;
   }
 }
 
