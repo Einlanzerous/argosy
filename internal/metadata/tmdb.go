@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -344,7 +345,6 @@ func (t *TMDB) SeriesSeasons(ctx context.Context, tmdbID int64) ([]SeasonRef, er
 		Seasons []struct {
 			SeasonNumber int    `json:"season_number"`
 			Name         string `json:"name"`
-			EpisodeCount int    `json:"episode_count"`
 		} `json:"seasons"`
 	}
 	if err := t.get(ctx, fmt.Sprintf("/tv/%d", tmdbID), url.Values{}, &body); err != nil {
@@ -352,24 +352,36 @@ func (t *TMDB) SeriesSeasons(ctx context.Context, tmdbID int64) ([]SeasonRef, er
 	}
 	out := make([]SeasonRef, 0, len(body.Seasons))
 	for _, s := range body.Seasons {
-		out = append(out, SeasonRef{Number: s.SeasonNumber, Name: s.Name, EpisodeCount: s.EpisodeCount})
+		out = append(out, SeasonRef{Number: s.SeasonNumber, Name: s.Name})
 	}
 	return out, nil
 }
 
-// AlternateSeasonMap reconciles TVDB's season numbering — which is the library's,
-// since the folders come from Sonarr — with TMDB's own (ARGY-224).
+// reGroupSeason pulls the season number out of an episode-group name like
+// "Season 11 - Water 7 & Enies Lobby". Anchored so an arc name that merely
+// mentions a number ("Season of Ash") can't match.
+var reGroupSeason = regexp.MustCompile(`(?i)^season\s+(\d{1,3})\b`)
+
+// SeriesEpisodeGroup reconciles TVDB's ordering — which is the library's, since
+// the folders come from Sonarr — with TMDB's own (ARGY-224).
 //
-// TMDB publishes this itself as an *episode group*: a user-curated re-ordering
-// of a show's episodes into named groups. Anime routinely carries one called
-// "TVDB Order", and it is exactly the translation table needed — for Bleach its
-// group 17 is TMDB's season 2, episodes 1-50. Deriving the same thing locally is
-// impossible: Argosy only stores the seasons that exist on disk, so a library
-// holding just S17 has no way to know the 366 episodes that precede it.
+// TMDB publishes this itself as an *episode group*: a curated re-ordering of a
+// show's episodes into named groups, one per TVDB season. Anime routinely
+// carries one called "TVDB Order", and it is exactly the translation needed.
+// Deriving the same thing locally is impossible: Argosy only stores the seasons
+// that exist on disk, so a library holding just Bleach S17 has no way to know
+// the 366 episodes that precede it.
 //
-// Two requests, and only for a series that actually needs one. Returns a nil map
-// when the show has no TVDB-ordered group, which is most of them.
-func (t *TMDB) AlternateSeasonMap(ctx context.Context, tmdbID int64) (map[int]SeasonMapping, error) {
+// The episodes come back renumbered onto the library's own numbering, rather
+// than as a season+offset mapping, because the mapping cannot express what these
+// groups actually contain: TVDB's One Piece season 11 draws from TMDB seasons 7,
+// 8 and 9. Reading the episodes out directly sidesteps that entirely — and costs
+// nothing extra, since the group payload already carries every field a per-season
+// fetch would have returned.
+//
+// Two requests, and only for a series that needs one. Returns a nil map when the
+// show has no TVDB-ordered group, which is most of them.
+func (t *TMDB) SeriesEpisodeGroup(ctx context.Context, tmdbID int64) (GroupedEpisodes, error) {
 	var groups struct {
 		Results []struct {
 			ID   string `json:"id"`
@@ -379,16 +391,11 @@ func (t *TMDB) AlternateSeasonMap(ctx context.Context, tmdbID int64) (map[int]Se
 	if err := t.get(ctx, fmt.Sprintf("/tv/%d/episode_groups", tmdbID), url.Values{}, &groups); err != nil {
 		return nil, err
 	}
-	// Match on the name rather than the type code: TMDB has no "TVDB" group
-	// type (these are filed under type 1, "original air date", alongside groups
-	// that mean something else entirely — "Season Split", "Specials"). Guessing
-	// from the type would pick a Netflix or Hulu re-cut and write wrong metadata,
-	// so an unnamed group is treated as no group at all.
 	groupID := ""
+	best := 0
 	for _, g := range groups.Results {
-		if strings.Contains(strings.ToLower(g.Name), "tvdb") {
-			groupID = g.ID
-			break
+		if score := tvdbGroupScore(g.Name); score > best {
+			groupID, best = g.ID, score
 		}
 	}
 	if groupID == "" {
@@ -397,10 +404,17 @@ func (t *TMDB) AlternateSeasonMap(ctx context.Context, tmdbID int64) (map[int]Se
 
 	var detail struct {
 		Groups []struct {
-			Order    int `json:"order"`
+			Order    int    `json:"order"`
+			Name     string `json:"name"`
 			Episodes []struct {
-				SeasonNumber  int `json:"season_number"`
-				EpisodeNumber int `json:"episode_number"`
+				Order         int     `json:"order"`
+				Name          string  `json:"name"`
+				Overview      string  `json:"overview"`
+				StillPath     string  `json:"still_path"`
+				VoteAverage   float64 `json:"vote_average"`
+				VoteCount     int     `json:"vote_count"`
+				SeasonNumber  int     `json:"season_number"`
+				EpisodeNumber int     `json:"episode_number"`
 			} `json:"episodes"`
 		} `json:"groups"`
 	}
@@ -408,37 +422,102 @@ func (t *TMDB) AlternateSeasonMap(ctx context.Context, tmdbID int64) (map[int]Se
 		return nil, err
 	}
 
-	out := make(map[int]SeasonMapping, len(detail.Groups))
+	out := make(GroupedEpisodes, len(detail.Groups))
 	for _, g := range detail.Groups {
 		if len(g.Episodes) == 0 {
 			continue
 		}
-		// A single season+offset can only express a group that is one contiguous
-		// run of one TMDB season. Anything else — a group straddling two seasons,
-		// or skipping numbers — is left out so the matcher reports it as unmapped
-		// rather than mapping most of it and quietly mis-titling the rest.
-		first := g.Episodes[0]
-		contiguous := true
-		for i, e := range g.Episodes {
-			if e.SeasonNumber != first.SeasonNumber || e.EpisodeNumber != first.EpisodeNumber+i {
-				contiguous = false
-				break
-			}
-		}
-		if !contiguous {
-			t.logger.Debug("tvdb-order group is not one contiguous provider season, skipping",
-				"tmdb_id", tmdbID, "group_order", g.Order)
+		season := t.groupSeasonNumber(tmdbID, g.Order, g.Name)
+		if _, clash := out[season]; clash {
+			// Two groups claiming the same season means the ordering we derived
+			// is not trustworthy for either; drop both rather than pick one.
+			t.logger.Warn("tvdb-order group claims a season twice, ignoring it",
+				"tmdb_id", tmdbID, "season", season, "group", g.Name)
+			out[season] = nil
 			continue
 		}
-		// The group's own ordinal is the season number as TVDB (and therefore
-		// the library) counts it; the offset carries the rest, since group 3 of
-		// Bleach starts at TMDB S1E42, not S1E1.
-		out[g.Order] = SeasonMapping{
-			SeasonNumber:  first.SeasonNumber,
-			EpisodeOffset: first.EpisodeNumber - 1,
+		eps := make([]EpisodeMeta, 0, len(g.Episodes))
+		for i, e := range g.Episodes {
+			// The group's per-episode order is a 0-based position within the
+			// group, which is the on-disk episode number less one. Fall back to
+			// the slice index when a curator has left the field at zero.
+			num := e.Order + 1
+			if e.Order == 0 && i > 0 {
+				num = i + 1
+			}
+			em := EpisodeMeta{
+				Number:      num,
+				Name:        e.Name,
+				Overview:    e.Overview,
+				VoteAverage: e.VoteAverage,
+				VoteCount:   e.VoteCount,
+			}
+			if e.StillPath != "" {
+				em.StillURL = t.imageBase + "/" + stillSize + e.StillPath
+			}
+			eps = append(eps, em)
+		}
+		out[season] = eps
+	}
+	for season, eps := range out {
+		if eps == nil {
+			delete(out, season)
 		}
 	}
+	if len(out) == 0 {
+		return nil, nil
+	}
 	return out, nil
+}
+
+// groupSeasonNumber decides which on-disk season a group stands for. The group's
+// `order` is a curator-editable display position, so where the name says which
+// season it is ("Season 11 - Water 7 & Enies Lobby") the name wins — it is the
+// explicit claim, and a reordered group would otherwise silently shift every
+// season's metadata by one. Bleach's groups are named for story arcs and carry
+// no number, so `order` remains the fallback rather than the default.
+func (t *TMDB) groupSeasonNumber(tmdbID int64, order int, name string) int {
+	if strings.EqualFold(strings.TrimSpace(name), "specials") {
+		return 0
+	}
+	m := reGroupSeason.FindStringSubmatch(name)
+	if m == nil {
+		return order
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return order
+	}
+	if n != order {
+		t.logger.Warn("tvdb-order group name and position disagree, trusting the name",
+			"tmdb_id", tmdbID, "group", name, "order", order, "season", n)
+	}
+	return n
+}
+
+// tvdbGroupScore ranks an episode-group name as a candidate for TVDB's ordering,
+// 0 meaning "not a candidate". Shows commonly publish several TVDB-ish groups —
+// "TVDB Order" beside "TVDB Absolute Order" and "TVDB DVD Order" — and those
+// alternates renumber the episodes differently, so taking whichever the API
+// happened to list first would silently mis-title the whole show.
+func tvdbGroupScore(name string) int {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if !strings.Contains(n, "tvdb") {
+		return 0
+	}
+	// An alternate ordering is not the one Sonarr laid the files out in.
+	for _, alt := range []string{"absolute", "dvd", "digital", "production", "alternate"} {
+		if strings.Contains(n, alt) {
+			return 0
+		}
+	}
+	if n == "tvdb order" {
+		return 3
+	}
+	if strings.Contains(n, "order") {
+		return 2
+	}
+	return 1
 }
 
 // tmdbCredits is the shape of /movie/{id}/credits and /tv/{id}/credits. Cast
@@ -526,7 +605,7 @@ func (t *TMDB) get(ctx context.Context, path string, q url.Values, out any) erro
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("tmdb %s: status %d", path, resp.StatusCode)
+		return &APIError{Path: path, Status: resp.StatusCode}
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return fmt.Errorf("decode tmdb response: %w", err)

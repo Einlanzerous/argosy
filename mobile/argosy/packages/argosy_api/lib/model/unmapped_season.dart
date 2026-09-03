@@ -17,6 +17,7 @@ class UnmappedSeason {
     required this.seriesTitle,
     required this.seasonNumber,
     required this.episodes,
+    this.reason,
   });
 
   String seriesId;
@@ -29,12 +30,22 @@ class UnmappedSeason {
   /// Episode rows left without provider metadata.
   int episodes;
 
+  /// Which way it failed — no such season at the provider, no published TVDB ordering covering it, or the provider disowning the series outright. Without it every entry reads the same and none of them suggests what to do next.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? reason;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is UnmappedSeason &&
     other.seriesId == seriesId &&
     other.seriesTitle == seriesTitle &&
     other.seasonNumber == seasonNumber &&
-    other.episodes == episodes;
+    other.episodes == episodes &&
+    other.reason == reason;
 
   @override
   int get hashCode =>
@@ -42,10 +53,11 @@ class UnmappedSeason {
     (seriesId.hashCode) +
     (seriesTitle.hashCode) +
     (seasonNumber.hashCode) +
-    (episodes.hashCode);
+    (episodes.hashCode) +
+    (reason == null ? 0 : reason!.hashCode);
 
   @override
-  String toString() => 'UnmappedSeason[seriesId=$seriesId, seriesTitle=$seriesTitle, seasonNumber=$seasonNumber, episodes=$episodes]';
+  String toString() => 'UnmappedSeason[seriesId=$seriesId, seriesTitle=$seriesTitle, seasonNumber=$seasonNumber, episodes=$episodes, reason=$reason]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -53,6 +65,11 @@ class UnmappedSeason {
       json[r'seriesTitle'] = this.seriesTitle;
       json[r'seasonNumber'] = this.seasonNumber;
       json[r'episodes'] = this.episodes;
+    if (this.reason != null) {
+      json[r'reason'] = this.reason;
+    } else {
+      json[r'reason'] = null;
+    }
     return json;
   }
 
@@ -83,6 +100,7 @@ class UnmappedSeason {
         seriesTitle: mapValueOfType<String>(json, r'seriesTitle')!,
         seasonNumber: mapValueOfType<int>(json, r'seasonNumber')!,
         episodes: mapValueOfType<int>(json, r'episodes')!,
+        reason: mapValueOfType<String>(json, r'reason'),
       );
     }
     return null;

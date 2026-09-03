@@ -3,7 +3,12 @@
 // matcher can be tested with a stub and providers swapped later (e.g. TVDB).
 package metadata
 
-import "context"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+)
 
 // Match is a normalized provider result.
 type Match struct {
@@ -34,44 +39,75 @@ type EpisodeMeta struct {
 // SeasonRef is one season as the provider models it. Used to decide whether a
 // season on disk has a counterpart in the provider's numbering at all.
 type SeasonRef struct {
-	Number       int
-	Name         string
-	EpisodeCount int
+	Number int
+	Name   string
 }
 
-// SeasonMapping translates one on-disk season onto the provider's numbering.
-// The on-disk number stays canonical; this is the lookup key that finds its
-// episodes on the provider side (ARGY-224).
+// SeasonMapping points one on-disk season at a provider season. It survives
+// only for mappings an operator sets by hand: the automatic path reads episodes
+// straight out of the provider's published ordering instead (see
+// GroupedEpisodes), which needs no season arithmetic.
 type SeasonMapping struct {
 	// SeasonNumber is the provider season the episodes live in.
 	SeasonNumber int
 	// EpisodeOffset is added to the on-disk episode number to get the
-	// provider's. Non-zero whenever the provider folded several of the
-	// library's seasons into one of its own: TVDB's Bleach S3 is TMDB's S1
-	// E42-E63, so on-disk E01 is provider E42.
+	// provider's, for a season that starts partway into the provider's.
 	EpisodeOffset int
 }
 
-// SeasonMapper is implemented by providers whose season numbering can disagree
-// with the library's, and that publish enough to reconcile the two. Optional,
-// like ImageDownloader: a provider that shares the library's numbering by
+// GroupedEpisodes is a provider's own translation of a series onto the library's
+// numbering: on-disk season number -> that season's episodes.
+//
+// The episodes are already renumbered, so EpisodeMeta.Number is the number **on
+// disk**, not the provider's. That is the whole point of this type. A season and
+// an offset cannot express the common case — TVDB's One Piece season 11 draws
+// from TMDB seasons 7, 8 and 9, and only 38% of that show's episodes sit in a
+// group that is one contiguous run of one provider season — but a per-episode
+// list needs no arithmetic and no special case, because every episode carries
+// its own metadata (ARGY-224).
+type GroupedEpisodes map[int][]EpisodeMeta
+
+// SeasonMapper is implemented by providers whose ordering can disagree with the
+// library's, and that publish enough to reconcile the two. Optional, like
+// ImageDownloader: a provider that shares the library's numbering by
 // construction (a TVDB-backed one, given the folders come from Sonarr) needs
-// none of this, and the matcher falls back to using the on-disk number directly.
+// none of this, and the matcher falls back to the on-disk number directly.
 type SeasonMapper interface {
 	// SeriesSeasons returns the seasons the provider models for a series, so
 	// the matcher can tell "we number this the same way" from "this season has
-	// no counterpart and needs translating".
+	// no counterpart at all".
 	SeriesSeasons(ctx context.Context, tmdbID int64) ([]SeasonRef, error)
-	// AlternateSeasonMap returns on-disk-season -> provider mapping for a
-	// series, keyed by the season number as the library sees it. Returns a nil
-	// map (and no error) when the provider publishes no such translation —
-	// the common case, and not a failure.
-	//
-	// Only unambiguous entries are included: a season the provider splits
-	// across several of its own, or numbers non-contiguously, is left out
-	// rather than approximated, so it surfaces as unmapped instead of as
-	// plausible-looking wrong metadata.
-	AlternateSeasonMap(ctx context.Context, tmdbID int64) (map[int]SeasonMapping, error)
+	// SeriesEpisodeGroup returns the provider's published translation of a
+	// series onto the library's numbering, or a nil map (and no error) when it
+	// publishes none — the common case, and not a failure.
+	SeriesEpisodeGroup(ctx context.Context, tmdbID int64) (GroupedEpisodes, error)
+}
+
+// APIError is a provider HTTP failure that carries the status code, so a caller
+// can tell an outage it should retry from an answer that will never change. A
+// series whose tmdb_id was merged away 404s on every sweep forever; treating
+// that as a transient failure hides it behind a warning nobody reads.
+type APIError struct {
+	Path   string
+	Status int
+}
+
+func (e *APIError) Error() string { return fmt.Sprintf("tmdb %s: status %d", e.Path, e.Status) }
+
+// Permanent reports whether retrying could ever succeed. 404 means the provider
+// does not have this resource; 401/403 mean the credentials will not get it.
+func (e *APIError) Permanent() bool {
+	switch e.Status {
+	case http.StatusNotFound, http.StatusUnauthorized, http.StatusForbidden:
+		return true
+	}
+	return false
+}
+
+// IsPermanent reports whether err is an APIError that will never succeed.
+func IsPermanent(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.Permanent()
 }
 
 // ImageDownloader is implemented by providers that fetch artwork through

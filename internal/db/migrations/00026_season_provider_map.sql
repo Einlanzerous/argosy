@@ -23,10 +23,21 @@ ALTER TABLE seasons
     -- How the mapping above was arrived at, so it is inspectable and so the
     -- automatic pass knows what it may overwrite:
     --   identity      — the provider numbers this season the same way we do
-    --   episode_group — taken from the provider's TVDB-ordered episode group
+    --   episode_group — episodes came from the provider's TVDB-ordered group
     --   manual        — set by an operator; the resolver must never clobber it
+    --   unmapped      — looked, and the provider has no counterpart
+    --
+    -- NULL is a fourth state and means "never looked". Keeping it distinct from
+    -- 'unmapped' is the point: an operator asking why a show is half-populated
+    -- needs to tell a season nothing has examined from one that was examined and
+    -- genuinely has no match, and a verdict that lives only in the scheduler's
+    -- in-memory status is gone after a restart.
+    --
+    -- 'manual' with a NULL provider_season_number is meaningful, not a mistake:
+    -- it is how an operator says "there is no counterpart, leave the filenames
+    -- alone" and stops the resolver from trying again every sweep.
     ADD COLUMN provider_season_source text
-        CHECK (provider_season_source IN ('identity', 'episode_group', 'manual'));
+        CHECK (provider_season_source IN ('identity', 'episode_group', 'manual', 'unmapped'));
 
 -- +goose Down
 ALTER TABLE seasons

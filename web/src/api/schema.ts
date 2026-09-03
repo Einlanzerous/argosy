@@ -1596,6 +1596,8 @@ export interface components {
             seasonNumber: number;
             /** @description Episode rows left without provider metadata. */
             episodes: number;
+            /** @description Which way it failed — no such season at the provider, no published TVDB ordering covering it, or the provider disowning the series outright. Without it every entry reads the same and none of them suggests what to do next. */
+            reason?: string;
         };
         ScanStatus: {
             running: boolean;

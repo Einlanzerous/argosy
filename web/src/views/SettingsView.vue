@@ -313,10 +313,10 @@ onUnmounted(() => {
                show just looks half-populated and nothing says why (ARGY-224). -->
           <ul v-if="l.unmappedSeasons?.length" class="unmapped">
             <li v-for="u in l.unmappedSeasons" :key="`${u.seriesId}-${u.seasonNumber}`">
-              <strong>{{ u.seriesTitle }}</strong> season {{ u.seasonNumber }} has no counterpart at
-              the metadata provider — {{ u.episodes }}
+              <strong>{{ u.seriesTitle }}</strong> season {{ u.seasonNumber }} — {{ u.episodes }}
               {{ u.episodes === 1 ? 'episode is' : 'episodes are' }}
               showing filenames instead of titles.
+              <span v-if="u.reason" class="unmapped-why">{{ u.reason }}</span>
             </li>
           </ul>
         </div>
@@ -547,6 +547,10 @@ h2 {
 .unmapped strong {
   color: var(--arg-ink-2);
   font-weight: 600;
+}
+.unmapped-why {
+  display: block;
+  color: var(--arg-faint);
 }
 .hint {
   margin-top: 18px;
