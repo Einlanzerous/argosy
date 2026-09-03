@@ -50,6 +50,21 @@ type MatchResult struct {
 	Episodes int // episode rows enriched with per-episode TMDB metadata
 	Credits  int // movies + series enriched with cast/people for search (ARGY-67)
 	Misses   int
+	// Unmapped lists seasons on disk the provider has no counterpart for, and
+	// which therefore went without episode metadata. Reported rather than
+	// swallowed: the series still matches, so the show looks half-populated
+	// instead of unmatched, and nothing else in the system says why (ARGY-224).
+	Unmapped []UnmappedSeason
+}
+
+// UnmappedSeason is one season whose number could not be translated onto the
+// provider's numbering — neither directly nor through a published TVDB-ordered
+// episode group. Its episodes keep their filename-derived titles.
+type UnmappedSeason struct {
+	SeriesID     string `json:"seriesId"`
+	SeriesTitle  string `json:"seriesTitle"`
+	SeasonNumber int    `json:"seasonNumber"`
+	Episodes     int    `json:"episodes"` // episode rows left without provider metadata
 }
 
 type matchItem struct {
@@ -116,11 +131,12 @@ func (m *Matcher) MatchLibrary(ctx context.Context, libraryID string, force bool
 	// the ones matched this pass) so episode files added after the series was
 	// first matched get enriched too; cheap because it only touches episodes
 	// still missing provider metadata unless force is set.
-	n, err := m.matchEpisodes(ctx, libraryID, force)
+	n, unmapped, err := m.matchEpisodes(ctx, libraryID, force)
 	if err != nil {
 		return res, err
 	}
 	res.Episodes = n
+	res.Unmapped = unmapped
 
 	// People/cast (ARGY-67): backfill top-billed cast onto every matched movie +
 	// series still missing it. Runs over all matched items (not just this pass),
@@ -205,98 +221,237 @@ func (m *Matcher) matchCredits(ctx context.Context, libraryID string, force bool
 
 // matchEpisodes fetches per-season episode lists from the provider for every
 // matched series in the library and writes each episode's name + overview +
-// still. Returns the number of episode rows enriched.
-func (m *Matcher) matchEpisodes(ctx context.Context, libraryID string, force bool) (int, error) {
+// still. Returns the number of episode rows enriched, plus the seasons whose
+// numbering could not be translated onto the provider's (ARGY-224).
+func (m *Matcher) matchEpisodes(ctx context.Context, libraryID string, force bool) (int, []UnmappedSeason, error) {
 	rows, err := m.pool.Query(ctx,
-		`SELECT id::text, tmdb_id FROM series WHERE library_id = $1 AND tmdb_id IS NOT NULL`, libraryID)
+		`SELECT id::text, title, tmdb_id FROM series WHERE library_id = $1 AND tmdb_id IS NOT NULL`, libraryID)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	type ser struct {
-		id   string
-		tmdb int64
-	}
-	var seriesList []ser
+	var seriesList []seriesRow
 	for rows.Next() {
-		var s ser
-		if err := rows.Scan(&s.id, &s.tmdb); err != nil {
+		var s seriesRow
+		if err := rows.Scan(&s.id, &s.title, &s.tmdb); err != nil {
 			rows.Close()
-			return 0, err
+			return 0, nil, err
 		}
 		seriesList = append(seriesList, s)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	total := 0
+	var unmapped []UnmappedSeason
 	for _, s := range seriesList {
-		n, err := m.matchSeriesEpisodes(ctx, s.id, s.tmdb, force)
+		n, u, err := m.matchSeriesEpisodes(ctx, s, force)
 		if err != nil {
-			return total, err
+			return total, unmapped, err
 		}
 		total += n
+		unmapped = append(unmapped, u...)
 	}
-	return total, nil
+	return total, unmapped, nil
 }
 
-func (m *Matcher) matchSeriesEpisodes(ctx context.Context, seriesID string, tmdbID int64, force bool) (int, error) {
+// seriesRow is a matched series the episode pass works over.
+type seriesRow struct {
+	id    string
+	title string
+	tmdb  int64
+}
+
+// localSeason is one season on disk still needing provider metadata, carrying
+// whatever translation onto the provider's numbering is already recorded.
+type localSeason struct {
+	id       string
+	number   int
+	provider *int    // provider_season_number, NULL until resolved
+	offset   int     // provider_episode_offset
+	source   *string // identity | episode_group | manual
+	episodes int     // episode rows still missing provider metadata
+}
+
+// seasonResolution distinguishes the two ways a season can end up without a
+// provider mapping. Only one of them is worth telling an operator about: a
+// failed lookup is transient and the next sweep retries it, while "the provider
+// does not have this season" is a fact about the title that will not change on
+// its own.
+type seasonResolution int
+
+const (
+	seasonResolved    seasonResolution = iota // mapping usable
+	seasonUnmapped                            // provider genuinely has no counterpart
+	seasonUnavailable                         // provider lookup failed; retry next sweep
+)
+
+func (m *Matcher) matchSeriesEpisodes(ctx context.Context, s seriesRow, force bool) (int, []UnmappedSeason, error) {
 	// Only the seasons with episodes still missing metadata (all of them when
 	// force) — avoids re-hitting TMDB for already-enriched seasons on rescans.
-	seasonQ := `SELECT DISTINCT se.season_number FROM seasons se JOIN episodes e ON e.season_id = se.id WHERE se.series_id = $1`
+	seasonQ := `SELECT se.id::text, se.season_number, se.provider_season_number,
+	                   se.provider_episode_offset, se.provider_season_source, count(e.id)
+	              FROM seasons se JOIN episodes e ON e.season_id = se.id
+	             WHERE se.series_id = $1`
 	if !force {
 		seasonQ += ` AND e.provider_metadata = '{}'::jsonb`
 	}
-	rows, err := m.pool.Query(ctx, seasonQ, seriesID)
+	seasonQ += ` GROUP BY se.id, se.season_number, se.provider_season_number,
+	                      se.provider_episode_offset, se.provider_season_source`
+	rows, err := m.pool.Query(ctx, seasonQ, s.id)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	var seasons []int
+	var seasons []localSeason
 	for rows.Next() {
-		var n int
-		if err := rows.Scan(&n); err != nil {
+		var ls localSeason
+		if err := rows.Scan(&ls.id, &ls.number, &ls.provider, &ls.offset, &ls.source, &ls.episodes); err != nil {
 			rows.Close()
-			return 0, err
+			return 0, nil, err
 		}
-		seasons = append(seasons, n)
+		seasons = append(seasons, ls)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
+	resolve := m.seasonResolver(s)
 	count := 0
-	for _, seasonNum := range seasons {
-		eps, err := m.provider.SeasonEpisodes(ctx, tmdbID, seasonNum)
+	var unmapped []UnmappedSeason
+	// Several on-disk seasons can land in the same provider season — TVDB splits
+	// Bleach's first 366 episodes across sixteen of them, all of which are TMDB
+	// season 1 — so the fetched episode list is cached per *provider* season.
+	fetched := make(map[int][]metadata.EpisodeMeta)
+	for _, ls := range seasons {
+		mapping, status, err := resolve(ctx, ls)
 		if err != nil {
-			m.logger.Warn("tmdb season fetch failed", "tmdb_id", tmdbID, "season", seasonNum, "err", err)
+			return count, unmapped, err
+		}
+		switch status {
+		case seasonUnmapped:
+			m.logger.Warn("season has no counterpart in the provider's numbering; episodes left without metadata",
+				"series", s.title, "tmdb_id", s.tmdb, "season", ls.number, "episodes", ls.episodes)
+			unmapped = append(unmapped, UnmappedSeason{
+				SeriesID:     s.id,
+				SeriesTitle:  s.title,
+				SeasonNumber: ls.number,
+				Episodes:     ls.episodes,
+			})
 			continue
+		case seasonUnavailable:
+			continue
+		}
+
+		eps, ok := fetched[mapping.SeasonNumber]
+		if !ok {
+			eps, err = m.provider.SeasonEpisodes(ctx, s.tmdb, mapping.SeasonNumber)
+			if err != nil {
+				m.logger.Warn("tmdb season fetch failed", "tmdb_id", s.tmdb, "season", mapping.SeasonNumber, "err", err)
+				continue
+			}
+			fetched[mapping.SeasonNumber] = eps
 		}
 		byNum := make(map[int]metadata.EpisodeMeta, len(eps))
 		for _, e := range eps {
 			byNum[e.Number] = e
 		}
-		n, err := m.storeSeasonEpisodes(ctx, seriesID, tmdbID, seasonNum, byNum, force)
+		n, err := m.storeSeasonEpisodes(ctx, ls.id, s.tmdb, mapping, byNum, force)
 		if err != nil {
-			return count, err
+			return count, unmapped, err
 		}
 		count += n
 	}
-	return count, nil
+	return count, unmapped, nil
+}
+
+// seasonResolver returns a per-series function that translates an on-disk season
+// onto the provider's numbering, persisting what it works out so the mapping is
+// stable and inspectable afterwards.
+//
+// The provider-side lookups are lazy and memoized across the closure's lifetime:
+// a library whose numbering already agrees with the provider's — which is most of
+// them — costs one extra request per series, and the episode-group fetch happens
+// only for a series that actually has a season needing translation.
+func (m *Matcher) seasonResolver(s seriesRow) func(context.Context, localSeason) (metadata.SeasonMapping, seasonResolution, error) {
+	mapper, canMap := m.provider.(metadata.SeasonMapper)
+	var providerSeasons map[int]bool
+	var altMap map[int]metadata.SeasonMapping
+	var altFetched bool
+
+	return func(ctx context.Context, ls localSeason) (metadata.SeasonMapping, seasonResolution, error) {
+		// An operator's mapping is the last word — the automatic pass never
+		// overwrites it, and never second-guesses it either.
+		if ls.source != nil && *ls.source == "manual" && ls.provider != nil {
+			return metadata.SeasonMapping{SeasonNumber: *ls.provider, EpisodeOffset: ls.offset}, seasonResolved, nil
+		}
+		identity := metadata.SeasonMapping{SeasonNumber: ls.number, EpisodeOffset: 0}
+		// A provider that can't describe its own season list is one whose
+		// numbering we have no way to check — use the on-disk number directly,
+		// exactly as this code did before ARGY-224, and record nothing.
+		if !canMap {
+			return identity, seasonResolved, nil
+		}
+
+		if providerSeasons == nil {
+			refs, err := mapper.SeriesSeasons(ctx, s.tmdb)
+			if err != nil {
+				m.logger.Warn("tmdb season list fetch failed", "series", s.title, "tmdb_id", s.tmdb, "err", err)
+				return metadata.SeasonMapping{}, seasonUnavailable, nil
+			}
+			providerSeasons = make(map[int]bool, len(refs))
+			for _, r := range refs {
+				providerSeasons[r.Number] = true
+			}
+		}
+		if providerSeasons[ls.number] {
+			return identity, seasonResolved, m.storeSeasonMapping(ctx, ls.id, identity, "identity")
+		}
+
+		// No counterpart at the same number: ask the provider for its TVDB-ordered
+		// translation, which is the numbering the folders on disk actually came in.
+		if !altFetched {
+			altFetched = true
+			var err error
+			if altMap, err = mapper.AlternateSeasonMap(ctx, s.tmdb); err != nil {
+				m.logger.Warn("tmdb episode-group fetch failed", "series", s.title, "tmdb_id", s.tmdb, "err", err)
+				altMap = nil
+				altFetched = false
+				return metadata.SeasonMapping{}, seasonUnavailable, nil
+			}
+		}
+		if mp, ok := altMap[ls.number]; ok {
+			return mp, seasonResolved, m.storeSeasonMapping(ctx, ls.id, mp, "episode_group")
+		}
+		return metadata.SeasonMapping{}, seasonUnmapped, nil
+	}
+}
+
+// storeSeasonMapping records how an on-disk season maps onto the provider's
+// numbering. The manual guard is belt-and-braces — the resolver already returns
+// early on an operator-set row — so that no future caller can quietly overwrite
+// a hand-fixed mapping.
+func (m *Matcher) storeSeasonMapping(ctx context.Context, seasonID string, mp metadata.SeasonMapping, source string) error {
+	_, err := m.pool.Exec(ctx,
+		`UPDATE seasons SET provider_season_number = $2, provider_episode_offset = $3,
+		        provider_season_source = $4, updated_at = now()
+		  WHERE id = $1 AND provider_season_source IS DISTINCT FROM 'manual'`,
+		seasonID, mp.SeasonNumber, mp.EpisodeOffset, source)
+	return err
 }
 
 // storeSeasonEpisodes writes provider metadata onto the episode rows of one
-// season, matching on episode_number. Each combined-file row (several numbers
-// sharing one media_item) is matched independently, so E01 and E02 of a merged
-// rip each get their own name/overview/still.
-func (m *Matcher) storeSeasonEpisodes(ctx context.Context, seriesID string, tmdbID int64, seasonNum int, byNum map[int]metadata.EpisodeMeta, force bool) (int, error) {
-	epQ := `SELECT e.id::text, e.episode_number FROM episodes e JOIN seasons se ON se.id = e.season_id
-	        WHERE se.series_id = $1 AND se.season_number = $2`
+// season, matching each on-disk episode number to the provider's through the
+// season's mapping. Each combined-file row (several numbers sharing one
+// media_item) is matched independently, so E01 and E02 of a merged rip each get
+// their own name/overview/still.
+func (m *Matcher) storeSeasonEpisodes(ctx context.Context, seasonID string, tmdbID int64, mapping metadata.SeasonMapping, byNum map[int]metadata.EpisodeMeta, force bool) (int, error) {
+	epQ := `SELECT id::text, episode_number FROM episodes WHERE season_id = $1`
 	if !force {
-		epQ += ` AND e.provider_metadata = '{}'::jsonb`
+		epQ += ` AND provider_metadata = '{}'::jsonb`
 	}
-	rows, err := m.pool.Query(ctx, epQ, seriesID, seasonNum)
+	rows, err := m.pool.Query(ctx, epQ, seasonID)
 	if err != nil {
 		return 0, err
 	}
@@ -320,14 +475,18 @@ func (m *Matcher) storeSeasonEpisodes(ctx context.Context, seriesID string, tmdb
 
 	count := 0
 	for _, e := range epRows {
-		meta, ok := byNum[e.num]
+		providerNum := e.num + mapping.EpisodeOffset
+		meta, ok := byNum[providerNum]
 		if !ok {
 			continue
 		}
 
 		stillRel := ""
 		if meta.StillURL != "" {
-			stillRel = path.Join("episodes", fmt.Sprintf("%d-s%de%d.jpg", tmdbID, seasonNum, e.num))
+			// Named by the *provider's* coordinates, so two on-disk seasons
+			// folded into one provider season can't collide, and an identity
+			// mapping keeps writing to exactly the path it always has.
+			stillRel = path.Join("episodes", fmt.Sprintf("%d-s%de%d.jpg", tmdbID, mapping.SeasonNumber, providerNum))
 			dest := filepath.Join(m.artworkDir, filepath.FromSlash(stillRel))
 			if err := m.download(ctx, meta.StillURL, dest); err != nil {
 				m.logger.Warn("episode still download failed", "url", meta.StillURL, "err", err)

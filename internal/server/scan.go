@@ -57,6 +57,18 @@ func toAPIScanStatus(s stevedore.Status) api.ScanStatus {
 			e := l.Error
 			r.Error = &e
 		}
+		if len(l.Unmapped) > 0 {
+			us := make([]api.UnmappedSeason, 0, len(l.Unmapped))
+			for _, u := range l.Unmapped {
+				us = append(us, api.UnmappedSeason{
+					SeriesId:     parseUUID(u.SeriesID),
+					SeriesTitle:  u.SeriesTitle,
+					SeasonNumber: u.SeasonNumber,
+					Episodes:     u.Episodes,
+				})
+			}
+			r.UnmappedSeasons = &us
+		}
 		out.Libraries = append(out.Libraries, r)
 	}
 	return out

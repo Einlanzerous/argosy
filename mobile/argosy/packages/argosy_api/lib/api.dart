@@ -96,6 +96,7 @@ part 'model/transcode_capabilities.dart';
 part 'model/transcode_progress.dart';
 part 'model/transcode_session.dart';
 part 'model/transcode_start_request.dart';
+part 'model/unmapped_season.dart';
 part 'model/update_vault_request.dart';
 part 'model/user_preferences.dart';
 part 'model/user_profile.dart';

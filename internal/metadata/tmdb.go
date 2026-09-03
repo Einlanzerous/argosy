@@ -336,6 +336,111 @@ func (t *TMDB) SeasonEpisodes(ctx context.Context, tmdbID int64, seasonNumber in
 	return out, nil
 }
 
+// SeriesSeasons returns the seasons TMDB models for a series, from the series
+// detail document. One request, and the answer to "does the season on disk even
+// exist over there".
+func (t *TMDB) SeriesSeasons(ctx context.Context, tmdbID int64) ([]SeasonRef, error) {
+	var body struct {
+		Seasons []struct {
+			SeasonNumber int    `json:"season_number"`
+			Name         string `json:"name"`
+			EpisodeCount int    `json:"episode_count"`
+		} `json:"seasons"`
+	}
+	if err := t.get(ctx, fmt.Sprintf("/tv/%d", tmdbID), url.Values{}, &body); err != nil {
+		return nil, err
+	}
+	out := make([]SeasonRef, 0, len(body.Seasons))
+	for _, s := range body.Seasons {
+		out = append(out, SeasonRef{Number: s.SeasonNumber, Name: s.Name, EpisodeCount: s.EpisodeCount})
+	}
+	return out, nil
+}
+
+// AlternateSeasonMap reconciles TVDB's season numbering — which is the library's,
+// since the folders come from Sonarr — with TMDB's own (ARGY-224).
+//
+// TMDB publishes this itself as an *episode group*: a user-curated re-ordering
+// of a show's episodes into named groups. Anime routinely carries one called
+// "TVDB Order", and it is exactly the translation table needed — for Bleach its
+// group 17 is TMDB's season 2, episodes 1-50. Deriving the same thing locally is
+// impossible: Argosy only stores the seasons that exist on disk, so a library
+// holding just S17 has no way to know the 366 episodes that precede it.
+//
+// Two requests, and only for a series that actually needs one. Returns a nil map
+// when the show has no TVDB-ordered group, which is most of them.
+func (t *TMDB) AlternateSeasonMap(ctx context.Context, tmdbID int64) (map[int]SeasonMapping, error) {
+	var groups struct {
+		Results []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"results"`
+	}
+	if err := t.get(ctx, fmt.Sprintf("/tv/%d/episode_groups", tmdbID), url.Values{}, &groups); err != nil {
+		return nil, err
+	}
+	// Match on the name rather than the type code: TMDB has no "TVDB" group
+	// type (these are filed under type 1, "original air date", alongside groups
+	// that mean something else entirely — "Season Split", "Specials"). Guessing
+	// from the type would pick a Netflix or Hulu re-cut and write wrong metadata,
+	// so an unnamed group is treated as no group at all.
+	groupID := ""
+	for _, g := range groups.Results {
+		if strings.Contains(strings.ToLower(g.Name), "tvdb") {
+			groupID = g.ID
+			break
+		}
+	}
+	if groupID == "" {
+		return nil, nil
+	}
+
+	var detail struct {
+		Groups []struct {
+			Order    int `json:"order"`
+			Episodes []struct {
+				SeasonNumber  int `json:"season_number"`
+				EpisodeNumber int `json:"episode_number"`
+			} `json:"episodes"`
+		} `json:"groups"`
+	}
+	if err := t.get(ctx, "/tv/episode_group/"+url.PathEscape(groupID), url.Values{}, &detail); err != nil {
+		return nil, err
+	}
+
+	out := make(map[int]SeasonMapping, len(detail.Groups))
+	for _, g := range detail.Groups {
+		if len(g.Episodes) == 0 {
+			continue
+		}
+		// A single season+offset can only express a group that is one contiguous
+		// run of one TMDB season. Anything else — a group straddling two seasons,
+		// or skipping numbers — is left out so the matcher reports it as unmapped
+		// rather than mapping most of it and quietly mis-titling the rest.
+		first := g.Episodes[0]
+		contiguous := true
+		for i, e := range g.Episodes {
+			if e.SeasonNumber != first.SeasonNumber || e.EpisodeNumber != first.EpisodeNumber+i {
+				contiguous = false
+				break
+			}
+		}
+		if !contiguous {
+			t.logger.Debug("tvdb-order group is not one contiguous provider season, skipping",
+				"tmdb_id", tmdbID, "group_order", g.Order)
+			continue
+		}
+		// The group's own ordinal is the season number as TVDB (and therefore
+		// the library) counts it; the offset carries the rest, since group 3 of
+		// Bleach starts at TMDB S1E42, not S1E1.
+		out[g.Order] = SeasonMapping{
+			SeasonNumber:  first.SeasonNumber,
+			EpisodeOffset: first.EpisodeNumber - 1,
+		}
+	}
+	return out, nil
+}
+
 // tmdbCredits is the shape of /movie/{id}/credits and /tv/{id}/credits. Cast
 // arrives in billing order; crew carries job titles (we pluck "Director").
 type tmdbCredits struct {

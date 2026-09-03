@@ -3,9 +3,11 @@ package stevedore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -194,5 +196,327 @@ func TestMatchLibrary(t *testing.T) {
 	}
 	if res2.Movies != 0 || res2.Series != 0 || res2.Episodes != 0 || res2.Credits != 0 {
 		t.Fatalf("second run matched %+v, want 0/0/0/0 (already matched + cast cached)", res2)
+	}
+}
+
+// mappingProvider models a provider whose season numbering disagrees with the
+// library's — TMDB against Sonarr's TVDB-shaped folders (ARGY-224). Seasons and
+// alt are the two documents the resolver reads; the call counters pin that each
+// is fetched at most once per series.
+type mappingProvider struct {
+	fakeProvider
+	seasons     []int
+	alt         map[int]metadata.SeasonMapping
+	seasonCalls int
+	altCalls    int
+	epCalls     []int // provider season numbers SeasonEpisodes was asked for
+}
+
+func (p *mappingProvider) SeriesSeasons(_ context.Context, _ int64) ([]metadata.SeasonRef, error) {
+	p.seasonCalls++
+	out := make([]metadata.SeasonRef, 0, len(p.seasons))
+	for _, n := range p.seasons {
+		out = append(out, metadata.SeasonRef{Number: n})
+	}
+	return out, nil
+}
+
+func (p *mappingProvider) AlternateSeasonMap(_ context.Context, _ int64) (map[int]metadata.SeasonMapping, error) {
+	p.altCalls++
+	return p.alt, nil
+}
+
+// SeasonEpisodes returns 60 episodes named for their provider coordinates, so a
+// wrong season or a dropped offset shows up as a wrong title rather than as an
+// absence.
+func (p *mappingProvider) SeasonEpisodes(_ context.Context, _ int64, season int) ([]metadata.EpisodeMeta, error) {
+	p.epCalls = append(p.epCalls, season)
+	eps := make([]metadata.EpisodeMeta, 0, 60)
+	for n := 1; n <= 60; n++ {
+		eps = append(eps, metadata.EpisodeMeta{
+			Number:   n,
+			Name:     fmt.Sprintf("s%de%d", season, n),
+			Overview: "ov",
+		})
+	}
+	return eps, nil
+}
+
+// mappingFixture builds a library with one matched series and the given on-disk
+// seasons, each holding episodes 1..episodesPerSeason.
+func mappingFixture(t *testing.T, pool *pgxpool.Pool, seasonNums []int, episodesPerSeason int) (libID, seriesID string) {
+	t.Helper()
+	ctx := context.Background()
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
+	var accID string
+	if err := pool.QueryRow(ctx, `INSERT INTO accounts (name) VALUES ($1) RETURNING id::text`, "map_"+suffix).Scan(&accID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO libraries (account_id, name, kind, root_path) VALUES ($1,$2,'show',$3) RETURNING id::text`,
+		accID, "lib_"+suffix, "/tmp/"+suffix).Scan(&libID); err != nil {
+		t.Fatal(err)
+	}
+	// Already matched at the series level: that is the shape of the bug — the
+	// show has a tmdb_id and full artwork, and only its episodes are empty.
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO series (library_id, title, sort_title, tmdb_id) VALUES ($1,'Bleach','bleach',30984) RETURNING id::text`,
+		libID).Scan(&seriesID); err != nil {
+		t.Fatal(err)
+	}
+	for _, sn := range seasonNums {
+		var seasonID string
+		if err := pool.QueryRow(ctx, `INSERT INTO seasons (series_id, season_number) VALUES ($1,$2) RETURNING id::text`,
+			seriesID, sn).Scan(&seasonID); err != nil {
+			t.Fatal(err)
+		}
+		for n := 1; n <= episodesPerSeason; n++ {
+			var itemID string
+			if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'episode',$2,$3) RETURNING id::text`,
+				libID, fmt.Sprintf("Bleach - S%02dE%02d - THE BLOOD WARFARE Bluray-1080p", sn, n),
+				fmt.Sprintf("bleach-%s-s%de%d.mkv", suffix, sn, n)).Scan(&itemID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pool.Exec(ctx, `INSERT INTO episodes (season_id, episode_number, media_item_id, title) VALUES ($1,$2,$3,$4)`,
+				seasonID, n, itemID, fmt.Sprintf("Bleach - S%02dE%02d - THE BLOOD WARFARE Bluray-1080p", sn, n)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return libID, seriesID
+}
+
+func mappingPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dsn := testdb.DSN(t)
+	ctx := context.Background()
+	if err := db.Migrate(ctx, dsn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func newMappingMatcher(t *testing.T, pool *pgxpool.Pool, p metadata.Provider) *Matcher {
+	t.Helper()
+	m := NewMatcher(pool, p, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	m.download = func(context.Context, string, string) error { return nil }
+	return m
+}
+
+// episodeTitles reads back the on-disk episode numbers and their titles for one
+// on-disk season.
+func episodeTitles(t *testing.T, pool *pgxpool.Pool, seriesID string, seasonNum int) map[int]string {
+	t.Helper()
+	rows, err := pool.Query(context.Background(),
+		`SELECT e.episode_number, e.title FROM episodes e JOIN seasons se ON se.id = e.season_id
+		  WHERE se.series_id = $1 AND se.season_number = $2`, seriesID, seasonNum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[int]string{}
+	for rows.Next() {
+		var n int
+		var title string
+		if err := rows.Scan(&n, &title); err != nil {
+			t.Fatal(err)
+		}
+		out[n] = title
+	}
+	return out
+}
+
+func seasonMapping(t *testing.T, pool *pgxpool.Pool, seriesID string, seasonNum int) (provider *int, offset int, source *string) {
+	t.Helper()
+	if err := pool.QueryRow(context.Background(),
+		`SELECT provider_season_number, provider_episode_offset, provider_season_source
+		   FROM seasons WHERE series_id = $1 AND season_number = $2`, seriesID, seasonNum).
+		Scan(&provider, &offset, &source); err != nil {
+		t.Fatal(err)
+	}
+	return provider, offset, source
+}
+
+// TestMatchSeasonTranslatedThroughEpisodeGroup is ARGY-224's headline case:
+// Bleach's Thousand-Year Blood War sits under Season 17 on disk (TVDB's
+// numbering, which is Sonarr's) and is season 2 at TMDB. Asking for season 17
+// finds nothing, so every episode kept its filename. The provider's own
+// TVDB-ordered episode group supplies the translation.
+func TestMatchSeasonTranslatedThroughEpisodeGroup(t *testing.T) {
+	pool := mappingPool(t)
+	ctx := context.Background()
+	libID, seriesID := mappingFixture(t, pool, []int{17}, 3)
+
+	p := &mappingProvider{
+		seasons: []int{0, 1, 2},
+		alt:     map[int]metadata.SeasonMapping{17: {SeasonNumber: 2, EpisodeOffset: 0}},
+	}
+	res, err := newMappingMatcher(t, pool, p).MatchLibrary(ctx, libID, false)
+	if err != nil {
+		t.Fatalf("match: %v", err)
+	}
+	if res.Episodes != 3 {
+		t.Fatalf("res.Episodes = %d, want 3", res.Episodes)
+	}
+	if len(res.Unmapped) != 0 {
+		t.Fatalf("res.Unmapped = %+v, want none", res.Unmapped)
+	}
+	got := episodeTitles(t, pool, seriesID, 17)
+	for n, want := range map[int]string{1: "s2e1", 2: "s2e2", 3: "s2e3"} {
+		if got[n] != want {
+			t.Errorf("S17E%02d title = %q, want %q", n, got[n], want)
+		}
+	}
+	// The translation is persisted, so it is stable and inspectable rather than
+	// re-derived (and re-charged to TMDB) on every sweep.
+	provider, offset, source := seasonMapping(t, pool, seriesID, 17)
+	if provider == nil || *provider != 2 || offset != 0 || source == nil || *source != "episode_group" {
+		t.Errorf("season 17 mapping = %v/%d/%v, want 2/0/episode_group", provider, offset, source)
+	}
+	// The episode list was fetched for the *provider's* season, not ours.
+	if len(p.epCalls) != 1 || p.epCalls[0] != 2 {
+		t.Errorf("SeasonEpisodes calls = %v, want [2]", p.epCalls)
+	}
+}
+
+// TestMatchSeasonOffsetIntoProviderSeason covers the case a season number alone
+// cannot express: TVDB splits Bleach's first 366 episodes across sixteen
+// seasons that TMDB keeps as one. On-disk S03E01 is TMDB S01E42, and several
+// on-disk seasons resolve to the same provider season — which must be fetched
+// once, not once each.
+func TestMatchSeasonOffsetIntoProviderSeason(t *testing.T) {
+	pool := mappingPool(t)
+	ctx := context.Background()
+	libID, seriesID := mappingFixture(t, pool, []int{3, 4}, 2)
+
+	p := &mappingProvider{
+		seasons: []int{0, 1, 2},
+		alt: map[int]metadata.SeasonMapping{
+			3: {SeasonNumber: 1, EpisodeOffset: 41},
+			4: {SeasonNumber: 1, EpisodeOffset: 43},
+		},
+	}
+	res, err := newMappingMatcher(t, pool, p).MatchLibrary(ctx, libID, false)
+	if err != nil {
+		t.Fatalf("match: %v", err)
+	}
+	if res.Episodes != 4 {
+		t.Fatalf("res.Episodes = %d, want 4", res.Episodes)
+	}
+	s3 := episodeTitles(t, pool, seriesID, 3)
+	if s3[1] != "s1e42" || s3[2] != "s1e43" {
+		t.Errorf("S03 titles = %v, want E01=s1e42 E02=s1e43", s3)
+	}
+	s4 := episodeTitles(t, pool, seriesID, 4)
+	if s4[1] != "s1e44" || s4[2] != "s1e45" {
+		t.Errorf("S04 titles = %v, want E01=s1e44 E02=s1e45", s4)
+	}
+	if len(p.epCalls) != 1 || p.epCalls[0] != 1 {
+		t.Errorf("SeasonEpisodes calls = %v, want a single fetch of provider season 1", p.epCalls)
+	}
+	if p.seasonCalls != 1 || p.altCalls != 1 {
+		t.Errorf("provider lookups = %d season lists / %d episode groups, want 1 each per series", p.seasonCalls, p.altCalls)
+	}
+}
+
+// TestMatchIdentitySeasonUnchanged is the regression guard for every title whose
+// numbering already agrees — SAO, Andor, Planet Earth II. They must keep going
+// straight to their own season number, and must not cost an episode-group fetch.
+func TestMatchIdentitySeasonUnchanged(t *testing.T) {
+	pool := mappingPool(t)
+	ctx := context.Background()
+	libID, seriesID := mappingFixture(t, pool, []int{1, 2}, 2)
+
+	p := &mappingProvider{seasons: []int{1, 2}}
+	res, err := newMappingMatcher(t, pool, p).MatchLibrary(ctx, libID, false)
+	if err != nil {
+		t.Fatalf("match: %v", err)
+	}
+	if res.Episodes != 4 || len(res.Unmapped) != 0 {
+		t.Fatalf("res = %d episodes / %+v unmapped, want 4 / none", res.Episodes, res.Unmapped)
+	}
+	if got := episodeTitles(t, pool, seriesID, 2); got[1] != "s2e1" {
+		t.Errorf("S02E01 title = %q, want s2e1", got[1])
+	}
+	if p.altCalls != 0 {
+		t.Errorf("episode groups fetched %d times for a series that needs no translation", p.altCalls)
+	}
+	provider, offset, source := seasonMapping(t, pool, seriesID, 2)
+	if provider == nil || *provider != 2 || offset != 0 || source == nil || *source != "identity" {
+		t.Errorf("season 2 mapping = %v/%d/%v, want 2/0/identity", provider, offset, source)
+	}
+}
+
+// TestMatchUnmappedSeasonReported is the other half of the bug: a season the
+// provider genuinely has no counterpart for must be *reported*, not silently
+// left empty. The series still matches, so nothing else in the system would say
+// why the episodes are blank.
+func TestMatchUnmappedSeasonReported(t *testing.T) {
+	pool := mappingPool(t)
+	ctx := context.Background()
+	libID, seriesID := mappingFixture(t, pool, []int{17}, 3)
+
+	p := &mappingProvider{seasons: []int{0, 1, 2}} // no episode group published
+	res, err := newMappingMatcher(t, pool, p).MatchLibrary(ctx, libID, false)
+	if err != nil {
+		t.Fatalf("match: %v", err)
+	}
+	if res.Episodes != 0 {
+		t.Fatalf("res.Episodes = %d, want 0", res.Episodes)
+	}
+	if len(res.Unmapped) != 1 {
+		t.Fatalf("res.Unmapped = %+v, want exactly one season", res.Unmapped)
+	}
+	u := res.Unmapped[0]
+	if u.SeriesID != seriesID || u.SeriesTitle != "Bleach" || u.SeasonNumber != 17 || u.Episodes != 3 {
+		t.Errorf("unmapped = %+v, want Bleach season 17 with 3 episodes", u)
+	}
+	// Nothing was guessed: the filename fallback stands rather than being
+	// overwritten with a plausible-looking wrong title.
+	if got := episodeTitles(t, pool, seriesID, 17); !strings.Contains(got[1], "S17E01") {
+		t.Errorf("S17E01 title = %q, want the filename fallback left intact", got[1])
+	}
+	provider, _, source := seasonMapping(t, pool, seriesID, 17)
+	if provider != nil || source != nil {
+		t.Errorf("unmapped season recorded %v/%v, want both NULL", provider, source)
+	}
+}
+
+// TestMatchManualSeasonMappingWins pins the operator escape hatch: a mapping set
+// by hand is used as-is and never overwritten by the automatic pass, even when
+// the provider would have resolved the season differently.
+func TestMatchManualSeasonMappingWins(t *testing.T) {
+	pool := mappingPool(t)
+	ctx := context.Background()
+	libID, seriesID := mappingFixture(t, pool, []int{17}, 2)
+	if _, err := pool.Exec(ctx,
+		`UPDATE seasons SET provider_season_number = 2, provider_episode_offset = 10,
+		        provider_season_source = 'manual' WHERE series_id = $1 AND season_number = 17`,
+		seriesID); err != nil {
+		t.Fatal(err)
+	}
+
+	// The provider would map season 17 at no offset; the operator's +10 must win.
+	p := &mappingProvider{
+		seasons: []int{0, 1, 2},
+		alt:     map[int]metadata.SeasonMapping{17: {SeasonNumber: 2, EpisodeOffset: 0}},
+	}
+	if _, err := newMappingMatcher(t, pool, p).MatchLibrary(ctx, libID, false); err != nil {
+		t.Fatalf("match: %v", err)
+	}
+	if got := episodeTitles(t, pool, seriesID, 17); got[1] != "s2e11" {
+		t.Errorf("S17E01 title = %q, want s2e11 from the manual +10 offset", got[1])
+	}
+	provider, offset, source := seasonMapping(t, pool, seriesID, 17)
+	if provider == nil || *provider != 2 || offset != 10 || source == nil || *source != "manual" {
+		t.Errorf("mapping = %v/%d/%v, want the operator's 2/10/manual left alone", provider, offset, source)
+	}
+	// A manual mapping is trusted without asking the provider anything.
+	if p.seasonCalls != 0 || p.altCalls != 0 {
+		t.Errorf("provider consulted (%d/%d) for a hand-set mapping", p.seasonCalls, p.altCalls)
 	}
 }

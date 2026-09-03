@@ -160,3 +160,127 @@ func TestTMDBConfigured(t *testing.T) {
 		t.Error("api key should be configured")
 	}
 }
+
+// episodeGroupServer serves the two documents AlternateSeasonMap reads, shaped
+// like TMDB's real answer for Bleach (tv/30984): a "TVDB Order" group whose
+// ordinals are the season numbers Sonarr laid the files out under.
+func episodeGroupServer(t *testing.T, groupsJSON, detailJSON string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/tv/30984/episode_groups":
+			_, _ = w.Write([]byte(groupsJSON))
+		case "/tv/episode_group/tvdb-order":
+			_, _ = w.Write([]byte(detailJSON))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+}
+
+func TestTMDBSeriesSeasons(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/tv/30984" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"seasons":[
+			{"season_number":0,"name":"Specials","episode_count":4},
+			{"season_number":1,"name":"Bleach","episode_count":366},
+			{"season_number":2,"name":"Thousand-Year Blood War","episode_count":50}
+		]}`))
+	}))
+	defer srv.Close()
+
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL})
+	got, err := tm.SeriesSeasons(context.Background(), 30984)
+	if err != nil {
+		t.Fatalf("series seasons: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d seasons, want 3", len(got))
+	}
+	if got[2].Number != 2 || got[2].Name != "Thousand-Year Blood War" || got[2].EpisodeCount != 50 {
+		t.Errorf("season 2 = %+v", got[2])
+	}
+	// Nothing numbered 17 — which is exactly why season 17 on disk went empty.
+	for _, s := range got {
+		if s.Number == 17 {
+			t.Fatal("provider reported a season 17; the fixture is wrong")
+		}
+	}
+}
+
+// TestTMDBAlternateSeasonMap pins ARGY-224's translation: TVDB's season 17 is
+// TMDB's season 2 at no offset, while TVDB's season 3 lands *inside* TMDB's
+// season 1 at episode 42 — the case a season number alone cannot express.
+func TestTMDBAlternateSeasonMap(t *testing.T) {
+	groups := `{"results":[
+		{"id":"season-split","name":"Season Split"},
+		{"id":"tvdb-order","name":"TVDB Order"}
+	]}`
+	detail := `{"groups":[
+		{"order":3,"episodes":[
+			{"season_number":1,"episode_number":42},
+			{"season_number":1,"episode_number":43}
+		]},
+		{"order":17,"episodes":[
+			{"season_number":2,"episode_number":1},
+			{"season_number":2,"episode_number":2}
+		]},
+		{"order":18,"episodes":[
+			{"season_number":2,"episode_number":49},
+			{"season_number":3,"episode_number":1}
+		]},
+		{"order":19,"episodes":[
+			{"season_number":4,"episode_number":1},
+			{"season_number":4,"episode_number":3}
+		]}
+	]}`
+	srv := episodeGroupServer(t, groups, detail)
+	defer srv.Close()
+
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL})
+	got, err := tm.AlternateSeasonMap(context.Background(), 30984)
+	if err != nil {
+		t.Fatalf("alternate season map: %v", err)
+	}
+	if mp := got[17]; mp.SeasonNumber != 2 || mp.EpisodeOffset != 0 {
+		t.Errorf("season 17 -> %+v, want {2 0}", mp)
+	}
+	if mp := got[3]; mp.SeasonNumber != 1 || mp.EpisodeOffset != 41 {
+		t.Errorf("season 3 -> %+v, want {1 41} (on-disk E01 is provider E42)", mp)
+	}
+	// A group straddling two provider seasons, and one that skips a number,
+	// are both left out: a single season+offset would map part of them right
+	// and quietly mis-title the rest, which is worse than reporting them.
+	if mp, ok := got[18]; ok {
+		t.Errorf("season 18 mapped to %+v; a group spanning two provider seasons must be skipped", mp)
+	}
+	if mp, ok := got[19]; ok {
+		t.Errorf("season 19 mapped to %+v; a non-contiguous group must be skipped", mp)
+	}
+}
+
+// TestTMDBAlternateSeasonMapNoTVDBGroup covers the common case: a show with
+// episode groups, none of them TVDB's. Guessing from TMDB's type code would
+// pick one of these re-cuts and write wrong metadata, so nothing is returned.
+func TestTMDBAlternateSeasonMapNoTVDBGroup(t *testing.T) {
+	groups := `{"results":[
+		{"id":"netflix","name":"Netflix"},
+		{"id":"arcs","name":"Story Arc"}
+	]}`
+	srv := episodeGroupServer(t, groups, `{"groups":[]}`)
+	defer srv.Close()
+
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL})
+	got, err := tm.AlternateSeasonMap(context.Background(), 30984)
+	if err != nil {
+		t.Fatalf("alternate season map: %v", err)
+	}
+	if got != nil {
+		t.Errorf("map = %v, want nil when the show publishes no TVDB order", got)
+	}
+}

@@ -295,13 +295,30 @@ onUnmounted(() => {
       <p v-if="message" class="message">{{ message }}</p>
 
       <div v-if="status?.libraries?.length" class="libs">
-        <div v-for="l in status.libraries" :key="l.libraryId" class="lib">
-          <span class="lib-name">{{ l.name }}</span>
-          <span class="lib-counts">
-            <span>{{ l.scanned }} scanned</span>
-            <span v-if="l.errors" class="err">{{ l.errors }} errors</span>
-            <span v-if="l.error" class="err" :title="l.error">unreadable root</span>
-          </span>
+        <div v-for="l in status.libraries" :key="l.libraryId" class="lib-entry">
+          <div class="lib">
+            <span class="lib-name">{{ l.name }}</span>
+            <span class="lib-counts">
+              <span>{{ l.scanned }} scanned</span>
+              <span v-if="l.errors" class="err">{{ l.errors }} errors</span>
+              <span v-if="l.error" class="err" :title="l.error">unreadable root</span>
+              <span v-if="l.unmappedSeasons?.length" class="warn">
+                {{ l.unmappedSeasons.length }}
+                {{ l.unmappedSeasons.length === 1 ? 'season' : 'seasons' }} unmapped
+              </span>
+            </span>
+          </div>
+          <!-- A season the metadata provider numbers differently gets no episode
+               metadata, and the series itself still matches — so without this the
+               show just looks half-populated and nothing says why (ARGY-224). -->
+          <ul v-if="l.unmappedSeasons?.length" class="unmapped">
+            <li v-for="u in l.unmappedSeasons" :key="`${u.seriesId}-${u.seasonNumber}`">
+              <strong>{{ u.seriesTitle }}</strong> season {{ u.seasonNumber }} has no counterpart at
+              the metadata provider — {{ u.episodes }}
+              {{ u.episodes === 1 ? 'episode is' : 'episodes are' }}
+              showing filenames instead of titles.
+            </li>
+          </ul>
         </div>
       </div>
       <p v-else class="hint">No libraries registered yet.</p>
@@ -505,6 +522,31 @@ h2 {
 }
 .err {
   color: var(--arg-danger);
+}
+.lib-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.warn {
+  color: var(--arg-accent);
+}
+.unmapped {
+  margin: 0;
+  padding: 10px 14px 10px 30px;
+  list-style: disc;
+  border-radius: var(--arg-r-sm);
+  background: var(--arg-bg-2);
+  border: 1px solid var(--arg-line);
+  font: 500 12px var(--arg-body);
+  color: var(--arg-dim);
+}
+.unmapped li + li {
+  margin-top: 4px;
+}
+.unmapped strong {
+  color: var(--arg-ink-2);
+  font-weight: 600;
 }
 .hint {
   margin-top: 18px;

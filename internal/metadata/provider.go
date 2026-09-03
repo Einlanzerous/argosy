@@ -31,6 +31,49 @@ type EpisodeMeta struct {
 	VoteCount   int     // number of votes behind VoteAverage
 }
 
+// SeasonRef is one season as the provider models it. Used to decide whether a
+// season on disk has a counterpart in the provider's numbering at all.
+type SeasonRef struct {
+	Number       int
+	Name         string
+	EpisodeCount int
+}
+
+// SeasonMapping translates one on-disk season onto the provider's numbering.
+// The on-disk number stays canonical; this is the lookup key that finds its
+// episodes on the provider side (ARGY-224).
+type SeasonMapping struct {
+	// SeasonNumber is the provider season the episodes live in.
+	SeasonNumber int
+	// EpisodeOffset is added to the on-disk episode number to get the
+	// provider's. Non-zero whenever the provider folded several of the
+	// library's seasons into one of its own: TVDB's Bleach S3 is TMDB's S1
+	// E42-E63, so on-disk E01 is provider E42.
+	EpisodeOffset int
+}
+
+// SeasonMapper is implemented by providers whose season numbering can disagree
+// with the library's, and that publish enough to reconcile the two. Optional,
+// like ImageDownloader: a provider that shares the library's numbering by
+// construction (a TVDB-backed one, given the folders come from Sonarr) needs
+// none of this, and the matcher falls back to using the on-disk number directly.
+type SeasonMapper interface {
+	// SeriesSeasons returns the seasons the provider models for a series, so
+	// the matcher can tell "we number this the same way" from "this season has
+	// no counterpart and needs translating".
+	SeriesSeasons(ctx context.Context, tmdbID int64) ([]SeasonRef, error)
+	// AlternateSeasonMap returns on-disk-season -> provider mapping for a
+	// series, keyed by the season number as the library sees it. Returns a nil
+	// map (and no error) when the provider publishes no such translation —
+	// the common case, and not a failure.
+	//
+	// Only unambiguous entries are included: a season the provider splits
+	// across several of its own, or numbers non-contiguously, is left out
+	// rather than approximated, so it surfaces as unmapped instead of as
+	// plausible-looking wrong metadata.
+	AlternateSeasonMap(ctx context.Context, tmdbID int64) (map[int]SeasonMapping, error)
+}
+
 // ImageDownloader is implemented by providers that fetch artwork through
 // their own paced, retrying HTTP path (TMDB, ARGY-141). The matcher prefers
 // it over a plain client so image downloads share the API's token bucket.

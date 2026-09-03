@@ -307,6 +307,8 @@ class ApiClient {
           return TranscodeSession.fromJson(value);
         case 'TranscodeStartRequest':
           return TranscodeStartRequest.fromJson(value);
+        case 'UnmappedSeason':
+          return UnmappedSeason.fromJson(value);
         case 'UpdateVaultRequest':
           return UpdateVaultRequest.fromJson(value);
         case 'UserPreferences':
