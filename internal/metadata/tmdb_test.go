@@ -403,3 +403,60 @@ func TestTMDBPermanentError(t *testing.T) {
 		t.Errorf("IsPermanent(%v) = true, want false for a 502 — that one retries", err)
 	}
 }
+
+// TestTMDBEpisodeGroupDuplicateSeason covers a malformed ordering: two groups
+// resolving to the same season. Keeping either would be a coin flip over which
+// arc's titles a season gets, so both are dropped and the season is left to be
+// reported as unmapped instead.
+func TestTMDBEpisodeGroupDuplicateSeason(t *testing.T) {
+	groups := `{"results":[{"id":"tvdb-order","name":"TVDB Order"}]}`
+	// Two groups whose names both claim season 3, plus a well-formed season 4
+	// that must survive alongside them.
+	detail := `{"groups":[
+		{"order":3,"name":"Season 3 - First Claim","episodes":[
+			{"order":0,"name":"first","season_number":1,"episode_number":10}
+		]},
+		{"order":7,"name":"Season 3 - Second Claim","episodes":[
+			{"order":0,"name":"second","season_number":1,"episode_number":20}
+		]},
+		{"order":4,"name":"Season 4","episodes":[
+			{"order":0,"name":"fine","season_number":1,"episode_number":30}
+		]}
+	]}`
+	srv := episodeGroupServer(t, groups, detail)
+	defer srv.Close()
+
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL})
+	got, err := tm.SeriesEpisodeGroup(context.Background(), 30984)
+	if err != nil {
+		t.Fatalf("episode group: %v", err)
+	}
+	if eps, ok := got[3]; ok {
+		t.Errorf("season 3 = %+v; a season claimed twice must be dropped, not guessed", eps)
+	}
+	if len(got[4]) != 1 || got[4][0].Name != "fine" {
+		t.Errorf("season 4 = %+v; one bad season must not discard the rest", got[4])
+	}
+}
+
+// TestTMDBEpisodeGroupAllDropped: if nothing survives, the show must read as
+// "publishes no ordering" rather than as an empty-but-present one, so the
+// resolver falls through to the provider's own numbering.
+func TestTMDBEpisodeGroupAllDropped(t *testing.T) {
+	groups := `{"results":[{"id":"tvdb-order","name":"TVDB Order"}]}`
+	detail := `{"groups":[
+		{"order":1,"name":"Season 2 - A","episodes":[{"order":0,"name":"a","season_number":1,"episode_number":1}]},
+		{"order":9,"name":"Season 2 - B","episodes":[{"order":0,"name":"b","season_number":1,"episode_number":2}]}
+	]}`
+	srv := episodeGroupServer(t, groups, detail)
+	defer srv.Close()
+
+	tm := NewTMDB("test-token", "", TMDBOptions{BaseURL: srv.URL})
+	got, err := tm.SeriesEpisodeGroup(context.Background(), 30984)
+	if err != nil {
+		t.Fatalf("episode group: %v", err)
+	}
+	if got != nil {
+		t.Errorf("got = %v, want nil so the caller treats it as no ordering at all", got)
+	}
+}
