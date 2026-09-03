@@ -132,11 +132,14 @@ func (m *Matcher) MatchLibrary(ctx context.Context, libraryID string, force bool
 	// first matched get enriched too; cheap because it only touches episodes
 	// still missing provider metadata unless force is set.
 	n, unmapped, err := m.matchEpisodes(ctx, libraryID, force)
+	// Recorded before the error check: a run that fails partway still resolved
+	// (and failed to resolve) real seasons, and the scan status is the only
+	// place that says so.
+	res.Episodes = n
+	res.Unmapped = unmapped
 	if err != nil {
 		return res, err
 	}
-	res.Episodes = n
-	res.Unmapped = unmapped
 
 	// People/cast (ARGY-67): backfill top-billed cast onto every matched movie +
 	// series still missing it. Runs over all matched items (not just this pass),
@@ -370,15 +373,65 @@ func (m *Matcher) matchSeriesEpisodes(ctx context.Context, s seriesRow, force bo
 // onto the provider's numbering, persisting what it works out so the mapping is
 // stable and inspectable afterwards.
 //
-// The provider-side lookups are lazy and memoized across the closure's lifetime:
-// a library whose numbering already agrees with the provider's — which is most of
-// them — costs one extra request per series, and the episode-group fetch happens
-// only for a series that actually has a season needing translation.
+// Order is manual -> episode group -> identity -> reported. The group comes
+// *before* identity deliberately: it is the authoritative on-disk-to-provider
+// table, and a season number existing on both sides does not mean it means the
+// same thing. Bleach is the counterexample in its own right — TMDB numbers it
+// {0,1,2}, so on-disk season 2 (TVDB's "The Entry" arc, which is TMDB S1
+// E21-E41) matches a provider season by number and would otherwise be given
+// Thousand-Year Blood War's episodes. Checking identity first is only safe for
+// a show whose numbering agrees everywhere, which is the thing being tested.
+//
+// Both provider lookups are memoized for the life of the closure, and the
+// season list stays lazy behind the group, so a show the group fully covers
+// never fetches one. A failed lookup is remembered too: sixteen seasons of an
+// unreachable series make one request and log one warning, not sixteen.
 func (m *Matcher) seasonResolver(s seriesRow) func(context.Context, localSeason) (metadata.SeasonMapping, seasonResolution, error) {
 	mapper, canMap := m.provider.(metadata.SeasonMapper)
-	var providerSeasons map[int]bool
-	var altMap map[int]metadata.SeasonMapping
-	var altFetched bool
+	var (
+		altMap          map[int]metadata.SeasonMapping
+		altLoaded       bool
+		providerSeasons map[int]bool
+		seasonsLoaded   bool
+		failed          bool // a lookup failed this run; stop asking until the next sweep
+	)
+
+	// loadAlt fetches the provider's TVDB-ordered translation once per series.
+	loadAlt := func(ctx context.Context) bool {
+		if altLoaded {
+			return true
+		}
+		alt, err := mapper.AlternateSeasonMap(ctx, s.tmdb)
+		if err != nil {
+			m.logger.Warn("tmdb episode-group fetch failed", "series", s.title, "tmdb_id", s.tmdb, "err", err)
+			failed = true
+			return false
+		}
+		altMap, altLoaded = alt, true
+		return true
+	}
+
+	// loadSeasons fetches the provider's own season list once per series — only
+	// reached for a season the group does not cover, where it is what separates
+	// "the provider numbers this the same way" from "the provider has no such
+	// season at all".
+	loadSeasons := func(ctx context.Context) bool {
+		if seasonsLoaded {
+			return true
+		}
+		refs, err := mapper.SeriesSeasons(ctx, s.tmdb)
+		if err != nil {
+			m.logger.Warn("tmdb season list fetch failed", "series", s.title, "tmdb_id", s.tmdb, "err", err)
+			failed = true
+			return false
+		}
+		providerSeasons = make(map[int]bool, len(refs))
+		for _, r := range refs {
+			providerSeasons[r.Number] = true
+		}
+		seasonsLoaded = true
+		return true
+	}
 
 	return func(ctx context.Context, ls localSeason) (metadata.SeasonMapping, seasonResolution, error) {
 		// An operator's mapping is the last word — the automatic pass never
@@ -387,42 +440,31 @@ func (m *Matcher) seasonResolver(s seriesRow) func(context.Context, localSeason)
 			return metadata.SeasonMapping{SeasonNumber: *ls.provider, EpisodeOffset: ls.offset}, seasonResolved, nil
 		}
 		identity := metadata.SeasonMapping{SeasonNumber: ls.number, EpisodeOffset: 0}
-		// A provider that can't describe its own season list is one whose
-		// numbering we have no way to check — use the on-disk number directly,
-		// exactly as this code did before ARGY-224, and record nothing.
+		// A provider that can't describe its own seasons is one whose numbering
+		// we have no way to check — use the on-disk number directly, exactly as
+		// this code did before ARGY-224, and record nothing.
 		if !canMap {
 			return identity, seasonResolved, nil
 		}
-
-		if providerSeasons == nil {
-			refs, err := mapper.SeriesSeasons(ctx, s.tmdb)
-			if err != nil {
-				m.logger.Warn("tmdb season list fetch failed", "series", s.title, "tmdb_id", s.tmdb, "err", err)
-				return metadata.SeasonMapping{}, seasonUnavailable, nil
-			}
-			providerSeasons = make(map[int]bool, len(refs))
-			for _, r := range refs {
-				providerSeasons[r.Number] = true
-			}
-		}
-		if providerSeasons[ls.number] {
-			return identity, seasonResolved, m.storeSeasonMapping(ctx, ls.id, identity, "identity")
+		if failed {
+			return metadata.SeasonMapping{}, seasonUnavailable, nil
 		}
 
-		// No counterpart at the same number: ask the provider for its TVDB-ordered
-		// translation, which is the numbering the folders on disk actually came in.
-		if !altFetched {
-			altFetched = true
-			var err error
-			if altMap, err = mapper.AlternateSeasonMap(ctx, s.tmdb); err != nil {
-				m.logger.Warn("tmdb episode-group fetch failed", "series", s.title, "tmdb_id", s.tmdb, "err", err)
-				altMap = nil
-				altFetched = false
-				return metadata.SeasonMapping{}, seasonUnavailable, nil
-			}
+		if !loadAlt(ctx) {
+			return metadata.SeasonMapping{}, seasonUnavailable, nil
 		}
 		if mp, ok := altMap[ls.number]; ok {
 			return mp, seasonResolved, m.storeSeasonMapping(ctx, ls.id, mp, "episode_group")
+		}
+
+		// No published translation for this season: the provider's own numbering
+		// is then the only claim available, and matching numbers are all we have
+		// to go on.
+		if !loadSeasons(ctx) {
+			return metadata.SeasonMapping{}, seasonUnavailable, nil
+		}
+		if providerSeasons[ls.number] {
+			return identity, seasonResolved, m.storeSeasonMapping(ctx, ls.id, identity, "identity")
 		}
 		return metadata.SeasonMapping{}, seasonUnmapped, nil
 	}

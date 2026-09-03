@@ -3,6 +3,7 @@ package stevedore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -418,8 +419,10 @@ func TestMatchSeasonOffsetIntoProviderSeason(t *testing.T) {
 	if len(p.epCalls) != 1 || p.epCalls[0] != 1 {
 		t.Errorf("SeasonEpisodes calls = %v, want a single fetch of provider season 1", p.epCalls)
 	}
-	if p.seasonCalls != 1 || p.altCalls != 1 {
-		t.Errorf("provider lookups = %d season lists / %d episode groups, want 1 each per series", p.seasonCalls, p.altCalls)
+	// One episode-group fetch for the series, and no season list at all: the
+	// group covered every season, so nothing had to fall back to identity.
+	if p.altCalls != 1 || p.seasonCalls != 0 {
+		t.Errorf("provider lookups = %d episode groups / %d season lists, want 1 / 0", p.altCalls, p.seasonCalls)
 	}
 }
 
@@ -442,8 +445,10 @@ func TestMatchIdentitySeasonUnchanged(t *testing.T) {
 	if got := episodeTitles(t, pool, seriesID, 2); got[1] != "s2e1" {
 		t.Errorf("S02E01 title = %q, want s2e1", got[1])
 	}
-	if p.altCalls != 0 {
-		t.Errorf("episode groups fetched %d times for a series that needs no translation", p.altCalls)
+	// The group is consulted first now (it is the authoritative table), so it is
+	// fetched exactly once and found to publish nothing; identity then applies.
+	if p.altCalls != 1 || p.seasonCalls != 1 {
+		t.Errorf("provider lookups = %d episode groups / %d season lists, want 1 each per series", p.altCalls, p.seasonCalls)
 	}
 	provider, offset, source := seasonMapping(t, pool, seriesID, 2)
 	if provider == nil || *provider != 2 || offset != 0 || source == nil || *source != "identity" {
@@ -518,5 +523,96 @@ func TestMatchManualSeasonMappingWins(t *testing.T) {
 	// A manual mapping is trusted without asking the provider anything.
 	if p.seasonCalls != 0 || p.altCalls != 0 {
 		t.Errorf("provider consulted (%d/%d) for a hand-set mapping", p.seasonCalls, p.altCalls)
+	}
+}
+
+// TestMatchEpisodeGroupBeatsIdentity guards the ordering: a season number that
+// exists on both sides does not mean it means the same thing, so the published
+// TVDB-ordered translation must be consulted before falling back to identity.
+//
+// Bleach is the counterexample in its own right. TMDB numbers it {0,1,2}, so
+// on-disk season 2 — TVDB's "The Entry" arc, which is TMDB S1 E21-E41 — matches
+// a provider season *by number*. Resolving identity first would hand it
+// Thousand-Year Blood War's episodes, which is precisely the confidently-wrong
+// metadata this ticket exists to prevent.
+func TestMatchEpisodeGroupBeatsIdentity(t *testing.T) {
+	pool := mappingPool(t)
+	ctx := context.Background()
+	libID, seriesID := mappingFixture(t, pool, []int{2, 3}, 2)
+
+	p := &mappingProvider{
+		seasons: []int{0, 1, 2}, // on-disk season 2 collides with the provider's
+		alt: map[int]metadata.SeasonMapping{
+			2: {SeasonNumber: 1, EpisodeOffset: 20},
+			3: {SeasonNumber: 1, EpisodeOffset: 41},
+		},
+	}
+	res, err := newMappingMatcher(t, pool, p).MatchLibrary(ctx, libID, false)
+	if err != nil {
+		t.Fatalf("match: %v", err)
+	}
+	if res.Episodes != 4 || len(res.Unmapped) != 0 {
+		t.Fatalf("res = %d episodes / %+v unmapped, want 4 / none", res.Episodes, res.Unmapped)
+	}
+	s2 := episodeTitles(t, pool, seriesID, 2)
+	if s2[1] != "s1e21" || s2[2] != "s1e22" {
+		t.Errorf("S02 titles = %v, want E01=s1e21 E02=s1e22 (the group's answer, not provider season 2)", s2)
+	}
+	provider, offset, source := seasonMapping(t, pool, seriesID, 2)
+	if provider == nil || *provider != 1 || offset != 20 || source == nil || *source != "episode_group" {
+		t.Errorf("season 2 mapping = %v/%d/%v, want 1/20/episode_group", provider, offset, source)
+	}
+	// The provider's own season list is never needed for a season the group
+	// covers, so it is not fetched at all.
+	if p.seasonCalls != 0 {
+		t.Errorf("season list fetched %d times; the group covered every season", p.seasonCalls)
+	}
+}
+
+// failingMapper fails both provider-side lookups, standing in for TMDB being
+// unreachable mid-sweep.
+type failingMapper struct {
+	fakeProvider
+	seasonCalls int
+	altCalls    int
+}
+
+func (p *failingMapper) SeriesSeasons(_ context.Context, _ int64) ([]metadata.SeasonRef, error) {
+	p.seasonCalls++
+	return nil, errors.New("tmdb unreachable")
+}
+
+func (p *failingMapper) AlternateSeasonMap(_ context.Context, _ int64) (map[int]metadata.SeasonMapping, error) {
+	p.altCalls++
+	return nil, errors.New("tmdb unreachable")
+}
+
+// TestMatchProviderUnavailableAsksOnce covers the difference between "the
+// provider has no such season" and "we could not ask". A failed lookup must not
+// be reported as unmapped — that would tell an operator a fact about the title
+// that isn't true — and must not be retried once per season of the series.
+func TestMatchProviderUnavailableAsksOnce(t *testing.T) {
+	pool := mappingPool(t)
+	ctx := context.Background()
+	libID, seriesID := mappingFixture(t, pool, []int{1, 2, 3}, 1)
+
+	p := &failingMapper{}
+	res, err := newMappingMatcher(t, pool, p).MatchLibrary(ctx, libID, false)
+	if err != nil {
+		t.Fatalf("match: %v", err)
+	}
+	if res.Episodes != 0 {
+		t.Fatalf("res.Episodes = %d, want 0", res.Episodes)
+	}
+	if len(res.Unmapped) != 0 {
+		t.Fatalf("res.Unmapped = %+v; a failed lookup is not a missing season", res.Unmapped)
+	}
+	if p.altCalls != 1 {
+		t.Errorf("episode groups fetched %d times across 3 seasons, want 1", p.altCalls)
+	}
+	// Nothing was recorded, so the next sweep retries from scratch.
+	provider, _, source := seasonMapping(t, pool, seriesID, 1)
+	if provider != nil || source != nil {
+		t.Errorf("recorded %v/%v for an unreachable provider, want both NULL", provider, source)
 	}
 }
