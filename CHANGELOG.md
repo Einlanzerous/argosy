@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.28.1](https://github.com/Einlanzerous/argosy/compare/v0.28.0...v0.28.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **metadata:** translate the provider's season numbering onto ours (ARGY-224) ([#236](https://github.com/Einlanzerous/argosy/issues/236)) ([fb859c5](https://github.com/Einlanzerous/argosy/commit/fb859c57193f186e8c21a132c69c1cb744d8be46))
+* **mobile:** preserve caption position when the subtitle track changes (ARGY-208) ([#233](https://github.com/Einlanzerous/argosy/issues/233)) ([c3a40da](https://github.com/Einlanzerous/argosy/commit/c3a40da39650e37b2d6632df819d7471820431f2))
+* **mobile:** probe HTTPS before assuming cleartext for a typed server address (ARGY-192) ([#234](https://github.com/Einlanzerous/argosy/issues/234)) ([7ca78b9](https://github.com/Einlanzerous/argosy/commit/7ca78b914d5ebee29f6f92e612270a776d6ff3de))
+
 ## [0.28.0](https://github.com/Einlanzerous/argosy/compare/v0.27.2...v0.28.0) (2026-08-28)
 
 
