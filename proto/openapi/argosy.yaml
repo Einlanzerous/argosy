@@ -2594,6 +2594,43 @@ components:
         scanned: { type: integer }
         errors: { type: integer }
         error: { type: string }
+        unmappedSeasons:
+          type: array
+          items: { $ref: "#/components/schemas/UnmappedSeason" }
+          description: >-
+            Seasons the metadata provider has no counterpart for. Absent or empty
+            when every season resolved.
+      additionalProperties: false
+
+    UnmappedSeason:
+      type: object
+      required: [seriesId, seriesTitle, seasonNumber, episodes]
+      description: >-
+        A season on disk whose number could not be translated onto the metadata
+        provider's numbering, so its episodes keep their filename-derived titles.
+
+        The library's season numbers come from Sonarr, which follows TVDB; TMDB
+        numbers some shows differently — Bleach's Thousand-Year Blood War is TVDB
+        season 17 and TMDB season 2. Argosy resolves this from the provider's own
+        TVDB-ordered episode group where one is published, and reports the season
+        here where none is. The failure is otherwise invisible: the series still
+        matches, so the show looks half-populated rather than unmatched.
+      properties:
+        seriesId: { type: string, format: uuid }
+        seriesTitle: { type: string }
+        seasonNumber:
+          type: integer
+          description: The season number as it appears on disk.
+        episodes:
+          type: integer
+          description: Episode rows left without provider metadata.
+        reason:
+          type: string
+          description: >-
+            Which way it failed — no such season at the provider, no published
+            TVDB ordering covering it, or the provider disowning the series
+            outright. Without it every entry reads the same and none of them
+            suggests what to do next.
       additionalProperties: false
 
     ScanStatus:

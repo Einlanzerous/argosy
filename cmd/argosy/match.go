@@ -109,7 +109,16 @@ func runMatch(cfg config.Config, logger *slog.Logger, args []string) {
 			logTMDBTraffic()
 			os.Exit(1)
 		}
-		logger.Info("match complete", "library", l.name, "movies", res.Movies, "series", res.Series, "episodes", res.Episodes, "credits", res.Credits, "misses", res.Misses)
+		logger.Info("match complete", "library", l.name, "movies", res.Movies, "series", res.Series,
+			"episodes", res.Episodes, "credits", res.Credits, "misses", res.Misses,
+			"unmappedSeasons", len(res.Unmapped))
+		// Named individually: the count alone tells an operator something is
+		// wrong without telling them which show to go and look at, and the CLI
+		// has no scan-status endpoint to fall back on (ARGY-224).
+		for _, u := range res.Unmapped {
+			logger.Warn("season left without metadata", "library", l.name, "series", u.SeriesTitle,
+				"season", u.SeasonNumber, "episodes", u.Episodes, "reason", u.Reason)
+		}
 	}
 	logTMDBTraffic()
 }

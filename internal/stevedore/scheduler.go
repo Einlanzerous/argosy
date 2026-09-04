@@ -18,6 +18,11 @@ type LibraryScan struct {
 	Scanned   int    `json:"scanned"`
 	Errors    int    `json:"errors"`
 	Error     string `json:"error,omitempty"`
+	// Unmapped names seasons whose numbering the metadata provider has no
+	// counterpart for, so their episodes went without metadata. Surfaced here
+	// because nothing else says why: the series itself matches, so the show
+	// looks half-populated rather than unmatched (ARGY-224).
+	Unmapped []UnmappedSeason `json:"unmappedSeasons,omitempty"`
 }
 
 // TMDBStats is the metadata provider's traffic for the current (or last) sweep:
@@ -200,11 +205,16 @@ func (s *Scheduler) scanOnce(ctx context.Context) Status {
 			ls.Error = err.Error()
 			s.logger.Warn("scan sweep: library failed", "library", l.name, "err", err)
 		} else if matcher != nil {
-			if _, err := matcher.MatchLibrary(ctx, l.id, false); err != nil {
+			mr, err := matcher.MatchLibrary(ctx, l.id, false)
+			if err != nil {
 				s.logger.Warn("scan sweep: match failed", "library", l.name, "err", err)
 			}
+			// Kept even on error: MatchLibrary reports what it resolved before
+			// it failed, and a half-run's unmapped seasons are still real.
+			ls.Unmapped = mr.Unmapped
 		}
-		s.logger.Info("rebuilt the Manifest", "library", l.name, "scanned", ls.Scanned, "errors", ls.Errors)
+		s.logger.Info("rebuilt the Manifest", "library", l.name, "scanned", ls.Scanned,
+			"errors", ls.Errors, "unmappedSeasons", len(ls.Unmapped))
 		results = append(results, ls)
 	}
 

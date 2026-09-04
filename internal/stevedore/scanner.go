@@ -164,10 +164,19 @@ func (s *Scanner) prune(ctx context.Context, libraryID string, seen []string) (i
 		return removed, err
 	}
 	// Seasons, then series, left with no children.
+	//
+	// A season carrying an operator's provider mapping is kept even when empty.
+	// The prune guard above is library-wide, so one show's files going missing
+	// for a single sweep — a rename in flight, a season folder briefly absent —
+	// is enough to delete the row, and Classify recreates it with the mapping
+	// columns NULL. That silently discards a hand-set mapping the resolver
+	// otherwise promises never to overwrite (ARGY-224). An empty season row
+	// costs nothing and disappears the moment the operator clears the mapping.
 	if _, err := s.pool.Exec(ctx,
 		`DELETE FROM seasons se
 		  WHERE se.series_id IN (SELECT id FROM series WHERE library_id = $1)
-		    AND NOT EXISTS (SELECT 1 FROM episodes e WHERE e.season_id = se.id)`,
+		    AND NOT EXISTS (SELECT 1 FROM episodes e WHERE e.season_id = se.id)
+		    AND se.provider_season_source IS DISTINCT FROM 'manual'`,
 		libraryID); err != nil {
 		return removed, err
 	}

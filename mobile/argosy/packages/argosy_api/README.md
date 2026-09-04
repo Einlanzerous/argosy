@@ -209,6 +209,7 @@ Class | Method | HTTP request | Description
  - [TranscodeProgress](doc//TranscodeProgress.md)
  - [TranscodeSession](doc//TranscodeSession.md)
  - [TranscodeStartRequest](doc//TranscodeStartRequest.md)
+ - [UnmappedSeason](doc//UnmappedSeason.md)
  - [UpdateVaultRequest](doc//UpdateVaultRequest.md)
  - [UserPreferences](doc//UserPreferences.md)
  - [UserProfile](doc//UserProfile.md)

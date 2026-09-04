@@ -18,6 +18,7 @@ class ScanLibraryResult {
     required this.scanned,
     required this.errors,
     this.error,
+    this.unmappedSeasons = const [],
   });
 
   String libraryId;
@@ -36,13 +37,17 @@ class ScanLibraryResult {
   ///
   String? error;
 
+  /// Seasons the metadata provider has no counterpart for. Absent or empty when every season resolved.
+  List<UnmappedSeason> unmappedSeasons;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is ScanLibraryResult &&
     other.libraryId == libraryId &&
     other.name == name &&
     other.scanned == scanned &&
     other.errors == errors &&
-    other.error == error;
+    other.error == error &&
+    _deepEquality.equals(other.unmappedSeasons, unmappedSeasons);
 
   @override
   int get hashCode =>
@@ -51,10 +56,11 @@ class ScanLibraryResult {
     (name.hashCode) +
     (scanned.hashCode) +
     (errors.hashCode) +
-    (error == null ? 0 : error!.hashCode);
+    (error == null ? 0 : error!.hashCode) +
+    (unmappedSeasons.hashCode);
 
   @override
-  String toString() => 'ScanLibraryResult[libraryId=$libraryId, name=$name, scanned=$scanned, errors=$errors, error=$error]';
+  String toString() => 'ScanLibraryResult[libraryId=$libraryId, name=$name, scanned=$scanned, errors=$errors, error=$error, unmappedSeasons=$unmappedSeasons]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -67,6 +73,7 @@ class ScanLibraryResult {
     } else {
       json[r'error'] = null;
     }
+      json[r'unmappedSeasons'] = this.unmappedSeasons;
     return json;
   }
 
@@ -98,6 +105,7 @@ class ScanLibraryResult {
         scanned: mapValueOfType<int>(json, r'scanned')!,
         errors: mapValueOfType<int>(json, r'errors')!,
         error: mapValueOfType<String>(json, r'error'),
+        unmappedSeasons: UnmappedSeason.listFromJson(json[r'unmappedSeasons']),
       );
     }
     return null;
