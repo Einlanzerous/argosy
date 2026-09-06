@@ -433,3 +433,95 @@ func mp4Boxes(contents []byte, typ string, skip int) [][]byte {
 	}
 	return out
 }
+
+// TestMediaPlaylistsPinStart is the ARGY-228 regression guard, run against what
+// ffmpeg actually writes. Every output shape the builders produce — a lone media
+// playlist at index.m3u8, a master with variant playlists, a ladder — must serve
+// each *media* playlist with exactly one EXT-X-START pinning playback to the
+// top, and serve the master with none. A media playlist is recognised by the
+// tag the spec makes mandatory there and forbids in a master,
+// EXT-X-TARGETDURATION, so this also catches ffmpeg moving the tag or the
+// builders changing which file is which.
+//
+// Asserted on the served bytes (NormalizePlaylist, as fileTranscode emits them)
+// because ffmpeg has no option to write the tag itself; the whole fix lives in
+// the serve path, and a test on the files on disk would pass with it removed.
+func TestMediaPlaylistsPinStart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test needs ffmpeg")
+	}
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.mkv")
+	genMultiAudioSource(t, ffmpeg, src)
+
+	const pinnedHeader = "#EXTM3U\n#EXT-X-START:TIME-OFFSET=0,PRECISE=YES\n"
+	for _, tc := range []struct {
+		name       string
+		spec       Spec
+		wantMaster bool
+	}{
+		{
+			// The ARGY-228 shape as the Android TV hit it: a copy, at disk speed.
+			// H.264 single-audio takes the lone-variant tail, so index.m3u8 *is*
+			// the media playlist here.
+			name: "single-audio remux (media playlist at index.m3u8)",
+			spec: Spec{
+				Source: src, Method: MethodRemux,
+				AudioTracks: []AudioTrack{{Index: 0, Language: "en", Default: true}},
+			},
+		},
+		{
+			name:       "multi-audio remux (master + variant playlists)",
+			spec:       Spec{Source: src, Method: MethodRemux, AudioTracks: dubSub},
+			wantMaster: true,
+		},
+		{
+			name:       "transcode ladder",
+			spec:       Spec{Source: src, Encoder: EncoderSoftware, SourceHeight: 1080, AudioTracks: dubSub},
+			wantMaster: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := t.TempDir()
+			spec := tc.spec
+			spec.OutputDir = out
+			run(t, ffmpeg, out, buildArgs(spec))
+
+			plists, _ := filepath.Glob(filepath.Join(out, "*.m3u8"))
+			if len(plists) == 0 {
+				t.Fatal("ffmpeg wrote no playlists")
+			}
+			media := 0
+			for _, p := range plists {
+				raw, err := os.ReadFile(p)
+				if err != nil {
+					t.Fatalf("read %s: %v", p, err)
+				}
+				name := filepath.Base(p)
+				served := string(NormalizePlaylist(raw))
+				isMedia := strings.Contains(served, "#EXT-X-TARGETDURATION")
+				if name == PlaylistName && isMedia == tc.wantMaster {
+					t.Errorf("%s: media playlist = %v, want a master = %v — the builders changed shape", name, isMedia, tc.wantMaster)
+				}
+				switch n := strings.Count(served, "#EXT-X-START"); {
+				case isMedia && n != 1:
+					t.Errorf("%s: served media playlist declares %d EXT-X-START, want exactly 1:\n%s", name, n, served)
+				case isMedia && !strings.HasPrefix(served, pinnedHeader):
+					t.Errorf("%s: pin is not right after the header:\n%s", name, served)
+				case !isMedia && n != 0:
+					t.Errorf("%s: master playlist must not carry EXT-X-START (%d found):\n%s", name, n, served)
+				}
+				if isMedia {
+					media++
+				}
+			}
+			if media == 0 {
+				t.Errorf("no media playlist among %v — nothing was pinned", plists)
+			}
+		})
+	}
+}
