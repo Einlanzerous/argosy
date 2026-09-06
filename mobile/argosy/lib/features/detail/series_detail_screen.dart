@@ -12,6 +12,7 @@ import '../../util/poster_gradient.dart';
 import '../../widgets/arg_chip.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
+import '../stow/stow_button.dart';
 import '../stow/stow_controller.dart';
 import '../stow/stowed_item.dart';
 import 'add_to_vault.dart';
@@ -66,6 +67,29 @@ List<List<EpisodeSummary>> _groupEpisodes(List<EpisodeSummary> episodes) {
   }
   return groups;
 }
+
+/// "E5" for a single episode, "E1–2" for a combined span.
+String _episodeCode(List<EpisodeSummary> episodes) => episodes.length > 1
+    ? 'E${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
+    : 'E${episodes.first.episodeNumber}';
+
+/// Real episode name(s) joined, or a plain "Episode N" / "Episodes N–M" fallback
+/// until TMDB per-episode metadata lands.
+String _groupTitle(List<EpisodeSummary> episodes) {
+  final names = episodes
+      .map((e) => episodeName(e.title))
+      .whereType<String>()
+      .toList();
+  if (names.isNotEmpty) return names.join(' / ');
+  return episodes.length > 1
+      ? 'Episodes ${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
+      : 'Episode ${episodes.first.episodeNumber}';
+}
+
+/// The line recorded with a stowed episode for the offline list, where there
+/// is no catalog left to look it up in.
+String _stowLine(int seasonNumber, List<EpisodeSummary> group) =>
+    'S$seasonNumber · ${_episodeCode(group)} · ${_groupTitle(group)}';
 
 class _Body extends ConsumerStatefulWidget {
   const _Body({required this.series});
@@ -299,6 +323,19 @@ class _BodyState extends ConsumerState<_Body> {
                       if (e.mediaItemId != null) e.mediaItemId!,
                   ], next),
                 ),
+                // One tap for the whole season (ARGY-229): the same groups the
+                // rows above are drawn from, so a combined rip stows once.
+                SeasonStowButton(
+                  seasonLabel: season.title ?? 'Season ${season.seasonNumber}',
+                  entries: [
+                    for (final group in _groupEpisodes(season.episodes))
+                      if (group.first.mediaItemId != null)
+                        (
+                          itemId: group.first.mediaItemId!,
+                          subtitleLine: _stowLine(season.seasonNumber, group),
+                        ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -385,23 +422,8 @@ class _EpisodeTile extends ConsumerWidget {
     return (dur - pos).clamp(0, dur);
   }
 
-  // "E5" for a single episode, "E1–2" for a combined span.
-  String get _episodeLabel => _combined
-      ? 'E${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
-      : 'E${_rep.episodeNumber}';
-
-  // Real episode name(s) joined, or a plain "Episode N" / "Episodes N–M" fallback
-  // until TMDB per-episode metadata lands.
-  String get _displayTitle {
-    final names = episodes
-        .map((e) => episodeName(e.title))
-        .whereType<String>()
-        .toList();
-    if (names.isNotEmpty) return names.join(' / ');
-    return _combined
-        ? 'Episodes ${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
-        : 'Episode ${_rep.episodeNumber}';
-  }
+  String get _episodeLabel => _episodeCode(episodes);
+  String get _displayTitle => _groupTitle(episodes);
 
   String? get _overview => episodes
       .map((e) => e.overview)
@@ -637,7 +659,7 @@ class _EpisodeTile extends ConsumerWidget {
       case _RowAction.stow:
         await stow.stowById(
           itemId,
-          subtitleLine: 'S$seasonNumber · $_episodeLabel · $_displayTitle',
+          subtitleLine: _stowLine(seasonNumber, episodes),
         );
       case _RowAction.cancelStow:
         await stow.cancel(itemId);

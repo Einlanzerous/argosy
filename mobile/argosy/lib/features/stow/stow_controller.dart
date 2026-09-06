@@ -12,6 +12,10 @@ import 'stow_service.dart';
 import 'stow_store.dart';
 import 'stowed_item.dart';
 
+/// An item to stow by id, with the line the offline list will show for it —
+/// what the series screen hands over for a whole season (ARGY-229).
+typedef StowEntry = ({String itemId, String? subtitleLine});
+
 /// The app's view of what is being stowed.
 ///
 /// It no longer runs the downloads itself (ARGY-201): the transfer belongs to a
@@ -93,6 +97,45 @@ class StowController extends Notifier<Map<String, StowStatus>> {
   Future<void> stowById(String itemId, {String? subtitleLine}) async {
     if (statusFor(itemId).isBusy) return;
     _set(itemId, const StowStatus(phase: StowPhase.requesting));
+    await _stowById(itemId, subtitleLine: subtitleLine);
+  }
+
+  /// Stows every item in [entries] — the season button (ARGY-229).
+  ///
+  /// Items already on the device or already in flight are left alone, so a
+  /// second press over a half-stowed season fills in the gaps rather than
+  /// starting over; one that failed is retried. Duplicates collapse to one
+  /// stow (a combined rip lists several episode rows over a single file), and
+  /// the order is kept, so the first episode is the first to land.
+  ///
+  /// Every item reads as "Preparing…" before any is fetched. Each hand-over is
+  /// a detail fetch plus a round trip to the service, and a season of them
+  /// takes long enough that rows flipping one at a time from a bare Stow would
+  /// look like the button had only half worked.
+  Future<void> stowMany(List<StowEntry> entries) async {
+    final seen = <String>{};
+    final todo = <StowEntry>[];
+    for (final entry in entries) {
+      if (!seen.add(entry.itemId)) continue;
+      final status = statusFor(entry.itemId);
+      if (status.isBusy || status.phase == StowPhase.stowed) continue;
+      todo.add(entry);
+    }
+    state = {
+      ...state,
+      for (final entry in todo)
+        entry.itemId: const StowStatus(phase: StowPhase.requesting),
+    };
+    for (final entry in todo) {
+      // Cancelled from its row while it waited its turn here: the engine never
+      // knew it, so the only trace is that its status is gone. Handing it over
+      // now would resurrect a download the user just refused.
+      if (state[entry.itemId]?.phase != StowPhase.requesting) continue;
+      await _stowById(entry.itemId, subtitleLine: entry.subtitleLine);
+    }
+  }
+
+  Future<void> _stowById(String itemId, {String? subtitleLine}) async {
     try {
       final detail = await _libraryApi.getMediaItem(itemId);
       if (detail == null) {
