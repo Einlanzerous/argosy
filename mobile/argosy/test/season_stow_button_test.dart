@@ -29,6 +29,11 @@ class _StalledLibraryApi extends LibraryApi {
 
 const _ids = ['ep-1', 'ep-2', 'ep-3'];
 
+final _entries = [
+  for (final (i, id) in _ids.indexed)
+    (itemId: id, subtitleLine: 'S1 · $id', code: 'E${i + 1}', episodes: 1),
+];
+
 void main() {
   late Directory root;
   late StowStore store;
@@ -62,7 +67,10 @@ void main() {
     });
   }
 
-  Future<void> pumpButton(WidgetTester tester) async {
+  Future<void> pumpButton(
+    WidgetTester tester, {
+    List<SeasonStowEntry>? remainder,
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -77,9 +85,8 @@ void main() {
           home: Scaffold(
             body: SeasonStowButton(
               seasonLabel: 'Season 1',
-              entries: [
-                for (final id in _ids) (itemId: id, subtitleLine: 'S1 · $id'),
-              ],
+              entries: _entries,
+              remainder: remainder,
             ),
           ),
         ),
@@ -114,6 +121,11 @@ void main() {
     await tester.pump();
 
     expect(
+      find.text('Entire season'),
+      findsNothing,
+      reason: 'nothing in the season is touched, so there is nothing to ask',
+    );
+    expect(
       find.text('Stowing season · 1 of 3'),
       findsOneWidget,
       reason: 'the stowed one counts; the two just queued do not',
@@ -147,4 +159,91 @@ void main() {
       expect(find.text('Remove'), findsOneWidget);
     },
   );
+
+  group('partway through the season', () {
+    // The viewer is on ep-2: the rest of the season is ep-2 onward.
+    final rest = _entries.sublist(1);
+
+    Future<void> openChooser(WidgetTester tester) async {
+      await tester.tap(find.text('Stow season'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text("You're partway through Season 1"), findsOneWidget);
+    }
+
+    testWidgets('asks whether to stow from here or all of it', (tester) async {
+      await pumpButton(tester, remainder: rest);
+      await openChooser(tester);
+
+      expect(find.text('Rest of the season'), findsOneWidget);
+      expect(find.text('From E2 · 2 episodes'), findsOneWidget);
+      expect(find.text('Entire season'), findsOneWidget);
+      expect(find.text('3 episodes'), findsOneWidget);
+    });
+
+    testWidgets('"rest of the season" stows from the current episode on', (
+      tester,
+    ) async {
+      await pumpButton(tester, remainder: rest);
+      await openChooser(tester);
+
+      await tester.tap(find.text('Rest of the season'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(
+        find.text('Stowing season · 0 of 2'),
+        findsOneWidget,
+        reason: 'the count is what was asked for, not the whole season',
+      );
+    });
+
+    testWidgets('"entire season" stows everything', (tester) async {
+      await pumpButton(tester, remainder: rest);
+      await openChooser(tester);
+
+      await tester.tap(find.text('Entire season'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Stowing season · 0 of 3'), findsOneWidget);
+    });
+
+    testWidgets('the rest of the season is offered only if it is not here', (
+      tester,
+    ) async {
+      await seed(tester, ['ep-2', 'ep-3']);
+      await pumpButton(tester, remainder: rest);
+      await openChooser(tester);
+
+      expect(find.text('Already on this device'), findsOneWidget);
+      expect(
+        tester
+            .widget<ListTile>(
+              find.ancestor(
+                of: find.text('Rest of the season'),
+                matching: find.byType(ListTile),
+              ),
+            )
+            .enabled,
+        isFalse,
+      );
+
+      await tester.tap(find.text('Entire season'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Stowing season · 2 of 3'), findsOneWidget);
+    });
+
+    testWidgets('no chooser when the rest is the whole season', (tester) async {
+      // Progress only on the first episode, still mid-way: "from here on" is
+      // everything, so there is nothing to choose between.
+      await pumpButton(tester, remainder: _entries);
+      await tester.tap(find.text('Stow season'));
+      await tester.pump();
+
+      expect(find.text('Entire season'), findsNothing);
+      expect(find.text('Stowing season · 0 of 3'), findsOneWidget);
+    });
+  });
 }

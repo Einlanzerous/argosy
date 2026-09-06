@@ -18,6 +18,7 @@ import '../stow/stowed_item.dart';
 import 'add_to_vault.dart';
 import 'detail_providers.dart';
 import 'detail_widgets.dart';
+import 'episode_progress.dart';
 
 /// A series' detail screen: backdrop hero, Add-to-Vault, a season selector, and
 /// the episode list with per-episode resume/play.
@@ -188,26 +189,46 @@ class _BodyState extends ConsumerState<_Body> {
         if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
   ];
 
-  bool _touched(EpisodeSummary e) =>
-      _isWatched(e) || (e.positionSeconds ?? 0) > 5;
-
   /// The episode to resume: the last in-progress one, else the one after the
   /// last episode you finished. Null when nothing's been started.
   _Playable? get _resumeTarget {
     final playable = _playable;
-    var lastTouched = -1;
-    for (var i = 0; i < playable.length; i++) {
-      if (_touched(playable[i].ep)) lastTouched = i;
-    }
-    if (lastTouched == -1) return null;
-    final last = playable[lastTouched];
-    if (!_isWatched(last.ep) && (last.ep.positionSeconds ?? 0) > 5) {
-      return last; // still mid-episode
-    }
-    return lastTouched + 1 < playable.length ? playable[lastTouched + 1] : null;
+    final i = resumeIndex([
+      for (final p in playable) p.ep,
+    ], isWatched: _isWatched);
+    return i == null || i >= playable.length ? null : playable[i];
   }
 
   String? get _firstPlayable => _playable.firstOrNull?.ep.mediaItemId;
+
+  /// A season's playable files as the Stow button takes them: one entry per
+  /// file, in episode order, so a combined rip is stowed once.
+  List<SeasonStowEntry> _seasonEntries(
+    int seasonNumber,
+    List<List<EpisodeSummary>> groups,
+  ) => [
+    for (final g in groups)
+      (
+        itemId: g.first.mediaItemId!,
+        subtitleLine: _stowLine(seasonNumber, g),
+        code: _episodeCode(g),
+        episodes: g.length,
+      ),
+  ];
+
+  /// "The rest of the season": from the file the viewer is on to the end,
+  /// judged the same way the Resume button is. Null when nothing in the season
+  /// has been touched, so the button stows the whole thing without asking.
+  List<SeasonStowEntry>? _seasonRemainder(
+    int seasonNumber,
+    List<List<EpisodeSummary>> groups,
+  ) {
+    final i = resumeIndex([
+      for (final g in groups) g.first,
+    ], isWatched: _isWatched);
+    if (i == null) return null;
+    return _seasonEntries(seasonNumber, groups.sublist(i));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +237,11 @@ class _BodyState extends ConsumerState<_Body> {
     final season = series.seasons.isEmpty
         ? null
         : series.seasons[_activeSeason];
+    final playableGroups = [
+      if (season != null)
+        for (final g in _groupEpisodes(season.episodes))
+          if (g.first.mediaItemId != null) g,
+    ];
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -327,14 +353,11 @@ class _BodyState extends ConsumerState<_Body> {
                 // rows above are drawn from, so a combined rip stows once.
                 SeasonStowButton(
                   seasonLabel: season.title ?? 'Season ${season.seasonNumber}',
-                  entries: [
-                    for (final group in _groupEpisodes(season.episodes))
-                      if (group.first.mediaItemId != null)
-                        (
-                          itemId: group.first.mediaItemId!,
-                          subtitleLine: _stowLine(season.seasonNumber, group),
-                        ),
-                  ],
+                  entries: _seasonEntries(season.seasonNumber, playableGroups),
+                  remainder: _seasonRemainder(
+                    season.seasonNumber,
+                    playableGroups,
+                  ),
                 ),
               ],
             ),

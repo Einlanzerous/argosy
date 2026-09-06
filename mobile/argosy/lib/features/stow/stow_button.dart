@@ -109,6 +109,16 @@ class StowButton extends ConsumerWidget {
   }
 }
 
+/// One file of a season as the season button needs it: the stow request,
+/// plus the episode code and how many episode rows the file covers, for the
+/// chooser's labels.
+typedef SeasonStowEntry = ({
+  String itemId,
+  String subtitleLine,
+  String code,
+  int episodes,
+});
+
 /// The season-wide Stow action on a series screen (ARGY-229): one tap queues
 /// every playable episode of the season, and from then on the button reads the
 /// season's aggregate state — how many are down, whether any are still coming,
@@ -124,6 +134,7 @@ class SeasonStowButton extends ConsumerWidget {
     super.key,
     required this.seasonLabel,
     required this.entries,
+    this.remainder,
   });
 
   /// "Season 2" — named in the confirmation dialogs.
@@ -131,7 +142,12 @@ class SeasonStowButton extends ConsumerWidget {
 
   /// The season's playable files in episode order, one entry per file, so a
   /// combined rip is stowed once.
-  final List<StowEntry> entries;
+  final List<SeasonStowEntry> entries;
+
+  /// The tail of [entries] from the file the viewer is on — what "the rest of
+  /// the season" means — or null when nothing in the season has been touched.
+  /// When it is a strict subset, a tap asks which of the two to stow.
+  final List<SeasonStowEntry>? remainder;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -158,13 +174,17 @@ class SeasonStowButton extends ConsumerWidget {
     final total = ids.length;
 
     if (busy > 0) {
+      // The denominator is what is here or on its way, not the whole season:
+      // after "rest of the season" from E7, "0 of 13" would be counting
+      // episodes nobody asked for.
+      final asked = stowed + busy;
       return FilledButton.icon(
         style: ghostButtonStyle(context),
         onPressed: () => _confirmCancel(context, ref, ids, remaining: busy),
         // Indeterminate until the first one lands: a determinate ring at zero
         // is a hairline circle that reads as nothing happening.
-        icon: _ProgressRing(fraction: stowed == 0 ? null : stowed / total),
-        label: Text('Stowing season · $stowed of $total'),
+        icon: _ProgressRing(fraction: stowed == 0 ? null : stowed / asked),
+        label: Text('Stowing season · $stowed of $asked'),
       );
     }
     if (total > 0 && stowed == total) {
@@ -184,7 +204,7 @@ class SeasonStowButton extends ConsumerWidget {
         message: failure ?? 'Stow failed',
         child: FilledButton.icon(
           style: ghostButtonStyle(context),
-          onPressed: () => controller.stowMany(entries),
+          onPressed: () => _stow(context, ref),
           icon: const Icon(
             Icons.error_outline,
             size: 18,
@@ -196,9 +216,95 @@ class SeasonStowButton extends ConsumerWidget {
     }
     return FilledButton.icon(
       style: ghostButtonStyle(context),
-      onPressed: () => controller.stowMany(entries),
+      onPressed: () => _stow(context, ref),
       icon: const Icon(Icons.download_for_offline_outlined, size: 18),
       label: const Text('Stow season'),
+    );
+  }
+
+  Future<void> _stow(BuildContext context, WidgetRef ref) async {
+    final controller = ref.read(stowControllerProvider.notifier);
+    final rest = remainder;
+    final choice = rest == null || rest.isEmpty || rest.length >= entries.length
+        ? entries
+        : await _chooseScope(context, controller, rest);
+    if (choice == null) return;
+    await controller.stowMany([
+      for (final e in choice) (itemId: e.itemId, subtitleLine: e.subtitleLine),
+    ]);
+  }
+
+  /// Asks whether "the season" means from here on or all of it.
+  ///
+  /// Only reached when the viewer is partway through. Someone stowing before
+  /// a flight is far more likely to want what they haven't seen than what they
+  /// have — and the episode they are on comes along either way, because if
+  /// they are reaching for Stow the connection is already in doubt.
+  Future<List<SeasonStowEntry>?> _chooseScope(
+    BuildContext context,
+    StowController controller,
+    List<SeasonStowEntry> rest,
+  ) {
+    int left(List<SeasonStowEntry> list) => list.where((e) {
+      final status = controller.statusFor(e.itemId);
+      return !status.isBusy && status.phase != StowPhase.stowed;
+    }).length;
+    int episodes(List<SeasonStowEntry> list) =>
+        list.fold(0, (n, e) => n + e.episodes);
+    final restLeft = left(rest);
+
+    return showModalBottomSheet<List<SeasonStowEntry>>(
+      context: context,
+      backgroundColor: ArgosyColors.panel,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "You're partway through $seasonLabel",
+                  style: Theme.of(
+                    sheet,
+                  ).textTheme.labelLarge?.copyWith(color: ArgosyColors.dim),
+                ),
+              ),
+            ),
+            ListTile(
+              enabled: restLeft > 0,
+              leading: Icon(
+                Icons.playlist_play,
+                color: restLeft > 0 ? ArgosyColors.accent : ArgosyColors.faint,
+              ),
+              title: Text(
+                'Rest of the season',
+                style: Theme.of(sheet).textTheme.titleMedium,
+              ),
+              subtitle: Text(
+                restLeft > 0
+                    ? 'From ${rest.first.code} · '
+                          '${_plural(episodes(rest), 'episode')}'
+                    : 'Already on this device',
+              ),
+              onTap: restLeft > 0 ? () => Navigator.of(sheet).pop(rest) : null,
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.download_for_offline_outlined,
+                color: ArgosyColors.accent,
+              ),
+              title: Text(
+                'Entire season',
+                style: Theme.of(sheet).textTheme.titleMedium,
+              ),
+              subtitle: Text(_plural(episodes(entries), 'episode')),
+              onTap: () => Navigator.of(sheet).pop(entries),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -215,9 +321,8 @@ class SeasonStowButton extends ConsumerWidget {
         backgroundColor: ArgosyColors.bg2,
         title: const Text('Cancel season download?'),
         content: Text(
-          'Stops the $remaining episode${remaining == 1 ? '' : 's'} of '
-          '$seasonLabel still on the way. Anything already on this device '
-          'stays.',
+          'Stops the ${_plural(remaining, 'episode')} of $seasonLabel still '
+          'on the way. Anything already on this device stays.',
         ),
         actions: [
           TextButton(
@@ -257,9 +362,8 @@ class SeasonStowButton extends ConsumerWidget {
         backgroundColor: ArgosyColors.bg2,
         title: Text('Remove $seasonLabel from this device?'),
         content: Text(
-          '${ids.length} episode${ids.length == 1 ? '' : 's'} will be deleted '
-          'from this device. They stay in your library and can be stowed '
-          'again.',
+          '${_plural(ids.length, 'episode')} will be deleted from this '
+          'device. They stay in your library and can be stowed again.',
         ),
         actions: [
           TextButton(
@@ -279,6 +383,8 @@ class SeasonStowButton extends ConsumerWidget {
     }
   }
 }
+
+String _plural(int n, String word) => '$n $word${n == 1 ? '' : 's'}';
 
 /// A small determinate/indeterminate ring sized to sit where a button icon goes.
 class _ProgressRing extends StatelessWidget {
