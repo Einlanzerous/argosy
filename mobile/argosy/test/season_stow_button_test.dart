@@ -245,5 +245,17 @@ void main() {
       expect(find.text('Entire season'), findsNothing);
       expect(find.text('Stowing season · 0 of 3'), findsOneWidget);
     });
+    testWidgets('a fully watched season stows whole without asking', (
+      tester,
+    ) async {
+      // Everything finished: "from here on" is empty, so the only thing to
+      // offer is the whole season — the same path as an untouched one.
+      await pumpButton(tester, remainder: const []);
+      await tester.tap(find.text('Stow season'));
+      await tester.pump();
+
+      expect(find.text('Entire season'), findsNothing);
+      expect(find.text('Stowing season · 0 of 3'), findsOneWidget);
+    });
   });
 }
