@@ -138,6 +138,12 @@ class StowController extends Notifier<Map<String, StowStatus>> {
   Future<void> _stowById(String itemId, {String? subtitleLine}) async {
     try {
       final detail = await _libraryApi.getMediaItem(itemId);
+      // Cancelled while the catalog was answering. The engine has no job for
+      // this item yet, so all a cancel could do was clear its status — and
+      // handing the detail over now would start the download just refused.
+      // This is the window a season stow spends most of its hand-over time
+      // in, but a single row has it too.
+      if (state[itemId]?.phase != StowPhase.requesting) return;
       if (detail == null) {
         throw const ApiFailure('That item is no longer in the library.');
       }

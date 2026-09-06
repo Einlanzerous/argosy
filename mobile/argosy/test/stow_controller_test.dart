@@ -300,6 +300,45 @@ void main() {
       expect(fetched(), [a, b, c]);
     });
 
+    test('an episode cancelled during its own detail fetch is not handed over', () async {
+      library.gatedId = a;
+      library.gate = Completer<void>();
+
+      final run = controller().stowMany([entry(a), entry(b)]);
+      await pumpEventQueue();
+      await controller().cancel(a);
+      await pumpEventQueue();
+      expect(controller().statusFor(a).phase, StowPhase.none);
+
+      library.gate!.complete();
+      await run;
+      await engine.done;
+      await pumpEventQueue();
+
+      expect(controller().statusFor(a).phase, StowPhase.none);
+      expect(controller().statusFor(b).phase, StowPhase.stowed);
+      expect(fetched(), [b], reason: 'the refused download must stay refused');
+    });
+
+    test('a single row cancelled during its detail fetch is not handed over', () async {
+      library.gatedId = a;
+      library.gate = Completer<void>();
+
+      final run = controller().stowById(a);
+      await pumpEventQueue();
+      expect(controller().statusFor(a).phase, StowPhase.requesting);
+      await controller().cancel(a);
+      await pumpEventQueue();
+
+      library.gate!.complete();
+      await run;
+      await engine.done;
+      await pumpEventQueue();
+
+      expect(controller().statusFor(a).phase, StowPhase.none);
+      expect(fetched(), isEmpty);
+    });
+
     test('an episode cancelled while waiting its turn is not handed over', () async {
       library.gatedId = a;
       library.gate = Completer<void>();
