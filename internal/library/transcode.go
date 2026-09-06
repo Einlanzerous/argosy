@@ -321,7 +321,8 @@ func (h *handlers) fileTranscode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Reading it into memory is also the interception point for the codec
-		// strings ffmpeg writes into the master playlist (ARGY-174).
+		// strings ffmpeg writes into the master playlist (ARGY-174) and for the
+		// start pin every media playlist leaves with (ARGY-228).
 		_, _ = w.Write(transcode.NormalizePlaylist(data))
 		h.tc.MarkServed(sess.ID, false)
 		return

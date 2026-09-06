@@ -170,3 +170,57 @@ func TestFileTranscodeRecordsWhatWasServed(t *testing.T) {
 		}
 	})
 }
+
+// eventMedia is a media playlist mid-encode, as ffmpeg writes it: `event` type,
+// no ENDLIST yet, no EXT-X-START. See transcode.NormalizePlaylist (ARGY-228).
+const eventMedia = `#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-PLAYLIST-TYPE:EVENT
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-MAP:URI="init_0.mp4"
+#EXTINF:4.000000,
+stream_0_00000.m4s
+#EXTINF:4.000000,
+stream_0_00001.m4s
+`
+
+// TestFileTranscodeServesPinnedMediaPlaylist is the wiring guard for ARGY-228,
+// after the pattern of the ARGY-174 one above: the start pin has to reach the
+// bytes a client receives for a *variant* playlist, which is the one ExoPlayer
+// reads it from — the master path is already covered, and a pin that only ever
+// landed there would leave the Android TV exactly where it was.
+func TestFileTranscodeServesPinnedMediaPlaylist(t *testing.T) {
+	h, sess := transcodeSessionFor(t,
+		writeBackend{files: map[string]string{
+			transcode.PlaylistName: hevcMaster,
+			"stream_0.m3u8":        eventMedia,
+		}},
+		transcode.PlaylistName, "stream_0.m3u8")
+
+	rec := getTranscodeFile(h, sess, "stream_0.m3u8")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	const pinned = "#EXTM3U\n#EXT-X-START:TIME-OFFSET=0,PRECISE=YES\n"
+	if !strings.HasPrefix(body, pinned) {
+		t.Errorf("served variant playlist is not pinned to the top:\n%s", body)
+	}
+	if n := strings.Count(body, "#EXT-X-START"); n != 1 {
+		t.Errorf("served variant playlist declares %d starts, want 1:\n%s", n, body)
+	}
+	if got := getTranscodeFile(h, sess, transcode.PlaylistName).Body.String(); strings.Contains(got, "#EXT-X-START") {
+		t.Errorf("master playlist must not carry the pin:\n%s", got)
+	}
+
+	// ffmpeg's own output is left alone; only what goes out is rewritten.
+	onDisk, err := os.ReadFile(filepath.Join(sess.OutputDir, "stream_0.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(onDisk), "#EXT-X-START") {
+		t.Errorf("the on-disk playlist was modified:\n%s", onDisk)
+	}
+}

@@ -120,3 +120,69 @@ func TestValidHEVCCodecString(t *testing.T) {
 		}
 	}
 }
+
+// TestNormalizePlaylistPinsMediaStart is the ARGY-228 unit guard: every media
+// playlist leaves with exactly one EXT-X-START pinning playback to the top,
+// sitting right after the #EXTM3U header; masters are left alone; and running
+// the served bytes through again changes nothing.
+func TestNormalizePlaylistPinsMediaStart(t *testing.T) {
+	const pin = "#EXT-X-START:TIME-OFFSET=0,PRECISE=YES\n"
+	const header = "#EXTM3U\n"
+	const mediaBody = "#EXT-X-VERSION:7\n" +
+		"#EXT-X-TARGETDURATION:4\n" +
+		"#EXT-X-MEDIA-SEQUENCE:0\n" +
+		"#EXT-X-PLAYLIST-TYPE:EVENT\n" +
+		"#EXT-X-INDEPENDENT-SEGMENTS\n" +
+		"#EXT-X-MAP:URI=\"init_0.mp4\"\n" +
+		"#EXTINF:4.000000,\n" +
+		"stream_0_00000.m4s\n" +
+		"#EXTINF:4.000000,\n" +
+		"stream_0_00001.m4s\n"
+	const master = header + "#EXT-X-VERSION:7\n" +
+		"#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"group_aud\",NAME=\"audio_0\",DEFAULT=YES,LANGUAGE=\"en\",URI=\"stream_1.m3u8\"\n" +
+		"#EXT-X-STREAM-INF:BANDWIDTH=8940800,RESOLUTION=1920x1080,CODECS=\"hvc1.1.4.L120.B01,mp4a.40.2\",AUDIO=\"group_aud\"\n" +
+		"stream_0.m3u8\n"
+
+	for _, tc := range []struct {
+		name, in, want string
+	}{
+		{
+			name: "growing (event) media playlist is pinned right after the header",
+			in:   header + mediaBody,
+			want: header + pin + mediaBody,
+		},
+		{
+			name: "finished media playlist is pinned too — same shape either side of ENDLIST",
+			in:   header + mediaBody + "#EXT-X-ENDLIST\n",
+			want: header + pin + mediaBody + "#EXT-X-ENDLIST\n",
+		},
+		{
+			name: "master playlist gets no pin, only the codec repair",
+			in:   master,
+			want: strings.Replace(master, ".B01,", ".B0,", 1),
+		},
+		{
+			name: "a playlist that already declares a start is left alone",
+			in:   header + "#EXT-X-START:TIME-OFFSET=30\n" + mediaBody,
+			want: header + "#EXT-X-START:TIME-OFFSET=30\n" + mediaBody,
+		},
+		{
+			name: "no header, no pin — not something a client would parse anyway",
+			in:   mediaBody,
+			want: mediaBody,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(NormalizePlaylist([]byte(tc.in)))
+			if got != tc.want {
+				t.Errorf("NormalizePlaylist:\n got: %q\nwant: %q", got, tc.want)
+			}
+			if n := strings.Count(got, "#EXT-X-START"); n > 1 {
+				t.Errorf("served playlist declares %d starts, want at most 1:\n%s", n, got)
+			}
+			if again := string(NormalizePlaylist([]byte(got))); again != got {
+				t.Errorf("not idempotent:\n once: %q\ntwice: %q", got, again)
+			}
+		})
+	}
+}
