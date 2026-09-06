@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.29.0](https://github.com/Einlanzerous/argosy/compare/v0.28.1...v0.29.0) (2026-09-06)
+
+
+### Features
+
+* **mobile:** stow a whole season in one tap (ARGY-229) ([#239](https://github.com/Einlanzerous/argosy/issues/239)) ([5194f6f](https://github.com/Einlanzerous/argosy/commit/5194f6f7a947e4b900ff69e1f53700d3ed4aa180))
+
+
+### Bug Fixes
+
+* **transcode:** pin HLS media playlists to start at 0, not the live edge (ARGY-228) ([#237](https://github.com/Einlanzerous/argosy/issues/237)) ([45759f8](https://github.com/Einlanzerous/argosy/commit/45759f8afb9e503095c1137541b841d450278692))
+
 ## [0.28.1](https://github.com/Einlanzerous/argosy/compare/v0.28.0...v0.28.1) (2026-09-04)
 
 
