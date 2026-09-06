@@ -12,11 +12,13 @@ import '../../util/poster_gradient.dart';
 import '../../widgets/arg_chip.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
+import '../stow/stow_button.dart';
 import '../stow/stow_controller.dart';
 import '../stow/stowed_item.dart';
 import 'add_to_vault.dart';
 import 'detail_providers.dart';
 import 'detail_widgets.dart';
+import 'episode_progress.dart';
 
 /// A series' detail screen: backdrop hero, Add-to-Vault, a season selector, and
 /// the episode list with per-episode resume/play.
@@ -66,6 +68,29 @@ List<List<EpisodeSummary>> _groupEpisodes(List<EpisodeSummary> episodes) {
   }
   return groups;
 }
+
+/// "E5" for a single episode, "E1–2" for a combined span.
+String _episodeCode(List<EpisodeSummary> episodes) => episodes.length > 1
+    ? 'E${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
+    : 'E${episodes.first.episodeNumber}';
+
+/// Real episode name(s) joined, or a plain "Episode N" / "Episodes N–M" fallback
+/// until TMDB per-episode metadata lands.
+String _groupTitle(List<EpisodeSummary> episodes) {
+  final names = episodes
+      .map((e) => episodeName(e.title))
+      .whereType<String>()
+      .toList();
+  if (names.isNotEmpty) return names.join(' / ');
+  return episodes.length > 1
+      ? 'Episodes ${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
+      : 'Episode ${episodes.first.episodeNumber}';
+}
+
+/// The line recorded with a stowed episode for the offline list, where there
+/// is no catalog left to look it up in.
+String _stowLine(int seasonNumber, List<EpisodeSummary> group) =>
+    'S$seasonNumber · ${_episodeCode(group)} · ${_groupTitle(group)}';
 
 class _Body extends ConsumerStatefulWidget {
   const _Body({required this.series});
@@ -164,26 +189,46 @@ class _BodyState extends ConsumerState<_Body> {
         if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
   ];
 
-  bool _touched(EpisodeSummary e) =>
-      _isWatched(e) || (e.positionSeconds ?? 0) > 5;
-
   /// The episode to resume: the last in-progress one, else the one after the
   /// last episode you finished. Null when nothing's been started.
   _Playable? get _resumeTarget {
     final playable = _playable;
-    var lastTouched = -1;
-    for (var i = 0; i < playable.length; i++) {
-      if (_touched(playable[i].ep)) lastTouched = i;
-    }
-    if (lastTouched == -1) return null;
-    final last = playable[lastTouched];
-    if (!_isWatched(last.ep) && (last.ep.positionSeconds ?? 0) > 5) {
-      return last; // still mid-episode
-    }
-    return lastTouched + 1 < playable.length ? playable[lastTouched + 1] : null;
+    final i = resumeIndex([
+      for (final p in playable) p.ep,
+    ], isWatched: _isWatched);
+    return i == null || i >= playable.length ? null : playable[i];
   }
 
   String? get _firstPlayable => _playable.firstOrNull?.ep.mediaItemId;
+
+  /// A season's playable files as the Stow button takes them: one entry per
+  /// file, in episode order, so a combined rip is stowed once.
+  List<SeasonStowEntry> _seasonEntries(
+    int seasonNumber,
+    List<List<EpisodeSummary>> groups,
+  ) => [
+    for (final g in groups)
+      (
+        itemId: g.first.mediaItemId!,
+        subtitleLine: _stowLine(seasonNumber, g),
+        code: _episodeCode(g),
+        episodes: g.length,
+      ),
+  ];
+
+  /// "The rest of the season": from the file the viewer is on to the end,
+  /// judged the same way the Resume button is. Null when nothing in the season
+  /// has been touched, so the button stows the whole thing without asking.
+  List<SeasonStowEntry>? _seasonRemainder(
+    int seasonNumber,
+    List<List<EpisodeSummary>> groups,
+  ) {
+    final i = resumeIndex([
+      for (final g in groups) g.first,
+    ], isWatched: _isWatched);
+    if (i == null) return null;
+    return _seasonEntries(seasonNumber, groups.sublist(i));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -192,6 +237,11 @@ class _BodyState extends ConsumerState<_Body> {
     final season = series.seasons.isEmpty
         ? null
         : series.seasons[_activeSeason];
+    final playableGroups = [
+      if (season != null)
+        for (final g in _groupEpisodes(season.episodes))
+          if (g.first.mediaItemId != null) g,
+    ];
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -299,6 +349,16 @@ class _BodyState extends ConsumerState<_Body> {
                       if (e.mediaItemId != null) e.mediaItemId!,
                   ], next),
                 ),
+                // One tap for the whole season (ARGY-229): the same groups the
+                // rows above are drawn from, so a combined rip stows once.
+                SeasonStowButton(
+                  seasonLabel: season.title ?? 'Season ${season.seasonNumber}',
+                  entries: _seasonEntries(season.seasonNumber, playableGroups),
+                  remainder: _seasonRemainder(
+                    season.seasonNumber,
+                    playableGroups,
+                  ),
+                ),
               ],
             ),
           ),
@@ -385,23 +445,8 @@ class _EpisodeTile extends ConsumerWidget {
     return (dur - pos).clamp(0, dur);
   }
 
-  // "E5" for a single episode, "E1–2" for a combined span.
-  String get _episodeLabel => _combined
-      ? 'E${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
-      : 'E${_rep.episodeNumber}';
-
-  // Real episode name(s) joined, or a plain "Episode N" / "Episodes N–M" fallback
-  // until TMDB per-episode metadata lands.
-  String get _displayTitle {
-    final names = episodes
-        .map((e) => episodeName(e.title))
-        .whereType<String>()
-        .toList();
-    if (names.isNotEmpty) return names.join(' / ');
-    return _combined
-        ? 'Episodes ${episodes.first.episodeNumber}–${episodes.last.episodeNumber}'
-        : 'Episode ${_rep.episodeNumber}';
-  }
+  String get _episodeLabel => _episodeCode(episodes);
+  String get _displayTitle => _groupTitle(episodes);
 
   String? get _overview => episodes
       .map((e) => e.overview)
@@ -637,7 +682,7 @@ class _EpisodeTile extends ConsumerWidget {
       case _RowAction.stow:
         await stow.stowById(
           itemId,
-          subtitleLine: 'S$seasonNumber · $_episodeLabel · $_displayTitle',
+          subtitleLine: _stowLine(seasonNumber, episodes),
         );
       case _RowAction.cancelStow:
         await stow.cancel(itemId);

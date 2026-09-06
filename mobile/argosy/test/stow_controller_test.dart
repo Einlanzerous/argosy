@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:argosy/api/api_providers.dart';
 import 'package:argosy/api/stream_urls.dart';
 import 'package:argosy/features/stow/stow_controller.dart';
 import 'package:argosy/features/stow/stow_runner.dart';
@@ -19,12 +20,16 @@ class _FileServer {
   late HttpServer _server;
   int status = HttpStatus.ok;
 
+  /// Every path requested, in order — which items were fetched, and when.
+  final hits = <String>[];
+
   String get base => 'http://${_server.address.host}:${_server.port}';
 
   Future<void> start() async {
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     unawaited(() async {
       await for (final req in _server) {
+        hits.add(req.uri.path);
         if (status != HttpStatus.ok) {
           req.response.statusCode = status;
           await req.response.close();
@@ -51,12 +56,39 @@ class _FakeStowApi extends StowApi {
     itemId: id,
     method: StowJobMethodEnum.passthrough,
     state: StowJobStateEnum.ready,
-    downloadUrl: '/file',
+    downloadUrl: '/file/$id',
     bytes: 0,
   );
 }
 
+MediaItemDetail _detailFor(String id) => MediaItemDetail(
+  id: id,
+  kind: 'movie',
+  title: 'Test Film',
+  filePath: 'movies/Test Film (2026).mp4',
+  container: 'mov,mp4,m4a,3gp,3g2,mj2',
+  durationSeconds: 120,
+  reviewRequired: false,
+);
+
 class _FakeLibraryApi extends LibraryApi {
+  /// Ids the catalog no longer has.
+  final missing = <String>{};
+
+  /// When set, the detail fetch for [gatedId] waits until [gate] completes —
+  /// a way to hold a season stow between two of its episodes.
+  String? gatedId;
+  Completer<void>? gate;
+
+  @override
+  Future<MediaItemDetail?> getMediaItem(
+    String itemId, {
+    Future<void>? abortTrigger,
+  }) async {
+    if (itemId == gatedId) await gate?.future;
+    return missing.contains(itemId) ? null : _detailFor(itemId);
+  }
+
   @override
   Future<List<SubtitleTrack>?> listSubtitles(
     String itemId, {
@@ -72,28 +104,22 @@ void main() {
   late _FileServer server;
   late StowStore store;
   late LocalStowEngine engine;
+  late _FakeLibraryApi library;
   late ProviderContainer container;
 
-  MediaItemDetail detail() => MediaItemDetail(
-    id: itemId,
-    kind: 'movie',
-    title: 'Test Film',
-    filePath: 'movies/Test Film (2026).mp4',
-    container: 'mov,mp4,m4a,3gp,3g2,mj2',
-    durationSeconds: 120,
-    reviewRequired: false,
-  );
+  MediaItemDetail detail() => _detailFor(itemId);
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp('argosy-stow-ctrl');
     server = _FileServer(body);
     await server.start();
     store = StowStore(root: root);
+    library = _FakeLibraryApi();
     engine = LocalStowEngine(
       store: store,
       connect: () async => StowSession(
         stow: _FakeStowApi(),
-        library: _FakeLibraryApi(),
+        library: library,
         urls: StreamUrls(server.base),
         baseUrl: server.base,
       ),
@@ -102,6 +128,7 @@ void main() {
       overrides: [
         stowStoreProvider.overrideWithValue(store),
         stowEngineProvider.overrideWithValue(engine),
+        libraryApiProvider.overrideWithValue(library),
       ],
     );
   });
@@ -179,5 +206,157 @@ void main() {
       reason: 'the button must offer Retry, not a bare Stow over hidden bytes',
     );
     expect(status.receivedBytes, 900);
+  });
+
+  group('stowMany (ARGY-229)', () {
+    const a = 'aaaaaaaa-0000-0000-0000-000000000001';
+    const b = 'aaaaaaaa-0000-0000-0000-000000000002';
+    const c = 'aaaaaaaa-0000-0000-0000-000000000003';
+    StowEntry entry(String id) => (itemId: id, subtitleLine: 'S1 · $id');
+
+    /// The items the server was asked for, in first-request order.
+    List<String> fetched() {
+      final out = <String>[];
+      for (final path in server.hits) {
+        if (!path.startsWith('/file/')) continue;
+        final id = path.substring('/file/'.length);
+        if (!out.contains(id)) out.add(id);
+      }
+      return out;
+    }
+
+    test('queues each file once, in order, skipping what is stowed', () async {
+      await controller().stow(_detailFor(c));
+      await engine.done;
+      await pumpEventQueue();
+      server.hits.clear();
+
+      await controller().stowMany([
+        entry(b),
+        entry(a),
+        entry(a), // a combined rip lists one file under several rows
+        entry(c), // already on the device
+      ]);
+      await engine.done;
+      await pumpEventQueue();
+
+      expect(fetched(), [b, a], reason: 'once each, in the order given');
+      for (final id in [a, b, c]) {
+        expect(controller().statusFor(id).phase, StowPhase.stowed);
+      }
+      expect((await container.read(stowedItemsProvider.future)).length, 3);
+    });
+
+    test('retries an episode that failed', () async {
+      server.status = HttpStatus.unauthorized;
+      await controller().stow(_detailFor(a));
+      await engine.done;
+      await pumpEventQueue();
+      expect(controller().statusFor(a).phase, StowPhase.failed);
+
+      server.status = HttpStatus.ok;
+      await controller().stowMany([entry(a), entry(b)]);
+      await engine.done;
+      await pumpEventQueue();
+
+      expect(controller().statusFor(a).phase, StowPhase.stowed);
+      expect(controller().statusFor(b).phase, StowPhase.stowed);
+    });
+
+    test('one missing episode fails alone; the rest of the season lands', () async {
+      library.missing.add(b);
+
+      await controller().stowMany([entry(a), entry(b), entry(c)]);
+      await engine.done;
+      await pumpEventQueue();
+
+      expect(controller().statusFor(a).phase, StowPhase.stowed);
+      expect(controller().statusFor(c).phase, StowPhase.stowed);
+      final failed = controller().statusFor(b);
+      expect(failed.phase, StowPhase.failed);
+      expect(failed.message, 'That item is no longer in the library.');
+      expect(fetched(), [a, c]);
+    });
+
+    test('every episode reads as in flight before the first is handed over', () async {
+      library.gatedId = a;
+      library.gate = Completer<void>();
+
+      final run = controller().stowMany([entry(a), entry(b), entry(c)]);
+      await pumpEventQueue();
+
+      for (final id in [a, b, c]) {
+        expect(
+          controller().statusFor(id).phase,
+          StowPhase.requesting,
+          reason: 'a row still offering Stow looks like the button missed it',
+        );
+      }
+
+      library.gate!.complete();
+      await run;
+      await engine.done;
+      await pumpEventQueue();
+      expect(fetched(), [a, b, c]);
+    });
+
+    test('an episode cancelled during its own detail fetch is not handed over', () async {
+      library.gatedId = a;
+      library.gate = Completer<void>();
+
+      final run = controller().stowMany([entry(a), entry(b)]);
+      await pumpEventQueue();
+      await controller().cancel(a);
+      await pumpEventQueue();
+      expect(controller().statusFor(a).phase, StowPhase.none);
+
+      library.gate!.complete();
+      await run;
+      await engine.done;
+      await pumpEventQueue();
+
+      expect(controller().statusFor(a).phase, StowPhase.none);
+      expect(controller().statusFor(b).phase, StowPhase.stowed);
+      expect(fetched(), [b], reason: 'the refused download must stay refused');
+    });
+
+    test('a single row cancelled during its detail fetch is not handed over', () async {
+      library.gatedId = a;
+      library.gate = Completer<void>();
+
+      final run = controller().stowById(a);
+      await pumpEventQueue();
+      expect(controller().statusFor(a).phase, StowPhase.requesting);
+      await controller().cancel(a);
+      await pumpEventQueue();
+
+      library.gate!.complete();
+      await run;
+      await engine.done;
+      await pumpEventQueue();
+
+      expect(controller().statusFor(a).phase, StowPhase.none);
+      expect(fetched(), isEmpty);
+    });
+
+    test('an episode cancelled while waiting its turn is not handed over', () async {
+      library.gatedId = a;
+      library.gate = Completer<void>();
+
+      final run = controller().stowMany([entry(a), entry(b)]);
+      await pumpEventQueue();
+      await controller().cancel(b);
+      await pumpEventQueue();
+      expect(controller().statusFor(b).phase, StowPhase.none);
+
+      library.gate!.complete();
+      await run;
+      await engine.done;
+      await pumpEventQueue();
+
+      expect(controller().statusFor(a).phase, StowPhase.stowed);
+      expect(controller().statusFor(b).phase, StowPhase.none);
+      expect(fetched(), [a], reason: 'the refused download must stay refused');
+    });
   });
 }
