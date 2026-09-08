@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1](https://github.com/Einlanzerous/argosy/compare/v0.29.0...v0.29.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* **mobile:** pin the plugin's duration to the session length so seeks don't finish a transcode (ARGY-230) ([#240](https://github.com/Einlanzerous/argosy/issues/240)) ([f669f18](https://github.com/Einlanzerous/argosy/commit/f669f186fa564c57327ecf2bbc943f6c4660b17b))
+
 ## [0.29.0](https://github.com/Einlanzerous/argosy/compare/v0.28.1...v0.29.0) (2026-09-06)
 
 
