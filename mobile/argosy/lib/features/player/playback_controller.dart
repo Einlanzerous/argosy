@@ -191,6 +191,12 @@ class PlaybackController extends ChangeNotifier
   /// to the player's relative position to get absolute media time.
   double baseOffset = 0;
 
+  /// How much of the current transcode session ffmpeg had written when the
+  /// player initialised — the plugin's own duration reading at that moment,
+  /// captured before [pinSessionDuration] overwrites it. The floor for
+  /// [_encodedSoFarSeconds]; buffered ranges raise it from there.
+  double _windowAtInitSeconds = 0;
+
   /// True while a session is (re)starting — the overlay shows a spinner.
   bool starting = false;
 
@@ -508,6 +514,7 @@ class PlaybackController extends ChangeNotifier
       unawaited(transcodeApi.stopTranscode(old).catchError((_) {}));
     }
     baseOffset = offset;
+    _windowAtInitSeconds = 0;
     starting = true;
     fatalError = false;
     errorMessage = null;
@@ -638,17 +645,57 @@ class PlaybackController extends ChangeNotifier
     }
   }
 
-  /// How far the current session is natively seekable (relative timeline), taken
-  /// as the max of the reported duration (event playlist = encoded-so-far) and
-  /// the furthest buffered range.
-  double _encodedSoFarSeconds() {
-    final v = videoValue;
-    if (v == null) return 0;
-    var ms = v.duration?.inMilliseconds ?? 0;
+  /// How far the current session is natively seekable (relative timeline): the
+  /// encoded window the player initialised against, raised by the furthest
+  /// buffered range. Not the plugin's duration — after [pinSessionDuration] that
+  /// is the whole session, which says nothing about what ffmpeg has written.
+  double _encodedSoFarSeconds() => encodedSoFarFrom(videoValue);
+
+  @visibleForTesting
+  double encodedSoFarFrom(VideoPlayerValue? v) {
+    var s = _windowAtInitSeconds;
+    if (v == null) return s;
     for (final r in v.buffered) {
-      if (r.end.inMilliseconds > ms) ms = r.end.inMilliseconds;
+      final end = r.end.inMilliseconds / 1000.0;
+      if (end > s) s = end;
     }
-    return ms / 1000.0;
+    return s;
+  }
+
+  /// Replaces the plugin's duration with the session's real length (ARGY-230).
+  ///
+  /// better_player_plus reads ExoPlayer's duration once, on `initialized`, and
+  /// never again. For an `event` playlist that is still encoding, that reading
+  /// is the window ffmpeg had written when the first frame came up — a few
+  /// segments, ~16 s. The plugin then treats it as the end of the media: its
+  /// `seekTo` clamps any later target back to it, and posts `finished` for the
+  /// attempt, because the target was "past the end". Every skip-ahead a minute
+  /// or more into a transcode therefore snapped to ~16 s, marked the episode
+  /// watched, and rolled into the next one.
+  ///
+  /// The web player stopped trusting `el.duration` for transcodes in PR #31 and
+  /// this controller carried that for the scrub bar ([catalogDuration]); the
+  /// plugin's private copy is the half that was missed. The catalog knows how
+  /// long the session really is, so tell the plugin. Only ever raises the value:
+  /// a session the encoder has already finished reports the true length, and a
+  /// catalog runtime that undershoots the file must not chop the end off.
+  ///
+  /// Direct and offline playback read a complete file, so the plugin's own
+  /// reading is right and left alone.
+  ///
+  /// Typed as the notifier rather than the plugin's `VideoPlayerController`,
+  /// which the package does not export — the value is all that is touched.
+  @visibleForTesting
+  void pinSessionDuration(ValueNotifier<VideoPlayerValue>? vpc) {
+    if (vpc == null) return;
+    final currentSeconds = (vpc.value.duration?.inMilliseconds ?? 0) / 1000.0;
+    _windowAtInitSeconds = currentSeconds;
+    if (!isTranscode || isOffline) return;
+    final session = catalogDuration - baseOffset;
+    if (session <= currentSeconds) return;
+    vpc.value = vpc.value.copyWith(
+      duration: Duration(milliseconds: (session * 1000).round()),
+    );
   }
 
   Future<void> retry() async {
@@ -922,6 +969,10 @@ class PlaybackController extends ChangeNotifier
         // exception when we're not mid-(re)start.
         if (!starting) _fail('Playback stopped unexpectedly.');
       case BetterPlayerEventType.initialized:
+        // The plugin has just taken its one and only duration reading; correct
+        // it before any seek can be measured against it (ARGY-230). Runs again
+        // after a transcode restart, which recreates the source.
+        pinSessionDuration(_player?.videoPlayerController);
         // The HLS alternate-audio renditions are parsed by now (ARGY-127); apply
         // the preferred (or default) track and reflect it in the picker. Also
         // reasserts the choice after a transcode restart recreates the source.
