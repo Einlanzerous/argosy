@@ -624,6 +624,22 @@ void main() {
       expect(store.has(itemId), isTrue);
     });
 
+    test('goes unchecked when the server reports no size', () async {
+      // The other way the check declines to have an opinion, and a different
+      // one: there is nothing to weigh a volume against. The probe here would
+      // refuse anything it were actually asked about, so a download that lands
+      // proves the check was skipped rather than passed.
+      final r = runner(
+        stow: _FakeStowApi(), // bytes: 0 — "the server didn't say"
+        freeSpace: (_) async => 1,
+      );
+      await r.enqueue(job());
+      await r.done;
+
+      await store.reload();
+      expect(store.has(itemId), isTrue);
+    });
+
     test('is read off df where there is one to read', () async {
       final free = await probeFreeSpace(root);
       // Elsewhere — iOS refuses to run a subprocess at all — null is the right

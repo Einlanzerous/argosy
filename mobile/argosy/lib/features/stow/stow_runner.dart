@@ -527,6 +527,19 @@ class StowRunner {
   ///
   /// A 4xx, a package the server says failed, or a device with no room fails at
   /// once — there is nothing a second attempt would do differently.
+  ///
+  /// The bound is per run, not per job: a service the system reclaims mid-
+  /// backoff and restarts picks the job up through [restore] and begins
+  /// counting again. That is deliberate. A restart is not a timer expiring, it
+  /// is a different situation — the app reopened, the network changed, the
+  /// phone came off a dead hotspot — and starting a job that survived one with
+  /// no attempts left would mean the queue's own resilience feeding it straight
+  /// into a failure. What the bound exists to stop is one dead link holding a
+  /// foreground service open all afternoon, and that still holds within any run.
+  /// A count carried across restarts would have to ride along in
+  /// [StowJobRequest], which is a description of *what* to fetch and is also
+  /// the message the app hands the service — neither is a place for how many
+  /// goes it has had.
   Future<void> _run(StowJobRequest job) async {
     final itemId = job.itemId;
     // One handle for the whole job, not one per attempt: it is what a cancel
@@ -797,11 +810,23 @@ class StowRunner {
   );
 
   /// Refuses a download the device hasn't room for, before a byte is written.
+  ///
+  /// There are two ways this declines to have an opinion, and they are not the
+  /// same thing: [needed] arrives at or below zero when the server didn't say
+  /// how big the download is (or a partial already covers it), so there is
+  /// nothing to weigh; [freeSpace] answers null when the volume can't be
+  /// measured at all. Either way the download proceeds — an unanswerable check
+  /// must never be what stops one — but neither is a check, and an early return
+  /// that reads as a pass is how a guard quietly stops guarding.
+  ///
+  /// In practice the first case shouldn't arise: both branches of the server's
+  /// plan carry a size (`internal/library/stow.go` sets `Bytes` for a
+  /// passthrough and for a package once it is ready).
   Future<void> _checkSpace(Directory dir, int needed) async {
     if (needed <= 0) return;
     final free = await freeSpace(dir);
-    // "Can't tell" is not "no".
-    if (free == null || free >= needed + _spaceReserve) return;
+    if (free == null) return;
+    if (free >= needed + _spaceReserve) return;
     throw StowOutOfSpace(needed, free);
   }
 
