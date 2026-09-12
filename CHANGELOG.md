@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.2](https://github.com/Einlanzerous/argosy/compare/v0.29.1...v0.29.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **mobile:** retry transient stow failures and keep the ones that stick (ARGY-231) ([#243](https://github.com/Einlanzerous/argosy/issues/243)) ([5fe054f](https://github.com/Einlanzerous/argosy/commit/5fe054fe1c83d708352c50665df3d98dda89bf41))
+
 ## [0.29.1](https://github.com/Einlanzerous/argosy/compare/v0.29.0...v0.29.1) (2026-09-08)
 
 
