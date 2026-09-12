@@ -208,6 +208,42 @@ void main() {
     expect(status.receivedBytes, 900);
   });
 
+  test('a failure with no bytes behind it still offers Retry, and why', () async {
+    // What a stow that died while the server was packaging leaves behind
+    // (ARGY-231). There is nothing on disk to point at — the live status died
+    // with the service — so the recorded reason is the whole trace, and without
+    // it the button reads "Stow" as though nothing had ever been asked for.
+    await store.put(
+      StowedItem(
+        itemId: itemId,
+        title: 'Test Film',
+        fileName: '',
+        bytes: 0,
+        stowedAt: DateTime.now(),
+        incomplete: true,
+        failure: 'The server had a problem. Try again shortly.',
+      ),
+    );
+
+    final reopened = StowStore(root: root);
+    await reopened.load();
+    final fresh = ProviderContainer(
+      overrides: [
+        stowStoreProvider.overrideWithValue(reopened),
+        stowEngineProvider.overrideWithValue(
+          LocalStowEngine(store: reopened, connect: () async => throw 'unused'),
+        ),
+      ],
+    );
+    addTearDown(fresh.dispose);
+
+    final status = fresh
+        .read(stowControllerProvider.notifier)
+        .statusFor(itemId);
+    expect(status.phase, StowPhase.failed);
+    expect(status.message, 'The server had a problem. Try again shortly.');
+  });
+
   group('stowMany (ARGY-229)', () {
     const a = 'aaaaaaaa-0000-0000-0000-000000000001';
     const b = 'aaaaaaaa-0000-0000-0000-000000000002';

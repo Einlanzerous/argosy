@@ -67,6 +67,26 @@ void main() {
     });
   }
 
+  /// Records [ids] as stows that gave up, the way one that failed while the
+  /// server was packaging does: a reason, and nothing on disk behind it.
+  Future<void> seedFailed(WidgetTester tester, List<String> ids) async {
+    await tester.runAsync(() async {
+      for (final id in ids) {
+        await store.put(
+          StowedItem(
+            itemId: id,
+            title: id,
+            fileName: '',
+            bytes: 0,
+            stowedAt: DateTime.now(),
+            incomplete: true,
+            failure: 'The server had a problem. Try again shortly.',
+          ),
+        );
+      }
+    });
+  }
+
   Future<void> pumpButton(
     WidgetTester tester, {
     List<SeasonStowEntry>? remainder,
@@ -159,6 +179,47 @@ void main() {
       expect(find.text('Remove'), findsOneWidget);
     },
   );
+
+  group('failures (ARGY-231)', () {
+    testWidgets('a settled season counts what failed, not just that it did', (
+      tester,
+    ) async {
+      await seedFailed(tester, ['ep-1', 'ep-2']);
+      await pumpButton(tester);
+
+      expect(find.text('2 failed · Retry'), findsOneWidget);
+      expect(
+        find.text('Stow season'),
+        findsNothing,
+        reason: 'a plain Stow over two failures is how they stayed invisible',
+      );
+    });
+
+    testWidgets('failures show while the rest of the season is still coming', (
+      tester,
+    ) async {
+      // The in-flight branch used to win outright, so a season that lost
+      // episodes partway read "Stowing season · N of M" for the rest of the run
+      // and never mentioned them.
+      await seedFailed(tester, ['ep-1']);
+      await pumpButton(tester);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SeasonStowButton)),
+      );
+      // The detail fetch never answers, so these two stay in flight for as long
+      // as the test needs to look at the button.
+      unawaited(
+        container.read(stowControllerProvider.notifier).stowMany(const [
+          (itemId: 'ep-2', subtitleLine: null),
+          (itemId: 'ep-3', subtitleLine: null),
+        ]),
+      );
+      await tester.pump();
+
+      expect(find.text('Stowing season · 0 of 2 · 1 failed'), findsOneWidget);
+    });
+  });
 
   group('partway through the season', () {
     // The viewer is on ep-2: the rest of the season is ep-2 onward.

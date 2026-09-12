@@ -57,6 +57,7 @@ class StowedItem {
     this.episodeNumber,
     this.subtitles = const [],
     this.incomplete = false,
+    this.failure,
   });
 
   final String itemId;
@@ -94,6 +95,17 @@ class StowedItem {
   /// reclaim them.
   final bool incomplete;
 
+  /// Why the stow gave up, when it did — the text the button and The Hold show.
+  ///
+  /// This is the only part of a failed stow that survives the app (ARGY-231).
+  /// Live status lives in memory in the download service, so a stow that died
+  /// during *packaging* — before a byte was written, and so before the row
+  /// above existed — left nothing at all behind: after a relaunch the season
+  /// button read "Stow season" over five episodes that had silently failed.
+  /// A row carrying this is kept by [StowStore] even with nothing on disk,
+  /// precisely so the failure is still there to be seen and retried.
+  final String? failure;
+
   /// Size of the finished file, or of the bytes downloaded so far while
   /// [incomplete].
   int get sizeOnDisk => bytes;
@@ -113,12 +125,18 @@ class StowedItem {
     'episodeNumber': episodeNumber,
     'subtitles': subtitles.map((s) => s.toJson()).toList(),
     'incomplete': incomplete,
+    'failure': failure,
   };
 
+  /// [clearFailure] rather than a nullable `failure` argument, because the two
+  /// things a caller wants to say — "leave it as it is" and "this one worked
+  /// after all" — are both `null` otherwise.
   StowedItem copyWith({
     int? bytes,
     bool? incomplete,
     List<StowedSubtitle>? subtitles,
+    String? failure,
+    bool clearFailure = false,
   }) => StowedItem(
     itemId: itemId,
     title: title,
@@ -134,6 +152,7 @@ class StowedItem {
     episodeNumber: episodeNumber,
     subtitles: subtitles ?? this.subtitles,
     incomplete: incomplete ?? this.incomplete,
+    failure: clearFailure ? null : (failure ?? this.failure),
   );
 
   static StowedItem fromJson(Map<String, dynamic> json) => StowedItem(
@@ -156,6 +175,7 @@ class StowedItem {
         .map((s) => StowedSubtitle.fromJson(s as Map<String, dynamic>))
         .toList(),
     incomplete: json['incomplete'] as bool? ?? false,
+    failure: json['failure'] as String?,
   );
 }
 
@@ -172,6 +192,16 @@ enum StowPhase {
 
   /// Bytes are coming down.
   downloading,
+
+  /// The last attempt hit something transient — a dead socket, a 5xx — and the
+  /// runner is sitting out a backoff before trying again (ARGY-231).
+  ///
+  /// Distinct from [requesting] because it is the honest answer: a phone
+  /// waiting out a blip that reads "Preparing…" is the state that made a whole
+  /// season's worth of failures invisible. Distinct from [failed] because
+  /// nothing has been given up on yet, so the season count must still carry it
+  /// as in flight rather than offering to retry something already retrying.
+  retrying,
 
   /// On the device and playable offline.
   stowed,
@@ -209,7 +239,8 @@ class StowStatus {
   bool get isBusy =>
       phase == StowPhase.requesting ||
       phase == StowPhase.packaging ||
-      phase == StowPhase.downloading;
+      phase == StowPhase.downloading ||
+      phase == StowPhase.retrying;
 
   /// 0..1 for the active phase, or null when there is nothing to measure yet
   /// (the caller shows an indeterminate spinner).
@@ -262,6 +293,8 @@ class StowStatus {
       case StowPhase.downloading:
         final f = fraction;
         return f == null ? 'Downloading…' : 'Downloading ${(f * 100).round()}%';
+      case StowPhase.retrying:
+        return 'Retrying…';
       case StowPhase.stowed:
         return 'Stowed';
       case StowPhase.failed:

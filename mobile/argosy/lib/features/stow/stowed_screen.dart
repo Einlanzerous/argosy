@@ -142,12 +142,22 @@ class _StowedRow extends ConsumerWidget {
         .read(stowControllerProvider.notifier)
         .statusFor(item.itemId);
     final active = item.incomplete && live.isBusy;
+    // A row that gave up carries why, and it may have no bytes at all behind it
+    // — a stow that failed while the server was still packaging never wrote any
+    // (ARGY-231). Saying "0 B downloaded — stow it again to resume" over one of
+    // those is worse than saying nothing.
+    final failed = item.incomplete && !active ? item.failure : null;
     // An unfinished row exists to account for bytes, so it says what they are
     // and what will happen to them rather than posing as something watchable.
     final subtitle = active
         ? '${live.label}   •   '
               '${formatBytes(live.receivedBytes > 0 ? live.receivedBytes : item.bytes)}'
               ' so far'
+        : failed != null
+        ? [
+            'Failed — $failed',
+            if (item.bytes > 0) '${formatBytes(item.bytes)} kept for a retry',
+          ].join('   •   ')
         : item.incomplete
         ? 'Unfinished — ${formatBytes(item.bytes)} downloaded'
               '   •   Stow it again to resume'
@@ -172,10 +182,14 @@ class _StowedRow extends ConsumerWidget {
           child: Row(
             children: [
               Icon(
-                item.incomplete
+                failed != null
+                    ? Icons.error_outline
+                    : item.incomplete
                     ? Icons.downloading_outlined
                     : Icons.offline_pin,
-                color: item.incomplete
+                color: failed != null
+                    ? ArgosyColors.danger
+                    : item.incomplete
                     ? ArgosyColors.dim
                     : ArgosyColors.accentHi,
                 size: 22,
@@ -223,7 +237,13 @@ class _StowedRow extends ConsumerWidget {
         backgroundColor: ArgosyColors.bg2,
         title: const Text('Remove download?'),
         content: Text(
-          item.incomplete
+          // A failed stow can have nothing on disk to free — offering to
+          // reclaim "0 B" reads as a bug in the arithmetic rather than as the
+          // truth about a download that never started.
+          item.incomplete && item.bytes == 0
+              ? 'The failed download of “${item.title}” will be cleared. It '
+                    'stays in your library and can be stowed again.'
+              : item.incomplete
               ? 'The unfinished download of “${item.title}” will be '
                     'deleted, freeing ${formatBytes(item.bytes)}. It stays in '
                     'your library and can be stowed again from the start.'

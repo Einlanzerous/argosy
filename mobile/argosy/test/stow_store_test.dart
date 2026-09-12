@@ -59,6 +59,25 @@ void main() {
     expect(second.get('a')?.bytes, 100);
   });
 
+  test('a reload never reads as empty while it is in flight', () async {
+    // Every reader here is synchronous, and the reload is kicked off by the
+    // same event that rebuilds the widget tree — so the tree asks during
+    // precisely this gap. Clearing the index first made a stowed item flicker
+    // back to an untouched "Stow", and a half-failed season sample as though
+    // nothing had ever been asked for.
+    final store = newStore();
+    await store.load();
+    final item = _item('a');
+    await _writeVideo(store, item);
+    await store.put(item);
+
+    final reading = store.reload();
+    expect(store.has('a'), isTrue, reason: 'the old index stands until the new');
+    expect(store.totalBytes(), 100);
+    await reading;
+    expect(store.has('a'), isTrue);
+  });
+
   test('lists newest first', () async {
     final store = newStore();
     await store.load();
@@ -187,6 +206,28 @@ void main() {
         4096,
         reason: 'the storage view must not report a stale 0 bytes',
       );
+    });
+
+    test('is kept with nothing on disk when it records a failure', () async {
+      // The one unfinished row that is about an absence rather than about
+      // bytes: a stow that gave up while the server was packaging never wrote
+      // any (ARGY-231). Dropping it on the way back in is how five failed
+      // episodes turned back into a plain "Stow season" across a relaunch.
+      final first = newStore();
+      await first.load();
+      await first.put(
+        _item('a', bytes: 0, file: '').copyWith(
+          incomplete: true,
+          failure: 'The server had a problem. Try again shortly.',
+        ),
+      );
+
+      final second = newStore();
+      await second.load();
+
+      expect(second.partial('a')?.failure, isNotNull);
+      expect(second.has('a'), isFalse, reason: 'there is nothing to play');
+      expect(second.totalBytes(), 0);
     });
 
     test('is dropped once its partial is gone', () async {
