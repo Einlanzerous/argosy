@@ -21,17 +21,52 @@ class DownloadCancelled implements Exception {
   String toString() => 'Download cancelled';
 }
 
+/// Thrown when the server answers a download with a status instead of a body.
+///
+/// Carries the status code rather than folding it into a message, because the
+/// runner's retry decision turns on exactly that distinction: a 503 is the
+/// server catching its breath and is worth another go, a 401 on a revoked token
+/// never will be (ARGY-231). A plain [HttpException] with the number in its
+/// text cannot be asked.
+class DownloadHttpException implements Exception {
+  const DownloadHttpException(this.statusCode, this.uri);
+
+  final int statusCode;
+  final Uri uri;
+
+  @override
+  String toString() => 'Download failed ($statusCode), uri = $uri';
+}
+
+/// How long a transfer may go without a single byte arriving before it counts
+/// as dead.
+///
+/// A link that is *up but useless* — hotel Wi-Fi, a train tunnel, the tailnet
+/// hop that stops forwarding — does not close the socket. It simply stops
+/// delivering, and `await for` over a stream nobody is feeding waits forever,
+/// holding the foreground service and its notification open behind it. Long
+/// enough that a slow-but-alive link is never mistaken for a dead one.
+const _stallTimeout = Duration(seconds: 45);
+
 /// A cancellable handle on a running download.
 class DownloadHandle {
-  bool _cancelled = false;
+  final _cancelled = Completer<void>();
   http.Client? _client;
 
-  bool get isCancelled => _cancelled;
+  bool get isCancelled => _cancelled.isCompleted;
+
+  /// Completes the instant [cancel] is called.
+  ///
+  /// The runner waits on this alongside its retry backoff, so cancelling an
+  /// item that is sitting out a network blip takes effect at once rather than
+  /// whenever the timer happens to fire — a whole season's worth of backoff is
+  /// a long time to watch a button refuse to let go.
+  Future<void> get cancelled => _cancelled.future;
 
   /// Aborts the transfer. The partial file is left on disk deliberately — the
   /// next attempt resumes from it rather than re-fetching what already arrived.
   void cancel() {
-    _cancelled = true;
+    if (!_cancelled.isCompleted) _cancelled.complete();
     _client?.close();
   }
 }
@@ -122,7 +157,7 @@ Future<void> downloadFile({
         onProgress: onProgress,
       );
     } else if (response.statusCode != HttpStatus.partialContent) {
-      throw HttpException('Download failed (${response.statusCode})', uri: url);
+      throw DownloadHttpException(response.statusCode, url);
     }
 
     // Record the validator for whatever we're about to write, so a later resume
@@ -141,7 +176,11 @@ Future<void> downloadFile({
     // Report at most a few times a second: the UI can't use more, and every
     // notification rebuilds a widget tree.
     var lastReport = DateTime.now();
-    await for (final chunk in response.stream) {
+    // `timeout` here is an *idle* timeout, not a deadline on the transfer: it
+    // fires only when no chunk has arrived for that long, so a 12 GB package
+    // over a slow link is fine and a socket that has quietly stopped delivering
+    // is not.
+    await for (final chunk in response.stream.timeout(_stallTimeout)) {
       if (handle.isCancelled) throw const DownloadCancelled();
       sink.add(chunk);
       received += chunk.length;

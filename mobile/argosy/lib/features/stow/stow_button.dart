@@ -49,12 +49,17 @@ class StowButton extends ConsumerWidget {
       case StowPhase.requesting:
       case StowPhase.packaging:
       case StowPhase.downloading:
-        return FilledButton.icon(
+      case StowPhase.retrying:
+        final button = FilledButton.icon(
           style: ghostButtonStyle(context),
           onPressed: () => controller.cancel(item.id),
           icon: _ProgressRing(fraction: status.fraction),
           label: Text(status.label),
         );
+        // A retry is the one busy phase with something to explain: "Retrying…"
+        // on its own doesn't say what went wrong or how many goes are left.
+        final why = status.phase == StowPhase.retrying ? status.message : null;
+        return why == null ? button : Tooltip(message: why, child: button);
 
       case StowPhase.failed:
         return Tooltip(
@@ -178,14 +183,26 @@ class SeasonStowButton extends ConsumerWidget {
       // after "rest of the season" from E7, "0 of 13" would be counting
       // episodes nobody asked for.
       final asked = stowed + busy;
-      return FilledButton.icon(
+      // Failures are carried alongside the count rather than waiting their
+      // turn. This branch used to win outright, so a season that lost five
+      // episodes partway through read "Stowing season · 9 of 47" for the rest
+      // of the run and said nothing about them (ARGY-231) — and by the time the
+      // queue drained, the app had usually been closed and reopened, which
+      // until now was enough to lose the failures altogether.
+      final progress = FilledButton.icon(
         style: ghostButtonStyle(context),
         onPressed: () => _confirmCancel(context, ref, ids, remaining: busy),
         // Indeterminate until the first one lands: a determinate ring at zero
         // is a hairline circle that reads as nothing happening.
         icon: _ProgressRing(fraction: stowed == 0 ? null : stowed / asked),
-        label: Text('Stowing season · $stowed of $asked'),
+        label: Text(
+          'Stowing season · $stowed of $asked'
+          '${failed > 0 ? ' · $failed failed' : ''}',
+        ),
       );
+      return failed == 0
+          ? progress
+          : Tooltip(message: failure ?? 'Stow failed', child: progress);
     }
     if (total > 0 && stowed == total) {
       return FilledButton.icon(
@@ -210,7 +227,10 @@ class SeasonStowButton extends ConsumerWidget {
             size: 18,
             color: ArgosyColors.danger,
           ),
-          label: const Text('Retry season'),
+          // How many, not just that something did. A season is dozens of
+          // files, and "Retry season" over two failures out of forty-seven
+          // reads as though the whole thing has to be done again.
+          label: Text('$failed failed · Retry'),
         ),
       );
     }

@@ -264,7 +264,7 @@ void main() {
     expect(server.ranges.last, isNull, reason: 'the retry asks for everything');
   });
 
-  test('a server error surfaces rather than writing a body', () async {
+  test('a server error surfaces, carrying its status', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     unawaited(() async {
@@ -281,7 +281,16 @@ void main() {
         target: target,
         handle: DownloadHandle(),
       ),
-      throwsA(isA<HttpException>()),
+      // The code, not just the fact: the runner retries a 503 and gives up on a
+      // 401, and it can only tell them apart if the status survives the throw
+      // (ARGY-231).
+      throwsA(
+        isA<DownloadHttpException>().having(
+          (e) => e.statusCode,
+          'statusCode',
+          HttpStatus.conflict,
+        ),
+      ),
     );
     expect(await target.exists(), isFalse);
   });

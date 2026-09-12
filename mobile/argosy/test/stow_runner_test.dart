@@ -17,6 +17,13 @@ class _FileServer {
   late HttpServer _server;
   int status = HttpStatus.ok;
 
+  /// Statuses to answer with before serving properly, one per request: a link
+  /// that drops for a moment and comes back.
+  final failures = <int>[];
+
+  /// How many requests have arrived — how many attempts were actually made.
+  int requests = 0;
+
   /// Held before answering, to keep a job running long enough for another to
   /// queue up behind it.
   Duration delay = Duration.zero;
@@ -27,7 +34,13 @@ class _FileServer {
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     unawaited(() async {
       await for (final req in _server) {
+        requests++;
         if (delay > Duration.zero) await Future<void>.delayed(delay);
+        if (failures.isNotEmpty) {
+          req.response.statusCode = failures.removeAt(0);
+          await req.response.close();
+          continue;
+        }
         if (status != HttpStatus.ok) {
           req.response.statusCode = status;
           await req.response.close();
@@ -55,6 +68,12 @@ class _FileServer {
 /// needs no packaging job, so the test exercises the download and the
 /// bookkeeping rather than the queue.
 class _FakeStowApi extends StowApi {
+  _FakeStowApi({this.bytes = 0});
+
+  /// What the server says the download weighs — 0 for "it didn't say", which
+  /// is what turns the free-space precheck off.
+  final int bytes;
+
   @override
   Future<StowJob?> stowItem(
     String id, {
@@ -65,16 +84,48 @@ class _FakeStowApi extends StowApi {
     method: StowJobMethodEnum.passthrough,
     state: StowJobStateEnum.ready,
     downloadUrl: '/file',
-    bytes: 0,
+    bytes: bytes,
   );
 }
 
-/// A stow endpoint that packages: the first call answers "packaging", every
-/// poll says the same, and it records whether the job was ever released.
+/// The shape a dropped link arrives in.
+///
+/// Not a bare [SocketException]: the generated client catches transport faults
+/// and re-throws them as `ApiException(400)` with the original tucked inside
+/// (`api_client.dart`), so anything reading the code alone sees a 4xx. Getting
+/// this fixture wrong would test a failure mode the app never actually meets.
+ApiException _transportFailure() => ApiException.withInner(
+  HttpStatus.badRequest,
+  'Socket operation failed: GET /api/v1/stow',
+  const SocketException('Connection reset by peer'),
+  StackTrace.current,
+);
+
+/// A stow endpoint that packages, and can be made to misbehave on the way.
+///
+/// Records how many times it was asked to package and whether the job was ever
+/// released, which is how the tests tell "collected on retry" from "orphaned in
+/// the spool".
 class _PackagingStowApi extends StowApi {
-  _PackagingStowApi(this.jobId);
+  _PackagingStowApi(
+    this.jobId, {
+    this.readyAfterPolls = 1 << 30,
+    this.bytes = 0,
+    List<Object> pollFailures = const [],
+  }) : pollFailures = [...pollFailures];
 
   final String jobId;
+
+  /// The poll at which the package is reported ready. Left effectively
+  /// infinite, the job packages forever — what the cancel test needs.
+  final int readyAfterPolls;
+  final int bytes;
+
+  /// Thrown, one per poll, before any of the above applies.
+  final List<Object> pollFailures;
+
+  int requests = 0;
+  int polls = 0;
   bool released = false;
 
   @override
@@ -82,24 +133,33 @@ class _PackagingStowApi extends StowApi {
     String id, {
     StowRequest? stowRequest,
     Future<void>? abortTrigger,
-  }) async => StowJob(
-    id: jobId,
-    itemId: id,
-    method: StowJobMethodEnum.package,
-    state: StowJobStateEnum.packaging,
-    durationSeconds: 600,
-  );
+  }) async {
+    requests++;
+    return StowJob(
+      id: jobId,
+      itemId: id,
+      method: StowJobMethodEnum.package,
+      state: StowJobStateEnum.packaging,
+      durationSeconds: 600,
+    );
+  }
 
   @override
-  Future<StowJob?> getStowJob(String id, {Future<void>? abortTrigger}) async =>
-      StowJob(
-        id: jobId,
-        itemId: 'x',
-        method: StowJobMethodEnum.package,
-        state: StowJobStateEnum.packaging,
-        progressSeconds: 12,
-        durationSeconds: 600,
-      );
+  Future<StowJob?> getStowJob(String id, {Future<void>? abortTrigger}) async {
+    polls++;
+    if (pollFailures.isNotEmpty) throw pollFailures.removeAt(0);
+    final ready = polls >= readyAfterPolls;
+    return StowJob(
+      id: jobId,
+      itemId: 'x',
+      method: StowJobMethodEnum.package,
+      state: ready ? StowJobStateEnum.ready : StowJobStateEnum.packaging,
+      downloadUrl: ready ? '/file' : null,
+      bytes: ready ? bytes : null,
+      progressSeconds: 12,
+      durationSeconds: 600,
+    );
+  }
 
   @override
   Future<void> deleteStowJob(String id, {Future<void>? abortTrigger}) async {
@@ -150,12 +210,30 @@ void main() {
         durationSeconds: 120,
       );
 
-  StowRunner runner({StowQueueStore? queue}) => StowRunner(
+  // Three passes with no real waiting between them: the backoff's timing is
+  // [StowRetryPolicy.delayFor]'s business, and sitting through it here would
+  // buy nothing but a slower suite.
+  const fastRetry = StowRetryPolicy(
+    maxAttempts: 3,
+    firstDelay: Duration(milliseconds: 1),
+    maxDelay: Duration(milliseconds: 1),
+  );
+
+  StowRunner runner({
+    StowQueueStore? queue,
+    StowApi? stow,
+    StowRetryPolicy retry = fastRetry,
+    FreeSpaceProbe? freeSpace,
+  }) => StowRunner(
     store: store,
     queue: queue,
+    retry: retry,
+    // "Can't tell" by default, so the precheck stays out of the way of tests
+    // that aren't about it — and so no test forks a `df`.
+    freeSpace: freeSpace ?? (_) async => null,
     onEvent: events.add,
     connect: () async => StowSession(
-      stow: _FakeStowApi(),
+      stow: stow ?? _FakeStowApi(),
       library: _FakeLibraryApi(),
       urls: StreamUrls(server.base),
       baseUrl: server.base,
@@ -291,16 +369,7 @@ void main() {
     // end — on a 39 GB remux that is twenty minutes of GPU for a file nobody
     // will collect. Verified on device: the cancel had no DELETE behind it.
     final stowApi = _PackagingStowApi('job-1');
-    final r = StowRunner(
-      store: store,
-      onEvent: events.add,
-      connect: () async => StowSession(
-        stow: stowApi,
-        library: _FakeLibraryApi(),
-        urls: StreamUrls(server.base),
-        baseUrl: server.base,
-      ),
-    );
+    final r = runner(stow: stowApi);
 
     await r.enqueue(job());
     // Let it reach the polling loop.
@@ -337,6 +406,248 @@ void main() {
     expect(store.list(), isEmpty);
     expect(store.totalBytes(), 0);
     expect(await Directory('${root.path}/$itemId').exists(), isFalse);
+  });
+
+  // A transient network fault used to fail a job outright, and the queue behind
+  // it with it: Bleach S17 lost E14–E18 to about forty seconds of dead air,
+  // with E19 onward landing normally (ARGY-231).
+  group('a blip on the link', () {
+    bool sawPhase(StowPhase phase) => events.any(
+      (e) => e.itemId == itemId && e.status?.phase == phase,
+    );
+
+    test('is ridden out, and the stow completes', () async {
+      server.failures.addAll([
+        HttpStatus.serviceUnavailable,
+        HttpStatus.badGateway,
+      ]);
+
+      final r = runner();
+      await r.enqueue(job());
+      await r.done;
+
+      await store.reload();
+      expect(store.has(itemId), isTrue, reason: 'the third attempt landed');
+      expect(store.get(itemId)!.bytes, body.length);
+      expect(
+        sawPhase(StowPhase.retrying),
+        isTrue,
+        reason: 'and it said so rather than sitting on "Preparing…"',
+      );
+      expect(sawPhase(StowPhase.failed), isFalse);
+    });
+
+    test('during packaging is retried, and the package collected', () async {
+      // E14 exactly: the poll died on a transport error while the server
+      // carried on encoding. The retry re-POSTs, is handed the same job back —
+      // the server keys them by (account, item) — and collects the package that
+      // was made while the phone wasn't looking.
+      final stowApi = _PackagingStowApi(
+        'job-poll',
+        readyAfterPolls: 2,
+        bytes: body.length,
+        pollFailures: [_transportFailure()],
+      );
+
+      final r = runner(stow: stowApi);
+      await r.enqueue(job());
+      await r.done;
+
+      await store.reload();
+      expect(store.has(itemId), isTrue);
+      expect(stowApi.requests, 2, reason: 'the retry asks again');
+      expect(
+        stowApi.released,
+        isTrue,
+        reason: 'collected, then released — no 1.1 GB orphan in the spool',
+      );
+    });
+
+    test('that never lifts gives up after a bounded number of goes', () async {
+      server.status = HttpStatus.serviceUnavailable;
+
+      final r = runner();
+      await r.enqueue(job());
+      await r.done;
+
+      expect(
+        server.requests,
+        3,
+        reason: 'three attempts and no more — a dead link is not a reason to '
+            'hold a foreground service open all afternoon',
+      );
+      expect(statusOf(itemId)?.phase, StowPhase.failed);
+    });
+
+    test('is told apart from a refusal, which fails at once', () async {
+      // A revoked token answers the same way every time; retrying it only
+      // delays the message that the device needs to pair again.
+      server.status = HttpStatus.unauthorized;
+
+      final r = runner();
+      await r.enqueue(job());
+      await r.done;
+
+      expect(server.requests, 1);
+      expect(statusOf(itemId)?.phase, StowPhase.failed);
+    });
+
+    test('can be cancelled mid-backoff without waiting it out', () async {
+      server.status = HttpStatus.serviceUnavailable;
+      final r = runner(
+        retry: const StowRetryPolicy(
+          maxAttempts: 3,
+          firstDelay: Duration(minutes: 5),
+          maxDelay: Duration(minutes: 5),
+        ),
+      );
+      await r.enqueue(job());
+      while (r.statuses[itemId]?.phase != StowPhase.retrying) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      // If the wait weren't interruptible this would sit here for five
+      // minutes and the test would time out.
+      await r.cancel(itemId);
+      await r.done;
+
+      expect(r.isIdle, isTrue);
+      await store.reload();
+      expect(store.list(), isEmpty);
+    });
+  });
+
+  group('a failure that sticks', () {
+    test('is written to the index, and survives a relaunch', () async {
+      // The packaging phase is where this mattered most: `started` is only
+      // assigned once a download URL comes back, so a failure before that wrote
+      // no row at all — and after a relaunch the season button offered a plain
+      // "Stow season" over episodes that had silently failed.
+      final stowApi = _PackagingStowApi(
+        'job-gone',
+        pollFailures: [ApiException(HttpStatus.notFound, 'not found')],
+      );
+
+      final r = runner(stow: stowApi);
+      await r.enqueue(job());
+      await r.done;
+
+      expect(
+        stowApi.released,
+        isTrue,
+        reason: 'nothing is coming back for it, so it must not be left behind',
+      );
+
+      // A fresh store over the same directory, as a relaunch would build.
+      final reopened = StowStore(root: root);
+      await reopened.load();
+      final row = reopened.partial(itemId);
+      expect(
+        row,
+        isNotNull,
+        reason: 'a failure with no bytes behind it is still a failure',
+      );
+      expect(row!.failure, 'Not found.');
+      expect(row.bytes, 0);
+      expect(reopened.has(itemId), isFalse, reason: 'nothing playable');
+    });
+
+    test('records why, alongside the bytes it did fetch', () async {
+      final dir = await store.itemDir(itemId);
+      await File(
+        '${dir.path}/video.mp4.part',
+      ).writeAsBytes(body.sublist(0, 900));
+      await File('${dir.path}/video.mp4.part.etag').writeAsString('"v1"');
+      server.status = HttpStatus.unauthorized;
+
+      final r = runner();
+      await r.enqueue(job());
+      await r.done;
+
+      final reopened = StowStore(root: root);
+      await reopened.load();
+      final row = reopened.partial(itemId)!;
+      expect(row.bytes, 900, reason: 'the partial is kept for the retry');
+      expect(row.failure, isNotNull);
+    });
+
+    test('is cleared by the retry that works', () async {
+      server.status = HttpStatus.unauthorized;
+      final first = runner();
+      await first.enqueue(job());
+      await first.done;
+      expect(store.partial(itemId)?.failure, isNotNull);
+
+      server.status = HttpStatus.ok;
+      final second = runner();
+      await second.enqueue(job());
+      await second.done;
+
+      await store.reload();
+      expect(store.has(itemId), isTrue);
+      expect(store.get(itemId)!.failure, isNull);
+    });
+  });
+
+  group('free space', () {
+    test('is checked before a byte is written, and says the numbers', () async {
+      final r = runner(
+        stow: _FakeStowApi(bytes: body.length),
+        freeSpace: (_) async => 4096,
+      );
+      await r.enqueue(job());
+      await r.done;
+
+      expect(server.requests, 0, reason: 'it never got as far as the transfer');
+      final status = statusOf(itemId);
+      expect(status?.phase, StowPhase.failed);
+      expect(status?.message, contains('Not enough space'));
+      expect(status?.message, contains('4.0 KB free'));
+
+      await store.reload();
+      expect(store.partial(itemId)?.failure, contains('Not enough space'));
+      expect(
+        await File('${root.path}/$itemId/video.mp4.part').exists(),
+        isFalse,
+      );
+    });
+
+    test('being unanswerable is never a reason not to download', () async {
+      final r = runner(
+        stow: _FakeStowApi(bytes: body.length),
+        freeSpace: (_) async => null,
+      );
+      await r.enqueue(job());
+      await r.done;
+
+      await store.reload();
+      expect(store.has(itemId), isTrue);
+    });
+
+    test('goes unchecked when the server reports no size', () async {
+      // The other way the check declines to have an opinion, and a different
+      // one: there is nothing to weigh a volume against. The probe here would
+      // refuse anything it were actually asked about, so a download that lands
+      // proves the check was skipped rather than passed.
+      final r = runner(
+        stow: _FakeStowApi(), // bytes: 0 — "the server didn't say"
+        freeSpace: (_) async => 1,
+      );
+      await r.enqueue(job());
+      await r.done;
+
+      await store.reload();
+      expect(store.has(itemId), isTrue);
+    });
+
+    test('is read off df where there is one to read', () async {
+      final free = await probeFreeSpace(root);
+      // Elsewhere — iOS refuses to run a subprocess at all — null is the right
+      // answer and the caller proceeds unchecked.
+      if (!Platform.isLinux && !Platform.isMacOS) return;
+      expect(free, isNotNull);
+      expect(free, greaterThan(0));
+    });
   });
 
   group('the queue', () {

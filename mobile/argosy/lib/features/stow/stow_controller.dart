@@ -57,15 +57,19 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       );
     }
     // In-flight status lives in memory, so after a restart a stow that failed
-    // partway would otherwise read as "never started" — offering Stow with no
-    // hint that gigabytes are sitting underneath it. The unfinished index entry
-    // is what survives, so report from that.
+    // would otherwise read as "never started" — offering Stow with no hint that
+    // gigabytes are sitting underneath it, or that it failed at all. The
+    // unfinished index entry is what survives, so report from that: its own
+    // recorded reason when it gave up with one (ARGY-231), otherwise the
+    // generic "interrupted" that a half-written row means on its own.
     final partial = _store.partial(itemId);
     if (partial != null) {
       return StowStatus(
         phase: StowPhase.failed,
         receivedBytes: partial.bytes,
-        message: 'Download stopped partway — it resumes where it left off.',
+        message:
+            partial.failure ??
+            'Download stopped partway — it resumes where it left off.',
       );
     }
     return const StowStatus.none();

@@ -59,15 +59,24 @@ class StowStore {
     await _reconcile();
   }
 
-  /// Re-reads the index from disk, discarding the cached copy.
+  /// Re-reads the index from disk, replacing the cached copy.
   ///
   /// The download service writes the same file from its own isolate
   /// (ARGY-201), so a cached index in the UI goes stale the moment a background
   /// transfer records progress. Callers refresh through this rather than
   /// assuming their copy is the only one.
+  ///
+  /// The old index is held right up until the new one has been read, never
+  /// cleared first: every reader here is synchronous ([has], [get], [partial],
+  /// [list], [totalBytes]) and a window where the map is missing is a window
+  /// where the app believes nothing is stowed. It is the widget tree asking —
+  /// this reload is kicked off by the very event that rebuilds it — so a stowed
+  /// item flickers back to an untouched "Stow" button, and worse, a season that
+  /// is really half-failed can be sampled as though it were untouched.
   Future<void> reload() async {
-    _index = null;
-    await load();
+    final fresh = await _readIndex();
+    _index = fresh;
+    await _reconcile();
   }
 
   Future<Map<String, StowedItem>> _readIndex() async {
@@ -95,7 +104,9 @@ class StowStore {
   /// entry is kept as long as its `.part` survives, with its size refreshed
   /// from disk so the storage view stays honest across restarts; once the
   /// partial is gone there is nothing left to resume or reclaim, so the row
-  /// goes too.
+  /// goes too — unless it records a [StowedItem.failure], which is a row about
+  /// an absence rather than about bytes and is the only thing a stow that died
+  /// before the first chunk leaves behind (ARGY-231).
   Future<void> _reconcile() async {
     final index = _index;
     if (index == null || index.isEmpty) return;
@@ -120,6 +131,7 @@ class StowStore {
         replace[entry.itemId] = entry.copyWith(
           bytes: await video.length(),
           incomplete: false,
+          clearFailure: true,
         );
         continue;
       }
@@ -127,6 +139,14 @@ class StowStore {
       final part = File('${video.path}.part');
       if (await part.exists()) {
         replace[entry.itemId] = entry.copyWith(bytes: await part.length());
+      } else if (entry.failure != null) {
+        // A stow that gave up before writing anything — the packaging phase,
+        // typically. There is nothing on disk to account for, but the row is
+        // the record that this item was asked for and never arrived, and
+        // dropping it is what made those failures invisible across a relaunch.
+        if (entry.bytes != 0) {
+          replace[entry.itemId] = entry.copyWith(bytes: 0);
+        }
       } else {
         // No final file and no partial: nothing to resume, nothing to reclaim.
         drop.add(entry.itemId);

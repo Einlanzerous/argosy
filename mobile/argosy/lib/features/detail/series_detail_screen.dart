@@ -649,7 +649,8 @@ class _EpisodeTile extends ConsumerWidget {
                 StowPhase.stowed => 'Remove $_episodeLabel from this device',
                 StowPhase.requesting ||
                 StowPhase.packaging ||
-                StowPhase.downloading =>
+                StowPhase.downloading ||
+                StowPhase.retrying =>
                   'Cancel download (${stowStatus.label})',
                 _ => 'Stow $_episodeLabel for offline',
               }, style: Theme.of(sheet).textTheme.titleMedium),
@@ -657,7 +658,8 @@ class _EpisodeTile extends ConsumerWidget {
                 StowPhase.stowed => _RowAction.unstow,
                 StowPhase.requesting ||
                 StowPhase.packaging ||
-                StowPhase.downloading => _RowAction.cancelStow,
+                StowPhase.downloading ||
+                StowPhase.retrying => _RowAction.cancelStow,
                 _ => _RowAction.stow,
               }),
             ),
