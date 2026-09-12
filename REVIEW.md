@@ -48,8 +48,9 @@ terms. Do not invent intent from the branch name.
 ## Severity
 
 - **🔴 Important** — breaks playback or the catalog, widens who can see whose
-  media, loses or corrupts data, wedges a client until cache expiry, or does not
-  do what the ticket asked.
+  media, loses or corrupts data, wedges a client until cache expiry, does not
+  do what the ticket asked, or changes shared playback semantics without saying
+  which of the three players it covers (see **Player parity**).
 - **🟡 Nit** — conventions, clarity, a comment that will mislead. Never blocking.
 - **🟣 Pre-existing** — real, not introduced here. At most two per review.
 
@@ -89,6 +90,48 @@ learned the hard way. `internal/auth/`.
 - Does a new player path handle its session disappearing, and keep it alive
   while paused?
 
+**Player parity** — three players, one playlist contract.
+
+Web `web/src/views/PlayerView.vue`, mobile
+`mobile/argosy/lib/features/player/playback_controller.dart` and TV
+`.../player/tv/tv_player_screen.dart` consume the same HLS contract, and twice a
+fix has landed on one side and been re-found on the other months later.
+ARGY-103's hls.js `startPosition: 0` became ARGY-228, the TV still joining a
+fast remux ~70% into the episode. PR #31's "never trust `el.duration` on an
+event playlist" became ARGY-230, mobile having carried it for the scrub bar and
+not for `seekTo`.
+
+A diff under `web/src/views/PlayerView.vue`,
+`mobile/argosy/lib/features/player/` (phone and `tv/` alike),
+`internal/transcode/` or `internal/library/transcode.go` that **alters playback
+semantics** — resume and seek, playlist start, duration or `ENDLIST` handling,
+auto-advance and credits timing, buffering, session keepalive and recovery,
+subtitle or audio preference — must say in the PR body **which of
+{web, mobile, TV} it covers and why the others are unaffected**. Silence is a
+🔴 Important finding: name the semantics the diff changes and the sibling file
+that shares them.
+
+- **"One-sided by nature" is a real answer when it is true** — hls.js codec
+  strings and `useMediaCapabilities`, ExoPlayer and `better_player` quirks,
+  secure-context browser APIs. One line saying which side, and why, is the whole
+  requirement.
+- **A server-side fix covers all three only when the PR says so and names the
+  client behaviour it replaces.** `pinStart` in `internal/transcode/playlist.go`
+  is the worked example: the `startPosition: 0` equivalent for every client that
+  is not hls.js, and deliberately not for hls.js, which consults `EXT-X-START`
+  only when its `startPosition` is -1. Absent that sentence a server change has
+  not been shown to reach anything — web's own `startPosition: 0` is still in
+  `PlayerView.vue`, so "the server handles it now" and "the client still
+  overrides it" are both true here at once.
+- **A parity claim the diff contradicts is its own 🔴** — "web only" where the
+  same threshold is duplicated in the Dart, "mobile only" on a change under
+  `internal/transcode/`. Read the sibling before accepting the sentence.
+
+The rule is about the PR body, not the diff: a change that fixes one client and
+says so is done. When ARGY-233 publishes its fix × {web, mobile, TV, server}
+classification it belongs in this section; until then the paths above are the
+trigger.
+
 **Migrations** — `internal/db/migrations/` is applied in order at startup. Is
 the change additive, and is it safe against the pre-ARGY-167 data the ownership
 backfill did not move?
@@ -103,6 +146,12 @@ Behaviour inferred from a name is not evidence. If you find yourself writing
 "this may not handle…", go read the implementation or drop it. For auth
 findings specifically, trace the actual call path: a handler that looks
 unguarded is sometimes guarded in middleware.
+
+The one finding that is not anchored to a line is the missing player-parity
+statement above. Its evidence is the changed path plus the absence of the
+sentence; the concrete failure it names is the one ARGY-228 and ARGY-230 each
+shipped. Point at the sibling file that carries the same semantics — that is
+the line.
 
 ## Re-reviews
 
