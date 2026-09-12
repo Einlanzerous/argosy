@@ -10,7 +10,7 @@ review re-proving what it already proves:
 
 | job | proves |
 |---|---|
-| `ci.yml` / `go` (with a `postgres` service and `ffmpeg`) | `go vet`, `gofmt -l`, `golangci-lint`, **`make test` — every one of the 47 `_test.go` files under `cmd/` and `internal/`, including all four of `internal/auth/`'s** — and that the binary builds |
+| `ci.yml` / `go` (with a `postgres` service and `ffmpeg`) | `go vet`, `gofmt -l`, `golangci-lint`, **`make test` — every `_test.go` file under `cmd/` and `internal/`, including all four of `internal/auth/`'s** — and that the binary builds |
 | `ci.yml` / `web` | `format:check`, `lint`, `build` |
 | `ci.yml` / `openapi-drift` | `make generate` then `git diff --exit-code` — a `proto/openapi` change that did not regenerate its Go, Dart and TS consumers fails the build |
 | `mobile.yml` | `flutter analyze`, `flutter test`, debug APK and iOS builds |
