@@ -125,7 +125,7 @@ CI is thorough here — more so than the other repos in the estate.
 
 | Workflow / job | Runs |
 |---|---|
-| `ci.yml` / `go` | Runs in `golang:1.26-trixie` — the prod runtime's base — with the `.ffmpeg-version` ffmpeg. `go vet`, `gofmt -l`, `golangci-lint`, `make test` (= `go test ./cmd/... ./internal/...`, all 50 test files) against a `postgres` service, then `make go-build` |
+| `ci.yml` / `go` | Runs in `golang:1.26-trixie` — the prod runtime's base — with the `.ffmpeg-version` ffmpeg. `go vet`, `gofmt -l`, `golangci-lint`, `make test` (= `go test ./cmd/... ./internal/...`, every `_test.go` file under both) against a `postgres` service, then `make go-build` |
 | `ci.yml` / `web` | `bun run format:check`, `lint`, `build` |
 | `ci.yml` / `openapi-drift` | `make generate` + `git diff --exit-code` — regenerating the contract's consumers is enforced, not remembered |
 | `mobile.yml` | `flutter analyze`, `flutter test`, debug APK, iOS build |
