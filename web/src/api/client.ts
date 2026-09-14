@@ -60,3 +60,25 @@ const authMiddleware: Middleware = {
 
 export const api = createClient<paths>({ baseUrl: '/' })
 api.use(authMiddleware)
+
+// ApiError is a non-OK answer from the API. The catalog helpers throw it rather
+// than returning [] so a view can tell "the request failed" from "the answer was
+// empty": an edge that 403'd every call once rendered as an empty hold, and read
+// as the library having vanished (ARGY-237).
+export class ApiError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}`)
+    this.name = 'ApiError'
+  }
+}
+
+// describeLoadError turns a failed catalog load into one line of copy. Anything
+// that isn't an ApiError is fetch itself rejecting — the server was never reached.
+export function describeLoadError(err: unknown): string {
+  if (!(err instanceof ApiError)) return "Couldn't reach the server. Check your connection."
+  if (err.status === 401 || err.status === 403) {
+    return `The server refused the request (HTTP ${err.status}).`
+  }
+  if (err.status >= 500) return `The server hit an error (HTTP ${err.status}).`
+  return `The server answered HTTP ${err.status}.`
+}
