@@ -22,6 +22,14 @@ import (
 // both the single-output layout (index.m3u8 + init.mp4 + stream_NNNNN.m4s) and
 // the multi-variant ladder (master + stream_N.m3u8 + init_N.mp4 +
 // stream_N_NNNNN.m4s). It doubles as the traversal guard for the {file} param.
+//
+// Mirrored at the public edge: construct-server's
+// config/crowdsec/parsers/s02-enrich/argosy-hls-whitelist.yaml exempts
+// successful fetches matching this set from CrowdSec's crawl detection
+// (SERV-184). A player's segment burst otherwise reads as crawling and bans
+// the viewer mid-episode. Change the two together. A new artifact this allows
+// but the whitelist doesn't cover brings those bans back silently, for anyone
+// watching off-LAN.
 var transcodeFile = regexp.MustCompile(`^(index\.m3u8|stream_\d+\.m3u8|init\.mp4|init_\d+\.mp4|stream_\d+\.m4s|stream_\d+_\d+\.m4s)$`)
 
 func transcodeContentType(name string) string {
