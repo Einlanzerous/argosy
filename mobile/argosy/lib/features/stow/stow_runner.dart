@@ -711,7 +711,8 @@ class StowRunner {
       await _cleanUp(itemId, session);
       _clear(itemId);
       return null;
-    } catch (e) {
+    } catch (caught) {
+      final e = await _explainStalePackage(caught, session, itemId);
       // A *failure* deliberately keeps the partial. Wiping it here would make
       // the resumable downloader pointless: the case it exists for is a
       // transfer dying partway, and the retry that follows resumes from these
@@ -828,6 +829,43 @@ class StowRunner {
     if (free == null) return;
     if (free >= needed + _spaceReserve) return;
     throw StowOutOfSpace(needed, free);
+  }
+
+  /// Turns a `410` on a package download into the reason the job gives.
+  ///
+  /// The server answers 410 for a package whose source file changed after it
+  /// was made (ARGY-238): a Sonarr upgrade replaced the episode, so the bytes
+  /// would be an encode of a file that no longer exists, and the sidecar
+  /// subtitles fetched next would come from the new one. The downloader keeps
+  /// only the status, never the body, so without this the user reads a
+  /// connection error for what is really "stow it again". The job knows why,
+  /// so ask it.
+  ///
+  /// The answer is permanent either way — an [ApiFailure] — because the 410 on
+  /// its own already proves the package is dead; a retry would only fetch the
+  /// same refusal. A poll that fails as well still ends in that message rather
+  /// than whatever broke the poll. Only a package has a job to ask: a
+  /// passthrough has none, and anything but a 410 passes through untouched.
+  Future<Object> _explainStalePackage(
+    Object error,
+    StowSession? session,
+    String itemId,
+  ) async {
+    final jobId = _serverJobs[itemId];
+    if (error is! DownloadHttpException ||
+        error.statusCode != HttpStatus.gone ||
+        jobId == null ||
+        session == null) {
+      return error;
+    }
+    const fallback = 'The file changed on the server — stow it again.';
+    try {
+      final polled = await session.stow.getStowJob(jobId).timeout(_apiTimeout);
+      final reason = polled?.error;
+      return ApiFailure(reason == null || reason.isEmpty ? fallback : reason);
+    } catch (_) {
+      return const ApiFailure(fallback);
+    }
   }
 
   /// The user-facing text for whatever stopped an attempt.

@@ -167,6 +167,30 @@ class _PackagingStowApi extends StowApi {
   }
 }
 
+/// A package the server has declared stale by the time the phone comes to
+/// collect it (ARGY-238): ready on the first poll, then — once the download has
+/// been refused — failed, with the reason the server gives.
+class _StalePackageStowApi extends _PackagingStowApi {
+  _StalePackageStowApi(super.jobId, {required this.reason})
+    : super(readyAfterPolls: 1);
+
+  final String reason;
+
+  @override
+  Future<StowJob?> getStowJob(String id, {Future<void>? abortTrigger}) async {
+    if (polls < 1) return super.getStowJob(id, abortTrigger: abortTrigger);
+    polls++;
+    return StowJob(
+      id: jobId,
+      itemId: 'x',
+      method: StowJobMethodEnum.package,
+      state: StowJobStateEnum.failed,
+      error: reason,
+      durationSeconds: 600,
+    );
+  }
+}
+
 /// No subtitle tracks — the sidecar fetch is not what these tests are about.
 class _FakeLibraryApi extends LibraryApi {
   @override
@@ -406,6 +430,57 @@ void main() {
     expect(store.list(), isEmpty);
     expect(store.totalBytes(), 0);
     expect(await Directory('${root.path}/$itemId').exists(), isFalse);
+  });
+
+  // A Sonarr upgrade replaced the file a package was made from (ARGY-238). The
+  // server refuses the download with 410; the downloader keeps only the status.
+  group('a package whose source changed on the server', () {
+    const reason = 'The file changed on the server — stow it again.';
+
+    test(
+      'says so rather than a connection error, and is not retried',
+      () async {
+        server.status = HttpStatus.gone;
+        final stowApi = _StalePackageStowApi('job-stale', reason: reason);
+
+        final r = runner(stow: stowApi);
+        await r.enqueue(job());
+        await r.done;
+
+        expect(
+          server.requests,
+          1,
+          reason: 'a dead package is not worth fetching again',
+        );
+        expect(
+          stowApi.polls,
+          2,
+          reason: 'ready once, then asked why the download was refused',
+        );
+        expect(statusOf(itemId)?.phase, StowPhase.failed);
+        expect(statusOf(itemId)?.message, reason);
+        await store.reload();
+        expect(
+          store.partial(itemId)?.failure,
+          reason,
+          reason: 'the reason is written down, so it survives a relaunch',
+        );
+      },
+    );
+
+    test('is not confused with any other refusal', () async {
+      server.status = HttpStatus.notFound;
+      final stowApi = _StalePackageStowApi('job-404', reason: reason);
+
+      final r = runner(stow: stowApi);
+      await r.enqueue(job());
+      await r.done;
+
+      expect(server.requests, 1);
+      expect(stowApi.polls, 1, reason: 'only a 410 sends it back to the job');
+      expect(statusOf(itemId)?.phase, StowPhase.failed);
+      expect(statusOf(itemId)?.message, isNot(reason));
+    });
   });
 
   // A transient network fault used to fail a job outright, and the queue behind
