@@ -64,7 +64,8 @@ async function load(id: string): Promise<void> {
   movie.value = data
   setPage(data.title)
   progress.value = await getProgress(id).catch(() => null)
-  const all = await getMovies({ sort: 'title' })
+  // Related titles are garnish: a failed browse leaves the rail empty, not the page broken.
+  const all = await getMovies({ sort: 'title' }).catch(() => [])
   related.value = all.filter((m) => m.id !== id).slice(0, 8)
 }
 

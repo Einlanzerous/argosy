@@ -1,4 +1,4 @@
-import { api } from '@/api/client'
+import { api, ApiError } from '@/api/client'
 import type { components } from '@/api/schema'
 
 export type Library = components['schemas']['Library']
@@ -54,8 +54,12 @@ function filterQuery(f: BrowseFilter) {
 // The browse API is per-library; the UI presents one unified Manifest, so these
 // helpers fan out across every library the account owns and merge the results.
 
+// getLibraries, getMovies, getSeries and getRecent throw ApiError on a non-OK
+// answer instead of returning [] (ARGY-237); callers that want the old empty
+// fallback say so with .catch.
 export async function getLibraries(): Promise<Library[]> {
-  const { data } = await api.GET('/api/v1/libraries')
+  const { data, response } = await api.GET('/api/v1/libraries')
+  if (!response.ok) throw new ApiError(response.status)
   return data ?? []
 }
 
@@ -92,6 +96,8 @@ export async function getMovies(
       }),
     ),
   )
+  const failed = pages.find((p) => !p.response.ok)
+  if (failed) throw new ApiError(failed.response.status)
   return pages.flatMap((p) => p.data?.items ?? [])
 }
 
@@ -110,6 +116,8 @@ export async function getSeries(
       }),
     ),
   )
+  const failed = pages.find((p) => !p.response.ok)
+  if (failed) throw new ApiError(failed.response.status)
   return pages.flatMap((p) => p.data?.items ?? [])
 }
 
@@ -119,7 +127,8 @@ export type RecentItem = MovieSummary
 // getRecent returns the unified, account-wide newly-arrived feed (films + series
 // merged, newest first) — already cross-library, so no per-library fan-out.
 export async function getRecent(limit = 24): Promise<RecentItem[]> {
-  const { data } = await api.GET('/api/v1/recent', { params: { query: { limit } } })
+  const { data, response } = await api.GET('/api/v1/recent', { params: { query: { limit } } })
+  if (!response.ok) throw new ApiError(response.status)
   return data ?? []
 }
 

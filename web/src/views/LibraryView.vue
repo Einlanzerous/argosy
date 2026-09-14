@@ -14,6 +14,7 @@ import {
   type SeriesSort,
   type WatchedState,
 } from '@/lib/manifest'
+import { describeLoadError } from '@/api/client'
 import { setPage } from '@/lib/page'
 import { useSessionStore } from '@/stores/session'
 
@@ -157,8 +158,23 @@ const backdropStyle = computed(() =>
   posterStyle(cards.value[0]?.backdropUrl ?? cards.value[0]?.posterUrl, libTitle.value),
 )
 
+// A failed browse is an error, never "nothing matches this filter" (ARGY-237).
+const loadError = ref<string | null>(null)
+
 async function load(): Promise<void> {
   loading.value = true
+  loadError.value = null
+  try {
+    cards.value = await fetchCards()
+  } catch (e) {
+    cards.value = []
+    loadError.value = describeLoadError(e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function fetchCards(): Promise<Card[]> {
   const f: BrowseFilter = {
     genres: genres.value,
     ratingMin: ratingMin.value,
@@ -203,8 +219,7 @@ async function load(): Promise<void> {
       })),
     )
   }
-  cards.value = out
-  loading.value = false
+  return out
 }
 
 // Any change to the scope/sort/filter query reloads (and retitles) the view.
@@ -228,7 +243,7 @@ watch(
         <div class="title-block">
           <div class="arg-eyebrow">The Manifest</div>
           <h1 class="arg-page-title">{{ libTitle }}</h1>
-          <div class="arg-count">{{ cards.length }} titles in the hold</div>
+          <div v-if="!loadError" class="arg-count">{{ cards.length }} titles in the hold</div>
         </div>
       </header>
 
@@ -348,7 +363,7 @@ watch(
         </div>
       </div>
 
-      <div class="showing">Showing {{ cards.length }} titles</div>
+      <div v-if="!loadError" class="showing">Showing {{ cards.length }} titles</div>
 
       <div v-if="cards.length" class="grid">
         <PosterCard
@@ -362,6 +377,16 @@ watch(
           :poster-url="c.posterUrl"
           :to="c.to"
         />
+      </div>
+
+      <div v-else-if="!loading && loadError" class="empty load-error" role="alert">
+        <img src="/argosy_mark.svg" alt="" />
+        <h2>Couldn't load the Manifest</h2>
+        <p>
+          {{ loadError }} Your library is still there — this is a problem reaching it, not missing
+          media.
+        </p>
+        <button class="scan" type="button" @click="load">Retry</button>
       </div>
 
       <div v-else-if="!loading" class="empty">
@@ -654,6 +679,7 @@ watch(
 }
 .scan {
   padding: 13px 24px;
+  border: none;
   border-radius: var(--arg-r);
   background: var(--arg-accent);
   color: var(--arg-bg);

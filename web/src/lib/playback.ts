@@ -1,4 +1,4 @@
-import { api, getToken } from '@/api/client'
+import { api, ApiError, getToken } from '@/api/client'
 import type { components } from '@/api/schema'
 
 export type PlayState = components['schemas']['PlayState']
@@ -200,15 +200,19 @@ export async function setSeriesWatched(seriesId: string, watched: boolean): Prom
   })
 }
 
+// getContinue and getOnDeck throw ApiError on a non-OK answer, so Home can tell a
+// refused request from an empty rail (ARGY-237).
 export async function getContinue(): Promise<ContinueItem[]> {
-  const { data } = await api.GET('/api/v1/continue')
+  const { data, response } = await api.GET('/api/v1/continue')
+  if (!response.ok) throw new ApiError(response.status)
   return data ?? []
 }
 
 // getOnDeck returns the next-up episode of each series the profile is current on
 // (distinct from in-progress items, which are in getContinue).
 export async function getOnDeck(): Promise<OnDeckItem[]> {
-  const { data } = await api.GET('/api/v1/ondeck')
+  const { data, response } = await api.GET('/api/v1/ondeck')
+  if (!response.ok) throw new ApiError(response.status)
   return data ?? []
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
-import { api } from '@/api/client'
+import { api, describeLoadError } from '@/api/client'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import { posterStyle } from '@/lib/poster'
@@ -192,13 +192,21 @@ function refreshContinueSoon(): void {
   }, 1500)
 }
 
-onMounted(async () => {
-  setPage('Home')
-  ;[recentItems.value, continueItems.value, onDeckItems.value] = await Promise.all([
-    getRecent().catch(() => []),
-    getContinue().catch(() => []),
-    getOnDeck().catch(() => []),
-  ])
+// A rail that failed to load is an error, not an empty rail. Collapsing both to []
+// is how an edge 403'd every call and Home announced "the hold is empty" over a
+// healthy 1,000-item library (ARGY-237). Rails that did load still render.
+const loadError = ref<string | null>(null)
+
+async function load(): Promise<void> {
+  loading.value = true
+  loadError.value = null
+  const results = await Promise.allSettled([getRecent(), getContinue(), getOnDeck()])
+  const [recentRes, continueRes, onDeckRes] = results
+  recentItems.value = recentRes.status === 'fulfilled' ? recentRes.value : []
+  continueItems.value = continueRes.status === 'fulfilled' ? continueRes.value : []
+  onDeckItems.value = onDeckRes.status === 'fulfilled' ? onDeckRes.value : []
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+  loadError.value = failed ? describeLoadError(failed.reason) : null
   loading.value = false
   // Vaults + genre rows are the "discovery" pieces — only built (and fetched) when
   // the profile's home layout is discovery (the default). Focused keeps just the
@@ -214,6 +222,11 @@ onMounted(async () => {
     })
     heroDetail.value = data ?? null
   }
+}
+
+onMounted(async () => {
+  setPage('Home')
+  await load()
   closeBeacon = subscribeBeacon({
     onPosition: refreshContinueSoon,
     onOpen: refreshContinueSoon,
@@ -369,7 +382,17 @@ onUnmounted(() => {
         />
       </PosterRail>
 
-      <div v-if="!loading && !recent.length && !continueItems.length" class="hold-empty">
+      <div v-if="!loading && loadError" class="hold-empty load-error" role="alert">
+        <img src="/argosy_mark.svg" alt="" />
+        <h2>Couldn't load the hold</h2>
+        <p>
+          {{ loadError }} Your library is still there — this is a problem reaching it, not missing
+          media.
+        </p>
+        <button class="play" type="button" @click="load"><span>⟲</span> Retry</button>
+      </div>
+
+      <div v-else-if="!loading && !recent.length && !continueItems.length" class="hold-empty">
         <img src="/argosy_mark.svg" alt="" />
         <h2>The hold is empty</h2>
         <!-- Only the owner can do anything about an empty hold; telling a member
