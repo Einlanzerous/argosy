@@ -30,7 +30,11 @@ ALTER TABLE stow_jobs ADD COLUMN source_identity text NOT NULL DEFAULT 'unknown'
 
 -- Exact, because no carry can have happened before this migration: every job
 -- was made from its item's current file. It matches fileid.Identity as it reads
--- now — file_size is still NULL everywhere, so a NULL hash is 'unknown'.
+-- now — file_size is still NULL everywhere, so a NULL hash is 'unknown'. That
+-- holds only until the first sweep writes file_size: an item whose partial hash
+-- read had failed then reads as 's<size>', and its ready job reports stale once
+-- (one tap to re-stow). Narrow — a NULL hash means a read error — and the
+-- scanner's hash stability keeps it from recurring.
 UPDATE stow_jobs sj
    SET source_identity = mi.content_hash
   FROM media_items mi

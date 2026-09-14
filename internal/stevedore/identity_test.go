@@ -719,3 +719,28 @@ func TestAdoptionKeepsTheOlderID(t *testing.T) {
 		}
 	})
 }
+
+// TestFailedAdoptionIsCountedAndHeldBack: an adoption that fails writes
+// nothing, holds the vanished row back like a failed carry, and shows in the
+// sweep's error count rather than only in the log.
+func TestFailedAdoptionIsCountedAndHeldBack(t *testing.T) {
+	f := newIdentityFixture(t)
+	older := "Show/Season 1/Show S01E15 HDTV.mkv"
+	younger := "Show/Season 1/Show S01E15 WEB.mkv"
+	f.scan(map[string][]byte{older: blob(54, 2*mib)})
+	olderID := f.mustID(older)
+	f.scan(map[string][]byte{older: blob(54, 2*mib), younger: blob(55, 2*mib)})
+	youngerID := f.mustID(younger)
+
+	f.sc.identityHook = func(string) error { return errors.New("injected adoption failure") }
+	res := f.scan(map[string][]byte{younger: blob(55, 2*mib)})
+	if res.Errors != 1 {
+		t.Errorf("result = %+v, want the failed adoption counted in Errors", res)
+	}
+	if n := f.count(`SELECT count(*) FROM media_items WHERE id = $1 AND carry_held_since IS NOT NULL`, olderID); n != 1 {
+		t.Error("the older row was not held back after its adoption failed")
+	}
+	if f.idOf(younger) != youngerID {
+		t.Error("a failed adoption still changed the younger row")
+	}
+}

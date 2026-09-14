@@ -108,8 +108,12 @@ func (s *Scanner) Scan(ctx context.Context, libraryID string, src mediasource.So
 	// Replacements already indexed in an earlier sweep. These run before ingest
 	// so that, when the older row survives at the newer file's path, that path's
 	// ingest refreshes the survivor.
+	adoptErrors := 0
 	for _, a := range plan.adoptions {
-		_ = s.adopt(ctx, a)
+		if err := s.adopt(ctx, a); err != nil {
+			// Logged and held back by adopt, like a failed carry.
+			adoptErrors++
+		}
 	}
 
 	var (
@@ -118,6 +122,7 @@ func (s *Scanner) Scan(ctx context.Context, libraryID string, src mediasource.So
 		res  Result
 		jobs = make(chan mediasource.Entry)
 	)
+	res.Errors = adoptErrors
 	worker := func() {
 		defer wg.Done()
 		for e := range jobs {
