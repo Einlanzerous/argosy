@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.3](https://github.com/Einlanzerous/argosy/compare/v0.29.2...v0.29.3) (2026-09-14)
+
+
+### Bug Fixes
+
+* **player:** keep a paused mobile session alive and recover a reaped one (ARGY-239) ([#247](https://github.com/Einlanzerous/argosy/issues/247)) ([bea126b](https://github.com/Einlanzerous/argosy/commit/bea126b4e0405af3c1ecbe702b7c1125cfc22472))
+
 ## [0.29.2](https://github.com/Einlanzerous/argosy/compare/v0.29.1...v0.29.2) (2026-09-14)
 
 
