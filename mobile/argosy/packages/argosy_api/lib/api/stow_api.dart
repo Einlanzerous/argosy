@@ -68,7 +68,7 @@ class StowApi {
 
   /// Download a ready package
   ///
-  /// Serves the packaged MP4 with byte-range support, so an interrupted download resumes instead of restarting — the difference between a 2 GB download surviving a walk out of Wi-Fi range and not. Auth is the per-device token via the bearer header OR a `token` query param, matching the stream endpoint. Returns 409 while the job is still packaging. 
+  /// Serves the packaged MP4 with byte-range support, so an interrupted download resumes instead of restarting — the difference between a 2 GB download surviving a walk out of Wi-Fi range and not. Auth is the per-device token via the bearer header OR a `token` query param, matching the stream endpoint. Returns 409 while the job is still packaging, and 410 once the item's file has been replaced since the package was made (ARGY-238) — poll the job for the reason, and request the stow again. 
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -111,7 +111,7 @@ class StowApi {
 
   /// Download a ready package
   ///
-  /// Serves the packaged MP4 with byte-range support, so an interrupted download resumes instead of restarting — the difference between a 2 GB download surviving a walk out of Wi-Fi range and not. Auth is the per-device token via the bearer header OR a `token` query param, matching the stream endpoint. Returns 409 while the job is still packaging. 
+  /// Serves the packaged MP4 with byte-range support, so an interrupted download resumes instead of restarting — the difference between a 2 GB download surviving a walk out of Wi-Fi range and not. Auth is the per-device token via the bearer header OR a `token` query param, matching the stream endpoint. Returns 409 while the job is still packaging, and 410 once the item's file has been replaced since the package was made (ARGY-238) — poll the job for the reason, and request the stow again. 
   ///
   /// Parameters:
   ///

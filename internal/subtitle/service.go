@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Einlanzerous/argosy/internal/fileid"
 )
 
 // maxExternalTracks caps how many OpenSubtitles candidates are surfaced per item
@@ -43,7 +45,11 @@ var imageSubCodecs = map[string]bool{
 
 // Target is everything needed to resolve subtitles for one media item.
 type Target struct {
-	ItemID       string
+	ItemID string
+	// Identity is the fileid identity of the item's current file. Everything
+	// cached from the file keys on it as well as the id, because an item keeps
+	// its id when its file is replaced (ARGY-238).
+	Identity     string
 	Path         string          // absolute media path
 	Technical    json.RawMessage // stored ffprobe JSON
 	TMDBID       int64           // movie TMDB id (0 if none / is episode)
@@ -146,10 +152,12 @@ func missingLangs(embedded []Track, wanted []string) []string {
 }
 
 // externalTracks returns OpenSubtitles candidates for the given languages,
-// serving repeat player opens from a short-lived per-item cache instead of
-// re-querying (and re-hashing the file) every time.
+// serving repeat player opens from a short-lived per-file cache instead of
+// re-querying (and re-hashing the file) every time. The key carries the file's
+// identity: the search matches by MovieHash, so a replaced file has different
+// best matches, and an external subtitle is timed to one release.
 func (s *Service) externalTracks(ctx context.Context, t Target, langs []string) []Track {
-	key := t.ItemID + "|" + strings.Join(langs, ",")
+	key := fileid.ItemKey(t.ItemID, t.Identity) + "|" + strings.Join(langs, ",")
 	s.mu.Lock()
 	if e, ok := s.searches[key]; ok && time.Now().Before(e.expires) {
 		s.mu.Unlock()
@@ -228,7 +236,12 @@ func (s *Service) VTT(ctx context.Context, t Target, trackID string) (string, er
 	if !trackIDRe.MatchString(trackID) {
 		return "", fmt.Errorf("invalid track id %q", trackID)
 	}
-	dir := filepath.Join(s.cacheDir, t.ItemID)
+	// One flat directory per item *and* file: Ballast reclaims only top-level
+	// entries, and library.LiveItems reports the same fileid key for every
+	// current row, so the directory of a replaced file becomes an orphan
+	// instead of serving the old file's captions (ARGY-238). This includes os:
+	// tracks, which are timed to one release.
+	dir := filepath.Join(s.cacheDir, fileid.ItemKey(t.ItemID, t.Identity))
 	dest := filepath.Join(dir, strings.ReplaceAll(trackID, ":", "-")+".vtt")
 	if _, err := os.Stat(dest); err == nil {
 		return dest, nil

@@ -122,11 +122,28 @@ func parseMovie(title string) (string, *int) {
 // movie years. It runs single-threaded after the concurrent scan, so series
 // upserts don't race. Items it can't place are flagged review_required.
 func (s *Scanner) Classify(ctx context.Context, libraryID string) error {
+	return s.classify(ctx, libraryID, nil)
+}
+
+// classify is Classify over the rows whose file_path is in seen (nil means every
+// row). A sweep passes what it walked, because a row whose file vanished must
+// never claim an episode slot: the upsert below is last-write-wins, and a
+// vanished row that won its slot would have its episode deleted by prune's
+// orphan sweep — TMDB title and all — and recreated from the filename next
+// sweep. Bleach S17 lost every replaced episode row that way on 2026-09-08.
+//
+// Rows are linked newest first, so when two seen files claim one slot — both on
+// disk for a while — the older row is written last and holds it, every sweep.
+// Unordered, the slot flipped between the two ids from sweep to sweep, and the
+// phone's stowed-copy lookup flipped with it (ARGY-238).
+func (s *Scanner) classify(ctx context.Context, libraryID string, seen []string) error {
 	type item struct {
 		id, kind, filePath, title string
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT id::text, kind, file_path, title FROM media_items WHERE library_id = $1`, libraryID)
+		`SELECT id::text, kind, file_path, title FROM media_items
+		  WHERE library_id = $1 AND ($2::text[] IS NULL OR file_path = ANY($2))
+		  ORDER BY created_at DESC, id DESC`, libraryID, seen)
 	if err != nil {
 		return err
 	}

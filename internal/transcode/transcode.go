@@ -104,9 +104,13 @@ func (s Spec) burnsIn() bool { return s.BurnInSubtitle > 0 }
 
 // StartRequest is the caller-facing request to begin (or join) a session.
 type StartRequest struct {
-	ItemID         string
-	AccountID      string
-	Source         string
+	ItemID    string
+	AccountID string
+	Source    string
+	// SourceIdentity is the fileid identity of Source. An item keeps its id when
+	// its file is replaced (ARGY-238), so the id alone can't tell a live encode
+	// of the old file from a request for the new one.
+	SourceIdentity string
 	StartAt        float64 // seek offset in seconds
 	Encoder        string
 	SourceHeight   int
@@ -294,9 +298,12 @@ func sessionID(req StartRequest) string {
 	// H.264 1080p) get distinct sessions rather than colliding on one. So is the
 	// burned-in subtitle: the picture differs, so turning captions on must start
 	// its own encode rather than join the one already running without them
-	// (ARGY-59).
-	key := fmt.Sprintf("%s|%s|%d|%s|%s|%s|%d", req.AccountID, req.ItemID, int64(req.StartAt),
-		req.Encoder, resolveCodec(req.VideoCodec), req.Method, req.BurnInSubtitle)
+	// (ARGY-59). And so is the source file's identity: a start that lands while
+	// an encode of a since-replaced file is still live — up to 30 minutes when
+	// paused — must not join it (ARGY-238). Identity rather than path, so a
+	// replacement that keeps its filename is caught too.
+	key := fmt.Sprintf("%s|%s|%s|%d|%s|%s|%s|%d", req.AccountID, req.ItemID, req.SourceIdentity,
+		int64(req.StartAt), req.Encoder, resolveCodec(req.VideoCodec), req.Method, req.BurnInSubtitle)
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])[:16]
 }

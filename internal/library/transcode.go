@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/Einlanzerous/argosy/internal/fileid"
 	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/Einlanzerous/argosy/internal/transcode"
@@ -106,7 +107,11 @@ func isHighBitDepth(pixFmt, profile, bitsPerRawSample string) bool {
 
 // transcodeSource is the resolved input for a transcode/remux decision.
 type transcodeSource struct {
-	path         string
+	path string
+	// identity is the fileid identity of path, read in the same query so the two
+	// describe one file. Sessions and stow jobs key on it because an item keeps
+	// its id when its file is replaced (ARGY-238).
+	identity     string
 	height       int
 	highBitDepth bool // source is >8-bit (10/12); blocks the H.264/HEVC copy path
 	video, audio string
@@ -163,11 +168,13 @@ func audioTracksFromTechnical(technical []byte) []transcode.AudioTrack {
 func (s *Store) itemSource(ctx context.Context, accountID, itemID string) (src transcodeSource, ok bool, err error) {
 	var root, rel string
 	var technical []byte
+	var contentHash *string
+	var fileSize *int64
 	e := s.pool.QueryRow(ctx,
-		`SELECT l.root_path, mi.file_path, mi.technical
+		`SELECT l.root_path, mi.file_path, mi.technical, mi.content_hash, mi.file_size
 		 FROM media_items mi JOIN libraries l ON l.id = mi.library_id
 		 WHERE l.account_id = $1 AND mi.id = $2`,
-		accountID, itemID).Scan(&root, &rel, &technical)
+		accountID, itemID).Scan(&root, &rel, &technical, &contentHash, &fileSize)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return transcodeSource{}, false, nil
 	}
@@ -181,6 +188,7 @@ func (s *Store) itemSource(ctx context.Context, accountID, itemID string) (src t
 	video, audio := codecsFromTechnical(technical)
 	return transcodeSource{
 		path:         abs,
+		identity:     fileid.Identity(contentHash, fileSize),
 		height:       videoHeightFromTechnical(technical),
 		highBitDepth: highBitDepthFromTechnical(technical),
 		video:        video,
@@ -264,6 +272,7 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		ItemID:         itemID,
 		AccountID:      account,
 		Source:         src.path,
+		SourceIdentity: src.identity,
 		StartAt:        startAt,
 		Encoder:        h.encoder,
 		SourceHeight:   src.height,

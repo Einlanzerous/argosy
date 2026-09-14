@@ -210,6 +210,7 @@ func (h *handlers) stowItem(w http.ResponseWriter, r *http.Request) {
 		AccountID:       account,
 		ItemID:          itemID,
 		Source:          src.path,
+		SourceIdentity:  src.identity,
 		SourceHeight:    src.height,
 		DurationSeconds: src.durationSeconds,
 		AudioTracks:     src.audioTracks,
@@ -288,6 +289,13 @@ func stowFileHandler(mgr *stow.Manager, authStore *auth.Store, logger *slog.Logg
 		}
 		if !ok {
 			httpx.Error(w, http.StatusNotFound, "not found")
+			return
+		}
+		// A package of a file the library has since replaced (ARGY-238). Gone
+		// rather than "not ready": it never will be, and the runner re-polls the
+		// job on a 410 to show why instead of a bare status code.
+		if job.Stale {
+			httpx.Error(w, http.StatusGone, job.Err)
 			return
 		}
 		if job.State != stow.StateReady {
