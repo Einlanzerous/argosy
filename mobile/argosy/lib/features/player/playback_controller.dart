@@ -11,6 +11,7 @@ import '../../api/device_preferences_copy.dart';
 import '../stow/offline_progress_queue.dart';
 import 'argosy_audio_handler.dart';
 import 'media_session_state.dart';
+import 'session_recovery.dart';
 import 'vtt.dart';
 
 /// Orchestrates a single playback session, mirroring the shipped web player
@@ -208,6 +209,17 @@ class PlaybackController extends ChangeNotifier
   String? get activeSubtitleId => _activeSubtitleId;
 
   Timer? _heartbeat;
+
+  /// When the heartbeat first saw playback stopped, or null while playing.
+  /// Measured by the heartbeat rather than the `pause` event on purpose: a pause
+  /// the platform makes (audio focus lost to a call, headphones pulled) changes
+  /// the player's value without posting that event, and a call is exactly the
+  /// long pause the keepalive exists for (ARGY-239).
+  DateTime? _pausedSince;
+
+  /// The retry budget for restarting a session that died under the player.
+  final _recovery = SessionRecovery();
+
   bool _disposed = false;
   bool _tornDown = false;
 
@@ -303,6 +315,8 @@ class PlaybackController extends ChangeNotifier
   /// Begins playback at [offset] seconds of absolute media time. For transcode
   /// this starts ffmpeg at that offset; for direct play it seeks the element.
   Future<void> start(double offset) async {
+    // A deliberate start is a fresh subject, so it gets a fresh retry budget.
+    _recovery.reset(offset);
     _player = BetterPlayerController(
       BetterPlayerConfiguration(
         fit: BoxFit.contain,
@@ -510,9 +524,6 @@ class PlaybackController extends ChangeNotifier
   Future<void> _startTranscodeAt(double offset) async {
     final old = _sessionId;
     _sessionId = null;
-    if (old != null) {
-      unawaited(transcodeApi.stopTranscode(old).catchError((_) {}));
-    }
     baseOffset = offset;
     _windowAtInitSeconds = 0;
     starting = true;
@@ -523,6 +534,18 @@ class PlaybackController extends ChangeNotifier
     _pushSession(phase: MediaPhase.starting, position: offset);
     _safeNotify();
     try {
+      if (old != null) {
+        // Await the stop before starting the replacement, as web does
+        // (ARGY-220). Session ids are deterministic in ⌊startAt⌋ and the server
+        // joins a live session with a matching id, so a restart in the same
+        // second (Retry, or recovering from an error just after a start) would
+        // rejoin the very session this DELETE is in flight to destroy, and be
+        // killed by it. Bounded, so a dead link can't hold the restart hostage.
+        await transcodeApi
+            .stopTranscode(old)
+            .timeout(const Duration(seconds: 5))
+            .catchError((_) {});
+      }
       final sess = await transcodeApi.startTranscode(
         itemId,
         transcodeStartRequest: TranscodeStartRequest(
@@ -536,11 +559,20 @@ class PlaybackController extends ChangeNotifier
       }
       _sessionId = sess.id;
       final playlistUrl = '$baseUrl${sess.playlistUrl}';
-      if (!await _waitForPlaylist(playlistUrl)) {
+      final ready = await _waitForPlaylist(playlistUrl);
+      if (_tornDown) {
+        // Torn down while this session was starting, ARGY-190's detached path
+        // included. Teardown stopped the session it knew about, which wasn't
+        // this one, and nothing will touch this one again. A recovery restart
+        // racing a teardown is the new way to get here.
+        _sessionId = null;
+        unawaited(transcodeApi.stopTranscode(sess.id).catchError((_) {}));
+        return;
+      }
+      if (!ready) {
         _fail('The transcoder is taking too long. Try again.');
         return;
       }
-      if (_disposed) return;
       await _player!.setupDataSource(
         BetterPlayerDataSource(
           BetterPlayerDataSourceType.network,
@@ -567,7 +599,7 @@ class PlaybackController extends ChangeNotifier
   Future<bool> _waitForPlaylist(String url) async {
     final headers = _authHeaders;
     for (var i = 0; i < 40; i++) {
-      if (_disposed) return false;
+      if (_tornDown) return false;
       try {
         final r = await http.get(Uri.parse(url), headers: headers);
         if (r.statusCode == 200) return true;
@@ -641,6 +673,9 @@ class PlaybackController extends ChangeNotifier
       await p.seekTo(Duration(milliseconds: (rel * 1000).round()));
       _flush();
     } else {
+      // The viewer asking for somewhere else earns a fresh retry budget: a count
+      // spent at an earlier position must not fail this one on its first error.
+      _recovery.reset(t);
       await _startTranscodeAt(t);
     }
   }
@@ -703,6 +738,7 @@ class PlaybackController extends ChangeNotifier
     errorMessage = null;
     _safeNotify();
     if (isTranscode) {
+      _recovery.reset(baseOffset);
       await _startTranscodeAt(baseOffset);
     } else {
       await _startDirect(position);
@@ -888,12 +924,29 @@ class PlaybackController extends ChangeNotifier
 
   void _startHeartbeat() {
     _heartbeat?.cancel();
+    _pausedSince = null;
     _heartbeat = Timer.periodic(const Duration(seconds: 10), (_) {
+      final now = DateTime.now();
       if (videoValue?.isPlaying ?? false) {
+        _pausedSince = null;
         _flush();
         // Correct any drift in the session's extrapolated position — mostly
         // from stalls, and from a transcode restart moving [baseOffset].
         _pushSession();
+        return;
+      }
+      _pausedSince ??= now;
+      // The progress report is also the only thing that touches the session
+      // server-side, so a pause that stopped reporting got its session reaped
+      // five minutes in, and playback died on resume (ARGY-239). Keep reporting
+      // the unchanged position. Teardown cancels this timer and clears the
+      // session, so a detached host still leaves it to the reaper (ARGY-190).
+      if (keepsPausedSessionAlive(
+        hasSession: _sessionId != null,
+        pausedSince: _pausedSince,
+        now: now,
+      )) {
+        _flush();
       }
     });
   }
@@ -965,9 +1018,11 @@ class PlaybackController extends ChangeNotifier
   void _onEvent(BetterPlayerEvent e) {
     switch (e.betterPlayerEventType) {
       case BetterPlayerEventType.exception:
-        // A restart tears the data source down and back up; only surface an
+        // A restart tears the data source down and back up; only react to an
         // exception when we're not mid-(re)start.
-        if (!starting) _fail('Playback stopped unexpectedly.');
+        if (!starting) _onPlaybackError();
+      case BetterPlayerEventType.progress:
+        _recovery.progressed(position);
       case BetterPlayerEventType.initialized:
         // The plugin has just taken its one and only duration reading; correct
         // it before any seek can be measured against it (ARGY-230). Runs again
@@ -1024,6 +1079,52 @@ class PlaybackController extends ChangeNotifier
         _flush();
       default:
         break;
+    }
+  }
+
+  /// Routes a player event as if the plugin had posted it. Tests drive the
+  /// controller through this, since no native player sits behind it.
+  @visibleForTesting
+  void handlePlayerEvent(BetterPlayerEvent e) => _onEvent(e);
+
+  /// A fatal player error. On a transcode the likeliest cause is the session
+  /// itself being gone, reaped after an uncovered pause or stopped server-side.
+  /// ExoPlayer plays out its buffer first, so the 404 lands minutes after the
+  /// session died. Restart at the playhead rather than dying (ARGY-239, web's
+  /// ARGY-107).
+  ///
+  /// The plugin doesn't pass the HTTP status through: its message is ExoPlayer's
+  /// `PlaybackException`, without the cause. So, like web, this recovers from
+  /// any fatal error on a transcode, and [SessionRecovery]'s cap stops one that
+  /// isn't transient from looping.
+  void _onPlaybackError() {
+    if (_tornDown) return;
+    if (!isTranscode || isOffline) {
+      _fail('Playback stopped unexpectedly.');
+      return;
+    }
+    final at = position;
+    switch (_recovery.onFatal(at)) {
+      case RecoveryDecision.duplicate:
+        return;
+      case RecoveryDecision.restart:
+        // Deferred: this is running inside the plugin's own listener, and the
+        // restart replaces the data source that listener belongs to.
+        Timer.run(() {
+          if (_tornDown) {
+            _recovery.settled();
+            return;
+          }
+          unawaited(_startTranscodeAt(at).whenComplete(_recovery.settled));
+        });
+      case RecoveryDecision.giveUp:
+        debugPrint(
+          'argosy: giving up after ${_recovery.attempts} recovery attempts '
+          'without playback',
+        );
+        // Don't bury what the last restart said ("Couldn't start the
+        // transcoder.") under a generic message.
+        if (!fatalError) _fail('Playback stopped unexpectedly.');
     }
   }
 
