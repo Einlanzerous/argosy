@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/Einlanzerous/argosy/internal/auth"
+	"github.com/Einlanzerous/argosy/internal/fileid"
 	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
 	"github.com/jackc/pgx/v5"
@@ -21,16 +22,20 @@ func (s *Store) subtitleTarget(ctx context.Context, accountID, itemID string) (s
 	var technical []byte
 	var movieTMDB, seriesTMDB *int64
 	var season, episode *int
+	var contentHash *string
+	var fileSize *int64
 	err := s.pool.QueryRow(ctx,
 		`SELECT l.root_path, mi.file_path, mi.technical, mi.tmdb_id,
-		        s.tmdb_id, se.season_number, e.episode_number
+		        s.tmdb_id, se.season_number, e.episode_number,
+		        mi.content_hash, mi.file_size
 		 FROM media_items mi
 		 JOIN libraries l ON l.id = mi.library_id
 		 LEFT JOIN episodes e ON e.media_item_id = mi.id
 		 LEFT JOIN seasons se ON se.id = e.season_id
 		 LEFT JOIN series s ON s.id = se.series_id
 		 WHERE l.account_id = $1 AND mi.id = $2`,
-		accountID, itemID).Scan(&root, &rel, &technical, &movieTMDB, &seriesTMDB, &season, &episode)
+		accountID, itemID).Scan(&root, &rel, &technical, &movieTMDB, &seriesTMDB, &season, &episode,
+		&contentHash, &fileSize)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return subtitle.Target{}, false, nil
 	}
@@ -43,6 +48,7 @@ func (s *Store) subtitleTarget(ctx context.Context, accountID, itemID string) (s
 	}
 	t := subtitle.Target{
 		ItemID:    itemID,
+		Identity:  fileid.Identity(contentHash, fileSize),
 		Path:      abs,
 		Technical: technical,
 	}

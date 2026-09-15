@@ -1180,7 +1180,9 @@ export interface paths {
          *     download resumes instead of restarting — the difference between a 2 GB
          *     download surviving a walk out of Wi-Fi range and not. Auth is the
          *     per-device token via the bearer header OR a `token` query param, matching
-         *     the stream endpoint. Returns 409 while the job is still packaging.
+         *     the stream endpoint. Returns 409 while the job is still packaging, and
+         *     410 once the item's file has been replaced since the package was made
+         *     (ARGY-238) — poll the job for the reason, and request the stow again.
          */
         get: operations["getStowFile"];
         put?: never;
@@ -4065,6 +4067,15 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description Job is not ready yet */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The package was made from a file the library has since replaced. It will never be served; the job reports failed with the reason. */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -161,6 +161,12 @@ func TestScanPrune(t *testing.T) {
 	}
 
 	// Second sweep: the movie is renamed and the episode file is gone entirely.
+	//
+	// The rename still prunes rather than carrying its identity (ARGY-238, see
+	// identity_test.go for the cases that do carry): its bytes are identical,
+	// but far below the 1 MiB a content match needs, since below that the
+	// partial hash covers the whole file and every tiny file would collide; and
+	// it sits at the library root, which is no film's own folder.
 	second := &fakeSource{files: map[string][]byte{
 		"Some Movie (2021) [1080p].mkv": []byte("movie-bytes"),
 	}}

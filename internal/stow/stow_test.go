@@ -326,7 +326,7 @@ func TestLiveIDsCoversUncollectedPackages(t *testing.T) {
 		t.Error("a ready, uncollected package is not live; Ballast would delete it before the device fetched it")
 	}
 
-	if err := f.mgr.setState(job.ID, StateFailed, "boom"); err != nil {
+	if err := f.mgr.setState(job.ID, job.SourceIdentity, StateFailed, "boom"); err != nil {
 		t.Fatal(err)
 	}
 	if live := f.mgr.LiveIDs(); live[job.ID] {
