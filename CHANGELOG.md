@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.4](https://github.com/Einlanzerous/argosy/compare/v0.29.3...v0.29.4) (2026-09-15)
+
+
+### Bug Fixes
+
+* **library:** keep an item's id when its file is replaced (ARGY-238) ([#249](https://github.com/Einlanzerous/argosy/issues/249)) ([1c594af](https://github.com/Einlanzerous/argosy/commit/1c594aff61864b627b5c8472808fe5692caa2e90))
+
 ## [0.29.3](https://github.com/Einlanzerous/argosy/compare/v0.29.2...v0.29.3) (2026-09-14)
 
 
