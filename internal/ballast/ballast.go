@@ -20,8 +20,15 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 )
+
+// statsTTL is how long a Stats() answer is reused. The numbers are a dashboard
+// gauge for The Helm / Drydock, not a control signal, so a few seconds of
+// staleness is invisible — while an uncached walk costs up to ~40ms on a full
+// cache, paid per caller per poll (ARGY-197).
+const statsTTL = 5 * time.Second
 
 // Live reports the session IDs currently in use; their cache directories must
 // never be purged. The transcode Manager satisfies this.
@@ -46,6 +53,14 @@ type Sweeper struct {
 	live        Live
 	logger      *slog.Logger
 	clock       func() time.Time
+
+	// statsMu guards the Stats() memo. It is held across the walk itself, so
+	// concurrent pollers on a cold memo share one walk instead of each paying
+	// for their own.
+	statsMu  sync.Mutex
+	statsAt  time.Time
+	statsVal Stats
+	statsOK  bool
 }
 
 // NewSweeper builds a Sweeper. budget<=0 disables size-based eviction (orphan
@@ -93,7 +108,12 @@ type entry struct {
 
 // Sweep reclaims orphaned directories and, if over budget, evicts LRU non-live
 // sessions until under budget. It returns the post-sweep cache stats.
+//
+// Sweep always walks the tree itself — eviction decisions must be exact, so it
+// never reads the Stats() memo. It does drop the memo, so the next Stats()
+// reflects whatever this pass reclaimed rather than the pre-eviction total.
 func (s *Sweeper) Sweep() Stats {
+	defer s.invalidateStats()
 	live := map[string]bool{}
 	if s.live != nil {
 		live = s.live.LiveIDs()
@@ -175,8 +195,29 @@ func (s *Sweeper) Sweep() Stats {
 }
 
 // Stats reports current cache usage without evicting anything (for The Helm /
-// Drydock to poll).
+// Drydock to poll). The answer is memoized for statsTTL so a short polling
+// interval, or several pollers, cannot drive the full-tree walk harder than the
+// Sweeper itself does.
 func (s *Sweeper) Stats() Stats {
+	s.statsMu.Lock()
+	defer s.statsMu.Unlock()
+	now := s.clock()
+	if s.statsOK && now.Sub(s.statsAt) < statsTTL {
+		return s.statsVal
+	}
+	st := s.walkStats()
+	s.statsVal, s.statsAt, s.statsOK = st, now, true
+	return st
+}
+
+func (s *Sweeper) invalidateStats() {
+	s.statsMu.Lock()
+	s.statsOK = false
+	s.statsMu.Unlock()
+}
+
+// walkStats is the uncached Stats() body: a full ReadDir + per-session walk.
+func (s *Sweeper) walkStats() Stats {
 	live := map[string]bool{}
 	if s.live != nil {
 		live = s.live.LiveIDs()
