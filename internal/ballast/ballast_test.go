@@ -116,3 +116,54 @@ func TestSweepSkipsWhenLiveSetUnknown(t *testing.T) {
 		t.Error("sweep purged a dir while the live set was unknown")
 	}
 }
+
+// Stats is memoized for statsTTL (ARGY-197): within the window a repeat call
+// answers from the memo without walking the tree, and once it lapses the next
+// call walks again.
+func TestStatsMemoizedWithinTTL(t *testing.T) {
+	root := t.TempDir()
+	mkSession(t, root, "a", 1000, 0)
+
+	now := time.Now()
+	s := NewSweeper(root, 0, time.Minute, fakeLive{ids: map[string]bool{"a": true}}, discardLogger(), 0)
+	s.clock = func() time.Time { return now }
+
+	first := s.Stats()
+	if first.TotalBytes != 1000 || first.SessionDirs != 1 || first.LiveDirs != 1 {
+		t.Fatalf("first Stats = %+v, want 1000 bytes / 1 dir / 1 live", first)
+	}
+
+	// A new session lands; inside the TTL the memo still answers.
+	mkSession(t, root, "b", 500, 0)
+	now = now.Add(statsTTL - time.Millisecond)
+	if got := s.Stats(); got != first {
+		t.Fatalf("Stats inside TTL = %+v, want memoized %+v", got, first)
+	}
+
+	// Past the TTL the tree is walked again and the new dir is counted.
+	now = now.Add(2 * time.Millisecond)
+	if got := s.Stats(); got.TotalBytes != 1500 || got.SessionDirs != 2 || got.LiveDirs != 1 {
+		t.Fatalf("Stats after TTL = %+v, want 1500 bytes / 2 dirs / 1 live", got)
+	}
+}
+
+// Sweep must not leave Stats reporting bytes it just reclaimed: an eviction
+// drops the memo so the next Stats reflects the post-sweep tree.
+func TestSweepInvalidatesStatsMemo(t *testing.T) {
+	root := t.TempDir()
+	mkSession(t, root, "oldest", 1000, 30*time.Second)
+	mkSession(t, root, "newest", 1000, 10*time.Second)
+
+	s := NewSweeper(root, 1500, time.Minute, fakeLive{ids: map[string]bool{}}, discardLogger(), 0)
+
+	if got := s.Stats(); got.TotalBytes != 2000 {
+		t.Fatalf("pre-sweep Stats = %+v, want 2000 bytes", got)
+	}
+	s.Sweep() // over budget: evicts "oldest"
+	if exists(root, "oldest") {
+		t.Fatal("sweep did not evict the LRU dir")
+	}
+	if got := s.Stats(); got.TotalBytes != 1000 || got.SessionDirs != 1 {
+		t.Fatalf("post-sweep Stats = %+v, want 1000 bytes / 1 dir (memo should have been dropped)", got)
+	}
+}
