@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.5](https://github.com/Einlanzerous/argosy/compare/v0.29.4...v0.29.5) (2026-10-16)
+
+
+### Bug Fixes
+
+* **transcode:** memoize Ballast Stats() behind a 5s TTL (ARGY-197) ([#251](https://github.com/Einlanzerous/argosy/issues/251)) ([6d458c4](https://github.com/Einlanzerous/argosy/commit/6d458c421b79b00b815b4725fd2f8673eb364ed4))
+
 ## [0.29.4](https://github.com/Einlanzerous/argosy/compare/v0.29.3...v0.29.4) (2026-09-15)
 
 
