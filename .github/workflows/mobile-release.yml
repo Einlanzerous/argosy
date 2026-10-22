@@ -1,8 +1,8 @@
 name: mobile-release
 
 # Builds + ships the Flutter app on the v* tags that release-please cuts.
-# - Android: signed APK attached to the GitHub Release; AAB to Play internal
-#   track (skipped until PLAY_SERVICE_ACCOUNT_JSON is set).
+# - Android: signed APK attached to the GitHub Release; AAB to the Play internal
+#   and closed (alpha) tracks (skipped until PLAY_SERVICE_ACCOUNT_JSON is set).
 # - iOS: TestFlight upload, skipped until the Apple secrets are set (ARGY-82).
 # See mobile/argosy/android/RELEASE.md for the secret/runbook details.
 #
@@ -104,7 +104,7 @@ jobs:
           gh release upload "${{ steps.ver.outputs.tag }}" \
             "argosy-${{ steps.ver.outputs.name }}.apk" --clobber
 
-      # --- Play internal track: only when the service account secret exists ---
+      # --- Play internal + closed tracks: only when the service account secret exists ---
       - name: gate on Play secret
         id: play
         run: |
@@ -120,6 +120,17 @@ jobs:
           packageName: dev.dodson.argosy
           releaseFiles: mobile/argosy/build/app/outputs/bundle/release/app-release.aab
           track: internal
+      # Play serves each tester the highest build among the tracks they are
+      # enrolled in, so a household member on an old closed-track release never
+      # saw internal builds and got no update (ARGY-250). Publish to alpha too.
+      - name: upload to Play closed (alpha) track
+        if: steps.play.outputs.enabled == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: mobile/argosy/play-service-account.json
+          packageName: dev.dodson.argosy
+          releaseFiles: mobile/argosy/build/app/outputs/bundle/release/app-release.aab
+          track: alpha
       - name: note when Play is skipped
         if: steps.play.outputs.enabled != 'true'
         run: echo "::notice::Play upload skipped — PLAY_SERVICE_ACCOUNT_JSON not set (see android/RELEASE.md)."
