@@ -270,9 +270,10 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
     final c = _controller;
     return [
       _Control('Subtitles', Icons.closed_caption_outlined,
-          () => _openTracks()),
+          () => _openTracks(TrackKind.subtitles)),
       if (c.audioTracks.length > 1)
-        _Control('Audio', Icons.graphic_eq, () => _openTracks()),
+        _Control('Audio', Icons.graphic_eq,
+            () => _openTracks(TrackKind.audio)),
       _Control(c.fitLabel, Icons.aspect_ratio, () {
         c.cycleFit();
         _scheduleHide();
@@ -283,9 +284,9 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
     ];
   }
 
-  Future<void> _openTracks() async {
+  Future<void> _openTracks(TrackKind kind) async {
     _hideTimer?.cancel();
-    await showTrackSheet(context, _controller);
+    await showTrackSheet(context, _controller, kind);
     if (!mounted) return;
     _rootFocus.requestFocus(); // reclaim D-pad after the sheet closes
     _scheduleHide();

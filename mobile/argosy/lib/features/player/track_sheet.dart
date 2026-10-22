@@ -5,22 +5,30 @@ import 'package:flutter/material.dart';
 import '../../theme/argosy_colors.dart';
 import 'playback_controller.dart';
 
-/// Bottom sheet for subtitle (and, when the HLS stream carries alternates,
-/// audio) track selection. Subtitle choices persist to the device's
+enum TrackKind { subtitles, audio }
+
+/// Bottom sheet for subtitle or audio track selection (ARGY-248: each has its
+/// own player button, so a wrong-language default is one tap from a fix rather
+/// than hidden under the CC list). Subtitle choices persist to the device's
 /// preferences via the controller.
-Future<void> showTrackSheet(BuildContext context, PlaybackController c) {
+Future<void> showTrackSheet(
+  BuildContext context,
+  PlaybackController c,
+  TrackKind kind,
+) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: ArgosyColors.panel,
     showDragHandle: true,
-    builder: (context) => _TrackSheet(controller: c),
+    builder: (context) => _TrackSheet(controller: c, kind: kind),
   );
 }
 
 class _TrackSheet extends StatefulWidget {
-  const _TrackSheet({required this.controller});
+  const _TrackSheet({required this.controller, required this.kind});
 
   final PlaybackController controller;
+  final TrackKind kind;
 
   @override
   State<_TrackSheet> createState() => _TrackSheetState();
@@ -69,26 +77,26 @@ class _TrackSheetState extends State<_TrackSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header('Subtitles'),
-            _option(
-              label: 'Off',
-              selected: _c.activeSubtitleId == null,
-              onTap: () => _selectSubtitle(null),
-            ),
-            for (final t in [...subsMain, if (_showAllSubs) ...subsMore])
+            if (widget.kind == TrackKind.subtitles) ...[
+              _header('Subtitles'),
               _option(
-                label: _subtitleLabel(t),
-                selected: _c.activeSubtitleId == t.id,
-                onTap: () => _selectSubtitle(t.id),
+                label: 'Off',
+                selected: _c.activeSubtitleId == null,
+                onTap: () => _selectSubtitle(null),
               ),
-            if (subsMore.isNotEmpty)
-              _moreOption(
-                count: subsMore.length,
-                open: _showAllSubs,
-                onTap: () => setState(() => _showAllSubs = !_showAllSubs),
-              ),
-            if (audio.length > 1) ...[
-              const SizedBox(height: 8),
+              for (final t in [...subsMain, if (_showAllSubs) ...subsMore])
+                _option(
+                  label: _subtitleLabel(t),
+                  selected: _c.activeSubtitleId == t.id,
+                  onTap: () => _selectSubtitle(t.id),
+                ),
+              if (subsMore.isNotEmpty)
+                _moreOption(
+                  count: subsMore.length,
+                  open: _showAllSubs,
+                  onTap: () => setState(() => _showAllSubs = !_showAllSubs),
+                ),
+            ] else ...[
               _header('Audio'),
               for (final a in [...audioMain, if (_showAllAudio) ...audioMore])
                 _option(

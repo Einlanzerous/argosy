@@ -340,19 +340,33 @@ class _PlayerControlsState extends State<PlayerControls> {
           ),
           Align(
             alignment: Alignment.centerRight,
-            child: IconButton(
-              tooltip: 'Subtitles & audio',
-              onPressed: () {
-                _hideTimer?.cancel();
-                showTrackSheet(context, _c).then((_) => _scheduleHide());
-              },
-              icon: const Icon(Icons.closed_caption_outlined,
-                  color: ArgosyColors.cream),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_c.audioTracks.length > 1)
+                  IconButton(
+                    tooltip: 'Audio',
+                    onPressed: () => _openTracks(TrackKind.audio),
+                    icon: const Icon(Icons.graphic_eq,
+                        color: ArgosyColors.cream),
+                  ),
+                IconButton(
+                  tooltip: 'Subtitles',
+                  onPressed: () => _openTracks(TrackKind.subtitles),
+                  icon: const Icon(Icons.closed_caption_outlined,
+                      color: ArgosyColors.cream),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _openTracks(TrackKind kind) {
+    _hideTimer?.cancel();
+    showTrackSheet(context, _c, kind).then((_) => _scheduleHide());
   }
 
   void _seekBy(double delta) {
