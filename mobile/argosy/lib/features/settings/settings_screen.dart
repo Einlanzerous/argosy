@@ -1,6 +1,7 @@
 import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../api/api_providers.dart';
 import '../../router/app_router.dart';
@@ -14,6 +15,7 @@ import '../auth/auth_controller.dart';
 import '../home/home_providers.dart';
 import '../stow/stow_controller.dart';
 import '../stow/stowed_item.dart';
+import 'app_info.dart';
 import 'link_device_sheet.dart';
 import 'settings_controller.dart';
 
@@ -229,9 +231,23 @@ class SettingsScreen extends ConsumerWidget {
                 confirmLabel: 'Sign out',
               ),
             ),
+            const SizedBox(height: 24),
+            _versionLine(ref.watch(packageInfoProvider).value),
           ],
         ),
       ),
+    );
+  }
+
+  /// The installed version, so an old install can be identified from a
+  /// screenshot (ARGY-249). Same `version (build)` form as TV's About screen.
+  Widget _versionLine(PackageInfo? info) {
+    return Text(
+      info == null
+          ? 'Argosy'
+          : 'Argosy ${info.version} (${info.buildNumber})',
+      textAlign: TextAlign.center,
+      style: const TextStyle(color: ArgosyColors.dim, fontSize: 12),
     );
   }
 
