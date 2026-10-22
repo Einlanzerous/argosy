@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.1](https://github.com/Einlanzerous/argosy/compare/v0.31.0...v0.31.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **ci:** upload the AAB once and assign it to internal and alpha (ARGY-250) ([#259](https://github.com/Einlanzerous/argosy/issues/259)) ([64089c7](https://github.com/Einlanzerous/argosy/commit/64089c77926a201921da9b5e3fc26d825c9ee7f4))
+
 ## [0.31.0](https://github.com/Einlanzerous/argosy/compare/v0.30.0...v0.31.0) (2026-10-22)
 
 
