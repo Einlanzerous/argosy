@@ -107,8 +107,21 @@ class AuthController extends Notifier<AuthStatus> {
           .login(LoginRequest(email: email, password: password));
       return res?.profiles ?? const [];
     } catch (e) {
-      throw mapApiError(e);
+      throw mapCredentialError(e);
     }
+  }
+
+  /// Credential endpoints answer a wrong email/password with 401, but there is
+  /// no session to expire here — [mapApiError]'s "session has expired" wording
+  /// told a first-time user to sign in again when they'd just typed it wrong.
+  static ApiFailure mapCredentialError(Object e) {
+    if (e is ApiException && e.code == 401) {
+      return const ApiFailure(
+        'Incorrect email or password.',
+        statusCode: 401,
+      );
+    }
+    return mapApiError(e);
   }
 
   /// Step 2 — register this device against the chosen profile and persist the
@@ -145,7 +158,7 @@ class AuthController extends Notifier<AuthStatus> {
       await ref.read(tokenStoreProvider).setToken(token);
       state = AuthStatus.authenticated;
     } catch (e) {
-      throw mapApiError(e);
+      throw mapCredentialError(e);
     }
   }
 
