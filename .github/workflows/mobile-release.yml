@@ -112,25 +112,20 @@ jobs:
       - name: write Play service account
         if: steps.play.outputs.enabled == 'true'
         run: printf '%s' "$PLAY_JSON" > play-service-account.json
-      - name: upload to Play internal track
-        if: steps.play.outputs.enabled == 'true'
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJson: mobile/argosy/play-service-account.json
-          packageName: dev.dodson.argosy
-          releaseFiles: mobile/argosy/build/app/outputs/bundle/release/app-release.aab
-          track: internal
+      # One upload, several tracks: Play rejects a second upload of the same
+      # versionCode ("Version code N has already been used"), so internal and
+      # alpha are assigned from a single AAB rather than uploaded twice.
       # Play serves each tester the highest build among the tracks they are
       # enrolled in, so a household member on an old closed-track release never
-      # saw internal builds and got no update (ARGY-250). Publish to alpha too.
-      - name: upload to Play closed (alpha) track
+      # saw internal builds and got no update (ARGY-250).
+      - name: upload to Play internal + closed (alpha) tracks
         if: steps.play.outputs.enabled == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: mobile/argosy/play-service-account.json
           packageName: dev.dodson.argosy
           releaseFiles: mobile/argosy/build/app/outputs/bundle/release/app-release.aab
-          track: alpha
+          tracks: internal,alpha
       - name: note when Play is skipped
         if: steps.play.outputs.enabled != 'true'
         run: echo "::notice::Play upload skipped — PLAY_SERVICE_ACCOUNT_JSON not set (see android/RELEASE.md)."
