@@ -40,6 +40,7 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   List<UserProfile> _profiles = const [];
   String? _selectedProfileId;
   bool _busy = false;
+  bool _showPassword = false;
   String? _error;
 
   @override
@@ -321,10 +322,20 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
           const SizedBox(height: 14),
           TextField(
             controller: _password,
-            obscureText: true,
+            obscureText: !_showPassword,
             textInputAction: TextInputAction.go,
             onSubmitted: (_) => _submitSignIn(),
-            decoration: const InputDecoration(labelText: 'Password'),
+            decoration: InputDecoration(
+              labelText: 'Password',
+              suffixIcon: IconButton(
+                tooltip: _showPassword ? 'Hide password' : 'Show password',
+                icon: Icon(
+                  _showPassword ? Icons.visibility_off : Icons.visibility,
+                ),
+                onPressed: () =>
+                    setState(() => _showPassword = !_showPassword),
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           _PrimaryButton(
@@ -493,8 +504,13 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
             ],
           ),
           const SizedBox(height: 16),
+          // A first-time user has no signed-in device to approve a code, so
+          // email sign-in is a real button here, not a footnote.
+          OutlinedButton(
+            onPressed: _useTypedSignIn,
+            child: const Text('Sign in with email instead'),
+          ),
           _BackLink(label: 'Enter address manually', onPressed: _useManualServer),
-          _BackLink(label: 'Sign in with email instead', onPressed: _useTypedSignIn),
         ];
     }
   }
