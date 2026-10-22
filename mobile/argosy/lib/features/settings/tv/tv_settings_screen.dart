@@ -2,7 +2,6 @@ import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../api/api_providers.dart';
 import '../../../theme/argosy_colors.dart';
@@ -14,6 +13,7 @@ import '../../../util/format.dart';
 import '../../account/account_providers.dart';
 import '../../auth/auth_controller.dart';
 import '../../beacon/beacon_providers.dart';
+import '../app_info.dart';
 import '../settings_controller.dart';
 
 /// The Bridge on the 10-foot screen (ARGY-51 / `TVSettings.dc.html`): a category
@@ -1327,14 +1327,10 @@ class _AccountContent extends ConsumerWidget {
 
 // --- About -------------------------------------------------------------------
 
-/// App version/build for the About screen. Loaded once from the platform.
-final _packageInfoProvider =
-    FutureProvider<PackageInfo>((ref) => PackageInfo.fromPlatform());
-
 class _AboutContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final info = ref.watch(_packageInfoProvider);
+    final info = ref.watch(packageInfoProvider);
     final version = info.value;
 
     return _ContentScroll(
