@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0](https://github.com/Einlanzerous/argosy/compare/v0.30.0...v0.31.0) (2026-10-22)
+
+
+### Features
+
+* **mobile:** show the app version at the bottom of Settings (ARGY-249) ([#256](https://github.com/Einlanzerous/argosy/issues/256)) ([2c100e7](https://github.com/Einlanzerous/argosy/commit/2c100e7754a3da0e945f0a661f36b1f483fec727))
+
 ## [0.30.0](https://github.com/Einlanzerous/argosy/compare/v0.29.5...v0.30.0) (2026-10-22)
 
 
