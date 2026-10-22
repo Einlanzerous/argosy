@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.30.0](https://github.com/Einlanzerous/argosy/compare/v0.29.5...v0.30.0) (2026-10-22)
+
+
+### Features
+
+* **player:** give audio its own button on phone and TV (ARGY-248) ([#255](https://github.com/Einlanzerous/argosy/issues/255)) ([53091f1](https://github.com/Einlanzerous/argosy/commit/53091f1d2708f9c2c74fd1a7148b60b9b0ae6a42))
+
+
+### Bug Fixes
+
+* **mobile:** clear wrong-password message, show-password toggle, email sign-in button (ARGY-247) ([#253](https://github.com/Einlanzerous/argosy/issues/253)) ([4ad613c](https://github.com/Einlanzerous/argosy/commit/4ad613cbf0aa957e6a8ca1d92a5a64363e859d46))
+
 ## [0.29.5](https://github.com/Einlanzerous/argosy/compare/v0.29.4...v0.29.5) (2026-10-16)
 
 
