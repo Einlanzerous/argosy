@@ -2,7 +2,8 @@
 
 `mobile-release.yml` builds a **signed** APK + AAB on every `v*` tag (the tags
 release-please cuts), attaches the APK to that GitHub Release, and — once a Play
-service account is configured — pushes the AAB to the Play **internal** track.
+service account is configured — pushes the AAB to the Play **internal** and
+**closed (`alpha`)** tracks.
 
 Release builds are signed with an **upload keystore** read from
 `android/key.properties` (gitignored). When that file is absent (local dev, CI
@@ -120,8 +121,12 @@ Developer account owner.
    `gh secret set PLAY_SERVICE_ACCOUNT_JSON < service-account.json`.
 
 Once `PLAY_SERVICE_ACCOUNT_JSON` is set, every release-please release uploads the
-AAB to the internal track automatically (`r0adkll/upload-google-play`). Promote
-internal → closed → production from the Play Console when ready.
+AAB to the internal **and** closed (`alpha`) tracks automatically
+(`r0adkll/upload-google-play`). Internal is the instant check on the dev phone;
+household testers belong on the closed track. Play serves a tester the highest
+build among the tracks they are enrolled in, so a tester left on an old closed
+release won't see internal builds — put them on `alpha` and have them accept its
+opt-in link. Promote to production from the Play Console when ready.
 
 ## Versioning
 
