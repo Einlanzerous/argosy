@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.32.0](https://github.com/Einlanzerous/argosy/compare/v0.31.1...v0.32.0) (2026-10-23)
+
+
+### Features
+
+* **detail:** show per-episode ratings on phone and TV (ARGY-256) ([#263](https://github.com/Einlanzerous/argosy/issues/263)) ([a4bea1f](https://github.com/Einlanzerous/argosy/commit/a4bea1fd9ec2a5947a3f8258cb4cbdab26f562c7))
+* **tv:** mark episodes and movies watched or unwatched (ARGY-257) ([#265](https://github.com/Einlanzerous/argosy/issues/265)) ([d6b9362](https://github.com/Einlanzerous/argosy/commit/d6b9362f4ff5d76a0b31db6bf3bc9d1fa8bd54f3))
+
+
+### Bug Fixes
+
+* cross-client parity batch (ARGY-259) ([#262](https://github.com/Einlanzerous/argosy/issues/262)) ([ac510ed](https://github.com/Einlanzerous/argosy/commit/ac510edac122413bb57d5dba0ecee6a4d767e546))
+* **mobile:** show an error, not an empty grid, when a Library request fails (ARGY-251) ([#264](https://github.com/Einlanzerous/argosy/issues/264)) ([4ff5e9e](https://github.com/Einlanzerous/argosy/commit/4ff5e9e5f9779d915455a8a1b27e23a2051076c5))
+
 ## [0.31.1](https://github.com/Einlanzerous/argosy/compare/v0.31.0...v0.31.1) (2026-10-22)
 
 
