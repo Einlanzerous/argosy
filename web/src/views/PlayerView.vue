@@ -213,6 +213,11 @@ const prefs = ref<DevicePreferences | null>(null)
 // runtime. creditsStart is the single seam where the chapter-marker follow-up can
 // swap this heuristic for a real marker. Manual "Play Next" jumps immediately.
 const CREDITS_LEAD_SECONDS = 40
+
+// How long a paused player keeps touching its transcode session. Matches the
+// mobile client's pausedKeepaliveLimit (ARGY-259).
+const PAUSED_KEEPALIVE_LIMIT_MS = 30 * 60 * 1000
+let pausedSince: number | null = null
 // How long the card counts down once it opens — a real timer, not a function of
 // the playhead (ARGY-207). Deriving it from remaining time only looked right on a
 // straight playthrough, where the card happens to open exactly this far ahead of
@@ -750,6 +755,7 @@ function bindVideo(el: HTMLVideoElement): void {
   })
   el.addEventListener('play', () => {
     playing.value = true
+    pausedSince = null
     // NB: recovery is re-armed by forward progress in `timeupdate`, not here.
     // `play` fires when playback is *requested*, which a restart always does, so
     // clearing the flag here re-armed the guard before a frame decoded (ARGY-220).
@@ -757,6 +763,7 @@ function bindVideo(el: HTMLVideoElement): void {
   })
   el.addEventListener('pause', () => {
     playing.value = false
+    pausedSince = Date.now()
     // Paused → keep the controls up so they're there when you come back.
     controlsVisible.value = true
     if (hideTimer) clearTimeout(hideTimer)
@@ -790,9 +797,17 @@ function bindVideo(el: HTMLVideoElement): void {
   // Throttled heartbeat while open. While playing, report progress; while paused,
   // still send a keepalive if the tab is visible so the idle reaper doesn't purge
   // the session out from under the viewer (ARGY-107). Hidden/closed tabs fall
-  // through to the reaper and rely on the on-resume recovery above.
+  // through to the reaper and rely on the on-resume recovery above. The keepalive
+  // stops after PAUSED_KEEPALIVE_LIMIT_MS (mobile's pausedKeepaliveLimit) so a tab
+  // left paused overnight doesn't hold an ffmpeg session; playing again resumes the
+  // heartbeat, and a session reaped meanwhile goes through the same recovery.
   heartbeat = setInterval(() => {
-    if (!el.paused || document.visibilityState === 'visible') flush()
+    if (!el.paused) {
+      flush()
+    } else if (document.visibilityState === 'visible') {
+      pausedSince ??= Date.now()
+      if (Date.now() - pausedSince < PAUSED_KEEPALIVE_LIMIT_MS) flush()
+    }
   }, 10000)
 }
 
