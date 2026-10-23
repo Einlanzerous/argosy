@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../api/api_providers.dart';
 import '../../../api/artwork.dart';
 import '../../../router/app_router.dart';
 import '../../../theme/argosy_colors.dart';
@@ -70,17 +71,37 @@ typedef _Playable = ({EpisodeSummary ep, int seasonNumber});
 /// the 1920×1080 [TvStage] gives the column.
 const double _episodeFocusInset = 22;
 
-class _Series extends StatefulWidget {
+class _Series extends ConsumerStatefulWidget {
   const _Series({required this.series});
 
   final SeriesDetail series;
 
   @override
-  State<_Series> createState() => _SeriesState();
+  ConsumerState<_Series> createState() => _SeriesState();
 }
 
-class _SeriesState extends State<_Series> {
+class _SeriesState extends ConsumerState<_Series> {
   late int _activeSeason = _resumeSeasonIndex;
+
+  /// Optimistic watched overrides keyed by backing-file id (ARGY-257), as on the
+  /// phone detail. Not an invalidate-and-refetch: that swaps the screen for the
+  /// loading spinner and drops focus off the toggle that was just pressed.
+  final Map<String, bool> _watchedOverrides = {};
+
+  bool _isWatched(EpisodeSummary e) {
+    final id = e.mediaItemId;
+    if (id != null && _watchedOverrides.containsKey(id)) {
+      return _watchedOverrides[id]!;
+    }
+    return e.watched ?? false;
+  }
+
+  Future<void> _setWatched(String mediaItemId, bool next) async {
+    await ref
+        .read(libraryApiProvider)
+        .setWatched(mediaItemId, WatchedUpdate(watched: next));
+    if (mounted) setState(() => _watchedOverrides[mediaItemId] = next);
+  }
 
   /// The season tab to open on: the one holding the resume episode (mapping its
   /// 1-indexed seasonNumber → the matching season index), else 0 so a fresh,
@@ -213,6 +234,8 @@ class _SeriesState extends State<_Series> {
                       onSelectSeason: (i) => setState(() => _activeSeason = i),
                       firstEpisodeFocus: _firstEpisodeFocus,
                       onEpisodesKey: _onEpisodesKey,
+                      isWatched: _isWatched,
+                      onSetWatched: _setWatched,
                     ),
             ),
           ],
@@ -356,7 +379,12 @@ class _Episodes extends StatelessWidget {
     required this.onSelectSeason,
     required this.firstEpisodeFocus,
     required this.onEpisodesKey,
+    required this.isWatched,
+    required this.onSetWatched,
   });
+
+  final bool Function(EpisodeSummary) isWatched;
+  final Future<void> Function(String mediaItemId, bool watched) onSetWatched;
 
   final SeriesDetail series;
   final SeasonSummary season;
@@ -444,10 +472,12 @@ class _Episodes extends StatelessWidget {
               ),
               itemCount: groups.length,
               separatorBuilder: (_, _) => const SizedBox(height: 16),
-              itemBuilder: (_, i) => _EpisodeTile(
+              itemBuilder: (_, i) => _EpisodeRow(
                 episodes: groups[i],
                 seasonNumber: season.seasonNumber,
                 focusNode: i == 0 ? firstEpisodeFocus : null,
+                isWatched: isWatched,
+                onSetWatched: onSetWatched,
               ),
             ),
           ),
@@ -497,16 +527,71 @@ class _SeasonTab extends StatelessWidget {
   }
 }
 
-class _EpisodeTile extends ConsumerWidget {
-  const _EpisodeTile({
+/// An episode row plus its watched toggle (ARGY-257). Owns the two focus nodes
+/// that let RIGHT / LEFT hop between them explicitly: the toggle floats over the
+/// row's own rect, so directional traversal can't tell which is "to the right".
+class _EpisodeRow extends StatefulWidget {
+  const _EpisodeRow({
     required this.episodes,
     required this.seasonNumber,
+    required this.isWatched,
+    required this.onSetWatched,
     this.focusNode,
   });
 
   final List<EpisodeSummary> episodes;
   final int seasonNumber;
+  final bool Function(EpisodeSummary) isWatched;
+  final Future<void> Function(String mediaItemId, bool watched) onSetWatched;
   final FocusNode? focusNode;
+
+  @override
+  State<_EpisodeRow> createState() => _EpisodeRowState();
+}
+
+class _EpisodeRowState extends State<_EpisodeRow> {
+  FocusNode? _ownRow;
+  final FocusNode _toggle = FocusNode(debugLabel: 'episode-watched-toggle');
+
+  FocusNode get _row =>
+      widget.focusNode ?? (_ownRow ??= FocusNode(debugLabel: 'episode-row'));
+
+  @override
+  void dispose() {
+    _ownRow?.dispose();
+    _toggle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _EpisodeTile(
+      episodes: widget.episodes,
+      seasonNumber: widget.seasonNumber,
+      isWatched: widget.isWatched,
+      onSetWatched: widget.onSetWatched,
+      focusNode: _row,
+      toggleFocus: _toggle,
+    );
+  }
+}
+
+class _EpisodeTile extends ConsumerWidget {
+  const _EpisodeTile({
+    required this.episodes,
+    required this.seasonNumber,
+    required this.isWatched,
+    required this.onSetWatched,
+    required this.focusNode,
+    required this.toggleFocus,
+  });
+
+  final bool Function(EpisodeSummary) isWatched;
+  final Future<void> Function(String mediaItemId, bool watched) onSetWatched;
+  final List<EpisodeSummary> episodes;
+  final int seasonNumber;
+  final FocusNode focusNode;
+  final FocusNode toggleFocus;
 
   EpisodeSummary get _rep => episodes.first;
   bool get _combined => episodes.length > 1;
@@ -544,7 +629,7 @@ class _EpisodeTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playable = _rep.mediaItemId != null;
-    final watched = _rep.watched ?? false;
+    final watched = episodes.every(isWatched);
     final inProgress = _percent > 0 && !watched;
     final still = ref.watch(artworkResolverProvider)(_still);
     final runtime = formatRuntime(_rep.durationSeconds);
@@ -558,9 +643,22 @@ class _EpisodeTile extends ConsumerWidget {
         ? '${formatRuntime((_rep.durationSeconds ?? 0) - (_rep.positionSeconds ?? 0))} left'
         : 'Not started';
 
-    return Opacity(
+    final tile = Opacity(
       opacity: playable ? 1 : 0.55,
-      child: TvFocusable(
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: (_, e) {
+          if (playable &&
+              e is KeyDownEvent &&
+              e.logicalKey == LogicalKeyboardKey.arrowRight &&
+              toggleFocus.context != null) {
+            toggleFocus.requestFocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: TvFocusable(
         borderRadius: 16,
         scale: 1.02,
         focusOffset: 4,
@@ -701,7 +799,125 @@ class _EpisodeTile extends ConsumerWidget {
                     color: ArgosyColors.mute,
                   ),
                 ),
+              // Room for the watched toggle floated over this edge.
+              if (playable) const SizedBox(width: 72),
             ],
+          ),
+        ),
+        ),
+      ),
+    );
+
+    if (!playable) return tile;
+    // The toggle floats over the row's right edge (the row reserves the room
+    // beside its runtime) rather than sitting next to it, so the row keeps the
+    // design's full width. RIGHT from the row reaches it; the row stays the
+    // Select-to-play target, so a stray OK press never flips watched state
+    // (ARGY-257).
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        tile,
+        Positioned(
+          right: 16,
+          top: 0,
+          bottom: 0,
+          child: Center(
+            child: _EpisodeWatchedToggle(
+              watched: watched,
+              focusNode: toggleFocus,
+              rowFocus: focusNode,
+              onSet: (next) async {
+                for (final e in episodes) {
+                  await onSetWatched(e.mediaItemId!, next);
+                }
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A square D-pad toggle over an episode row's right edge: SELECT marks the episode
+/// watched or unwatched. LEFT returns to the row it belongs to — the list's own
+/// LEFT interceptor would otherwise jump past it to the primary action.
+class _EpisodeWatchedToggle extends StatefulWidget {
+  const _EpisodeWatchedToggle({
+    required this.watched,
+    required this.onSet,
+    required this.focusNode,
+    required this.rowFocus,
+  });
+
+  final FocusNode focusNode;
+  final FocusNode rowFocus;
+  final bool watched;
+  final Future<void> Function(bool watched) onSet;
+
+  @override
+  State<_EpisodeWatchedToggle> createState() => _EpisodeWatchedToggleState();
+}
+
+class _EpisodeWatchedToggleState extends State<_EpisodeWatchedToggle> {
+  bool _busy = false;
+
+  Future<void> _toggle() async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await widget.onSet(!widget.watched);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't update watched state"),
+            backgroundColor: ArgosyColors.danger,
+          ),
+        );
+      }
+    } finally {
+      _busy = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final watched = widget.watched;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, e) {
+        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          widget.rowFocus.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Semantics(
+        button: true,
+        label: watched ? 'Mark unwatched' : 'Mark watched',
+        child: TvFocusable(
+          borderRadius: 13,
+          scale: 1.05,
+          focusNode: widget.focusNode,
+          ensureVisibleOnFocus: true,
+          onSelect: _toggle,
+          child: Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0x66141413),
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(color: ArgosyColors.line3),
+            ),
+            child: Icon(
+              watched ? Icons.check_circle : Icons.check_circle_outline,
+              size: 28,
+              color: watched ? ArgosyColors.accent : ArgosyColors.cream,
+            ),
           ),
         ),
       ),
