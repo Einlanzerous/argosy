@@ -178,8 +178,21 @@ async function rebuild(): Promise<void> {
   await refresh()
 }
 
+// The SPA is embedded in the server binary, so the server's build version is the
+// web app's version too (ARGY-259). Shown so an old deploy is identifiable.
+const appVersion = ref('')
+async function loadVersion(): Promise<void> {
+  try {
+    const { data } = await api.GET('/healthz')
+    if (data?.version) appVersion.value = data.version
+  } catch {
+    // Cosmetic only; the line just stays hidden.
+  }
+}
+
 onMounted(() => {
   setPage('Settings')
+  void loadVersion()
   if (canManageServer.value) {
     void refresh()
     void loadLibraries()
@@ -403,10 +416,18 @@ onUnmounted(() => {
         </div>
       </form>
     </div>
+
+    <p v-if="appVersion" class="app-version">Argosy {{ appVersion }}</p>
   </div>
 </template>
 
 <style scoped>
+.app-version {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--arg-dim, #8a8a95);
+}
 .settings {
   max-width: 760px;
 }
