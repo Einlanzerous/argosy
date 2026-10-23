@@ -633,6 +633,7 @@ class _EpisodeTile extends ConsumerWidget {
     final inProgress = _percent > 0 && !watched;
     final still = ref.watch(artworkResolverProvider)(_still);
     final runtime = formatRuntime(_rep.durationSeconds);
+    final rating = episodeRatingLabel(episodes.map((e) => e.rating));
     final overview = _overview;
 
     final status = !playable
@@ -758,6 +759,19 @@ class _EpisodeTile extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        if (rating != null) ...[
+                          const SizedBox(width: 12),
+                          Text(
+                            rating,
+                            key: const ValueKey('episode-rating'),
+                            style: const TextStyle(
+                              fontFamily: 'Archivo',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: ArgosyColors.accent,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     if (overview != null) ...[

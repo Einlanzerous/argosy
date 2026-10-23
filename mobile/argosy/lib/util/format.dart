@@ -154,3 +154,13 @@ String? yearRatingSubtitle(int? year, num? rating) {
   if (rating != null && rating > 0) parts.add('★ ${rating.toStringAsFixed(1)}');
   return parts.isEmpty ? null : parts.join('  ·  ');
 }
+
+/// An episode row rating badge, e.g. "★ 8.1": the first rated episode in the row
+/// represents it (a combined multi-episode rip); null when none is rated so the
+/// row omits the badge. Mirrors web's rowRating (ARGY-118).
+String? episodeRatingLabel(Iterable<num?> ratings) {
+  for (final r in ratings) {
+    if (r != null) return '★ ${r.toStringAsFixed(1)}';
+  }
+  return null;
+}
