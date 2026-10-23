@@ -2,6 +2,7 @@ import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../api/api_providers.dart';
 import '../../../router/app_router.dart';
 import '../../../theme/argosy_colors.dart';
 import '../../../tv/tv_backdrop_scaffold.dart';
@@ -160,6 +161,7 @@ class _Movie extends StatelessWidget {
               itemId: movie.id,
               resumable: _resumable,
               progress: data.progress,
+              watched: data.progress?.watched ?? false,
             ),
             if (_resumable && data.progress != null) ...[
               const SizedBox(height: 22),
@@ -269,22 +271,57 @@ class _CastLine extends StatelessWidget {
   }
 }
 
-class _Actions extends StatefulWidget {
+class _Actions extends ConsumerStatefulWidget {
   const _Actions({
     required this.itemId,
     required this.resumable,
     required this.progress,
+    required this.watched,
   });
 
   final String itemId;
   final bool resumable;
   final PlayState? progress;
+  final bool watched;
 
   @override
-  State<_Actions> createState() => _ActionsState();
+  ConsumerState<_Actions> createState() => _ActionsState();
 }
 
-class _ActionsState extends State<_Actions> {
+class _ActionsState extends ConsumerState<_Actions> {
+  /// Set once the viewer toggles watched (ARGY-257). Held here rather than by
+  /// invalidating [movieDetailProvider]: a reload swaps the whole screen for
+  /// the loading spinner, which would drop D-pad focus off the button that was
+  /// just pressed. The layout (Resume / Play from start) is left as loaded so
+  /// the row does not shift under the focused button.
+  bool? _watchedOverride;
+  bool _busy = false;
+
+  bool get _watched => _watchedOverride ?? widget.watched;
+
+  Future<void> _toggleWatched() async {
+    if (_busy) return;
+    _busy = true;
+    final next = !_watched;
+    try {
+      await ref
+          .read(libraryApiProvider)
+          .setWatched(widget.itemId, WatchedUpdate(watched: next));
+      if (mounted) setState(() => _watchedOverride = next);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't update watched state"),
+            backgroundColor: ArgosyColors.danger,
+          ),
+        );
+      }
+    } finally {
+      _busy = false;
+    }
+  }
+
   /// The primary action — Resume, or Play when there's nothing to resume.
   final FocusNode _primary = FocusNode(debugLabel: 'tv-movie-primary-action');
 
@@ -334,6 +371,12 @@ class _ActionsState extends State<_Actions> {
           icon: Icons.add,
           label: 'Add to Vault',
           onSelect: () => AddToVaultButton.showFor(context, movieId: itemId),
+        ),
+        const SizedBox(width: 18),
+        TvButton(
+          label: _watched ? 'Watched' : 'Mark watched',
+          icon: _watched ? Icons.check_circle : Icons.check_circle_outline,
+          onSelect: _toggleWatched,
         ),
       ],
     );
