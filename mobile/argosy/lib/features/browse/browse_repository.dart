@@ -21,7 +21,20 @@ class BrowseRepository {
 
   /// Movies + series across all libraries for the given [filter], merged and
   /// re-sorted client-side so ordering is consistent across libraries.
+  ///
+  /// All-or-nothing (ARGY-251): if any library's request fails the whole call
+  /// throws an [ApiFailure], so the screen shows an error with Retry rather
+  /// than an empty or silently partial grid. A library that answers with zero
+  /// items is not a failure and still reaches the empty state.
   Future<List<MediaCard>> browse(BrowseFilter filter) async {
+    try {
+      return await _browse(filter);
+    } catch (e) {
+      throw mapApiError(e);
+    }
+  }
+
+  Future<List<MediaCard>> _browse(BrowseFilter filter) async {
     final libs = await libraries();
     final cards = <MediaCard>[];
 
@@ -38,8 +51,7 @@ class BrowseRepository {
               yearFrom: filter.yearFrom,
               yearTo: filter.yearTo,
             )
-            .then((p) => p?.items ?? const <MediaItemSummary>[])
-            .catchError((_) => const <MediaItemSummary>[])),
+            .then((p) => p?.items ?? const <MediaItemSummary>[])),
       );
       for (final page in pages) {
         cards.addAll(page.map(MediaCard.fromSummary));
@@ -62,8 +74,7 @@ class BrowseRepository {
               yearFrom: filter.yearFrom,
               yearTo: filter.yearTo,
             )
-            .then((p) => p?.items ?? const <SeriesSummary>[])
-            .catchError((_) => const <SeriesSummary>[])),
+            .then((p) => p?.items ?? const <SeriesSummary>[])),
       );
       for (final page in pages) {
         cards.addAll(page.map(MediaCard.fromSeries));

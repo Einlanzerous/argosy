@@ -294,9 +294,12 @@ Future<List<HomeRow>> _buildGenreRows(
       .toList();
   final rows = await Future.wait(
     top.map((f) async {
-      final cards = await repo.browse(
-        BrowseFilter(genres: [f.value], sort: BrowseSort.rating),
-      );
+      // A decorative row must never take Home down with it: browse() now
+      // throws on a failed request (ARGY-251), so this caller absorbs it and
+      // the empty row is filtered out below.
+      final cards = await repo
+          .browse(BrowseFilter(genres: [f.value], sort: BrowseSort.rating))
+          .catchError((_) => const <MediaCard>[]);
       return HomeRow(
         title: f.value,
         cards: cards.take(12).toList(),
