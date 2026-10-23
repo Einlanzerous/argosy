@@ -64,10 +64,19 @@ export const useSessionStore = defineStore('session', () => {
 
   // Step 1: authenticate the account and list its profiles.
   async function login(email: string, password: string): Promise<UserProfile[]> {
-    const { data, error } = await api.POST('/api/v1/auth/login', {
-      body: { email, password },
-    })
-    if (error || !data) throw new Error('Invalid email or password.')
+    let res
+    try {
+      res = await api.POST('/api/v1/auth/login', { body: { email, password } })
+    } catch {
+      throw new Error("Couldn't reach the server. Check your connection and try again.")
+    }
+    const { data, error, response } = res
+    if (error || !data) {
+      if (response.status === 401 || response.status === 403)
+        throw new Error('Incorrect email or password.')
+      if (response.status >= 500) throw new Error('The server had a problem. Try again shortly.')
+      throw new Error('Could not sign in. Try again.')
+    }
     profiles.value = data.profiles
     return data.profiles
   }
