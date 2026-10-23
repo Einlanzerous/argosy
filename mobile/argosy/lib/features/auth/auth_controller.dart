@@ -187,8 +187,18 @@ class AuthController extends Notifier<AuthStatus> {
             DeviceSwitchRequest(userId: userId, password: password),
           );
     } catch (e) {
-      throw mapApiError(e);
+      throw mapSwitchProfileError(e);
     }
+  }
+
+  /// A wrong admin password answers 403, never 401 (a 401 would sign the device
+  /// out), and [mapApiError] words 403 as a permissions problem. Here the only
+  /// 403 is the password check, so say that (ARGY-259).
+  static ApiFailure mapSwitchProfileError(Object e) {
+    if (e is ApiException && e.code == 403) {
+      return const ApiFailure('Incorrect password.', statusCode: 403);
+    }
+    return mapApiError(e);
   }
 
   /// Sign out / re-pair. Keeps the server address (only the token is cleared).

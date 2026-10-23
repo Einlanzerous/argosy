@@ -15,4 +15,17 @@ void main() {
     final failure = AuthController.mapCredentialError(ApiException(500, 'x'));
     expect(failure.message, 'The server had a problem. Try again shortly.');
   });
+
+  test('a wrong admin password on profile switch reads as a wrong password', () {
+    final failure = AuthController.mapSwitchProfileError(
+      ApiException(403, 'forbidden'),
+    );
+    expect(failure.message, 'Incorrect password.');
+    expect(failure.statusCode, 403);
+  });
+
+  test('other profile-switch failures keep the generic mapping', () {
+    final failure = AuthController.mapSwitchProfileError(ApiException(500, 'x'));
+    expect(failure.message, 'The server had a problem. Try again shortly.');
+  });
 }
