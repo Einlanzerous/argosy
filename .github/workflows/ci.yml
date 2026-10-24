@@ -110,3 +110,9 @@ jobs:
         run: make generate
       - name: fail if generated code is out of sync
         run: git diff --exit-code
+      # Keeps docs/architecture.archify.json honest: a path or line range that no
+      # longer exists at the pinned commit fails the build (the map would not
+      # render); files that merely changed since the pin only warn (stale).
+      # No path filter on purpose: drift detection must fire on every PR.
+      - name: Architecture map is renderable, and say if it has gone stale (SERV-159)
+        run: scripts/architecture-map-check.sh
