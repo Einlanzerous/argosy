@@ -35,7 +35,8 @@
           "stevedore",
           "media",
           "postgres",
-          "metadata"
+          "metadata",
+          "subs"
         ],
         "note": "A scheduled sweep walks each library root, probes files, enriches from metadata providers and writes rows."
       },
@@ -365,10 +366,24 @@
     {
       "id": "metadata",
       "type": "external",
-      "label": "TMDB and OpenSubtitles",
-      "sublabel": "metadata · subtitles",
+      "label": "TMDB",
+      "sublabel": "title metadata",
       "pos": [
         1040,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "subs",
+      "type": "external",
+      "label": "OpenSubtitles",
+      "sublabel": "subtitle search",
+      "pos": [
+        240,
         400
       ],
       "size": [
@@ -382,7 +397,7 @@
       "id": "web-net",
       "from": "web",
       "to": "net",
-      "label": "HTTP /api/v1 · HLS",
+      "label": "HTTP /api/v1 · HLS · SSE",
       "variant": "emphasis"
     },
     {
@@ -481,6 +496,13 @@
       "from": "stevedore",
       "to": "metadata",
       "label": "HTTPS lookups",
+      "variant": "dashed"
+    },
+    {
+      "id": "api-subs",
+      "from": "api",
+      "to": "subs",
+      "label": "on request",
       "variant": "dashed"
     }
   ]
