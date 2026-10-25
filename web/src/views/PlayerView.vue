@@ -25,6 +25,7 @@ import {
   type SubtitleTrack,
 } from '@/lib/playback'
 import { parseVttCues, shiftVtt } from '@/lib/vtt'
+import { RestartGate, type RestartContext } from '@/lib/restartGate'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -376,6 +377,16 @@ function resetRecovery(from: number): void {
   recoveryFrom = from
 }
 let transcodeSessionId = ''
+// Serialises transcode restarts so a seek landing mid-restart supersedes it
+// rather than racing it (ARGY-260). While one is in flight `gate.pending` is the
+// seek target and `baseOffset` still describes the source that is being replaced.
+const gate = new RestartGate()
+// Absolute media position: the seek target while a restart is in flight, else
+// the committed offset plus the element's own clock.
+function mediaPosition(el: HTMLVideoElement): number {
+  const p = gate.pending
+  return p !== null ? p : baseOffset.value + el.currentTime
+}
 
 // What the fill/knob render: the drag preview while scrubbing, otherwise live time.
 const displayTime = computed(() => (dragging.value ? dragTime.value : position.value))
@@ -489,222 +500,246 @@ function attachDirect(el: HTMLVideoElement): void {
 // feeds the playlist to hls.js (per-device token on every request) and plays.
 // The HLS timeline's 0 corresponds to baseOffset in the media.
 async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<void> {
-  if (hls) {
-    // Carry the measured throughput across the restart. Every seek and every
-    // auto-advance destroys the instance, and a fresh one would otherwise go
-    // back to seeding from the manifest — re-learning a slow link from scratch
-    // at the top rung, once per restart (ARGY-177). Gated on a fragment having
-    // completed: with no samples hls.bandwidthEstimate returns the configured
-    // default, and carrying *that* would suppress the manifest seed for the
-    // rest of the session and pin playback to the lowest rung.
-    if (sawFragment) rememberBandwidth(hls.bandwidthEstimate)
-    hls.destroy()
-    hls = null
-    sawFragment = false
-  }
-  if (transcodeSessionId) {
-    // Await the teardown before starting its replacement. Session ids are
-    // deterministic in (account, item, ⌊startAt⌋, encoder, codec, method) and the
-    // server *joins* a live session with a matching id — so a restart at the same
-    // offset, which is every error recovery, would otherwise POST, rejoin the very
-    // session this DELETE is still in flight to destroy, and be killed by it. That
-    // showed up in production as `DELETE 204` followed by `index.m3u8 404`, and as
-    // bursts of ten concurrent DELETEs for one id (ARGY-220).
-    //
-    // Cheap: the wait is dwarfed by waitForPlaylist below, which polls until
-    // ffmpeg has written the first playlist. Clear the id first so a failed stop
-    // can't leave us pointing at a session we've already abandoned.
-    const stopping = transcodeSessionId
-    transcodeSessionId = ''
-    await stopTranscode(stopping).catch(() => {})
-  }
-  baseOffset.value = offset
-  starting.value = true
-  try {
-    const sess = await startTranscode(itemId, offset, burnInTrack.value).catch(() => null)
-    if (!sess) {
-      error.value = "Couldn't start transcoding this title. The server may be at capacity."
-      return
-    }
-    transcodeSessionId = sess.id
-    if (!(await waitForPlaylist(sess.playlistUrl))) {
-      error.value = 'The transcoder is taking too long to start. Please try again.'
-      return
-    }
-    if (Hls.isSupported()) {
-      hls = new Hls({
-        // Each transcode is encoded *from* the requested offset (HLS-timeline 0 ==
-        // baseOffset in the media), so playback must always begin at position 0.
-        // The transcoder emits an `event` playlist (no ENDLIST while encoding), which
-        // hls.js otherwise treats as live and joins at the live edge — and a fast
-        // remux-copy races so far ahead that the edge can be minutes in, dropping a
-        // fresh play deep into the episode (ARGY-103). Pin the start explicitly.
-        startPosition: 0,
-        // Let hls.js seed its bandwidth estimate from the manifest's top rung
-        // (ARGY-177). On manifest load it seeds with
-        // min(firstLevelBitrate, abrEwmaDefaultEstimateMax); both server ladders
-        // are widest-first, so firstLevelBitrate *is* the top rung — but the
-        // default 5 Mbps ceiling sits under every 4K rung (~17.7 Mbps), which
-        // made 2160p unreachable at startup on *any* connection, however fast.
-        // Playback opened at 1080p, dropped to 720p on the first fragment, and
-        // only climbed back once the running average crawled past the top rung on
-        // a diet of small low-rung segments. Raising the ceiling keeps the seed
-        // derived from whatever the server actually advertised, instead of
-        // hardcoding a copy of the ladder here; it is not a claim about the link.
-        abrEwmaDefaultEstimateMax: 50_000_000,
-        // Once we've measured this link, that beats anything derived: supplying
-        // abrEwmaDefaultEstimate is also what suppresses the seeding above (hls.js
-        // guards it on `userConfig.abrEwmaDefaultEstimate === undefined`).
-        ...(measuredBandwidth() ? { abrEwmaDefaultEstimate: measuredBandwidth() } : {}),
-        // Deliberately NOT setting capLevelToPlayerSize. Sizing quality to the
-        // video element sounds thrifty, but people watch this windowed and still
-        // want the resolution they chose to store — letting a window heuristic
-        // silently downgrade a 4K source is the opposite of what a self-hosted
-        // library is for. A genuinely constrained link is still handled, by
-        // measurement rather than by guessing from geometry.
-        // Buffer aggressively. The server transcodes far ahead of the playhead (no
-        // realtime throttle) and won't reap a live session with a full buffer, so the
-        // only thing capping look-ahead is hls.js's conservative defaults (30s /
-        // 60MB). A remux is a single video rendition with nothing to fall back to,
-        // and even a laddered transcode is cheaper to ride out than to downshift,
-        // so a deep buffer is our first defense against a bandwidth dip on remote
-        // links — which matters more now that playback can open at the top rung:
-        // a slow client can't abandon its first fragment until the next playlist
-        // reload (~one target duration) and half that fragment's duration have
-        // passed, so the buffer is what covers the gap. Fetch 60s ahead to start
-        // and let it grow to a 500MB ceiling as size permits — that's ~50 min of a
-        // 1.3 Mbps stream but only ~4 min of a 4K rung, so the time ceiling above
-        // is what binds on low bitrates and the byte ceiling on high ones. A pause
-        // naturally fills to the cap. backBufferLength bounds the memory retained
-        // behind the playhead.
-        maxBufferLength: 60,
-        maxMaxBufferLength: 3000,
-        maxBufferSize: 500_000_000,
-        backBufferLength: 60,
-        // Stop hls.js from declaring our HEVC renditions undecodable on a
-        // user-agent hunch (ARGY-177). Its media-capabilities gate never asks
-        // the browser about HEVC on Windows Firefox — `getMediaDecodingInfo`
-        // short-circuits to supported/smooth/powerEfficient = false purely from
-        // the UA string. findBestLevel then skips every level whose result says
-        // `smooth === false`, so ABR walks the whole ladder down to the lowest
-        // rung no matter what: observed stepping 2160p → 1080p → 720p with
-        // 175 Mbps measured and no cap set. It resolves asynchronously, so
-        // playback runs at the top rung for a minute and *then* collapses, which
-        // is what made it look like a bandwidth problem for so long.
-        //
-        // Disabling the gate is safe here because we already answer this
-        // question better: `supportsHevc()` probes MediaSource.isTypeSupported
-        // and the server only emits HEVC when the client said yes — a measured
-        // answer rather than a UA guess. That same browser also reports
-        // `smooth: true` for these exact configurations when asked directly.
-        // The flag has exactly one consumer, this ABR gate; the only other
-        // capability path is SUPPLEMENTAL-CODECS, which we never emit.
-        useMediaCapabilities: false,
-        // `?hlsdebug` on a /player URL turns on hls.js's own logging. Which
-        // rendition it picks, and why, is otherwise invisible from the outside:
-        // the server log shows which rung was *fetched*, but not the estimate or
-        // the cap behind the choice. Off by default — this is noisy.
-        debug: hlsDebug.value ? hlsDebugLogger() : false,
-        xhrSetup: (xhr) => {
-          const t = getToken()
-          if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
-        },
-      })
-      if (hlsDebug.value) {
-        // Park the instance so levels/estimate/capping can be inspected live.
-        ;(window as unknown as { __hls?: Hls }).__hls = hls
+  await gate.run(offset, {
+    getSessionId: () => transcodeSessionId,
+    setSessionId: (id) => {
+      transcodeSessionId = id
+    },
+    begin: () => {
+      if (hls) {
+        // Carry the measured throughput across the restart. Every seek and every
+        // auto-advance destroys the instance, and a fresh one would otherwise go
+        // back to seeding from the manifest — re-learning a slow link from scratch
+        // at the top rung, once per restart (ARGY-177). Gated on a fragment having
+        // completed: with no samples hls.bandwidthEstimate returns the configured
+        // default, and carrying *that* would suppress the manifest seed for the
+        // rest of the session and pin playback to the lowest rung.
+        if (sawFragment) rememberBandwidth(hls.bandwidthEstimate)
+        hls.destroy()
+        hls = null
+        sawFragment = false
       }
-      // A completed fragment is what turns hls.bandwidthEstimate from the
-      // configured default into a measurement worth carrying forward.
-      hls.on(Hls.Events.FRAG_BUFFERED, () => {
-        sawFragment = true
-        // NB: this deliberately does NOT re-arm recovery. A fragment reaching the
-        // buffer says nothing about whether it can be decoded — see recoveryFrom.
-      })
-      hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
-        if (!hlsDebug.value || !hls) return
-        const l = hls.levels[data.level]
-        console.log(
-          `[argosy] level -> ${l?.height}p @ ${l?.bitrate}` +
-            ` | estimate ${Math.round(hls.bandwidthEstimate / 1000)}kbps` +
-            ` | measured ${sawFragment}` +
-            ` | cap ${hls.autoLevelCapping} | player ${el.clientWidth}x${el.clientHeight}@${window.devicePixelRatio}` +
-            `\n[argosy] levels: ${levelSupport(hls)}`,
-        )
-      })
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        refreshAudioTracks()
-        void el.play().catch(() => {})
-      })
-      // Renditions can be (re)declared after the initial manifest, and hls.js may
-      // switch on its own; keep the list + active marker in sync either way.
-      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => refreshAudioTracks())
-      hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_e, data) => {
-        activeAudioTrack.value = data.id
-      })
-      hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (!data.fatal) return
-        // The idle reaper purges a transcode session that went quiet (e.g. a long
-        // pause), so its next segment 404s. Rather than dying, restart the
-        // transcode from the current position and keep playing (ARGY-107).
-        //
-        // The two flags answer different questions and are kept apart on purpose.
-        // `recovering` is "a restart is already in flight", so a second fatal
-        // arriving in the same tick — two renditions failing together, say — is a
-        // duplicate to drop, NOT a reason to give up on an attempt still running.
-        // `recoveryAttempts` is "how many restarts has this stream had without
-        // ever playing", and it alone decides when to stop, because it is the one
-        // that cannot be cleared by anything short of real forward progress.
-        const v = video.value
-        if (mode === 'transcode' && v) {
-          if (recovering) return
-          if (recoveryAttempts < maxRecoveryAttempts) {
-            recovering = true
-            recoveryAttempts++
-            const pos = baseOffset.value + v.currentTime
-            recoveryFrom = pos
-            // Defer so we don't tear down hls inside its own error callback.
-            setTimeout(() => void startTranscodeAt(v, pos), 0)
-            return
-          }
-          // Worth saying out loud: a give-up is the one moment where the console
-          // is the only record that this happened at all. Server-side visibility
-          // needs ARGY-219.
-          console.warn(
-            `[argosy] giving up after ${recoveryAttempts} recovery attempts without playback`,
-          )
-        }
-        error.value = 'This stream could not be played.'
-      })
-      hls.loadSource(sess.playlistUrl)
-      hls.attachMedia(el)
-      reapplySubtitle()
-    } else {
-      // Native-HLS browsers (iOS Safari) can't set an Authorization header on a
-      // bare <video> src; token-in-URL support is a follow-up.
-      el.src = sess.playlistUrl
-      void el.play().catch(() => {})
-      reapplySubtitle()
+      starting.value = true
+    },
+    // Awaited before the replacement starts (ARGY-220): session ids are
+    // deterministic in (account, item, floor(startAt), encoder, codec, method)
+    // and the server *joins* a live session with a matching id, so a restart at
+    // the same offset would otherwise POST, rejoin the very session this DELETE
+    // is still in flight to destroy, and be killed by it. The gate also makes a
+    // second restart wait on this one's stop (ARGY-260).
+    stop: (id) => stopTranscode(id),
+    start: (o) => startTranscode(itemId, o, burnInTrack.value),
+    probe: (url, cancelled) => waitForPlaylist(url, cancelled),
+    attach: (sess, ctx) => attachTranscode(el, sess, ctx),
+    commit: (o) => {
+      baseOffset.value = o
+    },
+    fail: (reason) => {
+      error.value =
+        reason === 'start'
+          ? "Couldn't start transcoding this title. The server may be at capacity."
+          : reason === 'slow'
+            ? 'The transcoder is taking too long to start. Please try again.'
+            : 'This stream could not be played.'
+    },
+    settle: () => {
+      starting.value = false
+      // The restart is no longer in flight, whatever came of it. `recovering`
+      // means exactly that and nothing more — whether the new session is any GOOD
+      // is `recoveryAttempts`' question, and it is only answered by playback
+      // actually advancing. Leaving this set until progress would conflate the two:
+      // the next fatal error would find `recovering` still true, skip the attempt
+      // it was owed, and surface the terminal message after one try instead of the
+      // cap (ARGY-223 review). Only the winning restart gets here, so a superseded
+      // one can't clear it under the live one (ARGY-260).
+      recovering = false
+    },
+  })
+}
+
+// attachTranscode feeds a ready session to the element. Returns true when it
+// will commit the new offset itself, once hls.js has actually attached the
+// source (so the old source's clock is never added to the new offset).
+function attachTranscode(
+  el: HTMLVideoElement,
+  sess: { playlistUrl: string },
+  ctx: RestartContext,
+): boolean {
+  if (Hls.isSupported()) {
+    const mine = new Hls({
+      // Each transcode is encoded *from* the requested offset (HLS-timeline 0 ==
+      // baseOffset in the media), so playback must always begin at position 0.
+      // The transcoder emits an `event` playlist (no ENDLIST while encoding), which
+      // hls.js otherwise treats as live and joins at the live edge — and a fast
+      // remux-copy races so far ahead that the edge can be minutes in, dropping a
+      // fresh play deep into the episode (ARGY-103). Pin the start explicitly.
+      startPosition: 0,
+      // Let hls.js seed its bandwidth estimate from the manifest's top rung
+      // (ARGY-177). On manifest load it seeds with
+      // min(firstLevelBitrate, abrEwmaDefaultEstimateMax); both server ladders
+      // are widest-first, so firstLevelBitrate *is* the top rung — but the
+      // default 5 Mbps ceiling sits under every 4K rung (~17.7 Mbps), which
+      // made 2160p unreachable at startup on *any* connection, however fast.
+      // Playback opened at 1080p, dropped to 720p on the first fragment, and
+      // only climbed back once the running average crawled past the top rung on
+      // a diet of small low-rung segments. Raising the ceiling keeps the seed
+      // derived from whatever the server actually advertised, instead of
+      // hardcoding a copy of the ladder here; it is not a claim about the link.
+      abrEwmaDefaultEstimateMax: 50_000_000,
+      // Once we've measured this link, that beats anything derived: supplying
+      // abrEwmaDefaultEstimate is also what suppresses the seeding above (hls.js
+      // guards it on `userConfig.abrEwmaDefaultEstimate === undefined`).
+      ...(measuredBandwidth() ? { abrEwmaDefaultEstimate: measuredBandwidth() } : {}),
+      // Deliberately NOT setting capLevelToPlayerSize. Sizing quality to the
+      // video element sounds thrifty, but people watch this windowed and still
+      // want the resolution they chose to store — letting a window heuristic
+      // silently downgrade a 4K source is the opposite of what a self-hosted
+      // library is for. A genuinely constrained link is still handled, by
+      // measurement rather than by guessing from geometry.
+      // Buffer aggressively. The server transcodes far ahead of the playhead (no
+      // realtime throttle) and won't reap a live session with a full buffer, so the
+      // only thing capping look-ahead is hls.js's conservative defaults (30s /
+      // 60MB). A remux is a single video rendition with nothing to fall back to,
+      // and even a laddered transcode is cheaper to ride out than to downshift,
+      // so a deep buffer is our first defense against a bandwidth dip on remote
+      // links — which matters more now that playback can open at the top rung:
+      // a slow client can't abandon its first fragment until the next playlist
+      // reload (~one target duration) and half that fragment's duration have
+      // passed, so the buffer is what covers the gap. Fetch 60s ahead to start
+      // and let it grow to a 500MB ceiling as size permits — that's ~50 min of a
+      // 1.3 Mbps stream but only ~4 min of a 4K rung, so the time ceiling above
+      // is what binds on low bitrates and the byte ceiling on high ones. A pause
+      // naturally fills to the cap. backBufferLength bounds the memory retained
+      // behind the playhead.
+      maxBufferLength: 60,
+      maxMaxBufferLength: 3000,
+      maxBufferSize: 500_000_000,
+      backBufferLength: 60,
+      // Stop hls.js from declaring our HEVC renditions undecodable on a
+      // user-agent hunch (ARGY-177). Its media-capabilities gate never asks
+      // the browser about HEVC on Windows Firefox — `getMediaDecodingInfo`
+      // short-circuits to supported/smooth/powerEfficient = false purely from
+      // the UA string. findBestLevel then skips every level whose result says
+      // `smooth === false`, so ABR walks the whole ladder down to the lowest
+      // rung no matter what: observed stepping 2160p → 1080p → 720p with
+      // 175 Mbps measured and no cap set. It resolves asynchronously, so
+      // playback runs at the top rung for a minute and *then* collapses, which
+      // is what made it look like a bandwidth problem for so long.
+      //
+      // Disabling the gate is safe here because we already answer this
+      // question better: `supportsHevc()` probes MediaSource.isTypeSupported
+      // and the server only emits HEVC when the client said yes — a measured
+      // answer rather than a UA guess. That same browser also reports
+      // `smooth: true` for these exact configurations when asked directly.
+      // The flag has exactly one consumer, this ABR gate; the only other
+      // capability path is SUPPLEMENTAL-CODECS, which we never emit.
+      useMediaCapabilities: false,
+      // `?hlsdebug` on a /player URL turns on hls.js's own logging. Which
+      // rendition it picks, and why, is otherwise invisible from the outside:
+      // the server log shows which rung was *fetched*, but not the estimate or
+      // the cap behind the choice. Off by default — this is noisy.
+      debug: hlsDebug.value ? hlsDebugLogger() : false,
+      xhrSetup: (xhr) => {
+        const t = getToken()
+        if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
+      },
+    })
+    hls = mine
+    // Commit the restart's offset only once this source is actually on the
+    // element, not when the seek was asked for: until then the element's clock
+    // still belongs to the old source and adding it to the new offset made the
+    // scrub bar flash newOffset + oldPosition (ARGY-260).
+    mine.on(Hls.Events.MEDIA_ATTACHED, () => {
+      if (hls === mine) ctx.commit()
+    })
+    if (hlsDebug.value) {
+      // Park the instance so levels/estimate/capping can be inspected live.
+      ;(window as unknown as { __hls?: Hls }).__hls = hls
     }
-  } finally {
-    starting.value = false
-    // The restart is no longer in flight, whatever came of it. `recovering`
-    // means exactly that and nothing more — whether the new session is any GOOD
-    // is `recoveryAttempts`' question, and it is only answered by playback
-    // actually advancing. Leaving this set until progress would conflate the two:
-    // the next fatal error would find `recovering` still true, skip the attempt
-    // it was owed, and surface the terminal message after one try instead of the
-    // cap (ARGY-223 review).
-    recovering = false
+    // A completed fragment is what turns hls.bandwidthEstimate from the
+    // configured default into a measurement worth carrying forward.
+    hls.on(Hls.Events.FRAG_BUFFERED, () => {
+      sawFragment = true
+      // NB: this deliberately does NOT re-arm recovery. A fragment reaching the
+      // buffer says nothing about whether it can be decoded — see recoveryFrom.
+    })
+    hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
+      if (!hlsDebug.value || !hls) return
+      const l = hls.levels[data.level]
+      console.log(
+        `[argosy] level -> ${l?.height}p @ ${l?.bitrate}` +
+          ` | estimate ${Math.round(hls.bandwidthEstimate / 1000)}kbps` +
+          ` | measured ${sawFragment}` +
+          ` | cap ${hls.autoLevelCapping} | player ${el.clientWidth}x${el.clientHeight}@${window.devicePixelRatio}` +
+          `\n[argosy] levels: ${levelSupport(hls)}`,
+      )
+    })
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      refreshAudioTracks()
+      void el.play().catch(() => {})
+    })
+    // Renditions can be (re)declared after the initial manifest, and hls.js may
+    // switch on its own; keep the list + active marker in sync either way.
+    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => refreshAudioTracks())
+    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_e, data) => {
+      activeAudioTrack.value = data.id
+    })
+    hls.on(Hls.Events.ERROR, (_e, data) => {
+      if (!data.fatal || hls !== mine || ctx.isStale()) return
+      // The idle reaper purges a transcode session that went quiet (e.g. a long
+      // pause), so its next segment 404s. Rather than dying, restart the
+      // transcode from the current position and keep playing (ARGY-107).
+      //
+      // The two flags answer different questions and are kept apart on purpose.
+      // `recovering` is "a restart is already in flight", so a second fatal
+      // arriving in the same tick — two renditions failing together, say — is a
+      // duplicate to drop, NOT a reason to give up on an attempt still running.
+      // `recoveryAttempts` is "how many restarts has this stream had without
+      // ever playing", and it alone decides when to stop, because it is the one
+      // that cannot be cleared by anything short of real forward progress.
+      const v = video.value
+      if (mode === 'transcode' && v) {
+        if (recovering) return
+        if (recoveryAttempts < maxRecoveryAttempts) {
+          recovering = true
+          recoveryAttempts++
+          const pos = mediaPosition(v)
+          recoveryFrom = pos
+          // Defer so we don't tear down hls inside its own error callback.
+          setTimeout(() => void startTranscodeAt(v, pos), 0)
+          return
+        }
+        // Worth saying out loud: a give-up is the one moment where the console
+        // is the only record that this happened at all. Server-side visibility
+        // needs ARGY-219.
+        console.warn(
+          `[argosy] giving up after ${recoveryAttempts} recovery attempts without playback`,
+        )
+      }
+      error.value = 'This stream could not be played.'
+    })
+    mine.loadSource(sess.playlistUrl)
+    mine.attachMedia(el)
+    reapplySubtitle()
+    return true
+  } else {
+    // Native-HLS browsers (iOS Safari) can't set an Authorization header on a
+    // bare <video> src; token-in-URL support is a follow-up.
+    el.src = sess.playlistUrl
+    void el.play().catch(() => {})
+    reapplySubtitle()
+    return false
   }
 }
 
 // waitForPlaylist polls the master playlist until ffmpeg has written it (the
 // endpoint returns 503 until then), giving the encoder time to warm up.
-async function waitForPlaylist(url: string): Promise<boolean> {
+async function waitForPlaylist(url: string, cancelled: () => boolean): Promise<boolean> {
   const token = getToken()
   const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
   for (let i = 0; i < 40; i++) {
+    // Superseded by a newer seek: stop polling a session that is being replaced.
+    if (cancelled()) return false
     try {
       const r = await fetch(url, { headers })
       if (r.ok) return true
@@ -723,6 +758,7 @@ onBeforeUnmount(() => {
   if (upNextTimer) clearInterval(upNextTimer)
   if (hideTimer) clearTimeout(hideTimer)
   removeSubtitleEl()
+  gate.cancel()
   if (hls) hls.destroy()
   if (transcodeSessionId) void stopTranscode(transcodeSessionId).catch(() => {})
   const el = video.value
@@ -741,7 +777,8 @@ function bindVideo(el: HTMLVideoElement): void {
   // Fires when the decoded resolution changes (e.g. hls.js switches level).
   el.addEventListener('resize', () => updateQuality(el))
   el.addEventListener('timeupdate', () => {
-    position.value = baseOffset.value + el.currentTime
+    // Mid-restart the element's clock belongs to the source being replaced.
+    position.value = mediaPosition(el)
     // Playing past where the recovery restarted from is the proof that the new
     // session actually decodes, so this is what re-arms recovery for a future
     // reap (ARGY-107) and clears the attempt count. Compared in absolute media
@@ -820,7 +857,7 @@ function updateQuality(el: HTMLVideoElement): void {
 }
 
 function flush(): void {
-  const pos = baseOffset.value + (video.value?.currentTime ?? 0)
+  const pos = video.value ? mediaPosition(video.value) : baseOffset.value
   if (pos > 0) {
     void reportProgress(itemId, pos, duration.value || undefined).catch(() => {})
   }
@@ -993,8 +1030,10 @@ async function seekTo(t: number): Promise<void> {
     return
   }
   const rel = t - baseOffset.value
+  // A restart in flight means the element is mid-swap and its seekable range
+  // belongs to the old source: always take the restart path (ARGY-260).
   const buffered = el.seekable.length ? el.seekable.end(el.seekable.length - 1) : 0
-  if (rel >= 0 && rel <= buffered) {
+  if (!gate.inFlight && rel >= 0 && rel <= buffered) {
     el.currentTime = rel
   } else {
     // A seek is the viewer asking for somewhere else, so it also earns a fresh
@@ -1041,7 +1080,9 @@ async function switchBurnIn(trackId: string | null): Promise<void> {
   burnInSwitching.value = true
   try {
     if (mode === 'direct') {
-      // Back to the original file: drop the HLS session and seek natively.
+      // Back to the original file: drop the HLS session and seek natively. Any
+      // restart still in flight is superseded.
+      gate.cancel()
       if (hls) {
         hls.destroy()
         hls = null

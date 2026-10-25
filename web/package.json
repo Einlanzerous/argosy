@@ -8,6 +8,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
+    "test": "bun test tests",
     "lint": "eslint .",
     "format": "prettier --write src/",
     "format:check": "prettier --check src/",
