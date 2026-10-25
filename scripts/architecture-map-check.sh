@@ -168,12 +168,16 @@ if ! refs=$(jq -r '.components[]? | .id as $c | (.sources // [])[] | [$c, (.path
   exit 1
 fi
 
+if [ -z "$refs" ]; then
+  annotate error "no component carries sources[] — archify refuses a map that pins a revision and cites nothing."
+  exit 1
+fi
+
 count=0
 # Fields are separated by US (0x1f), not a tab: `read` treats a tab as
 # whitespace and merges consecutive ones, so an absent field would shift the
 # columns and a missing path would be read as whatever came next.
 while IFS=$'\x1f' read -r component path line end_line; do
-  [ -n "$component$path$line$end_line" ] || continue   # the here-string's blank line
   count=$((count + 1))
   if [ -z "$component" ]; then
     errors+=("a component with no id cites ${path:-nothing}. The map will not render.")
@@ -198,9 +202,10 @@ while IFS=$'\x1f' read -r component path line end_line; do
     errors+=("$where with end_line $end_line but no line. The map will not render.")
     continue
   elif [ -n "$line" ]; then
-    # `-gt` on a non-integer is a bash error that adds nothing to errors[], so
-    # the shape is checked first: positive integers, end_line optional.
-    if ! [[ $line =~ ^[1-9][0-9]*$ ]] || { [ -n "$end_line" ] && ! [[ $end_line =~ ^[1-9][0-9]*$ ]]; }; then
+    # `-gt` on a non-integer, or on an integer past 64 bits, is a bash error
+    # that adds nothing to errors[], so the shape is checked first: positive
+    # integers of at most nine digits, end_line optional.
+    if ! [[ $line =~ ^[1-9][0-9]{0,8}$ ]] || { [ -n "$end_line" ] && ! [[ $end_line =~ ^[1-9][0-9]{0,8}$ ]]; }; then
       errors+=("$where:$line${end_line:+-$end_line}, which is not a positive-integer line range. The map will not render.")
       continue
     fi
