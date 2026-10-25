@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.2](https://github.com/Einlanzerous/argosy/compare/v0.33.1...v0.33.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **mobile:** refresh detail watched state when the player pops (ARGY-266) ([#275](https://github.com/Einlanzerous/argosy/issues/275)) ([2c50353](https://github.com/Einlanzerous/argosy/commit/2c503534288e2d69d84a669f814d4f175065f987))
+
 ## [0.33.1](https://github.com/Einlanzerous/argosy/compare/v0.33.0...v0.33.1) (2026-10-25)
 
 
