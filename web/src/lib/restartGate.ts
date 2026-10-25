@@ -96,6 +96,9 @@ export class RestartGate {
         this.pendingStop = (async () => {
           if (prev) await prev
           await d.stop(old).catch(() => {})
+          // Pruned once the stop has landed: ids are deterministic, so a later
+          // restart at the same second can be handed this id again.
+          this.stopping.delete(old)
         })()
       }
       if (this.pendingStop) await this.pendingStop

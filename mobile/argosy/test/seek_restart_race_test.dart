@@ -23,6 +23,9 @@ class _Server extends TranscodeApi {
   /// While non-null, DELETEs wait on it.
   Completer<void>? stopGate;
 
+  /// POSTs at these startAts wait here, after the server has made the session.
+  final startGates = <double, Completer<void>>{};
+
   @override
   Future<TranscodeSession?> startTranscode(
     String itemId, {
@@ -34,6 +37,8 @@ class _Server extends TranscodeApi {
     await Future<void>.delayed(Duration.zero);
     final id = 's${at.floor()}';
     alive.add(id);
+    final g = startGates[at];
+    if (g != null) await g.future;
     return TranscodeSession(
       id: id,
       itemId: itemId,
@@ -222,4 +227,40 @@ void main() {
     r.openGates();
     await f;
   });
+
+  test('a real end right behind a seek to the end still finishes', () async {
+    final r = _Rig();
+    addTearDown(r.c.dispose);
+    await r.c.seekTo(5000); // clamps to catalogDuration (1440)
+    expect(r.c.position, 1440);
+
+    r.c
+      ..handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.seekTo))
+      ..handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
+    expect(r.c.debugFinished, isTrue);
+  });
+
+  test(
+    'revisiting a stopped second and being superseded does not leak',
+    () async {
+      final r = _Rig();
+      addTearDown(r.c.dispose);
+      await r.c.seekTo(100); // session X = s100
+      await r.c.seekTo(500); // X stopped
+      expect(r.server.alive, {'s500'});
+
+      // Back to the same second: the POST hands out X again, and is held.
+      r.server.startGates[100] = Completer();
+      final back = r.c.seekTo(100);
+      await _settle();
+      expect(r.server.alive, {'s100'});
+      final away = r.c.seekTo(900);
+      await _settle();
+      r.server.startGates[100]!.complete();
+      await Future.wait([back, away]);
+
+      expect(r.server.alive, {'s900'});
+      expect(r.c.baseOffset, 900);
+    },
+  );
 }

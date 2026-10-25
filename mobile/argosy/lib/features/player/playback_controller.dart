@@ -221,6 +221,10 @@ class PlaybackController extends ChangeNotifier
   /// Session ids a restart has taken over to stop.
   final _stopping = <String>{};
 
+  /// A `finished` within this many seconds of the catalog end is the media
+  /// really ending, whatever seek preceded it.
+  static const _realEndSlackSeconds = 1.0;
+
   /// A seek was just issued, so a `finished` right behind it is the plugin
   /// clamping the target, not the media ending. Cleared by the next `progress`.
   bool _seekJustIssued = false;
@@ -590,6 +594,10 @@ class PlaybackController extends ChangeNotifier
               .stopTranscode(old)
               .timeout(const Duration(seconds: 5))
               .catchError((_) {});
+          // Pruned once the stop has landed: ids are deterministic, so a later
+          // restart at the same second can be handed this id again and must not
+          // be mistaken for one that is already being stopped.
+          _stopping.remove(old);
         }();
       }
       // A restart that finds no id still waits for the stop the one before it
@@ -1160,7 +1168,19 @@ class PlaybackController extends ChangeNotifier
         // The plugin posts `seekTo` then `finished` for a target past its
         // duration, and a source mid-swap can report one too. Neither is the
         // media ending: don't mark watched or roll the episode (ARGY-260).
-        if (starting || _pendingOffset != null || _seekJustIssued) return;
+        // Only a transcode pins a short duration, so only a transcode can post
+        // the phantom; and a seek to the very end is a real end of media, which
+        // the plugin may report before `progress` has cleared the latch. The
+        // phantom always lands far from the catalog end (ARGY-260).
+        final nearEnd =
+            catalogDuration > 0 &&
+            catalogDuration - position < _realEndSlackSeconds;
+        if (isTranscode &&
+            !isOffline &&
+            !nearEnd &&
+            (starting || _pendingOffset != null || _seekJustIssued)) {
+          return;
+        }
         _setWakelock(false);
         _finished = true;
         _pushSession(phase: MediaPhase.finished);

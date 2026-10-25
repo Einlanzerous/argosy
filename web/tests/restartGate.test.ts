@@ -68,7 +68,20 @@ function rig() {
   const gateAll = () => {
     for (const g of probeGates.values()) g.resolve()
   }
-  return { gate, deps, alive, starts, attached, errors, probeGates, stopGate, state, ctxs, settles, gateAll }
+  return {
+    gate,
+    deps,
+    alive,
+    starts,
+    attached,
+    errors,
+    probeGates,
+    stopGate,
+    state,
+    ctxs,
+    settles,
+    gateAll,
+  }
 }
 
 describe('RestartGate (ARGY-260)', () => {
@@ -162,5 +175,27 @@ describe('RestartGate (ARGY-260)', () => {
     expect(r.state.base).toBe(0)
     r.ctxs.at(-1)!.commit()
     expect(r.state.base).toBe(200)
+  })
+
+  test('revisiting a stopped second and being superseded does not leak', async () => {
+    const r = rig()
+    await r.gate.run(100, r.deps) // X = s100
+    await r.gate.run(500, r.deps) // X stopped
+    // Back to the same second: POST hands out X again, held in flight.
+    const gated = defer()
+    const start = r.deps.start
+    r.deps.start = async (o: number) => {
+      const s = await start(o)
+      if (o === 100) await gated.promise
+      return s
+    }
+    const back = r.gate.run(100, r.deps)
+    await tick()
+    expect([...r.alive].sort()).toEqual(['s100'])
+    const away = r.gate.run(900, r.deps)
+    await tick()
+    gated.resolve()
+    await Promise.all([back, away])
+    expect([...r.alive]).toEqual(['s900'])
   })
 })
