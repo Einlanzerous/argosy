@@ -82,10 +82,10 @@ class MainActivity : AudioServiceActivity() {
                 }
                 "setPlaying" -> {
                     isPlaying = call.arguments == true
-                    // Refresh the PiP action icon (play <-> pause) live while floating.
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                        isInPictureInPictureMode
-                    ) {
+                    // Always rebuild, not just while floating: the params also drive
+                    // auto-enter, so a pause before leaving the app must show the
+                    // play icon when PiP opens.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         runCatching { setPictureInPictureParams(buildPipParams()) }
                     }
                     result.success(null)
@@ -162,7 +162,8 @@ class MainActivity : AudioServiceActivity() {
         val intent = Intent(ACTION_PIP_TOGGLE).setPackage(packageName)
         val pending = PendingIntent.getBroadcast(
             this,
-            REQUEST_PIP_TOGGLE,
+            // Distinct per state so SystemUI sees a changed action and redraws.
+            if (isPlaying) REQUEST_PIP_TOGGLE_PAUSE else REQUEST_PIP_TOGGLE_PLAY,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -185,6 +186,9 @@ class MainActivity : AudioServiceActivity() {
         newConfig: Configuration,
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (isInPictureInPictureMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching { setPictureInPictureParams(buildPipParams()) }
+        }
         pip?.invokeMethod("pipChanged", isInPictureInPictureMode)
     }
 
@@ -216,7 +220,8 @@ class MainActivity : AudioServiceActivity() {
 
     companion object {
         private const val ACTION_PIP_TOGGLE = "dev.dodson.argosy.PIP_TOGGLE"
-        private const val REQUEST_PIP_TOGGLE = 1001
+        private const val REQUEST_PIP_TOGGLE_PAUSE = 1001
+        private const val REQUEST_PIP_TOGGLE_PLAY = 1003
         private const val REQUEST_NOTIFICATIONS = 1002
     }
 }

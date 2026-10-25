@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 
 /// Drives Android Picture-in-Picture through a platform channel (mirrors
@@ -77,20 +78,41 @@ class PiP {
 
   /// Registers handlers: [onChanged] fires with the current PiP mode whenever it
   /// changes (so the player can hide its overlay chrome in PiP); [onToggle]
-  /// fires when the PiP window's play/pause action is tapped. Pass nulls to
-  /// clear both.
-  static void register({
+  /// fires when the PiP window's play/pause action is tapped.
+  ///
+  /// The handlers are static, so they belong to whoever registered last. The
+  /// returned token is that ownership: hand it to [unregister] on teardown. When
+  /// one player replaces another (series auto-advance), the incoming screen
+  /// registers before the outgoing one disposes, and an unconditional clear
+  /// would wipe the new screen's handlers (ARGY-265).
+  static Object register({
     void Function(bool inPip)? onChanged,
     void Function()? onToggle,
   }) {
+    final token = Object();
+    _owner = token;
     _onChanged = onChanged;
     _onToggle = onToggle;
-    final active = onChanged != null || onToggle != null;
-    if (active && !_handlerInstalled && Platform.isAndroid) {
+    if (!_handlerInstalled && Platform.isAndroid) {
       _handlerInstalled = true;
       _channel.setMethodCallHandler(_handle);
     }
+    return token;
   }
+
+  /// Clears the handlers only if [token] still owns them; a no-op once a later
+  /// [register] has taken over.
+  static void unregister(Object token) {
+    if (!identical(_owner, token)) return;
+    _owner = null;
+    _onChanged = null;
+    _onToggle = null;
+  }
+
+  static Object? _owner;
+
+  @visibleForTesting
+  static Future<void> debugHandle(MethodCall call) => _handle(call);
 
   static Future<void> _handle(MethodCall call) async {
     switch (call.method) {
