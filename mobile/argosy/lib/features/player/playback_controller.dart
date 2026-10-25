@@ -198,6 +198,39 @@ class PlaybackController extends ChangeNotifier
   /// [_encodedSoFarSeconds]; buffered ranges raise it from there.
   double _windowAtInitSeconds = 0;
 
+  /// Restart generation (ARGY-260). Every [_startTranscodeAt] takes the next
+  /// number and, after each await, bails silently if a newer restart has taken
+  /// it: the newest seek always wins, and a superseded one is not a failure.
+  int _restartGen = 0;
+
+  /// The generation whose source is allowed to commit [_pendingOffset] when the
+  /// plugin reports `initialized`.
+  int _attachGen = -1;
+
+  /// Where the restart in flight is headed. [baseOffset] is only moved here when
+  /// the new source is actually up, so the old source's position is never added
+  /// to the new offset (the scrub-bar flash). Non-null means a restart is in
+  /// flight; [position] answers with it meanwhile.
+  double? _pendingOffset;
+
+  /// The stop of the previous session, which any restart awaits before POSTing
+  /// (ARGY-220) — including a restart that found no session id to stop because
+  /// the one before it already took it.
+  Future<void>? _pendingStop;
+
+  /// Session ids a restart has taken over to stop.
+  final _stopping = <String>{};
+
+  /// A seek was just issued, so a `finished` right behind it is the plugin
+  /// clamping the target, not the media ending. Cleared by the next `progress`.
+  bool _seekJustIssued = false;
+
+  /// Test seams: no native player sits behind the controller in unit tests.
+  @visibleForTesting
+  Future<bool> Function(String url, bool Function() cancelled)? debugProbe;
+  @visibleForTesting
+  Future<void> Function(String playlistUrl)? debugAttach;
+
   /// True while a session is (re)starting — the overlay shows a spinner.
   bool starting = false;
 
@@ -294,6 +327,9 @@ class PlaybackController extends ChangeNotifier
 
   bool _finished = false;
 
+  @visibleForTesting
+  bool get debugFinished => _finished;
+
   /// Friendly quality stamp derived from the decoded video height, mirroring
   /// the web player's `updateQuality`: "4K" at ≥2160p, otherwise `{height}p`.
   /// Null until the first frame reports a size.
@@ -306,6 +342,8 @@ class PlaybackController extends ChangeNotifier
 
   /// Absolute media position in seconds (`baseOffset + player.position`).
   double get position {
+    final pending = _pendingOffset;
+    if (pending != null) return pending;
     final ms = videoValue?.position.inMilliseconds ?? 0;
     return baseOffset + ms / 1000.0;
   }
@@ -522,9 +560,12 @@ class PlaybackController extends ChangeNotifier
   }
 
   Future<void> _startTranscodeAt(double offset) async {
+    final gen = ++_restartGen;
+    bool stale() => gen != _restartGen;
     final old = _sessionId;
     _sessionId = null;
-    baseOffset = offset;
+    // Held, not applied: [baseOffset] moves when the new source is up.
+    _pendingOffset = offset;
     _windowAtInitSeconds = 0;
     starting = true;
     fatalError = false;
@@ -535,17 +576,27 @@ class PlaybackController extends ChangeNotifier
     _safeNotify();
     try {
       if (old != null) {
+        _stopping.add(old);
         // Await the stop before starting the replacement, as web does
         // (ARGY-220). Session ids are deterministic in ⌊startAt⌋ and the server
         // joins a live session with a matching id, so a restart in the same
         // second (Retry, or recovering from an error just after a start) would
         // rejoin the very session this DELETE is in flight to destroy, and be
         // killed by it. Bounded, so a dead link can't hold the restart hostage.
-        await transcodeApi
-            .stopTranscode(old)
-            .timeout(const Duration(seconds: 5))
-            .catchError((_) {});
+        final prev = _pendingStop;
+        _pendingStop = () async {
+          if (prev != null) await prev;
+          await transcodeApi
+              .stopTranscode(old)
+              .timeout(const Duration(seconds: 5))
+              .catchError((_) {});
+        }();
       }
+      // A restart that finds no id still waits for the stop the one before it
+      // started (ARGY-260), or it would POST into the session being destroyed.
+      final pendingStop = _pendingStop;
+      if (pendingStop != null) await pendingStop;
+      if (stale()) return;
       final sess = await transcodeApi.startTranscode(
         itemId,
         transcodeStartRequest: TranscodeStartRequest(
@@ -553,13 +604,20 @@ class PlaybackController extends ChangeNotifier
           hevc: hevc,
         ),
       );
+      if (stale() || _tornDown) {
+        if (sess != null) _discardSession(sess.id, offset);
+        return;
+      }
       if (sess == null) {
         _fail("Couldn't start the transcoder.");
         return;
       }
       _sessionId = sess.id;
       final playlistUrl = '$baseUrl${sess.playlistUrl}';
-      final ready = await _waitForPlaylist(playlistUrl);
+      final ready = await (debugProbe ?? _waitForPlaylist)(
+        playlistUrl,
+        () => stale() || _tornDown,
+      );
       if (_tornDown) {
         // Torn down while this session was starting, ARGY-190's detached path
         // included. Teardown stopped the session it knew about, which wasn't
@@ -569,37 +627,77 @@ class PlaybackController extends ChangeNotifier
         unawaited(transcodeApi.stopTranscode(sess.id).catchError((_) {}));
         return;
       }
+      if (stale()) {
+        _discardSession(sess.id, offset);
+        return;
+      }
       if (!ready) {
         _fail('The transcoder is taking too long. Try again.');
         return;
       }
-      await _player!.setupDataSource(
-        BetterPlayerDataSource(
-          BetterPlayerDataSourceType.network,
-          playlistUrl,
-          videoFormat: BetterPlayerVideoFormat.hls,
-          liveStream: true,
-          headers: _authHeaders,
-          bufferingConfiguration: _bufferingConfig,
-          notificationConfiguration: _notificationConfig,
-        ),
-      );
-      await _player!.play();
+      _attachGen = gen;
+      if (debugAttach != null) {
+        await debugAttach!(playlistUrl);
+      } else {
+        await _player!.setupDataSource(
+          BetterPlayerDataSource(
+            BetterPlayerDataSourceType.network,
+            playlistUrl,
+            videoFormat: BetterPlayerVideoFormat.hls,
+            liveStream: true,
+            headers: _authHeaders,
+            bufferingConfiguration: _bufferingConfig,
+            notificationConfiguration: _notificationConfig,
+          ),
+        );
+      }
+      if (stale()) {
+        _discardSession(sess.id, offset);
+        return;
+      }
+      // Normally `initialized` committed this already; this covers a source that
+      // came up without one.
+      _commitPendingOffset();
+      if (debugAttach == null) await _player!.play();
+      if (stale()) return;
       await _applyActiveSubtitle();
     } catch (_) {
-      _fail('This stream could not be played.');
+      if (!stale()) _fail('This stream could not be played.');
     } finally {
-      starting = false;
-      _safeNotify();
+      // Only the winning generation owns these: a superseded run clearing
+      // `starting` would unmask player exceptions for the restart still live.
+      if (!stale()) {
+        _commitPendingOffset();
+        starting = false;
+        _safeNotify();
+      }
     }
+  }
+
+  /// Moves [baseOffset] to where the new source starts.
+  void _commitPendingOffset() {
+    final p = _pendingOffset;
+    if (p == null) return;
+    baseOffset = p;
+    _pendingOffset = null;
+  }
+
+  /// Stops a session a superseded restart brought up, unless a newer one is
+  /// using it. Ids are deterministic in floor(startAt) and the server joins a
+  /// live session with a matching id, so a stop here could kill the winner's.
+  void _discardSession(String id, double offset) {
+    final target = _pendingOffset;
+    final sameSecond = target != null && target.floor() == offset.floor();
+    if (_stopping.contains(id) || _sessionId == id || sameSecond) return;
+    unawaited(transcodeApi.stopTranscode(id).catchError((_) {}));
   }
 
   /// Polls the master playlist until ffmpeg has written it (the endpoint returns
   /// 503 until ready), up to ~20s — mirrors the web player's `waitForPlaylist`.
-  Future<bool> _waitForPlaylist(String url) async {
+  Future<bool> _waitForPlaylist(String url, bool Function() cancelled) async {
     final headers = _authHeaders;
     for (var i = 0; i < 40; i++) {
-      if (_tornDown) return false;
+      if (cancelled()) return false;
       try {
         final r = await http.get(Uri.parse(url), headers: headers);
         if (r.statusCode == 200) return true;
@@ -654,7 +752,7 @@ class PlaybackController extends ChangeNotifier
   @override
   Future<void> seekTo(double target) async {
     final p = _player;
-    if (p == null) return;
+    if (_tornDown || (p == null && !isTranscode)) return;
     final max = catalogDuration > 0 ? catalogDuration : target;
     final t = target.clamp(0.0, max).toDouble();
     // A seek is a fresh decision about where you are, so the card starts over:
@@ -663,13 +761,20 @@ class PlaybackController extends ChangeNotifier
     _closeUpNext();
 
     if (!isTranscode) {
-      await p.seekTo(Duration(milliseconds: (t * 1000).round()));
+      _seekJustIssued = true;
+      await p!.seekTo(Duration(milliseconds: (t * 1000).round()));
       _flush();
       return;
     }
 
+    _seekJustIssued = true;
     final rel = t - baseOffset;
-    if (rel >= 0 && rel <= _encodedSoFarSeconds() + 0.5) {
+    // A restart in flight means the player is mid-swap: its buffered ranges
+    // belong to the old source, so always take the restart path (ARGY-260).
+    if (p != null &&
+        _pendingOffset == null &&
+        rel >= 0 &&
+        rel <= _encodedSoFarSeconds() + 0.5) {
       await p.seekTo(Duration(milliseconds: (rel * 1000).round()));
       _flush();
     } else {
@@ -1022,11 +1127,13 @@ class PlaybackController extends ChangeNotifier
         // exception when we're not mid-(re)start.
         if (!starting) _onPlaybackError();
       case BetterPlayerEventType.progress:
+        _seekJustIssued = false;
         _recovery.progressed(position);
       case BetterPlayerEventType.initialized:
         // The plugin has just taken its one and only duration reading; correct
         // it before any seek can be measured against it (ARGY-230). Runs again
         // after a transcode restart, which recreates the source.
+        if (_attachGen == _restartGen) _commitPendingOffset();
         pinSessionDuration(_player?.videoPlayerController);
         // The HLS alternate-audio renditions are parsed by now (ARGY-127); apply
         // the preferred (or default) track and reflect it in the picker. Also
@@ -1050,6 +1157,10 @@ class PlaybackController extends ChangeNotifier
       case BetterPlayerEventType.bufferingEnd:
         _pushSession();
       case BetterPlayerEventType.finished:
+        // The plugin posts `seekTo` then `finished` for a target past its
+        // duration, and a source mid-swap can report one too. Neither is the
+        // media ending: don't mark watched or roll the episode (ARGY-260).
+        if (starting || _pendingOffset != null || _seekJustIssued) return;
         _setWakelock(false);
         _finished = true;
         _pushSession(phase: MediaPhase.finished);
@@ -1075,6 +1186,7 @@ class PlaybackController extends ChangeNotifier
         _flush();
         _safeNotify();
       case BetterPlayerEventType.seekTo:
+        _seekJustIssued = true;
         _pushSession();
         _flush();
       default:
