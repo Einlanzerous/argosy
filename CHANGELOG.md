@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.33.1](https://github.com/Einlanzerous/argosy/compare/v0.33.0...v0.33.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **mobile:** keep PiP handlers and auto-enter alive across an episode auto-advance (ARGY-265) ([#272](https://github.com/Einlanzerous/argosy/issues/272)) ([3e56992](https://github.com/Einlanzerous/argosy/commit/3e56992238c38519ae6ab2d1dbd1deb760d1c5f8))
+* **player:** retry the next-episode lookup so a transient failure at start can't disable Up Next (ARGY-264) ([#273](https://github.com/Einlanzerous/argosy/issues/273)) ([d50db43](https://github.com/Einlanzerous/argosy/commit/d50db43db564854dc6f8dcf42e258b94bf5feae3))
+
 ## [0.33.0](https://github.com/Einlanzerous/argosy/compare/v0.32.0...v0.33.0) (2026-10-25)
 
 
