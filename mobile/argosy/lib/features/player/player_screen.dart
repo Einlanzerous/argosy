@@ -215,7 +215,7 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     if (!mounted) return;
     setState(() => _pipSupported = supported);
     if (!supported) return;
-    PiP.register(
+    _pipToken = PiP.register(
       onChanged: (inPip) {
         if (mounted) setState(() => _inPip = inPip);
       },
@@ -224,8 +224,12 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     // Keep the PiP play/pause action icon in sync with playback. (Auto-enter is
     // armed by _startAt once real playback begins, not here.)
     _controller.addListener(_syncPipPlaying);
+    // A replacement screen must not inherit the native default (playing); push
+    // the real state once.
+    _syncPipPlaying();
   }
 
+  Object? _pipToken;
   bool? _lastPipPlaying;
 
   void _syncPipPlaying() {
@@ -267,8 +271,12 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
   @override
   void dispose() {
     _controller.removeListener(_syncPipPlaying);
-    PiP.register();
-    PiP.setActive(false);
+    // Owner-scoped: when this screen is being replaced by the next episode's, the
+    // incoming one has already registered its handlers and armed auto-enter, so
+    // neither may be torn down here (ARGY-265).
+    final token = _pipToken;
+    if (token != null) PiP.unregister(token);
+    if (!_replacingWithPlayer) PiP.setActive(false);
     _controller.dispose();
     // When replacing this player with the next episode's player, the incoming
     // screen has already locked landscape + immersive in its initState; resetting
