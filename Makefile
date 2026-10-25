@@ -24,7 +24,7 @@ all: build
 build: web-build go-build ## Build the single artifact: web UI embedded into the server binary
 
 web-build: ## Build the Vue SPA into the Go embed dir (:8097 picks it up live via air)
-	cd $(WEB) && $(BUN) install --frozen-lockfile && $(BUN) run build
+	cd $(WEB) && $(BUN) install --frozen-lockfile && VITE_APP_VERSION=$(VERSION) $(BUN) run build
 	@touch $(EMBED_DIR)/.gitkeep   # Vite's emptyOutDir wipes it; keep it tracked
 
 ensure-embed: ## Guarantee the embed dir is non-empty so go:embed compiles

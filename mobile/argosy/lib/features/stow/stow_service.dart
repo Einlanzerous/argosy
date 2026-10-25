@@ -5,6 +5,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../api/api_providers.dart';
+import '../../api/client_identity.dart';
 import '../../api/token_store.dart';
 import 'stow_runner.dart';
 import 'stow_store.dart';
@@ -439,6 +440,8 @@ class StowTaskHandler extends TaskHandler {
   /// The address goes through [resolveBaseUrl] rather than being read straight
   /// off the store, so this isolate reaches the same server the UI does.
   static Future<StowSession> _connect() async {
+    // This isolate has its own statics; identify the build before connecting.
+    await ClientIdentity.load();
     final tokens = TokenStore(const FlutterSecureStorage());
     await tokens.load();
     final baseUrl = resolveBaseUrl(tokens.baseUrl);

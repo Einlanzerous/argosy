@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../api/client_identity.dart';
 import '../../api/device_preferences_copy.dart';
 import '../stow/offline_progress_queue.dart';
 import 'argosy_audio_handler.dart';
@@ -313,9 +314,10 @@ class PlaybackController extends ChangeNotifier
   bool _disposed = false;
   bool _tornDown = false;
 
-  Map<String, String> get _authHeaders => (token != null && token!.isNotEmpty)
-      ? {'Authorization': 'Bearer $token'}
-      : {};
+  Map<String, String> get _authHeaders => {
+        ...ClientIdentity.header,
+        if (token != null && token!.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
 
   /// better_player_plus's own now-playing integration — **off on Android, kept
   /// on iOS** (ARGY-87).

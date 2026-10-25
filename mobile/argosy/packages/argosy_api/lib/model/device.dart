@@ -21,6 +21,8 @@ class Device {
     this.lastSeenAt,
     required this.revoked,
     required this.createdAt,
+    this.lastClient,
+    this.lastClientAt,
   });
 
   String id;
@@ -41,6 +43,12 @@ class Device {
 
   DateTime createdAt;
 
+  /// The X-Argosy-Client string this device last sent (app, version, build, hardware). Null until the device has made a request with the header.
+  String? lastClient;
+
+  /// When lastClient was last recorded (refreshed at most hourly).
+  DateTime? lastClientAt;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is Device &&
     other.id == id &&
@@ -50,7 +58,9 @@ class Device {
     other.userName == userName &&
     other.lastSeenAt == lastSeenAt &&
     other.revoked == revoked &&
-    other.createdAt == createdAt;
+    other.createdAt == createdAt &&
+    other.lastClient == lastClient &&
+    other.lastClientAt == lastClientAt;
 
   @override
   int get hashCode =>
@@ -62,10 +72,12 @@ class Device {
     (userName == null ? 0 : userName!.hashCode) +
     (lastSeenAt == null ? 0 : lastSeenAt!.hashCode) +
     (revoked.hashCode) +
-    (createdAt.hashCode);
+    (createdAt.hashCode) +
+    (lastClient == null ? 0 : lastClient!.hashCode) +
+    (lastClientAt == null ? 0 : lastClientAt!.hashCode);
 
   @override
-  String toString() => 'Device[id=$id, name=$name, platform=$platform, userId=$userId, userName=$userName, lastSeenAt=$lastSeenAt, revoked=$revoked, createdAt=$createdAt]';
+  String toString() => 'Device[id=$id, name=$name, platform=$platform, userId=$userId, userName=$userName, lastSeenAt=$lastSeenAt, revoked=$revoked, createdAt=$createdAt, lastClient=$lastClient, lastClientAt=$lastClientAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -93,6 +105,16 @@ class Device {
     }
       json[r'revoked'] = this.revoked;
       json[r'createdAt'] = this.createdAt.toUtc().toIso8601String();
+    if (this.lastClient != null) {
+      json[r'lastClient'] = this.lastClient;
+    } else {
+      json[r'lastClient'] = null;
+    }
+    if (this.lastClientAt != null) {
+      json[r'lastClientAt'] = this.lastClientAt!.toUtc().toIso8601String();
+    } else {
+      json[r'lastClientAt'] = null;
+    }
     return json;
   }
 
@@ -128,6 +150,8 @@ class Device {
         lastSeenAt: mapDateTime(json, r'lastSeenAt', r''),
         revoked: mapValueOfType<bool>(json, r'revoked')!,
         createdAt: mapDateTime(json, r'createdAt', r'')!,
+        lastClient: mapValueOfType<String>(json, r'lastClient'),
+        lastClientAt: mapDateTime(json, r'lastClientAt', r''),
       );
     }
     return null;

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import '../../api/api_providers.dart';
+import '../../api/client_identity.dart';
 import '../../api/stream_urls.dart';
 import '../../util/format.dart';
 import '../browse/media_card.dart';
@@ -159,6 +160,7 @@ class StowSession {
     );
     final auth = HttpBearerAuth()..accessToken = () => token ?? '';
     final api = ApiClient(basePath: baseUrl, authentication: auth)
+      ..addDefaultHeader(clientHeaderName, ClientIdentity.value)
       ..client = transport;
     return StowSession(
       stow: StowApi(api),
@@ -179,9 +181,10 @@ class StowSession {
 
   Map<String, String> get authHeaders {
     final value = token;
-    return (value != null && value.isNotEmpty)
-        ? {'Authorization': 'Bearer $value'}
-        : const {};
+    return {
+      ...ClientIdentity.header,
+      if (value != null && value.isNotEmpty) 'Authorization': 'Bearer $value',
+    };
   }
 
   /// Turns the server's relative download URL into an absolute one carrying the
