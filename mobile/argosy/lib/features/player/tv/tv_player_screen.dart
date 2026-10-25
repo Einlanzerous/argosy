@@ -819,9 +819,10 @@ class _UpNextCard extends StatelessWidget {
                         fontSize: 14,
                         letterSpacing: 2,
                         fontWeight: FontWeight.w700)),
-                Text('in ${countdown}s',
-                    style: const TextStyle(
-                        color: ArgosyColors.dim, fontSize: 15)),
+                if (!c.upNextHeld)
+                  Text('in ${countdown}s',
+                      style: const TextStyle(
+                          color: ArgosyColors.dim, fontSize: 15)),
               ],
             ),
             const SizedBox(height: 12),

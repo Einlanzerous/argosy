@@ -26,6 +26,7 @@ import {
 } from '@/lib/playback'
 import { parseVttCues, shiftVtt } from '@/lib/vtt'
 import { RestartGate, type RestartContext } from '@/lib/restartGate'
+import { SeekHold, isRealEnd } from '@/lib/upNext'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -230,6 +231,12 @@ const autoAdvance = ref(true)
 const nextEpisode = ref<OnDeckItem | null>(null)
 const upNextOpen = ref(false)
 const upNextCountdown = ref(0)
+// A seek into the window opens the card but holds the countdown until the viewer
+// has played a few seconds from there (ARGY-261). `seekHold` owns the notion of
+// "watched into this"; `upNextHeld` mirrors it for the template. The same notion
+// gates `ended`, so auto-advance is only ever caused by playing.
+const seekHold = new SeekHold()
+const upNextHeld = ref(false)
 // Milliseconds left on the countdown, and when we last charged it. Real elapsed
 // time rather than playback position, because the card has to keep counting after
 // the file ends (seek to 0:02 and there is no playback left to measure).
@@ -788,6 +795,13 @@ function bindVideo(el: HTMLVideoElement): void {
       recovering = false
       recoveryAttempts = 0
     }
+    if (seekHold.noteProgress(position.value) && upNextOpen.value) {
+      // The hold just lifted: the full countdown starts now.
+      upNextRemainingMs = UP_NEXT_COUNTDOWN_SECONDS * 1000
+      upNextCountdown.value = UP_NEXT_COUNTDOWN_SECONDS
+      upNextLastTick = Date.now()
+      upNextHeld.value = false
+    }
     maybeUpNext()
   })
   el.addEventListener('play', () => {
@@ -815,6 +829,14 @@ function bindVideo(el: HTMLVideoElement): void {
     maybeUpNext()
   })
   el.addEventListener('ended', () => {
+    // An `ended` with no real playback since the last seek is the echo of a seek
+    // past the end, not the media finishing: mark nothing, roll nothing (ARGY-261).
+    // Unless the playhead really is at the end, in which case the countdown that
+    // was held on the card now runs.
+    if (seekHold.held) {
+      if (!isRealEnd(mediaPosition(el), duration.value)) return
+      upNextHeld.value = false
+    }
     void setWatched(itemId, true).catch(() => {})
     // Roll into the next episode unless the viewer opted out (pref off or card
     // dismissed). Otherwise we leave the player on the finished episode.
@@ -882,6 +904,7 @@ function maybeUpNext(): void {
 // the window's business (ARGY-207).
 function openUpNext(): void {
   upNextOpen.value = true
+  upNextHeld.value = seekHold.held
   upNextRemainingMs = UP_NEXT_COUNTDOWN_SECONDS * 1000
   upNextCountdown.value = UP_NEXT_COUNTDOWN_SECONDS
   upNextLastTick = Date.now()
@@ -908,7 +931,9 @@ function tickUpNext(): void {
   const now = Date.now()
   const elapsed = now - upNextLastTick
   upNextLastTick = now
+  // Held by a seek (ARGY-261): the full countdown starts when the hold lifts.
   const el = video.value
+  if (seekHold.held && !el?.ended) return
   if (el && el.paused && !el.ended) return
   upNextRemainingMs -= elapsed
   upNextCountdown.value = Math.max(1, Math.ceil(upNextRemainingMs / 1000))
@@ -1025,6 +1050,7 @@ async function seekTo(t: number): Promise<void> {
   const el = video.value
   if (!el) return
   t = Math.max(0, duration.value ? Math.min(duration.value, t) : t)
+  seekHold.noteSeek()
   if (mode === 'direct') {
     el.currentTime = t
     return
@@ -1691,7 +1717,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <div class="up-next-card">
         <div class="up-next-head">
           <span class="up-next-eyebrow">Up Next</span>
-          <span class="up-next-count">in {{ upNextCountdown }}s</span>
+          <span v-if="!upNextHeld" class="up-next-count">in {{ upNextCountdown }}s</span>
         </div>
         <div class="up-next-title">{{ nextEpisodeLabel }}</div>
         <div v-if="nextEpisode.seriesTitle" class="up-next-series">

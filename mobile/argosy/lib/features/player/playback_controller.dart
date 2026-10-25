@@ -143,6 +143,50 @@ class PlaybackController extends ChangeNotifier
   /// ~25s of file left. Manual Play Next jumps immediately.
   static const upNextCountdownSeconds = 15;
 
+  /// Seconds the viewer must have played, forward and uninterrupted since the
+  /// last seek, before a seek-reached Up Next card starts counting down
+  /// (ARGY-261). Hunting for a scene in the last minutes must not roll the
+  /// episode; the card still opens so Play Next stays one tap away.
+  static const upNextArmSeconds = 5;
+
+  /// Playback seconds accrued from `progress` events since the last seek. Infinite
+  /// until the first seek: reaching the window by playing is never held. Counted
+  /// from the playhead, not the wall clock, so a paused player accrues nothing.
+  double _playedSinceSeek = double.infinity;
+  double? _lastProgressPos;
+
+  /// True while the card is up but its countdown is held back by a seek.
+  ///
+  /// Never held once the media has really ended: nothing is left to watch, so the
+  /// card counts down as ARGY-207 intended and Cancel is the way out.
+  bool get upNextHeld => !_playedPastSeek && !_finished;
+
+  /// Whether the viewer has actually watched into where they are, which is what
+  /// decides if `finished` is the media ending or the echo of a seek.
+  bool get _playedPastSeek => _playedSinceSeek >= upNextArmSeconds;
+
+  void _noteSeek() {
+    _playedSinceSeek = 0;
+    _lastProgressPos = null;
+  }
+
+  void _accruePlayed() {
+    final pos = position;
+    final last = _lastProgressPos;
+    _lastProgressPos = pos;
+    if (last == null) return;
+    final d = pos - last;
+    // Forward and small: a bigger jump is a seek or a restart, not playing.
+    if (d <= 0 || d > 3) return;
+    final wasHeld = !_playedPastSeek;
+    _playedSinceSeek += d;
+    if (wasHeld && _playedPastSeek && upNextOpen) {
+      _upNextLeftMs = upNextCountdownSeconds * 1000;
+      _upNextLastTick = debugNow();
+      _safeNotify();
+    }
+  }
+
   /// Whether the Up Next card should be showing, and the seconds left on its
   /// countdown. Both players render from these rather than deriving them, so the
   /// countdown has one owner and one timer.
@@ -150,6 +194,15 @@ class PlaybackController extends ChangeNotifier
   int upNextCountdown = upNextCountdownSeconds;
 
   Timer? _upNextTimer;
+
+  /// Test seams for the countdown: a manual clock, a stand-in for the player's
+  /// playing state, and a way to run one tick without waiting on the timer.
+  @visibleForTesting
+  DateTime Function() debugNow = DateTime.now;
+  @visibleForTesting
+  bool? debugPlaying;
+  @visibleForTesting
+  void debugTickUpNext() => _tickUpNext();
   int _upNextLeftMs = 0;
   DateTime? _upNextLastTick;
 
@@ -444,7 +497,7 @@ class PlaybackController extends ChangeNotifier
     upNextOpen = true;
     upNextCountdown = upNextCountdownSeconds;
     _upNextLeftMs = upNextCountdownSeconds * 1000;
-    _upNextLastTick = DateTime.now();
+    _upNextLastTick = debugNow();
     _upNextTimer?.cancel();
     _upNextTimer = Timer.periodic(
       const Duration(milliseconds: 250),
@@ -469,10 +522,12 @@ class PlaybackController extends ChangeNotifier
   /// the hold: after a seek into the last couple of seconds the countdown is the
   /// only thing left running, and freezing it would strand the card forever.
   void _tickUpNext() {
-    final now = DateTime.now();
+    final now = debugNow();
     final elapsed = now.difference(_upNextLastTick ?? now).inMilliseconds;
     _upNextLastTick = now;
-    if (!(videoValue?.isPlaying ?? false) && !_finished) return;
+    // Held by a seek (ARGY-261): the full countdown starts when the hold lifts.
+    if (upNextHeld) return;
+    if (!(debugPlaying ?? videoValue?.isPlaying ?? false) && !_finished) return;
     _upNextLeftMs -= elapsed;
     final secs = (_upNextLeftMs / 1000).ceil().clamp(1, upNextCountdownSeconds);
     if (secs != upNextCountdown) {
@@ -767,6 +822,7 @@ class PlaybackController extends ChangeNotifier
     // drop it and let the repaint ticker re-open it — with a full countdown — if
     // the new position is still inside the window (ARGY-207).
     _closeUpNext();
+    _noteSeek();
 
     if (!isTranscode) {
       _seekJustIssued = true;
@@ -1136,6 +1192,7 @@ class PlaybackController extends ChangeNotifier
         if (!starting) _onPlaybackError();
       case BetterPlayerEventType.progress:
         _seekJustIssued = false;
+        _accruePlayed();
         _recovery.progressed(position);
       case BetterPlayerEventType.initialized:
         // The plugin has just taken its one and only duration reading; correct
@@ -1172,13 +1229,18 @@ class PlaybackController extends ChangeNotifier
         // the phantom; and a seek to the very end is a real end of media, which
         // the plugin may report before `progress` has cleared the latch. The
         // phantom always lands far from the catalog end (ARGY-260).
+        //
+        // Likewise a `finished` with no real playback since the last seek is the
+        // echo of a seek, not the media ending: auto-advance is caused by
+        // playing (ARGY-261). A genuine end within the slack is exempt from both.
         final nearEnd =
             catalogDuration > 0 &&
             catalogDuration - position < _realEndSlackSeconds;
-        if (isTranscode &&
-            !isOffline &&
-            !nearEnd &&
-            (starting || _pendingOffset != null || _seekJustIssued)) {
+        if (!nearEnd &&
+            ((isTranscode &&
+                    !isOffline &&
+                    (starting || _pendingOffset != null || _seekJustIssued)) ||
+                !_playedPastSeek)) {
           return;
         }
         _setWakelock(false);
@@ -1207,6 +1269,7 @@ class PlaybackController extends ChangeNotifier
         _safeNotify();
       case BetterPlayerEventType.seekTo:
         _seekJustIssued = true;
+        _noteSeek();
         _pushSession();
         _flush();
       default:
