@@ -25,7 +25,8 @@
 #
 #   ERROR — the map is BROKEN, and archify would refuse to render it at all. A
 #   path that does not exist at the pinned revision, a line range past the end
-#   of the file there, a malformed IR, a component citing more than three
+#   of the file there or ending before it starts, a source with no path, a
+#   component with no id, a malformed IR, a component citing more than three
 #   sources. These fail the build, in the PR that introduced them, because the
 #   alternative is finding out from a warning block on a wiki page nobody was
 #   looking at. Nothing outside this repo can make them fire: both the pin and
@@ -172,8 +173,12 @@ count=0
 # whitespace and merges consecutive ones, so an absent field would shift the
 # columns and a missing path would be read as whatever came next.
 while IFS=$'\x1f' read -r component path line end_line; do
-  [ -n "$component" ] || continue
+  [ -n "$component$path$line$end_line" ] || continue   # the here-string's blank line
   count=$((count + 1))
+  if [ -z "$component" ]; then
+    errors+=("a component with no id cites ${path:-nothing}. The map will not render.")
+    continue
+  fi
   if [ -z "$path" ]; then
     # Checked before any use of $path: an empty associative-array subscript is
     # a bash error that ends the whole loop and would leave the rest unchecked.
@@ -189,11 +194,18 @@ while IFS=$'\x1f' read -r component path line end_line; do
     # Already an error; saying it also "no longer exists" would be false for
     # a path that never did, so the drift check below is skipped for it.
     continue
+  elif [ -z "$line" ] && [ -n "$end_line" ]; then
+    errors+=("$where with end_line $end_line but no line. The map will not render.")
+    continue
   elif [ -n "$line" ]; then
     # `-gt` on a non-integer is a bash error that adds nothing to errors[], so
     # the shape is checked first: positive integers, end_line optional.
     if ! [[ $line =~ ^[1-9][0-9]*$ ]] || { [ -n "$end_line" ] && ! [[ $end_line =~ ^[1-9][0-9]*$ ]]; }; then
       errors+=("$where:$line${end_line:+-$end_line}, which is not a positive-integer line range. The map will not render.")
+      continue
+    fi
+    if [ -n "$end_line" ] && [ "$end_line" -lt "$line" ]; then
+      errors+=("$where:$line-$end_line, a range that ends before it starts. The map will not render.")
       continue
     fi
     # Piped straight into awk, never captured first: `$(…)` strips every
