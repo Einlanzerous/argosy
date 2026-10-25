@@ -1,0 +1,508 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Argosy — system map",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "viewBox": [
+      1200,
+      690
+    ],
+    "repository": {
+      "url": "https://github.com/Einlanzerous/argosy",
+      "revision": "b77d6ff6b6475eaeb0c11d2ea089e0d009f6805c"
+    },
+    "views": [
+      {
+        "id": "watch-path",
+        "label": "Pressing play",
+        "focus": [
+          "web",
+          "mobile",
+          "net",
+          "api",
+          "auth",
+          "transcode",
+          "media"
+        ],
+        "note": "Token checked, then direct play, remux or transcode. ffmpeg reads the library; the server hands the fMP4 HLS back."
+      },
+      {
+        "id": "catalog-path",
+        "label": "How the catalog fills",
+        "focus": [
+          "stevedore",
+          "media",
+          "postgres",
+          "metadata"
+        ],
+        "note": "A scheduled sweep walks each library root, probes files, enriches from metadata providers and writes rows."
+      },
+      {
+        "id": "resume-path",
+        "label": "Cross-device resume",
+        "focus": [
+          "api",
+          "postgres",
+          "beacon",
+          "web",
+          "mobile"
+        ],
+        "note": "Progress writes become Postgres NOTIFY events that reach other devices as server-sent events."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Vue web app",
+      "sublabel": "Pinia · hls.js",
+      "tag": "embedded in the binary",
+      "pos": [
+        40,
+        100
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "internal/webui/embed.go",
+          "line": 14,
+          "label": "go:embed dist"
+        },
+        {
+          "path": "web/src/api/client.ts",
+          "line": 61,
+          "label": "typed API client"
+        },
+        {
+          "path": "web/package.json",
+          "line": 19,
+          "label": "hls.js"
+        }
+      ]
+    },
+    {
+      "id": "mobile",
+      "type": "frontend",
+      "label": "Flutter app",
+      "sublabel": "Android · Android TV · ExoPlayer",
+      "tag": "one APK, phone and TV",
+      "pos": [
+        40,
+        330
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "mobile/argosy/pubspec.yaml",
+          "line": 49,
+          "end_line": 52,
+          "label": "ExoPlayer playback"
+        },
+        {
+          "path": "mobile/argosy/android/app/src/main/AndroidManifest.xml",
+          "line": 19,
+          "end_line": 23,
+          "label": "TV support"
+        },
+        {
+          "path": "mobile/argosy/lib/features/beacon/beacon_client.dart",
+          "label": "play-state stream"
+        }
+      ]
+    },
+    {
+      "id": "net",
+      "type": "external",
+      "label": "Network path",
+      "sublabel": "LAN · tailnet · WAN",
+      "tag": "no edge logic in Argosy",
+      "pos": [
+        240,
+        215
+      ],
+      "size": [
+        140,
+        64
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Argosy server",
+      "sublabel": "Go · one binary · :8096",
+      "tag": "API, streams and SPA on one origin",
+      "pos": [
+        480,
+        210
+      ],
+      "size": [
+        170,
+        70
+      ],
+      "sources": [
+        {
+          "path": "cmd/argosy/main.go",
+          "line": 217,
+          "end_line": 262,
+          "label": "wiring and serve"
+        },
+        {
+          "path": "internal/server/server.go",
+          "line": 33,
+          "end_line": 61,
+          "label": "mux and SPA fallback"
+        },
+        {
+          "path": "internal/library/handlers.go",
+          "line": 58,
+          "end_line": 137,
+          "label": "catalog, playback, stream routes"
+        }
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Accounts and device tokens",
+      "sublabel": "bearer · PIN pairing",
+      "tag": "Argosy's own sessions",
+      "pos": [
+        475,
+        40
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "internal/auth/auth.go",
+          "line": 275,
+          "end_line": 276,
+          "label": "token to session"
+        },
+        {
+          "path": "internal/auth/handlers.go",
+          "line": 542,
+          "end_line": 544,
+          "label": "bearer middleware"
+        },
+        {
+          "path": "internal/auth/link.go",
+          "line": 28,
+          "label": "TV pairing code"
+        }
+      ]
+    },
+    {
+      "id": "beacon",
+      "type": "messagebus",
+      "label": "Beacon",
+      "sublabel": "NOTIFY → server-sent events",
+      "pos": [
+        780,
+        40
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "internal/beacon/beacon.go",
+          "line": 1,
+          "end_line": 5,
+          "label": "design note"
+        },
+        {
+          "path": "internal/beacon/beacon.go",
+          "line": 148,
+          "label": "LISTEN"
+        },
+        {
+          "path": "internal/library/beacon.go",
+          "line": 36,
+          "label": "SSE response"
+        }
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "accounts · catalog · play state",
+      "tag": "migrated at boot",
+      "pos": [
+        780,
+        215
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "internal/db/db.go",
+          "line": 32,
+          "label": "Migrate"
+        },
+        {
+          "path": "internal/db/migrations/00001_init.sql",
+          "line": 6,
+          "label": "initial schema"
+        }
+      ]
+    },
+    {
+      "id": "transcode",
+      "type": "backend",
+      "label": "Transcode sessions",
+      "sublabel": "ffmpeg → fMP4 HLS · VAAPI",
+      "tag": "direct play, remux or encode",
+      "pos": [
+        475,
+        400
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "internal/transcode/ffmpeg.go",
+          "line": 336,
+          "end_line": 339,
+          "label": "HLS fMP4 arguments"
+        },
+        {
+          "path": "internal/transcode/capabilities.go",
+          "line": 61,
+          "label": "hardware probe"
+        },
+        {
+          "path": "internal/ballast/ballast.go",
+          "line": 66,
+          "end_line": 69,
+          "label": "cache sweeper"
+        }
+      ]
+    },
+    {
+      "id": "stevedore",
+      "type": "backend",
+      "label": "Stevedore",
+      "sublabel": "library scanner",
+      "tag": "scheduled sweep",
+      "pos": [
+        780,
+        400
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "internal/stevedore/scheduler.go",
+          "line": 105,
+          "label": "scan loop"
+        },
+        {
+          "path": "internal/stevedore/scheduler.go",
+          "line": 245,
+          "end_line": 246,
+          "label": "library roots"
+        },
+        {
+          "path": "internal/stevedore/scanner.go",
+          "line": 87,
+          "label": "Scan"
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "type": "database",
+      "label": "Media library",
+      "sublabel": "local file trees",
+      "tag": "read-only to the server",
+      "pos": [
+        475,
+        590
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "internal/mediasource/mediasource.go",
+          "line": 22,
+          "label": "Source interface"
+        },
+        {
+          "path": "internal/mediasource/localfs.go",
+          "line": 42,
+          "label": "local filesystem backend"
+        },
+        {
+          "path": "deploy/docker-compose.yml",
+          "line": 93,
+          "end_line": 94,
+          "label": "media mounts"
+        }
+      ]
+    },
+    {
+      "id": "metadata",
+      "type": "external",
+      "label": "TMDB",
+      "sublabel": "title metadata",
+      "pos": [
+        1040,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "subs",
+      "type": "external",
+      "label": "OpenSubtitles",
+      "sublabel": "subtitle search",
+      "pos": [
+        240,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "web-net",
+      "from": "web",
+      "to": "net",
+      "label": "HTTP /api/v1 · HLS · SSE",
+      "variant": "emphasis"
+    },
+    {
+      "id": "mobile-net",
+      "from": "mobile",
+      "to": "net",
+      "label": "HTTP · HLS · SSE",
+      "variant": "emphasis"
+    },
+    {
+      "id": "net-api",
+      "from": "net",
+      "to": "api",
+      "label": "bearer token",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-auth",
+      "from": "api",
+      "to": "auth",
+      "label": "resolve session",
+      "variant": "security"
+    },
+    {
+      "id": "api-postgres",
+      "from": "api",
+      "to": "postgres",
+      "label": "SQL",
+      "variant": "emphasis",
+      "labelAt": [
+        745,
+        247
+      ]
+    },
+    {
+      "id": "api-beacon",
+      "from": "api",
+      "to": "beacon",
+      "label": "progress events",
+      "labelAt": [
+        715,
+        140
+      ]
+    },
+    {
+      "id": "beacon-postgres",
+      "from": "beacon",
+      "to": "postgres",
+      "label": "LISTEN / NOTIFY",
+      "labelAt": [
+        865,
+        160
+      ]
+    },
+    {
+      "id": "api-transcode",
+      "from": "api",
+      "to": "transcode",
+      "label": "start · fetch segments",
+      "labelAt": [
+        565,
+        340
+      ]
+    },
+    {
+      "id": "transcode-media",
+      "from": "transcode",
+      "to": "media",
+      "label": "ffmpeg reads",
+      "labelAt": [
+        565,
+        527
+      ]
+    },
+    {
+      "id": "api-stevedore",
+      "from": "api",
+      "to": "stevedore",
+      "label": "scan trigger",
+      "variant": "dashed"
+    },
+    {
+      "id": "stevedore-media",
+      "from": "stevedore",
+      "to": "media",
+      "label": "walk · ffprobe"
+    },
+    {
+      "id": "stevedore-postgres",
+      "from": "stevedore",
+      "to": "postgres",
+      "label": "catalog rows"
+    },
+    {
+      "id": "stevedore-metadata",
+      "from": "stevedore",
+      "to": "metadata",
+      "label": "HTTPS lookups",
+      "variant": "dashed"
+    },
+    {
+      "id": "api-subs",
+      "from": "api",
+      "to": "subs",
+      "label": "on request",
+      "variant": "dashed"
+    }
+  ]
+}
