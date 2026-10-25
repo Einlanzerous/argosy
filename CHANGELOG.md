@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.3](https://github.com/Einlanzerous/argosy/compare/v0.33.2...v0.33.3) (2026-10-25)
+
+
+### Bug Fixes
+
+* **mobile:** strip the plugin's BOOT_COMPLETED receiver from the merged manifest (ARGY-272) ([#277](https://github.com/Einlanzerous/argosy/issues/277)) ([ad923ad](https://github.com/Einlanzerous/argosy/commit/ad923ad1a460e622a9cf5f1264e626225177f8c4))
+
 ## [0.33.2](https://github.com/Einlanzerous/argosy/compare/v0.33.1...v0.33.2) (2026-10-25)
 
 
