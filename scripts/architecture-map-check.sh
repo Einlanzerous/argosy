@@ -163,14 +163,16 @@ count_lines() { awk 'END { print NR }'; }
 # One type gate for the source shape, mirroring archify's vendored schema
 # (`sources.items`: `path` a non-empty string, `line`/`end_line` integers >= 1,
 # `label` the only other key, `additionalProperties: false`; and every
-# component an `id`). Checked here as data, in one place, rather than field by
-# field downstream, where each new coercion was its own hole: a string line
-# that `tostring` smoothed over, a `false` that `//` read as absent.
+# component an `id`, and a non-empty `sources` array). Checked here as data, in
+# one place, rather than field by field downstream, where each new coercion
+# was its own hole: a string line that `tostring` smoothed over, a `false` that
+# `//` read as absent. Not checked, because nothing downstream reads them:
+# `label`'s type and length, and `path`'s maximum length.
 shape=$(jq -r '
   (.components // []) | to_entries[] | .key as $i | .value as $c
   | (if ($c.id|type)=="string" and ($c.id|length)>0 then $c.id else "#\($i)" end) as $name
   | ( if ($c.id|type)!="string" or ($c.id|length)==0 then "component \($name) has no string id" else empty end ),
-    ( ($c.sources // []) | if type!="array" then "component \($name): sources is not an array"
+    ( (if $c|has("sources") then $c.sources else null end) | if type!="array" or length==0 then "component \($name): sources is not a non-empty array"
       else to_entries[] | .key as $j | .value as $s
       | if ($s|type)!="object" then "component \($name) source \($j) is not an object"
         else ( ($s|keys[]) | select(. != "path" and . != "line" and . != "end_line" and . != "label") | "component \($name) source \($j) has an unknown key \"\(.)\"" ),
@@ -190,7 +192,10 @@ fi
 # does not see the exit status of `< <(jq …)`, so a jq error partway through
 # the stream (a non-string path, say) would leave every later reference
 # unchecked and the summary saying "in sync".
-if ! refs=$(jq -r '.components[]? | .id as $c | (.sources // [])[] | [$c, (.path // ""), (.line // "" | tostring), (.end_line // "" | tostring)] | join("\u001f")' "$IR"); then
+# Numbers are canonicalised here (`floor|tostring`): the gate has proved them
+# integral, but jq spells 700.0 as "700.0" and 7e3 as "7E+3", and bash's `-gt`
+# would choke on either without adding anything to errors[].
+if ! refs=$(jq -r '.components[]? | .id as $c | .sources[] | [$c, .path, (.line // "" | if type=="number" then floor|tostring else . end), (.end_line // "" | if type=="number" then floor|tostring else . end)] | join("\u001f")' "$IR"); then
   annotate error "$IR has a source jq cannot read (a path or line that is not a string or number?); the map will not render."
   exit 1
 fi
