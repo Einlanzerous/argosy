@@ -64,10 +64,26 @@ class _Server extends TranscodeApi {
   }
 }
 
+class _Library extends LibraryApi {
+  _Library() : super(ApiClient());
+
+  final watched = <String>[];
+
+  @override
+  Future<PlayState?> setWatched(
+    String id,
+    WatchedUpdate watchedUpdate, {
+    Future<void>? abortTrigger,
+  }) async {
+    watched.add(id);
+    return null;
+  }
+}
+
 class _Rig {
   _Rig() {
     c = PlaybackController(
-      libraryApi: LibraryApi(ApiClient()),
+      libraryApi: library,
       transcodeApi: server,
       authApi: AuthApi(ApiClient()),
       baseUrl: 'http://localhost',
@@ -90,6 +106,7 @@ class _Rig {
   }
 
   final server = _Server();
+  final library = _Library();
   late final PlaybackController c;
   final probeGates = <String, Completer<void>>{};
   final attached = <String>[];
@@ -104,6 +121,29 @@ class _Rig {
 Future<void> _settle() async {
   for (var i = 0; i < 30; i++) {
     await Future<void>.delayed(Duration.zero);
+  }
+}
+
+/// Plays [seconds] of forward progress, a progress event every half second.
+void _play(PlaybackController c, double seconds) {
+  // The first progress after a seek only anchors the playhead.
+  c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.progress));
+  for (var t = 0.0; t < seconds; t += 0.5) {
+    c.baseOffset += 0.5;
+    c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.progress));
+  }
+}
+
+class _Clock {
+  DateTime now = DateTime(2026, 10, 25);
+}
+
+/// Runs the Up Next countdown forward [seconds] on a manual clock, 250ms a tick.
+void _tick(PlaybackController c, _Clock clock, double seconds) {
+  for (var t = 0.0; t < seconds; t += 0.25) {
+    clock.now = clock.now.add(const Duration(milliseconds: 250));
+    c.maybeAdvance();
+    c.debugTickUpNext();
   }
 }
 
@@ -207,10 +247,13 @@ void main() {
       ..handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
     expect(r.c.debugFinished, isFalse);
 
-    // Once playback progresses, a real finish counts again.
-    r.c
-      ..handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.progress))
-      ..handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
+    // Once the viewer has played on from the seek, a real finish counts again
+    // (ARGY-261: a progress event with no forward motion is not playing).
+    r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.progress));
+    r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
+    expect(r.c.debugFinished, isFalse);
+    _play(r.c, PlaybackController.upNextArmSeconds.toDouble());
+    r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
     expect(r.c.debugFinished, isTrue);
   });
 
@@ -263,4 +306,142 @@ void main() {
       expect(r.c.baseOffset, 900);
     },
   );
+
+  group('Up Next after a manual seek (ARGY-261)', () {
+    // 30s from the end of 1440s: inside the 40s window, ~98%.
+    const inWindow = 1410.0;
+
+    ({_Rig r, _Clock clock, List<int> advanced}) rig() {
+      final r = _Rig();
+      addTearDown(r.c.dispose);
+      final clock = _Clock();
+      final advanced = <int>[];
+      r.c
+        ..nextEpisode = OnDeckItem(
+          id: 'next-1',
+          seriesId: 's',
+          seriesTitle: 'Scrubs',
+          seasonNumber: 1,
+          episodeNumber: 2,
+        )
+        ..debugNow = (() => clock.now)
+        ..debugPlaying = true
+        ..onAdvance = () => advanced.add(1);
+      return (r: r, clock: clock, advanced: advanced);
+    }
+
+    test('a seek into the window opens the card but holds the countdown',
+        () async {
+      final t = rig();
+      await t.r.c.seekTo(inWindow);
+      t.r.c.maybeAdvance();
+      expect(t.r.c.upNextOpen, isTrue);
+      expect(t.r.c.upNextHeld, isTrue);
+
+      _tick(t.r.c, t.clock, 20);
+      expect(t.advanced, isEmpty);
+      expect(t.r.c.upNextCountdown, PlaybackController.upNextCountdownSeconds);
+      expect(t.r.c.upNextOpen, isTrue);
+    });
+
+    test('five seconds of playback arms it, and then it runs', () async {
+      final t = rig();
+      await t.r.c.seekTo(inWindow);
+      t.r.c.maybeAdvance();
+      _play(t.r.c, 4);
+      expect(t.r.c.upNextHeld, isTrue);
+      _play(t.r.c, 1);
+      expect(t.r.c.upNextHeld, isFalse);
+
+      _tick(t.r.c, t.clock, 14);
+      expect(t.advanced, isEmpty);
+      _tick(t.r.c, t.clock, 2);
+      expect(t.advanced, [1]);
+    });
+
+    test('a paused player accrues nothing', () async {
+      final t = rig();
+      await t.r.c.seekTo(inWindow);
+      for (var i = 0; i < 40; i++) {
+        t.r.c.handlePlayerEvent(
+          BetterPlayerEvent(BetterPlayerEventType.progress),
+        );
+      }
+      expect(t.r.c.upNextHeld, isTrue);
+    });
+
+    test('a second seek re-holds', () async {
+      final t = rig();
+      await t.r.c.seekTo(inWindow);
+      _play(t.r.c, 5);
+      expect(t.r.c.upNextHeld, isFalse);
+
+      await t.r.c.seekTo(inWindow + 5);
+      t.r.c.maybeAdvance();
+      expect(t.r.c.upNextOpen, isTrue);
+      expect(t.r.c.upNextHeld, isTrue);
+      _tick(t.r.c, t.clock, 20);
+      expect(t.advanced, isEmpty);
+    });
+
+    test('playing into the window still counts down at once', () {
+      final t = rig();
+      t.r.c.baseOffset = 1440.0 - 41;
+      t.r.c.maybeAdvance();
+      expect(t.r.c.upNextOpen, isFalse);
+      _play(t.r.c, 1);
+      t.r.c.maybeAdvance();
+      expect(t.r.c.upNextOpen, isTrue);
+      expect(t.r.c.upNextHeld, isFalse);
+
+      _tick(t.r.c, t.clock, 16);
+      expect(t.advanced, [1]);
+    });
+
+    test('finished right after a seek marks nothing and advances nothing',
+        () async {
+      final t = rig();
+      await t.r.c.seekTo(inWindow);
+      t.r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
+      _play(t.r.c, 2);
+      t.r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
+      expect(t.r.c.debugFinished, isFalse);
+      expect(t.advanced, isEmpty);
+    });
+
+    test('a real end right behind a seek to the end finishes and counts down',
+        () async {
+      final t = rig();
+      await t.r.c.seekTo(5000); // clamps to the 1440s catalog end
+      t.r.c.maybeAdvance();
+      expect(t.r.c.upNextOpen, isTrue);
+      expect(t.r.c.upNextHeld, isTrue);
+
+      t.r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.seekTo));
+      t.r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
+      expect(t.r.c.debugFinished, isTrue);
+      expect(t.r.library.watched, ['item-1']);
+      // The card was up, so the countdown owns the roll-over and is no longer held.
+      expect(t.r.c.upNextHeld, isFalse);
+      expect(t.advanced, isEmpty);
+      _tick(t.r.c, t.clock, 16);
+      expect(t.advanced, [1]);
+    });
+
+    test('finished far from the end with no playback marks nothing', () async {
+      final t = rig();
+      await t.r.c.seekTo(inWindow);
+      t.r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
+      expect(t.r.c.debugFinished, isFalse);
+      expect(t.r.library.watched, isEmpty);
+    });
+
+    test('finished after enough playback is the real end', () async {
+      final t = rig();
+      await t.r.c.seekTo(inWindow);
+      _play(t.r.c, 5);
+      t.r.c.handlePlayerEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
+      expect(t.r.c.debugFinished, isTrue);
+    });
+  });
 }

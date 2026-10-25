@@ -181,9 +181,10 @@ class _PlayerControlsState extends State<PlayerControls> {
                         letterSpacing: 1.6,
                         fontWeight: FontWeight.w700,
                       )),
-                  Text('in ${countdown}s',
-                      style: const TextStyle(
-                          color: ArgosyColors.dim, fontSize: 12)),
+                  if (!_c.upNextHeld)
+                    Text('in ${countdown}s',
+                        style: const TextStyle(
+                            color: ArgosyColors.dim, fontSize: 12)),
                 ],
               ),
               const SizedBox(height: 10),
