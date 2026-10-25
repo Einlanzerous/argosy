@@ -35,8 +35,7 @@
           "stevedore",
           "media",
           "postgres",
-          "metadata",
-          "subs"
+          "metadata"
         ],
         "note": "A scheduled sweep walks each library root, probes files, enriches from metadata providers and writes rows."
       },
