@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../api/api_providers.dart';
 import '../../../api/artwork.dart';
-import '../../../router/app_router.dart';
 import '../../../theme/argosy_colors.dart';
 import '../../../tv/tv_backdrop_scaffold.dart';
 import '../../../tv/tv_button.dart';
@@ -49,6 +48,7 @@ class TvSeriesScreen extends ConsumerWidget {
               Expanded(
                 child: AsyncView(
                   value: detail,
+                  keepStale: true,
                   onRetry: () => ref.invalidate(seriesDetailProvider(seriesId)),
                   builder: (series) => _Series(series: series),
                 ),
@@ -87,6 +87,15 @@ class _SeriesState extends ConsumerState<_Series> {
   /// phone detail. Not an invalidate-and-refetch: that swaps the screen for the
   /// loading spinner and drops focus off the toggle that was just pressed.
   final Map<String, bool> _watchedOverrides = {};
+
+  /// A refetch (the player popped, ARGY-266) replaces `widget.series`; the
+  /// server is authoritative from then on, so an override that disagrees with it
+  /// would be the stale side.
+  @override
+  void didUpdateWidget(covariant _Series oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.series, widget.series)) _watchedOverrides.clear();
+  }
 
   bool _isWatched(EpisodeSummary e) {
     final id = e.mediaItemId;
@@ -341,8 +350,12 @@ class _Meta extends StatelessWidget {
             icon: Icons.play_arrow,
             primary: true,
             focusNode: playFocus,
-            onSelect: () =>
-                openPlayer(context, resume!.ep.mediaItemId!, resume: true),
+            onSelect: () => openPlayerThenRefresh(
+              context,
+              seriesDetailProvider(series.id),
+              resume!.ep.mediaItemId!,
+              resume: true,
+            ),
           )
         else if (firstPlayable != null)
           TvButton(
@@ -350,7 +363,11 @@ class _Meta extends StatelessWidget {
             icon: Icons.play_arrow,
             primary: true,
             focusNode: playFocus,
-            onSelect: () => openPlayer(context, firstPlayable!),
+            onSelect: () => openPlayerThenRefresh(
+              context,
+              seriesDetailProvider(series.id),
+              firstPlayable!,
+            ),
           ),
         const SizedBox(height: 18),
         TvButton.icon(
@@ -473,6 +490,7 @@ class _Episodes extends StatelessWidget {
               itemCount: groups.length,
               separatorBuilder: (_, _) => const SizedBox(height: 16),
               itemBuilder: (_, i) => _EpisodeRow(
+                seriesId: series.id,
                 episodes: groups[i],
                 seasonNumber: season.seasonNumber,
                 focusNode: i == 0 ? firstEpisodeFocus : null,
@@ -532,6 +550,7 @@ class _SeasonTab extends StatelessWidget {
 /// row's own rect, so directional traversal can't tell which is "to the right".
 class _EpisodeRow extends StatefulWidget {
   const _EpisodeRow({
+    required this.seriesId,
     required this.episodes,
     required this.seasonNumber,
     required this.isWatched,
@@ -539,6 +558,7 @@ class _EpisodeRow extends StatefulWidget {
     this.focusNode,
   });
 
+  final String seriesId;
   final List<EpisodeSummary> episodes;
   final int seasonNumber;
   final bool Function(EpisodeSummary) isWatched;
@@ -566,6 +586,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
   @override
   Widget build(BuildContext context) {
     return _EpisodeTile(
+      seriesId: widget.seriesId,
       episodes: widget.episodes,
       seasonNumber: widget.seasonNumber,
       isWatched: widget.isWatched,
@@ -578,6 +599,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
 
 class _EpisodeTile extends ConsumerWidget {
   const _EpisodeTile({
+    required this.seriesId,
     required this.episodes,
     required this.seasonNumber,
     required this.isWatched,
@@ -586,6 +608,7 @@ class _EpisodeTile extends ConsumerWidget {
     required this.toggleFocus,
   });
 
+  final String seriesId;
   final bool Function(EpisodeSummary) isWatched;
   final Future<void> Function(String mediaItemId, bool watched) onSetWatched;
   final List<EpisodeSummary> episodes;
@@ -666,7 +689,12 @@ class _EpisodeTile extends ConsumerWidget {
         focusNode: focusNode,
         ensureVisibleOnFocus: true,
         onSelect: playable
-            ? () => openPlayer(context, _rep.mediaItemId!, resume: inProgress)
+            ? () => openPlayerThenRefresh(
+                context,
+                seriesDetailProvider(seriesId),
+                _rep.mediaItemId!,
+                resume: inProgress,
+              )
             : null,
         child: Container(
           padding: const EdgeInsets.all(16),

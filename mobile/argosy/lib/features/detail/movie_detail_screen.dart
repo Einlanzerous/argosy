@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
-import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
 import '../../util/format.dart';
@@ -33,6 +32,7 @@ class MovieDetailScreen extends ConsumerWidget {
       ),
       body: AsyncView(
         value: detail,
+        keepStale: true,
         onRetry: () => ref.invalidate(movieDetailProvider(itemId)),
         builder: (data) => _Body(data: data),
       ),
@@ -192,7 +192,12 @@ class _Actions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final primary = FilledButton.icon(
       style: brassButtonStyle(context),
-      onPressed: () => openPlayer(context, itemId, resume: resumable),
+      onPressed: () => openPlayerThenRefresh(
+        context,
+        movieDetailProvider(itemId),
+        itemId,
+        resume: resumable,
+      ),
       icon: const Icon(Icons.play_arrow, size: 20),
       label: Text(resumable ? 'Resume' : 'Play'),
     );
@@ -203,7 +208,12 @@ class _Actions extends ConsumerWidget {
       if (resumable)
         FilledButton.icon(
           style: ghostButtonStyle(context),
-          onPressed: () => openPlayer(context, itemId, startOver: true),
+          onPressed: () => openPlayerThenRefresh(
+            context,
+            movieDetailProvider(itemId),
+            itemId,
+            startOver: true,
+          ),
           icon: const Icon(Icons.replay, size: 18),
           label: const Text('Start over'),
         ),
