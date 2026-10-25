@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'api/client_identity.dart';
 import 'app.dart';
 import 'features/player/argosy_audio_handler.dart';
 import 'platform/device_capabilities.dart';
@@ -20,6 +21,9 @@ Future<void> main() async {
   // Resolve the device type once up front so the root can synchronously pick the
   // TV (10-foot, D-pad) shell vs. the touch shell (ARGY-51).
   final isTv = await DeviceCapabilities.isTelevision();
+  // Identify this build on every request (ARGY-262). After the TV probe so the
+  // string can say `tv`.
+  await ClientIdentity.load();
   if (isTv) {
     // Always paint focus highlights on a TV. Flutter's default highlight mode
     // follows the last input kind and flips to `touch` (no focus rings) on any

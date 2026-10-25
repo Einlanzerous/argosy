@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/io_client.dart';
 
+import 'client_identity.dart';
 import 'stream_urls.dart';
 import 'token_store.dart';
 
@@ -53,6 +54,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   final httpClient = IOClient(HttpClient()..connectionTimeout = _connectTimeout);
   ref.onDispose(httpClient.close);
   return ApiClient(basePath: basePath, authentication: auth)
+    ..addDefaultHeader(clientHeaderName, ClientIdentity.value)
     ..client = httpClient;
 });
 
