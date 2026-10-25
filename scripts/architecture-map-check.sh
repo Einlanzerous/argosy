@@ -25,9 +25,10 @@
 #
 #   ERROR — the map is BROKEN, and archify would refuse to render it at all. A
 #   path that does not exist at the pinned revision, a line range past the end
-#   of the file there or ending before it starts, a source with no path, a
-#   component with no id, a malformed IR, a component citing more than three
-#   sources. These fail the build, in the PR that introduced them, because the
+#   of the file there, a source that breaks archify's schema (no path, a line
+#   that is not a positive integer, a range ending before it starts, an unknown
+#   key), a component with no id, unparsable JSON, a component citing more
+#   than three sources. These fail the build, in the PR that introduced them, because the
 #   alternative is finding out from a warning block on a wiki page nobody was
 #   looking at. Nothing outside this repo can make them fire: both the pin and
 #   the paths live in the tracked file.
@@ -159,6 +160,32 @@ fi
 # is exactly that count.
 count_lines() { awk 'END { print NR }'; }
 
+# One type gate for the source shape, mirroring archify's vendored schema
+# (`sources.items`: `path` a non-empty string, `line`/`end_line` integers >= 1,
+# `label` the only other key, `additionalProperties: false`; and every
+# component an `id`). Checked here as data, in one place, rather than field by
+# field downstream, where each new coercion was its own hole: a string line
+# that `tostring` smoothed over, a `false` that `//` read as absent.
+shape=$(jq -r '
+  (.components // []) | to_entries[] | .key as $i | .value as $c
+  | (if ($c.id|type)=="string" and ($c.id|length)>0 then $c.id else "#\($i)" end) as $name
+  | ( if ($c.id|type)!="string" or ($c.id|length)==0 then "component \($name) has no string id" else empty end ),
+    ( ($c.sources // []) | if type!="array" then "component \($name): sources is not an array"
+      else to_entries[] | .key as $j | .value as $s
+      | if ($s|type)!="object" then "component \($name) source \($j) is not an object"
+        else ( ($s|keys[]) | select(. != "path" and . != "line" and . != "end_line" and . != "label") | "component \($name) source \($j) has an unknown key \"\(.)\"" ),
+             ( if ($s.path|type)!="string" or ($s.path|length)==0 then "component \($name) source \($j) has no string path" else empty end ),
+             ( $s | to_entries[] | select(.key=="line" or .key=="end_line")
+               | select((.value|type)!="number" or (.value|floor)!=.value or .value<1 or .value>999999999)
+               | "component \($name) source \($j) \(.key) is not a positive integer" ),
+             ( if ($s.line|type)=="number" and ($s.end_line|type)=="number" and $s.end_line<$s.line then "component \($name) source \($j) range ends before it starts" else empty end ),
+             ( if ($s.end_line|type)=="number" and ($s.line|type)!="number" then "component \($name) source \($j) has end_line but no line" else empty end )
+        end end )' "$IR" 2>&1) || { annotate error "$IR could not be read for its source shapes: $shape"; exit 1; }
+if [ -n "$shape" ]; then
+  while IFS= read -r finding; do annotate error "$finding. The map will not render."; done <<<"$shape"
+  exit 1
+fi
+
 # Captured first and checked, never read through a process substitution: bash
 # does not see the exit status of `< <(jq …)`, so a jq error partway through
 # the stream (a non-string path, say) would leave every later reference
@@ -179,16 +206,6 @@ count=0
 # columns and a missing path would be read as whatever came next.
 while IFS=$'\x1f' read -r component path line end_line; do
   count=$((count + 1))
-  if [ -z "$component" ]; then
-    errors+=("a component with no id cites ${path:-nothing}. The map will not render.")
-    continue
-  fi
-  if [ -z "$path" ]; then
-    # Checked before any use of $path: an empty associative-array subscript is
-    # a bash error that ends the whole loop and would leave the rest unchecked.
-    errors+=("component \"$component\" has a source with no path. The map will not render.")
-    continue
-  fi
   cited[$path]=1
   where="component \"$component\" cites $path"
 
@@ -198,21 +215,7 @@ while IFS=$'\x1f' read -r component path line end_line; do
     # Already an error; saying it also "no longer exists" would be false for
     # a path that never did, so the drift check below is skipped for it.
     continue
-  elif [ -z "$line" ] && [ -n "$end_line" ]; then
-    errors+=("$where with end_line $end_line but no line. The map will not render.")
-    continue
   elif [ -n "$line" ]; then
-    # `-gt` on a non-integer, or on an integer past 64 bits, is a bash error
-    # that adds nothing to errors[], so the shape is checked first: positive
-    # integers of at most nine digits, end_line optional.
-    if ! [[ $line =~ ^[1-9][0-9]{0,8}$ ]] || { [ -n "$end_line" ] && ! [[ $end_line =~ ^[1-9][0-9]{0,8}$ ]]; }; then
-      errors+=("$where:$line${end_line:+-$end_line}, which is not a positive-integer line range. The map will not render.")
-      continue
-    fi
-    if [ -n "$end_line" ] && [ "$end_line" -lt "$line" ]; then
-      errors+=("$where:$line-$end_line, a range that ends before it starts. The map will not render.")
-      continue
-    fi
     # Piped straight into awk, never captured first: `$(…)` strips every
     # trailing newline, so a file ending in blank lines would be undercounted
     # and a citation into those lines reported as out of range.
@@ -242,11 +245,6 @@ while IFS=$'\x1f' read -r component path line end_line; do
     fi
   fi
 done <<<"$refs"
-
-if [ "$count" -eq 0 ]; then
-  annotate error "no component carries sources[] — archify refuses a map that pins a revision and cites nothing."
-  exit 1
-fi
 
 echo "architecture-map: $count source reference(s) checked against $short"
 for e in "${errors[@]}"; do annotate error "$e"; done
