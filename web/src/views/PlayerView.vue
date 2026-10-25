@@ -28,6 +28,7 @@ import {
 import { parseVttCues, shiftVtt } from '@/lib/vtt'
 import { RestartGate, type RestartContext } from '@/lib/restartGate'
 import { SeekHold, isRealEnd } from '@/lib/upNext'
+import { NextEpisodeLookup } from '@/lib/nextEpisode'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
 
@@ -230,6 +231,13 @@ let pausedSince: number | null = null
 const UP_NEXT_COUNTDOWN_SECONDS = 15
 const autoAdvance = ref(true)
 const nextEpisode = ref<OnDeckItem | null>(null)
+// A failed lookup is not "last episode" (ARGY-264): it is retried when a transcode
+// restart succeeds, when the playhead enters the credits window, and at `ended`.
+const nextLookup = new NextEpisodeLookup<OnDeckItem>({
+  fetch: () => getNextEpisode(itemId),
+  onResolved: (n) => (nextEpisode.value = n),
+  onFailure: (err) => console.warn('next-episode lookup failed', err),
+})
 const upNextOpen = ref(false)
 const upNextCountdown = ref(0)
 // A seek into the window opens the card but holds the countdown until the viewer
@@ -433,9 +441,7 @@ onMounted(async () => {
   // no point asking the server for the next episode.
   autoAdvance.value = devicePrefs?.seriesAutoAdvance ?? true
   if (autoAdvance.value) {
-    void getNextEpisode(itemId)
-      .then((n) => (nextEpisode.value = n))
-      .catch(() => {})
+    void nextLookup.load()
   }
 
   // Subtitle tracks load in the background; an OpenSubtitles search can take a
@@ -561,6 +567,9 @@ async function startTranscodeAt(el: HTMLVideoElement, offset: number): Promise<v
       // cap (ARGY-223 review). Only the winning restart gets here, so a superseded
       // one can't clear it under the live one (ARGY-260).
       recovering = false
+      // The server just answered a whole restart: if the next-episode lookup
+      // failed earlier, now is the time to ask again (ARGY-264).
+      if (!error.value && autoAdvance.value && nextLookup.failed) void nextLookup.load()
     },
   })
 }
@@ -852,6 +861,16 @@ function bindVideo(el: HTMLVideoElement): void {
     // until it expires.
     if (autoAdvance.value && nextEpisode.value && !upNextCancelled.value && !upNextOpen.value) {
       advance()
+    } else if (
+      autoAdvance.value &&
+      !nextEpisode.value &&
+      nextLookup.failed &&
+      !upNextCancelled.value
+    ) {
+      // The lookup failed earlier: one last try so a real end can still roll over.
+      void nextLookup.load(true).then(() => {
+        if (nextEpisode.value && !upNextCancelled.value && !upNextOpen.value) advance()
+      })
     }
   })
   el.addEventListener('error', () => {
@@ -895,6 +914,11 @@ function flush(): void {
 // credits-triggered rather than waiting for the 'ended' event (ARGY-90). The
 // viewer can jump immediately with Play Next or opt out with Cancel.
 function maybeUpNext(): void {
+  // Entering the window with a failed lookup retries it (ARGY-264); the lookup's
+  // own spacing and cap keep the per-tick call from becoming a storm.
+  if (autoAdvance.value && !nextEpisode.value && nextLookup.failed && inCredits.value) {
+    void nextLookup.load().then(maybeUpNext)
+  }
   if (!autoAdvance.value || !nextEpisode.value || upNextCancelled.value || advancing) return
   if (!duration.value) return
   if (inCredits.value) {

@@ -219,10 +219,16 @@ export async function getOnDeck(): Promise<OnDeckItem[]> {
 // getNextEpisode returns the episode that follows itemId in its series (across
 // season boundaries), or null when there's nothing after it — the item is the
 // last episode, or isn't a series episode at all. Powers player auto-advance.
+//
+// Only a 404 means "nothing follows". Any other non-OK answer throws, so the
+// caller can tell "last episode" from "the lookup failed" and retry (ARGY-264);
+// a network failure rejects out of fetch itself.
 export async function getNextEpisode(itemId: string): Promise<OnDeckItem | null> {
-  const { data } = await api.GET('/api/v1/items/{itemId}/next-episode', {
+  const { data, response } = await api.GET('/api/v1/items/{itemId}/next-episode', {
     params: { path: { itemId } },
   })
+  if (response.status === 404) return null
+  if (!response.ok) throw new ApiError(response.status)
   return data ?? null
 }
 
