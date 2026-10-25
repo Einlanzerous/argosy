@@ -15,6 +15,8 @@ import 'media_session_state.dart';
 import 'session_recovery.dart';
 import 'vtt.dart';
 
+enum _NextFetch { unfetched, fetched, failed }
+
 /// Orchestrates a single playback session, mirroring the shipped web player
 /// (`web/src/views/PlayerView.vue`). It owns the [BetterPlayerController] and the
 /// transcode-session lifecycle, and exposes a small surface for the Argosy
@@ -451,20 +453,98 @@ class PlaybackController extends ChangeNotifier
     _applyPreferredSubtitle();
     // Auto-advance needs the server to know what comes next; offline it simply
     // doesn't apply, and asking would block on a socket that isn't there.
-    if (autoAdvance && !isOffline) unawaited(_loadNextEpisode());
+    unawaited(_loadNextEpisode());
   }
 
+  /// Where the next-episode lookup stands (ARGY-264). A failed request used to
+  /// read as "last episode", so one blip at start disabled Up Next for the whole
+  /// episode. Only a server answer (an episode, or 404) is terminal.
+  _NextFetch _nextFetch = _NextFetch.unfetched;
+  int _nextAttempts = 0;
+  DateTime? _nextLastAttempt;
+  Future<void>? _nextInFlight;
+  bool _nextFinalTried = false;
+
+  /// Most lookups per episode, and the least gap between them. The three retry
+  /// triggers (restart, window entry, end of file) all fire on a link that may
+  /// still be dead, so these are what keep a bad link from becoming a storm.
+  static const int nextEpisodeMaxAttempts = 3;
+  static const Duration nextEpisodeRetryGap = Duration(seconds: 10);
+
+  @visibleForTesting
+  int get debugNextAttempts => _nextAttempts;
+
+  /// The lookup `start()` kicks off, which tests can't reach (it builds the
+  /// native player).
+  @visibleForTesting
+  Future<void> debugLoadNextEpisode() => _loadNextEpisode();
+
+  bool get _nextFetchFailed => _nextFetch == _NextFetch.failed;
+
   /// Fetches the next episode for auto-advance. A 404 (last episode, or not a
-  /// series episode) just leaves [nextEpisode] null — no card, no roll-over.
-  Future<void> _loadNextEpisode() async {
+  /// series episode) is an answer: [nextEpisode] stays null and is never asked
+  /// again. Any other error leaves the lookup retryable. [last] is the
+  /// end-of-file attempt, which skips the spacing and the cap once, because
+  /// the alternative is stranding the viewer on a black frame.
+  Future<void> _loadNextEpisode({bool last = false}) {
+    if (isOffline || !autoAdvance || _disposed || _tornDown) {
+      return Future.value();
+    }
+    if (_nextFetch == _NextFetch.fetched) return Future.value();
+    final inFlight = _nextInFlight;
+    if (inFlight != null) return inFlight;
+    if (last) {
+      if (_nextFinalTried) return Future.value();
+      _nextFinalTried = true;
+    } else {
+      if (_nextAttempts >= nextEpisodeMaxAttempts) return Future.value();
+      final at = _nextLastAttempt;
+      if (at != null && debugNow().difference(at) < nextEpisodeRetryGap) {
+        return Future.value();
+      }
+    }
+    return _nextInFlight = _fetchNextEpisode().whenComplete(
+      () => _nextInFlight = null,
+    );
+  }
+
+  Future<void> _fetchNextEpisode() async {
+    _nextAttempts++;
+    _nextLastAttempt = debugNow();
     try {
       final n = await libraryApi.getNextEpisode(itemId);
       if (_disposed) return;
+      _nextFetch = _NextFetch.fetched;
       nextEpisode = n;
       _safeNotify();
-    } catch (_) {
-      /* no next episode */
+    } on ApiException catch (e) {
+      if (e.code == 404) {
+        _nextFetch = _NextFetch.fetched;
+      } else {
+        _noteNextFailure(e);
+      }
+    } catch (e) {
+      _noteNextFailure(e);
     }
+  }
+
+  void _noteNextFailure(Object e) {
+    _nextFetch = _NextFetch.failed;
+    if (_nextAttempts == 1) debugPrint('next-episode lookup failed: $e');
+  }
+
+  /// End of file with a failed lookup: one last try, bounded, so a real end can
+  /// still roll over. Re-checks everything the handler checked, since the card
+  /// or the viewer may have changed things while the request was out.
+  Future<void> _retryThenAdvance() async {
+    try {
+      await _loadNextEpisode(last: true).timeout(const Duration(seconds: 4));
+    } catch (_) {}
+    if (_disposed || _tornDown) return;
+    if (autoAdvance && nextEpisode != null && !upNextCancelled && !upNextOpen) {
+      _requestAdvance();
+    }
+    _safeNotify();
   }
 
   /// Rolls into the next episode now (the Up Next "Play Next" action).
@@ -475,6 +555,16 @@ class PlaybackController extends ChangeNotifier
   /// viewer seeks back out. Driven by each player's repaint ticker, since the
   /// controller has no progress event of its own; safe to call repeatedly.
   void maybeAdvance() {
+    if (autoAdvance &&
+        nextEpisode == null &&
+        _nextFetchFailed &&
+        !_tornDown &&
+        catalogDuration > 0 &&
+        catalogDuration - position <= upNextLeadSeconds) {
+      // Entering the window with a failed lookup (ARGY-264): the ticker calls
+      // this constantly, and _loadNextEpisode's gap and cap keep it to a few.
+      unawaited(_loadNextEpisode());
+    }
     if (!autoAdvance ||
         nextEpisode == null ||
         upNextCancelled ||
@@ -726,6 +816,8 @@ class PlaybackController extends ChangeNotifier
       if (debugAttach == null) await _player!.play();
       if (stale()) return;
       await _applyActiveSubtitle();
+      // The winning restart is proof the server is reachable (ARGY-264).
+      if (!stale() && _nextFetchFailed) unawaited(_loadNextEpisode());
     } catch (_) {
       if (!stale()) _fail('This stream could not be played.');
     } finally {
@@ -1262,6 +1354,11 @@ class PlaybackController extends ChangeNotifier
             !upNextCancelled &&
             !upNextOpen) {
           _requestAdvance();
+        } else if (autoAdvance &&
+            nextEpisode == null &&
+            _nextFetchFailed &&
+            !upNextCancelled) {
+          unawaited(_retryThenAdvance());
         }
         _safeNotify();
       case BetterPlayerEventType.pause:
