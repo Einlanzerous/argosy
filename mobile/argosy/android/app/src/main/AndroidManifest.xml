@@ -16,6 +16,16 @@
          for exactly this — moving bytes on the user's behalf — and its
          permission is mandatory at targetSdk 34+. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- flutter_foreground_task's manifest merges in RECEIVE_BOOT_COMPLETED and a
+         RebootReceiver that restarts the download service after a boot or a
+         package update. We never ask for that (`autoRunOnBoot` and
+         `autoRunOnMyPackageReplaced` stay unset in stow_service.dart), and from
+         Android 15 a BOOT_COMPLETED receiver may not launch a `dataSync`
+         service at all — Play flags the receiver + type pair as a crash risk on
+         every upload (ARGY-272). Strip both from the merged manifest; the
+         RestartReceiver that brings the service back after the system reclaims
+         the process is a different receiver and stays. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="remove"/>
     <!-- Android TV support (ARGY-51): advertise leanback but don't require it, and
          don't require a touchscreen, so the same APK installs on TVs and phones. -->
     <uses-feature
@@ -81,6 +91,10 @@
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false"/>
+        <!-- See the RECEIVE_BOOT_COMPLETED note above (ARGY-272). -->
+        <receiver
+            android:name="com.pravera.flutter_foreground_task.service.RebootReceiver"
+            tools:node="remove"/>
         <!-- Monochrome status-bar icon for that notification, named by
              meta-data because the plugin resolves it by name at runtime. The
              default is the launcher icon, which Android masks to its alpha
