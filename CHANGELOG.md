@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.33.0](https://github.com/Einlanzerous/argosy/compare/v0.32.0...v0.33.0) (2026-10-25)
+
+
+### Features
+
+* **fleet:** identify the client build on every request and log device, account and version (ARGY-262) ([#269](https://github.com/Einlanzerous/argosy/issues/269)) ([62cd2ac](https://github.com/Einlanzerous/argosy/commit/62cd2ac3385c054c94ef053caa86ccebdd3bef10))
+* **player:** hold the Up Next countdown after a manual seek (ARGY-261) ([#270](https://github.com/Einlanzerous/argosy/issues/270)) ([79e482c](https://github.com/Einlanzerous/argosy/commit/79e482c8a44c47bfc553981ef23d1067c1f23c23))
+
+
+### Bug Fixes
+
+* **player:** serialise transcode restarts so rapid seeks can't race (ARGY-260) ([#268](https://github.com/Einlanzerous/argosy/issues/268)) ([4a11129](https://github.com/Einlanzerous/argosy/commit/4a11129aa44e0572742e33ec0bbc9fd759a178ae))
+
 ## [0.32.0](https://github.com/Einlanzerous/argosy/compare/v0.31.1...v0.32.0) (2026-10-23)
 
 
