@@ -39,7 +39,12 @@ void openDetail(BuildContext context, MediaKind kind, String id) {
 /// Pushes the player for a playable item. `resume` jumps straight to the saved
 /// position; `startOver` forces playback from the top. With neither, the player
 /// asks (Resume vs. Start over) when there's saved progress — mirroring the web.
-void openPlayer(
+///
+/// Returns the push's [Future], which completes when the player route pops, so a
+/// caller whose screen stays mounted beneath it can refresh what playback changed
+/// (ARGY-266). Auto-advance replaces the player route in place, so the future
+/// completes once for the whole run, not per episode.
+Future<void> openPlayer(
   BuildContext context,
   String itemId, {
   bool resume = false,
@@ -50,7 +55,7 @@ void openPlayer(
       : startOver
       ? '?start=1'
       : '';
-  context.push('${Routes.player(itemId)}$query');
+  return context.push<void>('${Routes.player(itemId)}$query');
 }
 
 /// Pushes the Settings screen over the nav shell.

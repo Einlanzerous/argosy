@@ -13,15 +13,22 @@ class AsyncView<T> extends StatelessWidget {
     required this.value,
     required this.builder,
     this.onRetry,
+    this.keepStale = false,
   });
 
   final AsyncValue<T> value;
   final Widget Function(T data) builder;
   final VoidCallback? onRetry;
 
+  /// Keep showing the previous data while a refresh is in flight instead of
+  /// swapping the screen for the spinner (ARGY-266). A screen that refetches on
+  /// return from the player would otherwise flash a spinner and drop D-pad focus.
+  final bool keepStale;
+
   @override
   Widget build(BuildContext context) {
     return value.when(
+      skipLoadingOnReload: keepStale,
       data: builder,
       loading: () => const Center(
         child: CircularProgressIndicator(color: ArgosyColors.accent),

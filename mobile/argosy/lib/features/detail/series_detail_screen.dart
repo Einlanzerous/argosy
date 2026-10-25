@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
 import '../../api/artwork.dart';
-import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
 import '../../util/format.dart';
@@ -40,6 +39,7 @@ class SeriesDetailScreen extends ConsumerWidget {
       ),
       body: AsyncView(
         value: detail,
+        keepStale: true,
         onRetry: () => ref.invalidate(seriesDetailProvider(seriesId)),
         builder: (series) => _Body(series: series),
       ),
@@ -108,6 +108,15 @@ class _BodyState extends ConsumerState<_Body> {
   /// an episode or a whole season writes here so the list updates immediately
   /// without a full refetch; the server keeps the authoritative flag + position.
   final Map<String, bool> _watchedOverrides = {};
+
+  /// A refetch (the player popped, ARGY-266) replaces `widget.series`; the
+  /// server is authoritative from then on, so an override that disagrees with it
+  /// would be the stale side.
+  @override
+  void didUpdateWidget(covariant _Body oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.series, widget.series)) _watchedOverrides.clear();
+  }
 
   bool _isWatched(EpisodeSummary e) {
     final id = e.mediaItemId;
@@ -316,6 +325,7 @@ class _BodyState extends ConsumerState<_Body> {
         if (season != null)
           for (final group in _groupEpisodes(season.episodes))
             _EpisodeTile(
+              seriesId: series.id,
               episodes: group,
               seasonNumber: season.seasonNumber,
               watched: _isWatched(group.first),
@@ -390,7 +400,12 @@ class _SeriesActions extends StatelessWidget {
           FilledButton.icon(
             style: brassButtonStyle(context),
             onPressed: () =>
-                openPlayer(context, resume!.ep.mediaItemId!, resume: true),
+                openPlayerThenRefresh(
+                  context,
+                  seriesDetailProvider(seriesId),
+                  resume!.ep.mediaItemId!,
+                  resume: true,
+                ),
             icon: const Icon(Icons.play_arrow, size: 20),
             label: Text(
               'Resume S${resume!.seasonNumber} Ep ${resume!.ep.episodeNumber}',
@@ -401,7 +416,11 @@ class _SeriesActions extends StatelessWidget {
             style: brassButtonStyle(context),
             onPressed: firstPlayable == null
                 ? null
-                : () => openPlayer(context, firstPlayable!),
+                : () => openPlayerThenRefresh(
+                    context,
+                    seriesDetailProvider(seriesId),
+                    firstPlayable!,
+                  ),
             icon: const Icon(Icons.play_arrow, size: 20),
             label: const Text('Play'),
           ),
@@ -413,11 +432,14 @@ class _SeriesActions extends StatelessWidget {
 
 class _EpisodeTile extends ConsumerWidget {
   const _EpisodeTile({
+    required this.seriesId,
     required this.episodes,
     required this.seasonNumber,
     required this.watched,
     required this.onSet,
   });
+
+  final String seriesId;
 
   /// One or more episode rows backed by a single file. Length > 1 is a combined
   /// rip; the first is the representative for runtime/progress/play.
@@ -480,7 +502,13 @@ class _EpisodeTile extends ConsumerWidget {
     return Opacity(
       opacity: playable ? 1 : 0.5,
       child: InkWell(
-        onTap: playable ? () => openPlayer(context, _rep.mediaItemId!) : null,
+        onTap: playable
+            ? () => openPlayerThenRefresh(
+                context,
+                seriesDetailProvider(seriesId),
+                _rep.mediaItemId!,
+              )
+            : null,
         onLongPress: playable ? () => _showRowSheet(context, ref) : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
