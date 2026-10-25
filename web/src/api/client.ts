@@ -1,5 +1,6 @@
 import createClient, { type Middleware } from 'openapi-fetch'
 import type { paths } from './schema'
+import { CLIENT_HEADER, CLIENT_ID } from '@/lib/clientId'
 
 // Typed API client generated from proto/openapi/argosy.yaml. The SPA is served
 // by the Go server, so requests are same-origin. A per-device bearer token
@@ -47,6 +48,7 @@ export function setUnauthorizedHandler(fn: () => void): void {
 const authMiddleware: Middleware = {
   onRequest({ request }) {
     const token = getToken()
+    request.headers.set(CLIENT_HEADER, CLIENT_ID)
     if (token) request.headers.set('Authorization', `Bearer ${token}`)
     return request
   },

@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -10,8 +11,30 @@ import vue from '@vitejs/plugin-vue'
 // the `server` container).
 const proxyTarget = process.env.VITE_DEV_PROXY ?? 'http://localhost:8097'
 
+// The version this build reports as X-Argosy-Client (ARGY-262). `make web-build`
+// and the Docker web stage pass VITE_APP_VERSION (the same value the Go binary is
+// stamped with); a bare `bun run build` falls back to the release-please manifest
+// — the repo's version of record, since web/package.json stays 0.0.0 — and then `dev`.
+function appVersion(): string {
+  const fromEnv = process.env.VITE_APP_VERSION?.replace(/^v/, '')
+  if (fromEnv) return fromEnv
+  const manifest = fileURLToPath(new URL('../.release-please-manifest.json', import.meta.url))
+  if (existsSync(manifest)) {
+    try {
+      const v = (JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, string>)['.']
+      if (v) return v
+    } catch {
+      // fall through
+    }
+  }
+  return 'dev'
+}
+
 export default defineConfig({
   plugins: [vue()],
+  define: {
+    __ARGOSY_VERSION__: JSON.stringify(appVersion()),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

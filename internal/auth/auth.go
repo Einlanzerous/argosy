@@ -62,6 +62,8 @@ type Store struct {
 	pool *pgxpool.Pool
 	// owner memoizes which account owns the instance (ARGY-167); see owner.go.
 	owner ownerCache
+	// clients throttles devices.last_client writes (ARGY-262); see client.go.
+	clients clientTracker
 }
 
 // NewStore returns a Store backed by pool.
@@ -263,7 +265,7 @@ func (s *Store) RegisterDevice(ctx context.Context, req api.DeviceRegistrationRe
 		   token_hash = EXCLUDED.token_hash,
 		   platform = EXCLUDED.platform,
 		   revoked_at = NULL
-		 RETURNING id::text, name, platform, user_id::text, last_seen_at, revoked_at, created_at`,
+		 RETURNING id::text, name, platform, user_id::text, last_seen_at, revoked_at, created_at, last_client, last_client_at`,
 		accID, userID, req.DeviceName, hashToken(token), platform, installID)
 	dev, err := scanDevice(row)
 	if err != nil {
@@ -274,16 +276,18 @@ func (s *Store) RegisterDevice(ctx context.Context, req api.DeviceRegistrationRe
 
 // AuthenticateDevice resolves a bearer token to a session, refreshing last-seen.
 func (s *Store) AuthenticateDevice(ctx context.Context, token string) (api.Session, error) {
-	var accID, devID, role string
-	var userID *string
+	var accID, devID, role, devName string
+	var userID, storedClient *string
+	var storedAt *time.Time
 	var isOwner bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT d.account_id::text, d.id::text, d.user_id::text, coalesce(u.role, 'viewer'), a.is_owner
+		`SELECT d.account_id::text, d.id::text, d.user_id::text, coalesce(u.role, 'viewer'), a.is_owner,
+		        d.name, d.last_client, d.last_client_at
 		 FROM devices d
 		 JOIN accounts a ON a.id = d.account_id
 		 LEFT JOIN users u ON u.id = d.user_id
 		 WHERE d.token_hash = $1 AND d.revoked_at IS NULL AND a.disabled_at IS NULL`, hashToken(token)).
-		Scan(&accID, &devID, &userID, &role, &isOwner)
+		Scan(&accID, &devID, &userID, &role, &isOwner, &devName, &storedClient, &storedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.Session{}, ErrInvalidCredentials
 	}
@@ -291,6 +295,17 @@ func (s *Store) AuthenticateDevice(ctx context.Context, token string) (api.Sessi
 		return api.Session{}, err
 	}
 	_, _ = s.pool.Exec(ctx, `UPDATE devices SET last_seen_at = now() WHERE id = $1`, devID)
+
+	// Hand the resolved identity to the request logger (ARGY-262) and remember
+	// which client build this device is running.
+	if tr := TraceFromContext(ctx); tr != nil {
+		tr.SetIdentity(accID, devID, devName)
+		stored := ""
+		if storedClient != nil {
+			stored = *storedClient
+		}
+		s.noteClient(ctx, devID, tr.Client, stored, storedAt)
+	}
 
 	sess := api.Session{AccountId: parseUUID(accID), DeviceId: parseUUID(devID), Role: api.Role(role), IsOwner: &isOwner}
 	if userID != nil {
@@ -310,7 +325,7 @@ func (s *Store) ListDevices(ctx context.Context, sess api.Session) ([]api.Device
 		args = append(args, sess.UserId.String())
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT d.id::text, d.name, d.platform, d.user_id::text, u.name, d.last_seen_at, d.revoked_at, d.created_at
+		`SELECT d.id::text, d.name, d.platform, d.user_id::text, u.name, d.last_seen_at, d.revoked_at, d.created_at, d.last_client, d.last_client_at
 		 FROM devices d LEFT JOIN users u ON u.id = d.user_id `+where+` ORDER BY d.created_at`, args...)
 	if err != nil {
 		return nil, err
@@ -320,14 +335,16 @@ func (s *Store) ListDevices(ctx context.Context, sess api.Session) ([]api.Device
 	for rows.Next() {
 		var id, name string
 		var platform, userID, userName *string
-		var lastSeen, revokedAt *time.Time
+		var lastSeen, revokedAt, lastClientAt *time.Time
+		var lastClient *string
 		var createdAt time.Time
-		if err := rows.Scan(&id, &name, &platform, &userID, &userName, &lastSeen, &revokedAt, &createdAt); err != nil {
+		if err := rows.Scan(&id, &name, &platform, &userID, &userName, &lastSeen, &revokedAt, &createdAt, &lastClient, &lastClientAt); err != nil {
 			return nil, err
 		}
 		dev := api.Device{
 			Id: parseUUID(id), Name: name, Platform: platform, UserName: userName,
 			LastSeenAt: lastSeen, Revoked: revokedAt != nil, CreatedAt: createdAt,
+			LastClient: lastClient, LastClientAt: lastClientAt,
 		}
 		if userID != nil {
 			u := parseUUID(*userID)
@@ -384,7 +401,7 @@ func (s *Store) RenameDevice(ctx context.Context, sess api.Session, deviceID ope
 	}
 	row := s.pool.QueryRow(ctx,
 		`UPDATE devices SET name = $1 WHERE id = $2
-		 RETURNING id::text, name, platform, user_id::text, last_seen_at, revoked_at, created_at`,
+		 RETURNING id::text, name, platform, user_id::text, last_seen_at, revoked_at, created_at, last_client, last_client_at`,
 		name, deviceID.String())
 	return scanDevice(row)
 }
@@ -835,9 +852,10 @@ type row interface {
 func scanDevice(r row) (api.Device, error) {
 	var id, name string
 	var platform, userID *string
-	var lastSeen, revokedAt *time.Time
+	var lastSeen, revokedAt, lastClientAt *time.Time
+	var lastClient *string
 	var createdAt time.Time
-	if err := r.Scan(&id, &name, &platform, &userID, &lastSeen, &revokedAt, &createdAt); err != nil {
+	if err := r.Scan(&id, &name, &platform, &userID, &lastSeen, &revokedAt, &createdAt, &lastClient, &lastClientAt); err != nil {
 		return api.Device{}, err
 	}
 	dev := api.Device{
@@ -847,6 +865,9 @@ func scanDevice(r row) (api.Device, error) {
 		LastSeenAt: lastSeen,
 		Revoked:    revokedAt != nil,
 		CreatedAt:  createdAt,
+
+		LastClient:   lastClient,
+		LastClientAt: lastClientAt,
 	}
 	if userID != nil {
 		u := parseUUID(*userID)

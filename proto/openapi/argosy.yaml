@@ -2396,6 +2396,15 @@ components:
         createdAt:
           type: string
           format: date-time
+        lastClient:
+          type: string
+          nullable: true
+          description: The X-Argosy-Client string this device last sent (app, version, build, hardware). Null until the device has made a request with the header.
+        lastClientAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When lastClient was last recorded (refreshed at most hourly).
 
     DeviceRenameRequest:
       type: object

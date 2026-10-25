@@ -1470,6 +1470,13 @@ export interface components {
             revoked: boolean;
             /** Format: date-time */
             createdAt: string;
+            /** @description The X-Argosy-Client string this device last sent (app, version, build, hardware). Null until the device has made a request with the header. */
+            lastClient?: string | null;
+            /**
+             * Format: date-time
+             * @description When lastClient was last recorded (refreshed at most hourly).
+             */
+            lastClientAt?: string | null;
         };
         DeviceRenameRequest: {
             name: string;

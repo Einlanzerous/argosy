@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
+	"github.com/Einlanzerous/argosy/internal/auth"
 	"github.com/Einlanzerous/argosy/internal/fileid"
 	"github.com/Einlanzerous/argosy/internal/httpx"
 	"github.com/Einlanzerous/argosy/internal/subtitle"
@@ -257,12 +258,6 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	if plan.method != methodTranscode {
 		mode = transcode.MethodRemux
 	}
-	h.logger.Info("transcode decision", "item", itemID, "method", mode, "codec", plan.videoCodec,
-		"transcodeAudio", plan.transcodeAudio, "reason", plan.reason, "container", filepath.Ext(src.path),
-		"video", src.video, "audio", src.audio, "height", src.height, "clientHevc", clientHEVC,
-		"clientHevcHardware", clientHEVCHardware, "highBitDepth", src.highBitDepth,
-		"burnInSubtitle", burnIn)
-
 	var startAt float64
 	if body.StartAt != nil && *body.StartAt > 0 {
 		startAt = *body.StartAt
@@ -282,6 +277,20 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		AudioTracks:    src.audioTracks,
 		BurnInSubtitle: burnIn,
 	})
+	// One line per start carries the decision AND who asked for which session at
+	// which offset, so a seek burst reads from the log alone (ARGY-262). On a
+	// failed start there is no session id, but the decision is still worth having.
+	decision := []any{"item", itemID, "device", auth.DeviceLabel(r.Context()),
+		"startAt", startAt, "method", mode, "codec", plan.videoCodec,
+		"transcodeAudio", plan.transcodeAudio, "reason", plan.reason, "container", filepath.Ext(src.path),
+		"video", src.video, "audio", src.audio, "height", src.height, "clientHevc", clientHEVC,
+		"clientHevcHardware", clientHEVCHardware, "highBitDepth", src.highBitDepth,
+		"burnInSubtitle", burnIn}
+	if err != nil {
+		h.logger.Info("transcode decision", decision...)
+	} else {
+		h.logger.Info("transcode decision", append(decision, "session", sess.ID)...)
+	}
 	if errors.Is(err, transcode.ErrAtCapacity) {
 		httpx.Error(w, http.StatusServiceUnavailable, "server at transcode capacity, try again shortly")
 		return
@@ -356,6 +365,7 @@ func (h *handlers) stopTranscode(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	h.logger.Info("transcode stop", "session", sess.ID, "device", auth.DeviceLabel(r.Context()))
 	h.tc.Stop(sess.ID)
 	w.WriteHeader(http.StatusNoContent)
 }

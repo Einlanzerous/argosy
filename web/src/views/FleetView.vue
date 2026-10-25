@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import { formatRelative } from '@/lib/format'
+import { isBehind, parseClient } from '@/lib/clientId'
 import { useSessionStore } from '@/stores/session'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
@@ -13,12 +14,35 @@ const router = useRouter()
 const session = useSessionStore()
 const devices = ref<Device[]>([])
 const loading = ref(true)
+const serverVersion = ref('')
 
 // One modal serves both flows: rename (editable name) and retire (confirm).
 const renameTarget = ref<Device | null>(null)
 const renameValue = ref('')
 const retireTarget = ref<Device | null>(null)
 const busy = ref(false)
+
+// "0.32.0 · android" from the X-Argosy-Client string the device last sent, or
+// null if it has never sent one (an older build).
+function clientLabel(d: Device): string | null {
+  const c = parseClient(d.lastClient)
+  return c ? `${c.version} · ${c.app}` : null
+}
+
+// Older than the server it talks to: the household member who is behind.
+function isStale(d: Device): boolean {
+  const c = parseClient(d.lastClient)
+  return !!c && isBehind(c.version, serverVersion.value)
+}
+
+async function loadServerVersion(): Promise<void> {
+  try {
+    const { data } = await api.GET('/healthz')
+    if (data?.version) serverVersion.value = data.version
+  } catch {
+    // Cosmetic only; nothing is flagged as behind without it.
+  }
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -85,6 +109,7 @@ async function confirmRetire(): Promise<void> {
 onMounted(() => {
   setPage('Devices')
   void load()
+  void loadServerVersion()
 })
 </script>
 
@@ -116,6 +141,15 @@ onMounted(() => {
             <span class="name">{{ d.name }}</span>
             <span v-if="d.platform" class="tag">{{ d.platform }}</span>
             <span v-if="isCurrent(d)" class="tag current">THIS DEVICE</span>
+            <span
+              v-if="clientLabel(d)"
+              class="tag build"
+              :class="{ stale: isStale(d) }"
+              :title="
+                isStale(d) ? `Behind the server (${serverVersion}). ${d.lastClient}` : d.lastClient!
+              "
+              >{{ clientLabel(d) }}</span
+            >
           </div>
           <div class="seen">
             <span v-if="d.userName">{{ d.userName }} · </span>last seen
@@ -283,6 +317,17 @@ onMounted(() => {
 .tag.current {
   background: rgba(125, 191, 130, 0.16);
   color: var(--arg-green);
+}
+.tag.build {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+/* Behind the server: muted amber so the owner can see who needs to update. */
+.tag.build.stale {
+  background: rgba(224, 168, 74, 0.16);
+  color: var(--arg-amber, #e0a84a);
+  opacity: 1;
 }
 .seen {
   margin-top: 4px;

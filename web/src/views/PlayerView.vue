@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Hls from 'hls.js'
 import { api, getToken } from '@/api/client'
+import { CLIENT_HEADER, CLIENT_ID } from '@/lib/clientId'
 import { posterStyle } from '@/lib/poster'
 import { formatClock, formatTitle, episodeHeader, episodeName } from '@/lib/format'
 import {
@@ -641,6 +642,7 @@ function attachTranscode(
       debug: hlsDebug.value ? hlsDebugLogger() : false,
       xhrSetup: (xhr) => {
         const t = getToken()
+        xhr.setRequestHeader(CLIENT_HEADER, CLIENT_ID)
         if (t) xhr.setRequestHeader('Authorization', `Bearer ${t}`)
       },
     })
@@ -736,7 +738,10 @@ function attachTranscode(
 // endpoint returns 503 until then), giving the encoder time to warm up.
 async function waitForPlaylist(url: string, cancelled: () => boolean): Promise<boolean> {
   const token = getToken()
-  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+  const headers: HeadersInit = {
+    [CLIENT_HEADER]: CLIENT_ID,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
   for (let i = 0; i < 40; i++) {
     // Superseded by a newer seek: stop polling a session that is being replaced.
     if (cancelled()) return false
@@ -1258,7 +1263,10 @@ async function applySubtitle(trackId: string): Promise<void> {
   try {
     const token = getToken()
     const r = await fetch(subtitleUrl(itemId, trackId), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: {
+        [CLIENT_HEADER]: CLIENT_ID,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     })
     if (!r.ok) return
     let text = await r.text()

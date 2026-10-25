@@ -13,7 +13,11 @@ WORKDIR /app/web
 COPY web/package.json web/bun.lock ./
 RUN bun install --frozen-lockfile
 COPY web/ ./
-RUN bun run build
+# The SPA reports its version as X-Argosy-Client (ARGY-262). The manifest it
+# otherwise falls back to is outside this stage's context, so take the same
+# build arg the Go stage stamps into the binary.
+ARG VERSION=
+RUN VITE_APP_VERSION=${VERSION} bun run build
 
 # 2) Build the Go binary with the SPA embedded
 FROM golang:1.26-trixie AS build
