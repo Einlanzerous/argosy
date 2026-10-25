@@ -917,7 +917,11 @@ function maybeUpNext(): void {
   // Entering the window with a failed lookup retries it (ARGY-264); the lookup's
   // own spacing and cap keep the per-tick call from becoming a storm.
   if (autoAdvance.value && !nextEpisode.value && nextLookup.failed && inCredits.value) {
-    void nextLookup.load().then(maybeUpNext)
+    // Re-run only if the lookup actually found something: a gated load() resolves
+    // immediately with nothing changed, and chaining on that would loop forever.
+    void nextLookup.load().then(() => {
+      if (nextEpisode.value) maybeUpNext()
+    })
   }
   if (!autoAdvance.value || !nextEpisode.value || upNextCancelled.value || advancing) return
   if (!duration.value) return
