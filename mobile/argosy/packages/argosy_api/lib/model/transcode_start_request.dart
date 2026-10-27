@@ -16,6 +16,8 @@ class TranscodeStartRequest {
     this.startAt,
     this.hevc,
     this.hevcHardware,
+    this.minHeight,
+    this.maxHeight,
     this.burnInSubtitle,
   });
 
@@ -37,7 +39,7 @@ class TranscodeStartRequest {
   ///
   bool? hevc;
 
-  /// MediaCapabilities.decodingInfo's view of whether this client decodes 10-bit HEVC (Main 10) in hardware — both `smooth` and `powerEfficient`. Read it asymmetrically: false is meaningful (the device has recorded decode stats and they are bad), while true is weak, because browsers report any supported configuration as smooth and powerEfficient until stats have been recorded on the device. The server treats it as a veto rather than a licence: a true only permits a 10-bit HEVC source to keep its bit depth and HDR above 1080p, where such a copy has been observed playing smoothly (ARGY-178). Absent or false re-encodes to 8-bit, which is the pre-ARGY-178 behaviour. 
+  /// Whether this client decodes 10-bit HEVC (Main 10) at 2160p in hardware. Two kinds of client assert it, and they mean different things. A browser sends MediaCapabilities.decodingInfo's view — both `smooth` and `powerEfficient` — which is asymmetric: false is meaningful (the device has recorded decode stats and they are bad), while true is weak, because browsers report any supported configuration as smooth and powerEfficient until stats have been recorded on the device. A native client (Android phone or TV) sends MediaCodecInfo's answer — a hardware-accelerated HEVC decoder that lists Main 10 and supports 3840×2160 — which is a strong signal; iOS has no equivalent query in the app and sends false. The server's reading is the same for both: true permits a 10-bit HEVC source to keep its bit depth and HDR above 1080p as a copy at native resolution (ARGY-178), and absent or false re-encodes to 8-bit, which is the pre-ARGY-178 behaviour. 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated
@@ -45,6 +47,28 @@ class TranscodeStartRequest {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   bool? hevcHardware;
+
+  /// Lowest ladder rung the client wants, in pixels of height. Rungs below it are not encoded or advertised, unless nothing at or above it survives the cap, in which case the highest surviving rung is kept — so minHeight is a soft floor and the result is never empty. Omit for the full ladder; either hint may be sent alone (a TV sends both equal to its display mode height). Ignored on a remux, which copies one variant. A present value that is not a positive integer is a 400, as is minHeight greater than maxHeight. (ARGY-179) 
+  ///
+  /// Minimum value: 1
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? minHeight;
+
+  /// Highest rung the client can display, in pixels of height. Rungs above it are not encoded or advertised (a 1080p output never receives a 2160 rung), except that the lowest rung available for the source is always kept, so a cap below the ladder still receives that rung — the one case the client gets more than it asked for, because nothing smaller exists. A cap between two rungs resolves to the rung just below it. Omit for no cap. Ignored on a remux. A present value that is not a positive integer is a 400. (ARGY-179) 
+  ///
+  /// Minimum value: 1
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? maxHeight;
 
   /// Id of an image-based subtitle track (a SubtitleTrack with burnIn true, e.g. \"burn:6\") to draw into the video frames. Image subtitles are bitmaps, so there is no WebVTT to hand a <track> element and the only way to show them is to paint them into the picture during the encode (ARGY-59). Doing so forces a full re-encode — the video stream can no longer be copied — and the result cannot be switched off without restarting the session, so send it only when the viewer picks such a track explicitly. Unset (the default) burns in nothing. An id that isn't an image subtitle stream of this item is a 400. 
   ///
@@ -60,6 +84,8 @@ class TranscodeStartRequest {
     other.startAt == startAt &&
     other.hevc == hevc &&
     other.hevcHardware == hevcHardware &&
+    other.minHeight == minHeight &&
+    other.maxHeight == maxHeight &&
     other.burnInSubtitle == burnInSubtitle;
 
   @override
@@ -68,10 +94,12 @@ class TranscodeStartRequest {
     (startAt == null ? 0 : startAt!.hashCode) +
     (hevc == null ? 0 : hevc!.hashCode) +
     (hevcHardware == null ? 0 : hevcHardware!.hashCode) +
+    (minHeight == null ? 0 : minHeight!.hashCode) +
+    (maxHeight == null ? 0 : maxHeight!.hashCode) +
     (burnInSubtitle == null ? 0 : burnInSubtitle!.hashCode);
 
   @override
-  String toString() => 'TranscodeStartRequest[startAt=$startAt, hevc=$hevc, hevcHardware=$hevcHardware, burnInSubtitle=$burnInSubtitle]';
+  String toString() => 'TranscodeStartRequest[startAt=$startAt, hevc=$hevc, hevcHardware=$hevcHardware, minHeight=$minHeight, maxHeight=$maxHeight, burnInSubtitle=$burnInSubtitle]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -89,6 +117,16 @@ class TranscodeStartRequest {
       json[r'hevcHardware'] = this.hevcHardware;
     } else {
       json[r'hevcHardware'] = null;
+    }
+    if (this.minHeight != null) {
+      json[r'minHeight'] = this.minHeight;
+    } else {
+      json[r'minHeight'] = null;
+    }
+    if (this.maxHeight != null) {
+      json[r'maxHeight'] = this.maxHeight;
+    } else {
+      json[r'maxHeight'] = null;
     }
     if (this.burnInSubtitle != null) {
       json[r'burnInSubtitle'] = this.burnInSubtitle;
@@ -116,6 +154,8 @@ class TranscodeStartRequest {
         startAt: mapValueOfType<double>(json, r'startAt'),
         hevc: mapValueOfType<bool>(json, r'hevc'),
         hevcHardware: mapValueOfType<bool>(json, r'hevcHardware'),
+        minHeight: mapValueOfType<int>(json, r'minHeight'),
+        maxHeight: mapValueOfType<int>(json, r'maxHeight'),
         burnInSubtitle: mapValueOfType<String>(json, r'burnInSubtitle'),
       );
     }
