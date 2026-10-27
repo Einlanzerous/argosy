@@ -127,6 +127,58 @@ func rungsForCodec(sourceHeight int, codec string) []rung {
 	return out
 }
 
+// boundedRungs shapes rungsForCodec's set with a client's minHeight/maxHeight
+// hints (ARGY-179; 0 = no hint). The resolution is ruling 4 of that plan, in
+// this order:
+//
+//  1. Drop rungs above maxHeight. If none survive, keep the lowest rung of the
+//     set — the one case the client receives more than it asked for, because
+//     nothing smaller exists for this source.
+//  2. Drop rungs below minHeight. If that would empty the set, keep the single
+//     highest surviving rung instead.
+//
+// So maxHeight is a hard cap (with the lowest-rung exception), minHeight is
+// soft, and the result is never empty. On a 1080p H.264 source (1080/720/480):
+// min=max=2160 → 1080; min=max=800 → 720; min=max=360 → 480; max=720 alone →
+// 720, 480; min=1080 alone → 1080. Clients never need to know the ladder.
+func boundedRungs(sourceHeight int, codec string, minHeight, maxHeight int) []rung {
+	set := rungsForCodec(sourceHeight, codec)
+	if maxHeight > 0 {
+		var kept []rung
+		for _, r := range set {
+			if r.height <= maxHeight {
+				kept = append(kept, r)
+			}
+		}
+		if len(kept) == 0 {
+			kept = []rung{set[len(set)-1]}
+		}
+		set = kept
+	}
+	if minHeight > 0 {
+		var kept []rung
+		for _, r := range set {
+			if r.height >= minHeight {
+				kept = append(kept, r)
+			}
+		}
+		if len(kept) == 0 {
+			kept = []rung{set[0]}
+		}
+		set = kept
+	}
+	return set
+}
+
+// rungHeights projects a rung set onto its heights, widest first.
+func rungHeights(rungs []rung) []int {
+	out := make([]int, 0, len(rungs))
+	for _, r := range rungs {
+		out = append(out, r.height)
+	}
+	return out
+}
+
 // buildArgs builds the ffmpeg arguments for an HLS encode, dispatching on the
 // decision engine's choice: a remux copies the existing codecs into fMP4 (no
 // re-encode), while a transcode re-encodes through the bitrate ladder. Paths
@@ -203,11 +255,13 @@ func buildRemuxArgs(spec Spec) []string {
 // playlist (index.m3u8) directly; multiple rungs emit a master playlist + one
 // variant playlist/init/segments per rung for adaptive streaming. The video
 // codec/scale/hwaccel flags come from the selected encoder backend (software
-// today; qsv/vaapi/nvenc in ARGY-30/61).
+// today; qsv/vaapi/nvenc in ARGY-30/61). The rung set is the ladder shaped by
+// the client's minHeight/maxHeight hints (ARGY-179): only the surviving rungs
+// are encoded, so a TV that asked for its display height alone gets one output.
 func buildTranscodeArgs(spec Spec) []string {
 	enc := encoderFor(spec.Encoder)
 	codec := resolveCodec(spec.VideoCodec)
-	rungs := rungsForCodec(spec.SourceHeight, codec)
+	rungs := boundedRungs(spec.SourceHeight, codec, spec.MinRungHeight, spec.MaxRungHeight)
 	if len(rungs) == 1 {
 		return buildSingleTranscodeArgs(spec, enc, codec, rungs[0])
 	}
@@ -233,10 +287,14 @@ func buildSingleTranscodeArgs(spec Spec, enc videoEncoder, codec string, r rung)
 	args = append(args, enc.rateControl(-1, r)...)
 	args = append(args, "-c:a", "aac", "-b:a", audioBitrate, "-ac", "2")
 	// An HEVC output needs its codec declared for the same reason a copy does
-	// (see needsCodecDeclaration). planPlayback only picks HEVC above 1080p, and
-	// every such height yields 2+ rungs, so a single-rung HEVC encode does not
-	// arise today — this keeps the two single-variant exits consistent rather
-	// than leaving one of them a trap for a future ladder change.
+	// (see needsCodecDeclaration). A single-rung HEVC encode arises whenever the
+	// client's minHeight/maxHeight hints shape the HEVC ladder down to one rung
+	// (ARGY-179: a 4K TV asking for min=max=2160 on a 10-bit 4K source), so this
+	// exit writes the same one-variant master with an audio rendition group that
+	// buildRemuxArgs writes for a single-audio HEVC copy (ARGY-218) — the shape
+	// that gives hls.js a CODECS string to gate on (ARGY-174). Without an
+	// enumerated audio track there is no group to reference, and the encode
+	// falls through to the bare media playlist like the copy does.
 	if multiAudio(spec) || needsCodecDeclaration(spec) {
 		return append(args, hlsMasterTail(audioGroupVSM(1, spec.AudioTracks))...)
 	}
