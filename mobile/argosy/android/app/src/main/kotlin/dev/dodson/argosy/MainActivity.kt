@@ -12,11 +12,14 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.drawable.Icon
+import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -57,6 +60,15 @@ class MainActivity : AudioServiceActivity() {
                     // re-encode to H.264 1080p) when the client advertises this,
                     // so it gates the 4K remux-copy path (ARGY-79).
                     "hevc4k" -> result.success(hasHevc4kDecoder())
+                    // Stricter sibling (ARGY-179 / ARGY-275): a *hardware* HEVC
+                    // Main10 decoder at 3840×2160. The server copies 10-bit 4K
+                    // HEVC only when this is true; `hevc4k` above also accepts
+                    // the software decoder, which stutters on 10-bit (ARGY-150).
+                    "hevcHardware" -> result.success(hasHevcHardwareMain10Decoder())
+                    // The panel's active display-mode height — not the Flutter
+                    // window — so the TV can ask for one ladder rung at its
+                    // output resolution (ARGY-179). Null when unreadable.
+                    "displayModeHeight" -> result.success(displayModeHeight())
                     // Is this a TV / leanback device? Drives the 10-foot UI +
                     // D-pad shell (ARGY-51). Primary signal is the UI mode; the
                     // leanback/television features are a belt-and-suspenders
@@ -215,6 +227,52 @@ class MainActivity : AudioServiceActivity() {
             }
         } catch (_: Exception) {
             false
+        }
+    }
+
+    // Ruling 2 of the ARGY-179 plan: hardware-accelerated, HEVC Main10 in the
+    // decoder's profile list, and 3840×2160 inside its size range. Below API 29
+    // `isHardwareAccelerated` does not exist, so the answer is false there and
+    // the server re-encodes to 8-bit — today's behaviour. The HDR10 / HDR10+
+    // profiles are Main10 plus HDR metadata, so a decoder that advertises only
+    // those still decodes a Main10 stream and is accepted as well.
+    private fun hasHevcHardwareMain10Decoder(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        return try {
+            val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            codecs.codecInfos.any { info ->
+                if (info.isEncoder || !info.isHardwareAccelerated) return@any false
+                info.supportedTypes.any types@{ type ->
+                    if (!type.equals(MediaFormat.MIMETYPE_VIDEO_HEVC, ignoreCase = true)) {
+                        return@types false
+                    }
+                    val caps = info.getCapabilitiesForType(type)
+                    val main10 = caps.profileLevels.any { pl ->
+                        pl.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
+                            pl.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 ||
+                            pl.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus
+                    }
+                    if (!main10) return@types false
+                    val video = caps.videoCapabilities ?: return@types false
+                    video.isSizeSupported(3840, 2160)
+                }
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // Media3's helper returns Display.Mode's physical size with the vendor
+    // workarounds (older Bravia sysprops, Fire TV) baked in. A 4K Bravia runs
+    // the UI window at 1080p, so FlutterView.physicalSize would under-report.
+    // The symbol is @UnstableApi, hence the opt-in; media3-common is pinned in
+    // app/build.gradle.kts because the plugin's Media3 is implementation-scoped.
+    @androidx.annotation.OptIn(UnstableApi::class)
+    private fun displayModeHeight(): Int? {
+        return try {
+            Util.getCurrentDisplayModeSize(this).y
+        } catch (_: Exception) {
+            null
         }
     }
 
