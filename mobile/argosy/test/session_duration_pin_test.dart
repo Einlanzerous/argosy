@@ -33,6 +33,7 @@ PlaybackController _controller({
     catalogDuration: catalogDuration,
     isTranscode: isTranscode,
     hevc: false,
+    hevcHardware: false,
     subtitles: const [],
     preferredLanguages: const [],
     prefs: null,
