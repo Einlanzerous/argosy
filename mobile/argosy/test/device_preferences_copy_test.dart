@@ -59,6 +59,7 @@ PlaybackController _controller(_FakeAuthApi auth, DevicePreferences? prefs) {
     catalogDuration: 1320,
     isTranscode: true,
     hevc: false,
+    hevcHardware: false,
     subtitles: <SubtitleTrack>[
       _track('embedded:2', 'en'),
       _track('embedded:3', 'ja'),

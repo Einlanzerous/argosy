@@ -44,6 +44,9 @@ class PlaybackController extends ChangeNotifier
     required this.catalogDuration,
     required this.isTranscode,
     required this.hevc,
+    required this.hevcHardware,
+    this.minHeight,
+    this.maxHeight,
     required this.subtitles,
     required this.preferredLanguages,
     required this.prefs,
@@ -100,6 +103,18 @@ class PlaybackController extends ChangeNotifier
 
   /// Whether the device advertised 4K-HEVC decode to the transcoder.
   final bool hevc;
+
+  /// Whether the device advertised a hardware HEVC Main10 4K decoder (ARGY-179
+  /// ruling 2), which lets the server copy 10-bit 4K HEVC rather than re-encode.
+  final bool hevcHardware;
+
+  /// Ladder hints (ARGY-179): the lowest and highest rung heights the client
+  /// wants; null means not sent, and the server shapes the full ladder. The TV
+  /// sends both equal to its display-mode height, the phone sends neither.
+  /// Final so every restart — seek, recovery, next episode — negotiates the
+  /// same output and the same session key.
+  final int? minHeight;
+  final int? maxHeight;
 
   /// Subtitle tracks available for the item (populated up front).
   final List<SubtitleTrack> subtitles;
@@ -757,6 +772,9 @@ class PlaybackController extends ChangeNotifier
         transcodeStartRequest: TranscodeStartRequest(
           startAt: offset,
           hevc: hevc,
+          hevcHardware: hevcHardware,
+          minHeight: minHeight,
+          maxHeight: maxHeight,
         ),
       );
       if (stale() || _tornDown) {

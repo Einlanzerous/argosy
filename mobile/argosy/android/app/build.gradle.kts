@@ -112,3 +112,16 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // MainActivity reads the display mode through Media3's Util (ARGY-275).
+    // better_player_plus declares Media3 as `implementation`, and Flutter adds
+    // a plugin to the app as an `Api` dependency, so the plugin's own classes
+    // reach this module's compile classpath but its Media3 artifacts do not.
+    //
+    // MUST equal the `media3Version` better_player_plus pins — Media3 artifacts
+    // share one version inside an APK. better_player_plus 1.3.4 → 1.10.1.
+    // ARGY-278 (PR #279) bumps the plugin to 1.4.1, which pins 1.11.0; whichever
+    // of that PR and this one merges second sets this to 1.11.0.
+    implementation("androidx.media3:media3-common:1.10.1")
+}

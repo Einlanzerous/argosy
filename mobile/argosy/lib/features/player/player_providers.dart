@@ -22,6 +22,15 @@ typedef PlayerSetup = ({
   List<String> preferredLanguages,
   bool hevc,
 
+  /// Whether the device has a hardware HEVC Main10 decoder at 4K (ARGY-179
+  /// ruling 2); the server copies 10-bit 4K HEVC only when this is true.
+  bool hevcHardware,
+
+  /// The panel's active display-mode height, or null off Android or when the
+  /// read failed. The TV player sends it as `minHeight = maxHeight` so the
+  /// server encodes one rung at the output resolution; the phone sends nothing.
+  int? displayModeHeight,
+
   /// Absolute path to a stowed copy of this item, when one is on the device
   /// (ARGY-49). Set means play from disk and never touch the network.
   String? localPath,
@@ -76,6 +85,11 @@ final playerSetupProvider = FutureProvider.autoDispose.family<PlayerSetup, Strin
       )
       .catchError((_) => null);
   final hevcF = DeviceCapabilities.supportsHevc4k();
+  final hevcHardwareF = DeviceCapabilities.hevcHardware();
+  // Read once per setup and carried into the controller's final fields, so a
+  // mid-session display-mode change (an AFR refresh switch) cannot alter the
+  // hints a restart sends or re-key the session.
+  final displayModeHeightF = DeviceCapabilities.displayModeHeight();
 
   final playback = await playbackF;
   return (
@@ -89,6 +103,8 @@ final playerSetupProvider = FutureProvider.autoDispose.family<PlayerSetup, Strin
     // tracks by default and folds the rest behind "More options".
     preferredLanguages: playback?.preferredLanguages ?? const [],
     hevc: await hevcF,
+    hevcHardware: await hevcHardwareF,
+    displayModeHeight: await displayModeHeightF,
     localPath: null,
     localSubtitles:
         const <({String id, String label, String language, String path})>[],
@@ -177,7 +193,11 @@ Future<PlayerSetup> _offlineSetup(
     prefs: prefs,
     subtitles: localTracks,
     preferredLanguages: const <String>[],
+    // A stowed copy plays from disk and never starts a transcode, so nothing
+    // here is ever sent.
     hevc: false,
+    hevcHardware: false,
+    displayModeHeight: null,
     localPath: await store.videoPath(stowed),
     localSubtitles: localSubs,
   );

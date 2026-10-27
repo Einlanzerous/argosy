@@ -144,6 +144,9 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
       catalogDuration: setup.item.durationSeconds?.toDouble() ?? 0,
       isTranscode: setup.isTranscode,
       hevc: setup.hevc,
+      hevcHardware: setup.hevcHardware,
+      // No ladder hints from the phone (ARGY-179): it keeps the full ladder
+      // and Media3's ramp, which is right on cellular.
       subtitles: setup.subtitles,
       preferredLanguages: setup.preferredLanguages,
       prefs: setup.prefs,
