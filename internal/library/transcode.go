@@ -317,13 +317,17 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	plan := planPlayback(src.video, src.audio, clientHEVC, clientHEVCHardware, src.highBitDepth,
 		burnIn > 0, src.height)
 	mode := transcode.MethodTranscode
+	// The hints that reach the transcoder. A copy has one variant by
+	// construction, so on a remux the ladder hints have nothing to shape: they
+	// are dropped here so a hinted and an unhinted remux derive the same session
+	// and join one copy (ARGY-235 owns giving a remux a ladder). The raw values
+	// stay in minHeight/maxHeight for the decision line, so a TV that sent
+	// min=max=2160 for a title that copies is still distinguishable in the log
+	// from a client that sent nothing.
+	rungMin, rungMax := minHeight, maxHeight
 	if plan.method != methodTranscode {
 		mode = transcode.MethodRemux
-		// A copy has one variant by construction, so the ladder hints have
-		// nothing to shape: drop them here so a hinted and an unhinted remux
-		// derive the same session and join one copy (ARGY-235 owns giving a
-		// remux a ladder).
-		minHeight, maxHeight = 0, 0
+		rungMin, rungMax = 0, 0
 	}
 	var startAt float64
 	if body.StartAt != nil && *body.StartAt > 0 {
@@ -343,15 +347,17 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		TranscodeAudio: plan.transcodeAudio,
 		AudioTracks:    src.audioTracks,
 		BurnInSubtitle: burnIn,
-		MinRungHeight:  minHeight,
-		MaxRungHeight:  maxHeight,
+		MinRungHeight:  rungMin,
+		MaxRungHeight:  rungMax,
 	}
 	sess, err := h.tc.Start(req)
 	// One line per start carries the decision AND who asked for which session at
 	// which offset, so a seek burst reads from the log alone (ARGY-262). On a
 	// failed start there is no session id, but the decision is still worth having.
-	// rungs= is the *planned* ladder after the hints ("copy" on a remux); a
-	// hardware→software fallback that changes it logs its own line (ARGY-179).
+	// minHeight=/maxHeight= are the hints as the client sent them (0 = absent),
+	// even on a remux where they were dropped; rungs= is the *planned* ladder
+	// after the hints ("copy" on a remux); a hardware→software fallback that
+	// changes it logs its own line (ARGY-179).
 	rungs := transcode.PlannedRungs(req)
 	if err == nil {
 		rungs = sess.Rungs

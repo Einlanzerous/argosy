@@ -339,7 +339,13 @@ func sessionID(req StartRequest) string {
 	// encode (ARGY-179). The heights are appended only when the hints changed
 	// the set: an unhinted request's key is byte-identical to the pre-hint key,
 	// so in-flight sessions rejoin across the deploy (ARGY-239), and a hint that
-	// resolves to the full ladder joins the unhinted session.
+	// resolves to the full ladder joins the unhinted session. That join holds
+	// for the codec the key was derived on: if a hardware→software fallback
+	// later re-resolves the session on the H.264 ladder, it does so with the
+	// hints of whichever request started it, so an unhinted HEVC start and a
+	// minHeight=500 one share a key yet would fall back to {1080,720,480} and
+	// {1080,720} respectively. The difference is only the 480 rung and minHeight
+	// is soft, so the key deliberately does not carry the fallback codec.
 	if shaped := shapedRungs(req); shaped != nil {
 		key += "|" + FormatRungs(shaped)
 	}

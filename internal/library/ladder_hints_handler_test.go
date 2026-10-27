@@ -1,7 +1,9 @@
 package library
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -262,5 +264,55 @@ func TestDecodeTranscodeBodyTable(t *testing.T) {
 		if got := body.Hevc != nil && *body.Hevc; got != tc.hevc {
 			t.Errorf("%s: hevc = %v, want %v", tc.body, got, tc.hevc)
 		}
+	}
+}
+
+// TestStartTranscodeRemuxLogsRawHints: dropping the hints on a remux must not
+// erase them from the decision line. A TV that sent min=max=2160 for a title
+// that copies has to read differently from a client that sent nothing —
+// otherwise the log cannot tell a TV on a pre-hint build from one on the new
+// build — so the line carries the raw values beside rungs=copy, and the
+// StartRequest still carries none.
+func TestStartTranscodeRemuxLogsRawHints(t *testing.T) {
+	h, be, itemID := transcodeFixture(t, hevc4KFixture)
+	var buf bytes.Buffer
+	h.logger = slog.New(slog.NewTextHandler(&buf, nil))
+
+	rec := postTranscode(t, h, itemID, `{"hevc":true,"minHeight":2160,"maxHeight":2160}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202 (body %s)", rec.Code, rec.Body.String())
+	}
+	spec := be.await(t)
+	if spec.Method != transcode.MethodRemux {
+		t.Fatalf("method = %s, want remux", spec.Method)
+	}
+	if spec.MinRungHeight != 0 || spec.MaxRungHeight != 0 {
+		t.Errorf("remux StartRequest carries hints min %d max %d; want none", spec.MinRungHeight, spec.MaxRungHeight)
+	}
+
+	line := ""
+	for _, l := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(l, "transcode decision") {
+			line = l
+		}
+	}
+	if line == "" {
+		t.Fatalf("no decision line logged:\n%s", buf.String())
+	}
+	for _, want := range []string{"method=remux", "minHeight=2160", "maxHeight=2160", "rungs=copy"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("decision line missing %q: %s", want, line)
+		}
+	}
+
+	// And the unhinted twin of the same request reads as absent, not as the
+	// same zeros a dropped hint would have left.
+	buf.Reset()
+	rec = postTranscode(t, h, itemID, `{"hevc":true}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("unhinted: status = %d (body %s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(buf.String(), "minHeight=0 maxHeight=0 rungs=copy") {
+		t.Errorf("unhinted remux decision line should read minHeight=0 maxHeight=0 rungs=copy:\n%s", buf.String())
 	}
 }
