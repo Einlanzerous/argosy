@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -199,6 +200,66 @@ func (s *Store) itemSource(ctx context.Context, accountID, itemID string) (src t
 	}, true, nil
 }
 
+// errBadLadderHint is the 400 for a minHeight/maxHeight that is present but not
+// a positive integer. A malformed hint is refused, not ignored: it is a client
+// bug, and reading the zero Go left behind as "absent" would hide it.
+const errBadLadderHint = "minHeight/maxHeight must be a positive integer"
+
+// decodeTranscodeBody reads the optional POST transcode body and validates the
+// ladder hints (ARGY-179). The decode error is kept, and what encoding/json does
+// with the generated pointer struct decides the outcome:
+//
+//   - An empty body, a non-JSON body or a syntax error (including a truncated
+//     object) decodes nothing; the body is treated as empty — today's
+//     behaviour: no hints, hevc=false. Older clients send no hints and read as
+//     "full ladder".
+//   - A *json.UnmarshalTypeError allocates the offending field's pointer to
+//     zero and decodes every other field. On minHeight/maxHeight ("abc",
+//     1080.5) it is a 400. Go reports only the FIRST type error, so
+//     {"hevc":"yes","minHeight":"abc"} surfaces Field="hevc" with minHeight
+//     left at 0 — the "<= 0" rule below refuses it, which is why that rule
+//     stays and the checks are not reordered. A type error on another field
+//     alone ("hevc":"yes") leaves it zero and the hints are honoured. A
+//     top-level non-object ([1,2]) is a type error with an empty Field and
+//     nothing decoded: 200, no hints.
+//   - A JSON null hint (what the generated Dart client sends for every unset
+//     field) decodes to nil with no error and reads as absent.
+//   - minHeight > maxHeight as sent, both present, is a 400 — raw values, so
+//     the rule is well-defined, and before the method decision, so a request
+//     that would have remuxed is still refused for inconsistent hints.
+//
+// errMsg is non-empty for a 400; min/max are 0 when absent.
+func decodeTranscodeBody(r io.Reader) (body api.TranscodeStartRequest, minHeight, maxHeight int, errMsg string) {
+	if r == nil {
+		return body, 0, 0, ""
+	}
+	if err := json.NewDecoder(r).Decode(&body); err != nil {
+		var typeErr *json.UnmarshalTypeError
+		if !errors.As(err, &typeErr) {
+			return api.TranscodeStartRequest{}, 0, 0, ""
+		}
+		if typeErr.Field == "minHeight" || typeErr.Field == "maxHeight" {
+			return body, 0, 0, errBadLadderHint
+		}
+	}
+	if body.MinHeight != nil {
+		if *body.MinHeight <= 0 {
+			return body, 0, 0, errBadLadderHint
+		}
+		minHeight = *body.MinHeight
+	}
+	if body.MaxHeight != nil {
+		if *body.MaxHeight <= 0 {
+			return body, 0, 0, errBadLadderHint
+		}
+		maxHeight = *body.MaxHeight
+	}
+	if minHeight > 0 && maxHeight > 0 && minHeight > maxHeight {
+		return body, 0, 0, "minHeight must not exceed maxHeight"
+	}
+	return body, minHeight, maxHeight, ""
+}
+
 // startTranscode begins (or joins) an HLS transcode session for an item and
 // returns the session + its playlist URL.
 func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
@@ -222,12 +283,13 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Body is optional; it carries the seek offset and whether the client can
-	// play HEVC (so a 4K HEVC source can be copied at native resolution rather
-	// than re-encoded down to H.264 1080p).
-	var body api.TranscodeStartRequest
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&body)
+	// Body is optional; it carries the seek offset, whether the client can play
+	// HEVC (so a 4K HEVC source can be copied at native resolution rather than
+	// re-encoded down to H.264 1080p), and the ladder hints (ARGY-179).
+	body, minHeight, maxHeight, hintErr := decodeTranscodeBody(r.Body)
+	if hintErr != "" {
+		httpx.Error(w, http.StatusBadRequest, hintErr)
+		return
 	}
 	clientHEVC := body.Hevc != nil && *body.Hevc
 	// Whether the client hardware-decodes 10-bit HEVC. Absent on every client
@@ -255,15 +317,24 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 	plan := planPlayback(src.video, src.audio, clientHEVC, clientHEVCHardware, src.highBitDepth,
 		burnIn > 0, src.height)
 	mode := transcode.MethodTranscode
+	// The hints that reach the transcoder. A copy has one variant by
+	// construction, so on a remux the ladder hints have nothing to shape: they
+	// are dropped here so a hinted and an unhinted remux derive the same session
+	// and join one copy (ARGY-235 owns giving a remux a ladder). The raw values
+	// stay in minHeight/maxHeight for the decision line, so a TV that sent
+	// min=max=2160 for a title that copies is still distinguishable in the log
+	// from a client that sent nothing.
+	rungMin, rungMax := minHeight, maxHeight
 	if plan.method != methodTranscode {
 		mode = transcode.MethodRemux
+		rungMin, rungMax = 0, 0
 	}
 	var startAt float64
 	if body.StartAt != nil && *body.StartAt > 0 {
 		startAt = *body.StartAt
 	}
 
-	sess, err := h.tc.Start(transcode.StartRequest{
+	req := transcode.StartRequest{
 		ItemID:         itemID,
 		AccountID:      account,
 		Source:         src.path,
@@ -276,16 +347,28 @@ func (h *handlers) startTranscode(w http.ResponseWriter, r *http.Request) {
 		TranscodeAudio: plan.transcodeAudio,
 		AudioTracks:    src.audioTracks,
 		BurnInSubtitle: burnIn,
-	})
+		MinRungHeight:  rungMin,
+		MaxRungHeight:  rungMax,
+	}
+	sess, err := h.tc.Start(req)
 	// One line per start carries the decision AND who asked for which session at
 	// which offset, so a seek burst reads from the log alone (ARGY-262). On a
 	// failed start there is no session id, but the decision is still worth having.
+	// minHeight=/maxHeight= are the hints as the client sent them (0 = absent),
+	// even on a remux where they were dropped; rungs= is the *planned* ladder
+	// after the hints ("copy" on a remux); a hardware→software fallback that
+	// changes it logs its own line (ARGY-179).
+	rungs := transcode.PlannedRungs(req)
+	if err == nil {
+		rungs = sess.Rungs
+	}
 	decision := []any{"item", itemID, "device", auth.DeviceLabel(r.Context()),
 		"startAt", startAt, "method", mode, "codec", plan.videoCodec,
 		"transcodeAudio", plan.transcodeAudio, "reason", plan.reason, "container", filepath.Ext(src.path),
 		"video", src.video, "audio", src.audio, "height", src.height, "clientHevc", clientHEVC,
 		"clientHevcHardware", clientHEVCHardware, "highBitDepth", src.highBitDepth,
-		"burnInSubtitle", burnIn}
+		"burnInSubtitle", burnIn, "minHeight", minHeight, "maxHeight", maxHeight,
+		"rungs", transcode.FormatRungs(rungs)}
 	if err != nil {
 		h.logger.Info("transcode decision", decision...)
 	} else {
