@@ -982,24 +982,46 @@ class _ErrorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 56, color: ArgosyColors.danger),
-          const SizedBox(height: 18),
-          Text(
-            controller.errorMessage ?? 'This title could not be played.',
-            style: const TextStyle(color: ArgosyColors.cream, fontSize: 20),
-          ),
-          const SizedBox(height: 22),
-          TvButton(
-            label: 'Retry',
-            primary: true,
-            autofocus: true,
-            onSelect: controller.retry,
-          ),
-        ],
+    // Same scrim as the TV resume prompt: the bare icon + text washed out on
+    // bright frames (ARGY-284).
+    return ColoredBox(
+      color: const Color(0xF0000000),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline,
+                size: 56, color: ArgosyColors.danger),
+            const SizedBox(height: 14),
+            const Text(
+              'PLAYBACK ERROR',
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                color: ArgosyColors.accent,
+                fontSize: 16,
+                letterSpacing: 2,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              controller.errorMessage ?? 'This title could not be played.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'HankenGrotesk',
+                color: ArgosyColors.cream,
+                fontSize: 22,
+              ),
+            ),
+            const SizedBox(height: 28),
+            TvButton(
+              label: 'Retry',
+              primary: true,
+              autofocus: true,
+              onSelect: controller.retry,
+            ),
+          ],
+        ),
       ),
     );
   }

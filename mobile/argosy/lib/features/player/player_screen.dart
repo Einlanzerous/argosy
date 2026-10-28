@@ -17,6 +17,7 @@ import '../../widgets/async_view.dart';
 import '../stow/stow_controller.dart';
 import 'playback_controller.dart';
 import 'player_controls.dart';
+import 'player_modal_shell.dart';
 import 'player_providers.dart';
 
 /// The full playback surface (ARGY-79): direct play or HLS transcode, an Argosy
@@ -376,98 +377,77 @@ class _ResumePromptState extends State<_ResumePrompt>
   Widget build(BuildContext context) {
     final remaining = (widget.duration - widget.position)
         .clamp(0, widget.duration > 0 ? widget.duration : widget.position);
-    return ColoredBox(
-      color: const Color(0xE6000000),
-      child: SafeArea(
-        child: Stack(
+    return PlayerModalShell(
+      onBack: widget.onBack,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Align(
-              alignment: Alignment.topLeft,
-              child: IconButton(
-                onPressed: widget.onBack,
-                icon: const Icon(Icons.arrow_back, color: ArgosyColors.cream),
-              ),
+            Text(
+              'CROSS-DEVICE RESUME',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: ArgosyColors.accent,
+                    letterSpacing: 1.6,
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'CROSS-DEVICE RESUME',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: ArgosyColors.accent,
-                              letterSpacing: 1.6,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Pick up where you left off?',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${formatTitle(widget.title)} · ${formatClock(remaining)} remaining',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(color: ArgosyColors.soft),
-                      ),
-                      const SizedBox(height: 24),
-                      AnimatedBuilder(
-                        animation: _glow,
-                        builder: (context, child) {
-                          final t = _glow.value;
-                          return DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: ArgosyColors.accent
-                                      .withValues(alpha: 0.45 + 0.27 * t),
-                                  blurRadius: 16 + 14 * t,
-                                  spreadRadius: 1 + 4 * t,
-                                ),
-                              ],
-                            ),
-                            child: child,
-                          );
-                        },
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            style: brassButtonStyle(context),
-                            onPressed: widget.onResume,
-                            icon: const Icon(Icons.play_arrow, size: 20),
-                            label: Text(
-                                'Resume from ${formatClock(widget.position)}'),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          style: ghostButtonStyle(context),
-                          onPressed: widget.onStartOver,
-                          icon: const Icon(Icons.replay, size: 18),
-                          label: const Text('Start from the beginning'),
-                        ),
+            const SizedBox(height: 10),
+            Text(
+              'Pick up where you left off?',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${formatTitle(widget.title)} · ${formatClock(remaining)} remaining',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: ArgosyColors.soft),
+            ),
+            const SizedBox(height: 24),
+            AnimatedBuilder(
+              animation: _glow,
+              builder: (context, child) {
+                final t = _glow.value;
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ArgosyColors.accent
+                            .withValues(alpha: 0.45 + 0.27 * t),
+                        blurRadius: 16 + 14 * t,
+                        spreadRadius: 1 + 4 * t,
                       ),
                     ],
                   ),
+                  child: child,
+                );
+              },
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: brassButtonStyle(context),
+                  onPressed: widget.onResume,
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: Text(
+                      'Resume from ${formatClock(widget.position)}'),
                 ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: ghostButtonStyle(context),
+                onPressed: widget.onStartOver,
+                icon: const Icon(Icons.replay, size: 18),
+                label: const Text('Start from the beginning'),
               ),
             ),
           ],
         ),
-      ),
     );
   }
 }
