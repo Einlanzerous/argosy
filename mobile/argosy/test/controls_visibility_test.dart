@@ -146,6 +146,32 @@ void main() {
     });
   });
 
+  test('disposing while armed fires nothing, and late calls are no-ops', () {
+    fakeAsync((async) {
+      final v = make()..setCanHide(true);
+      var n = 0;
+      v.addListener(() => n++);
+      async.elapse(const Duration(seconds: 1));
+      expect(v.armed, isTrue);
+
+      v.dispose();
+      expect(v.armed, isFalse);
+
+      // The track sheet's dismiss future resolving after the player screen is
+      // gone: must not arm a timer that notifies a disposed notifier.
+      v.touch();
+      v.toggle();
+      v.hold();
+      v.setCanHide(false);
+      v.setCanHide(true);
+      expect(v.armed, isFalse);
+
+      async.elapse(const Duration(seconds: 10));
+      expect(n, 0);
+      expect(v.visible, isTrue);
+    });
+  });
+
   test('listeners are told on every change', () {
     fakeAsync((async) {
       final v = make()..setCanHide(true);

@@ -22,6 +22,7 @@ class ControlsVisibility extends ChangeNotifier {
   bool _visible = true;
   bool _canHide = false;
   bool _held = false;
+  bool _disposed = false;
   Timer? _timer;
 
   bool get visible => _visible;
@@ -36,7 +37,7 @@ class ControlsVisibility extends ChangeNotifier {
   /// repeat of the current value is a no-op, so continuous controller
   /// updates and repaint ticks never push the countdown back.
   void setCanHide(bool value) {
-    if (value == _canHide) return;
+    if (_disposed || value == _canHide) return;
     _canHide = value;
     if (value) {
       _arm();
@@ -47,6 +48,7 @@ class ControlsVisibility extends ChangeNotifier {
 
   /// A tap on the bare video: toggles, and arms the hide when showing.
   void toggle() {
+    if (_disposed) return;
     _visible = !_visible;
     if (_visible) {
       _arm();
@@ -59,6 +61,7 @@ class ControlsVisibility extends ChangeNotifier {
   /// Any interaction with a control (play/pause, a seek, a dismissed sheet):
   /// keeps the controls showing and restarts the countdown.
   void touch() {
+    if (_disposed) return;
     _held = false;
     if (!_visible) {
       _visible = true;
@@ -70,16 +73,17 @@ class ControlsVisibility extends ChangeNotifier {
   /// Suspends the countdown while something has the viewer's attention — a
   /// scrub drag or an open track sheet. [touch] releases it.
   void hold() {
+    if (_disposed) return;
     _held = true;
     _cancel();
   }
 
   void _arm() {
     _cancel();
-    if (!_canHide || !_visible || _held) return;
+    if (_disposed || !_canHide || !_visible || _held) return;
     _timer = Timer(hideAfter, () {
       _timer = null;
-      if (!_canHide || !_visible || _held) return;
+      if (_disposed || !_canHide || !_visible || _held) return;
       _visible = false;
       notifyListeners();
     });
@@ -90,8 +94,12 @@ class ControlsVisibility extends ChangeNotifier {
     _timer = null;
   }
 
+  /// After this every call is a no-op: a late interaction — the track sheet's
+  /// dismiss future resolving after the player screen was torn down — must not
+  /// arm a timer that would notify a disposed notifier.
   @override
   void dispose() {
+    _disposed = true;
     _cancel();
     super.dispose();
   }

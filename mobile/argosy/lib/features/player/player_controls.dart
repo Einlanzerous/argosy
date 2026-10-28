@@ -377,7 +377,11 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   void _openTracks(TrackKind kind) {
     _vis.hold();
-    showTrackSheet(context, _c, kind).then((_) => _scheduleHide());
+    // The sheet can outlive this overlay (player torn down underneath it);
+    // the notifier is also dispose-safe, this just skips the dead call.
+    showTrackSheet(context, _c, kind).then((_) {
+      if (mounted) _scheduleHide();
+    });
   }
 
   void _seekBy(double delta) {
