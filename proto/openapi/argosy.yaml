@@ -1358,6 +1358,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlayState"
+        "400":
+          description: >-
+            positionSeconds is NaN, negative, or more than the title's duration
+            (the longer of durationSeconds and the catalog's) plus a small
+            slack; nothing is written. A 4xx so a client's offline queue drops
+            the entry rather than retrying it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":

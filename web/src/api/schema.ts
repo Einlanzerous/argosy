@@ -3585,6 +3585,15 @@ export interface operations {
                     "application/json": components["schemas"]["PlayState"];
                 };
             };
+            /** @description positionSeconds is NaN, negative, or more than the title's duration (the longer of durationSeconds and the catalog's) plus a small slack; nothing is written. A 4xx so a client's offline queue drops the entry rather than retrying it. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
