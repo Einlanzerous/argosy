@@ -2,6 +2,8 @@ package library
 
 import (
 	"context"
+	"errors"
+	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -465,5 +467,98 @@ func TestContinueWatchingAbandoned(t *testing.T) {
 	// clients no longer have to render it.
 	if got.Title == "" || got.SeriesTitle == nil || *got.SeriesTitle != "Sword Art Online" {
 		t.Errorf("seriesTitle = %v, title = %q", got.SeriesTitle, got.Title)
+	}
+}
+
+// TestSetProgressRefusesOutOfRange is the server half of ARGY-283: a wedged
+// mobile recovery reported a position 12 hours into a 22-minute episode, which
+// moved the resume point to nonsense and — because watchedThreshold is a
+// fraction of the duration — flagged the episode watched. A position that is
+// not finite, is negative, or lies more than progressSlackSeconds past the
+// longer of the client's and the catalog's duration is refused and leaves the
+// stored state untouched; the slack itself is accepted.
+func TestSetProgressRefusesOutOfRange(t *testing.T) {
+	dsn := testdb.DSN(t)
+	ctx := context.Background()
+	if err := db.Migrate(ctx, dsn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	store := NewStore(pool, "/artwork")
+
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
+	var accID, userID, libID, itemID, bareID string
+	if err := pool.QueryRow(ctx, `INSERT INTO accounts (name) VALUES ($1) RETURNING id::text`, "psr_"+suffix).Scan(&accID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO users (account_id, name) VALUES ($1,$2) RETURNING id::text`, accID, "viewer").Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO libraries (account_id, name, kind, root_path) VALUES ($1,$2,'mixed',$3) RETURNING id::text`,
+		accID, "lib_"+suffix, "/tmp/"+suffix).Scan(&libID); err != nil {
+		t.Fatal(err)
+	}
+	// The incident's shape: a 1355.872s episode.
+	if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path, duration_seconds) VALUES ($1,'episode','Ep',$2,1355.872) RETURNING id::text`,
+		libID, "ep-"+suffix+".mkv").Scan(&itemID); err != nil {
+		t.Fatal(err)
+	}
+	// An item the scanner never measured: only the client's duration can bound it.
+	if err := pool.QueryRow(ctx, `INSERT INTO media_items (library_id, kind, title, file_path) VALUES ($1,'movie','Bare',$2) RETURNING id::text`,
+		libID, "bare-"+suffix+".mkv").Scan(&bareID); err != nil {
+		t.Fatal(err)
+	}
+	dur := 1355.872
+
+	// The real resume point, written while the player was healthy.
+	if ps, err := store.SetProgress(ctx, accID, userID, "", itemID, 1266.2, &dur); err != nil || ps == nil || ps.Watched {
+		t.Fatalf("healthy write = %+v (err %v), want stored/unwatched", ps, err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		pos  float64
+		dur  *float64
+	}{
+		{"the incident's position", 44842.9614135569, &dur},
+		{"just past the slack", dur + progressSlackSeconds + 0.01, &dur},
+		{"beyond the catalog duration with no client duration", 5000, nil},
+		{"negative", -1, &dur},
+		{"NaN", math.NaN(), &dur},
+		{"+Inf", math.Inf(1), &dur},
+		{"-Inf", math.Inf(-1), &dur},
+	} {
+		ps, err := store.SetProgress(ctx, accID, userID, "", itemID, tc.pos, tc.dur)
+		if !errors.Is(err, ErrProgressOutOfRange) || ps != nil {
+			t.Errorf("%s: SetProgress = %+v, %v; want ErrProgressOutOfRange", tc.name, ps, err)
+		}
+	}
+	// Nothing above touched the row: the resume point and the flag survive.
+	if ps, err := store.GetProgress(ctx, accID, userID, itemID); err != nil || ps == nil || ps.Watched || math.Abs(float64(ps.PositionSeconds)-1266.2) > 0.01 {
+		t.Fatalf("after refused writes = %+v (err %v), want 1266.2/unwatched", ps, err)
+	}
+
+	// Within the slack is a real end of file, not garbage: accepted, and watched.
+	if ps, err := store.SetProgress(ctx, accID, userID, "", itemID, dur+progressSlackSeconds-0.5, &dur); err != nil || ps == nil || !ps.Watched {
+		t.Fatalf("within slack = %+v (err %v), want accepted/watched", ps, err)
+	}
+	// A client duration longer than the catalog's widens the bound rather than
+	// fighting it: the longer of the two wins.
+	long := 2000.0
+	if ps, err := store.SetProgress(ctx, accID, userID, "", itemID, 1900, &long); err != nil || ps == nil {
+		t.Fatalf("longer client duration = %+v (err %v), want accepted", ps, err)
+	}
+	// With no duration anywhere there is nothing to bound against: accepted.
+	if ps, err := store.SetProgress(ctx, accID, userID, "", bareID, 90000, nil); err != nil || ps == nil {
+		t.Fatalf("unbounded item = %+v (err %v), want accepted", ps, err)
+	}
+	// Even an unmeasured item is bounded by what the client itself says.
+	short := 100.0
+	if ps, err := store.SetProgress(ctx, accID, userID, "", bareID, 90000, &short); !errors.Is(err, ErrProgressOutOfRange) || ps != nil {
+		t.Fatalf("unmeasured item past client duration = %+v, %v; want ErrProgressOutOfRange", ps, err)
 	}
 }

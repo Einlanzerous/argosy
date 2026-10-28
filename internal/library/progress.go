@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -28,6 +29,37 @@ const (
 	abandonedSeconds = 120
 	abandonedAfter   = "24 hours"
 )
+
+// progressSlackSeconds is how far past an item's duration a reported position
+// may land before it is refused (ARGY-283). Catalog and file durations disagree
+// by fractions of a second, and a player that runs out its last buffer can
+// report a hair past the end; a position hours past it is a client that has
+// lost track of where it is, and writing it would both move the resume point
+// to nonsense and flip the item watched (watchedThreshold is a fraction of the
+// duration, so anything huge clears it).
+const progressSlackSeconds = 10
+
+// ErrProgressOutOfRange is returned by SetProgress for a position that is not a
+// finite, non-negative number within the item's duration plus
+// progressSlackSeconds. The stored play state is left untouched.
+var ErrProgressOutOfRange = errors.New("position is outside the item's duration")
+
+// itemDurationInAccount reports whether the item is in the account and, when
+// it is, its catalog duration (nil when the scanner recorded none).
+func (s *Store) itemDurationInAccount(ctx context.Context, accountID, itemID string) (bool, *float64, error) {
+	var dur *float64
+	err := s.pool.QueryRow(ctx,
+		`SELECT mi.duration_seconds FROM media_items mi JOIN libraries l ON l.id = mi.library_id
+		 WHERE mi.id = $1 AND l.account_id = $2`,
+		itemID, accountID).Scan(&dur)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	return true, dur, nil
+}
 
 func (s *Store) itemInAccount(ctx context.Context, accountID, itemID string) (bool, error) {
 	var ok bool
@@ -83,13 +115,32 @@ func (s *Store) GetProgress(ctx context.Context, accountID, userID, itemID strin
 // user's devices playing the same item at once is rare (it's one person), and
 // Beacon pushes every change to the other devices, so a write is never a silent
 // clobber — the other device sees it within seconds.
+//
+// The position has to be a finite, non-negative number no further than
+// progressSlackSeconds past the longer of the client's duration and the
+// catalog's; anything else is ErrProgressOutOfRange and nothing is written
+// (ARGY-283: a wedged mobile recovery reported 44842s into a 1355s episode,
+// which both lost the real resume point and marked the episode watched).
 func (s *Store) SetProgress(ctx context.Context, accountID, userID, deviceID, itemID string, pos float64, dur *float64) (*api.PlayState, error) {
-	ok, err := s.itemInAccount(ctx, accountID, itemID)
+	ok, itemDur, err := s.itemDurationInAccount(ctx, accountID, itemID)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, nil
+	}
+	if math.IsNaN(pos) || math.IsInf(pos, 0) || pos < 0 {
+		return nil, ErrProgressOutOfRange
+	}
+	var limit float64
+	if dur != nil && *dur > 0 {
+		limit = *dur
+	}
+	if itemDur != nil && *itemDur > limit {
+		limit = *itemDur
+	}
+	if limit > 0 && pos > limit+progressSlackSeconds {
+		return nil, ErrProgressOutOfRange
 	}
 	watched := dur != nil && *dur > 0 && pos >= *dur*watchedThreshold
 	// device_id records which deck owns this playhead (ARGY-98). COALESCE on
@@ -362,6 +413,12 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 	itemID := r.PathValue("itemId")
 	sess, _ := auth.SessionFromContext(r.Context())
 	ps, err := h.store.SetProgress(r.Context(), catalogOf(r), userOf(r), sess.DeviceId.String(), itemID, float64(body.PositionSeconds), dur)
+	if errors.Is(err, ErrProgressOutOfRange) {
+		// A 4xx, so the client's offline queue drops the entry instead of
+		// retrying a position that can never be accepted.
+		httpx.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err != nil {
 		h.fail(w, err)
 		return
