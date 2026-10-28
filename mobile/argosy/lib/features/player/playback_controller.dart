@@ -249,7 +249,13 @@ class PlaybackController extends ChangeNotifier
 
   /// The latest frame of video state (position, buffering, playing…) for the
   /// overlay. Null until the first data source is set up.
-  VideoPlayerValue? get videoValue => _player?.videoPlayerController?.value;
+  VideoPlayerValue? get videoValue =>
+      debugVideoValue ?? _player?.videoPlayerController?.value;
+
+  /// Test seam: stands in for the plugin's value, so a test can hand the
+  /// controller a relative position the way a live player would.
+  @visibleForTesting
+  VideoPlayerValue? debugVideoValue;
 
   /// True once the player has a data source whose first frame is ready to
   /// render. Deliberately avoids better_player's `isVideoInitialized()`, which
@@ -424,11 +430,52 @@ class PlaybackController extends ChangeNotifier
     return baseOffset + ms / 1000.0;
   }
 
+  /// The last absolute position known to be real (ARGY-283): a deliberate
+  /// start or seek, or a `progress` reading inside the catalog's bounds. Any
+  /// restart whose derived position is not believable begins here instead.
+  double _lastGoodPosition = 0;
+
+  @visibleForTesting
+  double get debugLastGoodPosition => _lastGoodPosition;
+
+  /// How far past the catalog end a position may read and still be believed:
+  /// a file can outrun its catalogued runtime by a few seconds, and a player
+  /// draining its last buffer reports a hair past the end. The server refuses
+  /// progress beyond the same margin (`progressSlackSeconds`), so what passes
+  /// here is what it will accept.
+  static const positionSlackSeconds = 10.0;
+
+  /// Whether [p] can be a position in this title: finite, not negative, and no
+  /// further past the catalog end than [positionSlackSeconds]. Anything else
+  /// is the arithmetic of a broken player, not a place in the episode.
+  bool isSanePosition(double p) =>
+      p.isFinite &&
+      p >= 0 &&
+      (catalogDuration <= 0 || p <= catalogDuration + positionSlackSeconds);
+
+  /// Where playback should (re)start: [candidate] — the playhead by default —
+  /// when it is believable, else the last good position; always finite and
+  /// within [0, catalogDuration]. The one place a start offset is derived, so
+  /// nothing outside the title can reach a transcode start or a progress
+  /// report (ARGY-283: a wedged recovery POSTed startAt=44842 into a 1355s
+  /// episode, ten times).
+  double _resumePoint([double? candidate]) {
+    final p = candidate ?? position;
+    final base = isSanePosition(p) ? p : _lastGoodPosition;
+    if (!base.isFinite || base < 0) return 0;
+    if (catalogDuration > 0 && base > catalogDuration) return catalogDuration;
+    return base;
+  }
+
   // --- lifecycle -----------------------------------------------------------
 
   /// Begins playback at [offset] seconds of absolute media time. For transcode
   /// this starts ffmpeg at that offset; for direct play it seeks the element.
   Future<void> start(double offset) async {
+    // The saved position is the first thing believed about where we are, so it
+    // is checked like any other: a server-side value past the end starts over.
+    offset = _resumePoint(offset);
+    _lastGoodPosition = offset;
     // A deliberate start is a fresh subject, so it gets a fresh retry budget.
     _recovery.reset(offset);
     _player = BetterPlayerController(
@@ -570,6 +617,17 @@ class PlaybackController extends ChangeNotifier
   /// viewer seeks back out. Driven by each player's repaint ticker, since the
   /// controller has no progress event of its own; safe to call repeatedly.
   void maybeAdvance() {
+    // Not while the stream is broken or mid-restart, and never on a position
+    // that cannot be real (ARGY-283): the card is a prompt about the episode
+    // ending, and a dead player's arithmetic is not evidence of that. The
+    // window check re-opens it once playback is genuinely back inside it.
+    if (fatalError ||
+        starting ||
+        _pendingOffset != null ||
+        !isSanePosition(position)) {
+      if (upNextOpen) _closeUpNext();
+      return;
+    }
     if (autoAdvance &&
         nextEpisode == null &&
         _nextFetchFailed &&
@@ -632,6 +690,8 @@ class PlaybackController extends ChangeNotifier
     final now = debugNow();
     final elapsed = now.difference(_upNextLastTick ?? now).inMilliseconds;
     _upNextLastTick = now;
+    // A broken stream rolls nothing over (ARGY-283).
+    if (fatalError) return;
     // Held by a seek (ARGY-261): the full countdown starts when the hold lifts.
     if (upNextHeld) return;
     if (!(debugPlaying ?? videoValue?.isPlaying ?? false) && !_finished) return;
@@ -726,10 +786,16 @@ class PlaybackController extends ChangeNotifier
   }
 
   Future<void> _startTranscodeAt(double offset) async {
+    // The choke point (ARGY-283): whatever a caller derived, the session starts
+    // somewhere inside the title.
+    offset = _resumePoint(offset);
     final gen = ++_restartGen;
     bool stale() => gen != _restartGen;
     final old = _sessionId;
     _sessionId = null;
+    // Whether this run got as far as handing the plugin the new source. Until
+    // it does, the plugin still holds the previous one.
+    var attached = false;
     // Held, not applied: [baseOffset] moves when the new source is up.
     _pendingOffset = offset;
     _windowAtInitSeconds = 0;
@@ -809,6 +875,7 @@ class PlaybackController extends ChangeNotifier
         return;
       }
       _attachGen = gen;
+      attached = true;
       if (debugAttach != null) {
         await debugAttach!(playlistUrl);
       } else {
@@ -842,7 +909,20 @@ class PlaybackController extends ChangeNotifier
       // Only the winning generation owns these: a superseded run clearing
       // `starting` would unmask player exceptions for the restart still live.
       if (!stale()) {
-        _commitPendingOffset();
+        if (attached) {
+          _commitPendingOffset();
+        } else {
+          // Failed before the swap — a dead link, a server at capacity, a
+          // playlist that never came — so the plugin still holds the previous
+          // source, whose relative position is measured from the baseOffset it
+          // already has. Committing the target here counted that position
+          // twice: with ~220s of stale buffer the playhead read 220s further
+          // on at every failed restart, which re-armed the recovery budget
+          // (it looked like forward progress) and walked the restart offset
+          // out of the episode, 220s at a time, for as long as the link was
+          // down (ARGY-283).
+          _pendingOffset = null;
+        }
         starting = false;
         _safeNotify();
       }
@@ -930,11 +1010,14 @@ class PlaybackController extends ChangeNotifier
     if (_tornDown || (p == null && !isTranscode)) return;
     final max = catalogDuration > 0 ? catalogDuration : target;
     final t = target.clamp(0.0, max).toDouble();
+    if (!t.isFinite) return;
     // A seek is a fresh decision about where you are, so the card starts over:
     // drop it and let the repaint ticker re-open it — with a full countdown — if
     // the new position is still inside the window (ARGY-207).
     _closeUpNext();
     _noteSeek();
+    // Deliberate, so it is the new last good position whatever happens next.
+    _lastGoodPosition = t;
 
     if (!isTranscode) {
       _seekJustIssued = true;
@@ -1014,15 +1097,22 @@ class PlaybackController extends ChangeNotifier
     );
   }
 
+  /// The overlay's Retry: a fresh session, with a fresh recovery budget, from
+  /// where the viewer actually was. Not [baseOffset] (ARGY-283): that is where
+  /// the *last restart* began, so a Retry from an error ten minutes into a
+  /// session rewound ten minutes — and from a wedged recovery it re-sent the
+  /// very offset that had just failed, which is why Retry appeared to do
+  /// nothing.
   Future<void> retry() async {
     fatalError = false;
     errorMessage = null;
     _safeNotify();
+    final at = _resumePoint();
     if (isTranscode) {
-      _recovery.reset(baseOffset);
-      await _startTranscodeAt(baseOffset);
+      _recovery.reset(at);
+      await _startTranscodeAt(at);
     } else {
-      await _startDirect(position);
+      await _startDirect(at);
     }
   }
 
@@ -1240,6 +1330,12 @@ class PlaybackController extends ChangeNotifier
   void _flush() {
     final pos = position;
     if (pos <= 0) return;
+    // A dead stream has nothing new to say about where the viewer is, and a
+    // position outside the title is not a position (ARGY-283). Either would
+    // overwrite the resume point the server already holds — and past 95% of
+    // the duration it also flips the episode watched, which is how a wedged
+    // recovery's heartbeat erased Ashley's place and put Continue at 0:00.
+    if (fatalError || !isSanePosition(pos)) return;
     final duration = catalogDuration > 0 ? catalogDuration : null;
     unawaited(
       libraryApi
@@ -1305,7 +1401,14 @@ class PlaybackController extends ChangeNotifier
       case BetterPlayerEventType.progress:
         _seekJustIssued = false;
         _accruePlayed();
-        _recovery.progressed(position);
+        // Only a believable reading counts as progress — for the recovery
+        // budget, and as the place a later restart may fall back to. A
+        // restart's own target is not a reading (ARGY-283).
+        final p = position;
+        if (isSanePosition(p)) {
+          if (!starting && _pendingOffset == null) _lastGoodPosition = p;
+          _recovery.progressed(p);
+        }
       case BetterPlayerEventType.initialized:
         // The plugin has just taken its one and only duration reading; correct
         // it before any seek can be measured against it (ARGY-230). Runs again
@@ -1345,9 +1448,15 @@ class PlaybackController extends ChangeNotifier
         // Likewise a `finished` with no real playback since the last seek is the
         // echo of a seek, not the media ending: auto-advance is caused by
         // playing (ARGY-261). A genuine end within the slack is exempt from both.
+        //
+        // And neither is a `finished` from a broken stream, or one read at a
+        // position that cannot be in this title (ARGY-283): an empty session
+        // ends the instant it opens, and `catalogDuration - position` goes
+        // negative past the end, which the old check read as "near the end".
+        final pos = position;
+        if (fatalError || !isSanePosition(pos)) return;
         final nearEnd =
-            catalogDuration > 0 &&
-            catalogDuration - position < _realEndSlackSeconds;
+            catalogDuration > 0 && catalogDuration - pos < _realEndSlackSeconds;
         if (!nearEnd &&
             ((isTranscode &&
                     !isOffline &&
@@ -1415,7 +1524,7 @@ class PlaybackController extends ChangeNotifier
       _fail('Playback stopped unexpectedly.');
       return;
     }
-    final at = position;
+    final at = _resumePoint();
     switch (_recovery.onFatal(at)) {
       case RecoveryDecision.duplicate:
         return;
@@ -1450,8 +1559,17 @@ class PlaybackController extends ChangeNotifier
   void _fail(String message) {
     fatalError = true;
     errorMessage = message;
+    // The card is about the episode ending; the stream breaking is not that.
+    _closeUpNext();
     _safeNotify();
   }
+
+  /// The retry budget, for tests that assert Retry hands out a fresh one.
+  @visibleForTesting
+  SessionRecovery get debugRecovery => _recovery;
+
+  @visibleForTesting
+  bool get debugHasSession => _sessionId != null;
 
   void _safeNotify() {
     if (!_disposed) notifyListeners();
