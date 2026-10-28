@@ -21,6 +21,7 @@ class TranscodeSession {
     required this.startAt,
     required this.startedAt,
     required this.playlistUrl,
+    this.rungs = const [],
     this.error,
     required this.progress,
   });
@@ -43,6 +44,9 @@ class TranscodeSession {
   /// Relative URL of the HLS media playlist for this session.
   String playlistUrl;
 
+  /// Heights the session plans to encode, widest first — the bitrate ladder after the client's minHeight/maxHeight hints (ARGY-179). Absent on a remux, which copies the source's one variant. A client whose player never reports a track switch (better_player_plus does not, ARGY-282) can label the picture from this when it holds exactly one rung: nothing else can be playing. 
+  List<int> rungs;
+
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated
@@ -63,6 +67,7 @@ class TranscodeSession {
     other.startAt == startAt &&
     other.startedAt == startedAt &&
     other.playlistUrl == playlistUrl &&
+    _deepEquality.equals(other.rungs, rungs) &&
     other.error == error &&
     other.progress == progress;
 
@@ -77,11 +82,12 @@ class TranscodeSession {
     (startAt.hashCode) +
     (startedAt.hashCode) +
     (playlistUrl.hashCode) +
+    (rungs.hashCode) +
     (error == null ? 0 : error!.hashCode) +
     (progress.hashCode);
 
   @override
-  String toString() => 'TranscodeSession[id=$id, itemId=$itemId, encoder=$encoder, method=$method, state=$state, startAt=$startAt, startedAt=$startedAt, playlistUrl=$playlistUrl, error=$error, progress=$progress]';
+  String toString() => 'TranscodeSession[id=$id, itemId=$itemId, encoder=$encoder, method=$method, state=$state, startAt=$startAt, startedAt=$startedAt, playlistUrl=$playlistUrl, rungs=$rungs, error=$error, progress=$progress]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -93,6 +99,7 @@ class TranscodeSession {
       json[r'startAt'] = this.startAt;
       json[r'startedAt'] = this.startedAt.toUtc().toIso8601String();
       json[r'playlistUrl'] = this.playlistUrl;
+      json[r'rungs'] = this.rungs;
     if (this.error != null) {
       json[r'error'] = this.error;
     } else {
@@ -143,6 +150,9 @@ class TranscodeSession {
         startAt: mapValueOfType<double>(json, r'startAt')!,
         startedAt: mapDateTime(json, r'startedAt', r'')!,
         playlistUrl: mapValueOfType<String>(json, r'playlistUrl')!,
+        rungs: json[r'rungs'] is Iterable
+            ? (json[r'rungs'] as Iterable).cast<int>().toList(growable: false)
+            : const [],
         error: mapValueOfType<String>(json, r'error'),
         progress: TranscodeProgress.fromJson(json[r'progress'])!,
       );

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
@@ -516,6 +517,14 @@ func toAPISession(s transcode.Session) api.TranscodeSession {
 	}
 	if s.Err != "" {
 		out.Error = &s.Err
+	}
+	// The planned rung set rides along so a client without a track-switch
+	// signal can still stamp a single-rung session correctly (ARGY-282). Nil on
+	// a remux, where the picture is the source's one variant and the player's
+	// own size is already right.
+	if len(s.Rungs) > 0 {
+		rungs := slices.Clone(s.Rungs)
+		out.Rungs = &rungs
 	}
 	return out
 }
