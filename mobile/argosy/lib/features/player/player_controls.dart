@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../theme/argosy_colors.dart';
+import '../../theme/button_styles.dart';
 import '../../util/format.dart';
 import 'controls_visibility.dart';
 import 'playback_controller.dart';
+import 'player_modal_shell.dart';
 import 'track_sheet.dart';
 
 /// The Argosy-styled transport overlay that replaces better_player_plus's
@@ -472,27 +474,41 @@ class _ErrorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: ArgosyColors.danger),
-            const SizedBox(height: 16),
-            Text(
-              controller.errorMessage ?? 'This title could not be played.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: ArgosyColors.cream),
-            ),
-            const SizedBox(height: 20),
-            OutlinedButton(
+    return PlayerModalShell(
+      onBack: () => Navigator.of(context).maybePop(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 48, color: ArgosyColors.danger),
+          const SizedBox(height: 12),
+          Text(
+            'PLAYBACK ERROR',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: ArgosyColors.accent,
+                  letterSpacing: 1.6,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            controller.errorMessage ?? 'This title could not be played.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodyLarge
+                ?.copyWith(color: ArgosyColors.cream),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: brassButtonStyle(context),
               onPressed: controller.retry,
-              child: const Text('Retry'),
+              icon: const Icon(Icons.refresh, size: 20),
+              label: const Text('Retry'),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
