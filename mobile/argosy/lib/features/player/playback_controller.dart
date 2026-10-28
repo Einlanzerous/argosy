@@ -259,6 +259,13 @@ class PlaybackController extends ChangeNotifier
 
   String? _sessionId;
 
+  /// The rung set the current transcode session plans to encode, from the
+  /// start response (ARGY-282). Empty for direct play, offline and a remux.
+  List<int> _sessionRungs = const [];
+
+  @visibleForTesting
+  List<int> get debugSessionRungs => _sessionRungs;
+
   /// The transcode StartAt for the current session (0 for direct play). Added
   /// to the player's relative position to get absolute media time.
   double baseOffset = 0;
@@ -332,9 +339,9 @@ class PlaybackController extends ChangeNotifier
   bool _tornDown = false;
 
   Map<String, String> get _authHeaders => {
-        ...ClientIdentity.header,
-        if (token != null && token!.isNotEmpty) 'Authorization': 'Bearer $token',
-      };
+    ...ClientIdentity.header,
+    if (token != null && token!.isNotEmpty) 'Authorization': 'Bearer $token',
+  };
 
   /// better_player_plus's own now-playing integration — **off on Android, kept
   /// on iOS** (ARGY-87).
@@ -406,13 +413,32 @@ class PlaybackController extends ChangeNotifier
   @visibleForTesting
   bool get debugFinished => _finished;
 
-  /// Friendly quality stamp derived from the decoded video height, mirroring
-  /// the web player's `updateQuality`: "4K" at ≥2160p, otherwise `{height}p`.
-  /// Null until the first frame reports a size.
-  String? get qualityLabel {
-    final h = videoValue?.size?.height;
-    if (h == null || h <= 0) return null;
-    final hi = h.round();
+  /// Friendly quality stamp, mirroring the web player's `updateQuality`: "4K"
+  /// at ≥2160p, otherwise `{height}p`. See [qualityLabelFor] for where the
+  /// height comes from.
+  String? get qualityLabel =>
+      qualityLabelFor(_sessionRungs, videoValue?.size?.height);
+
+  /// Picks the height the stamp reads from. The plugin reports the video size
+  /// once, from the first frame (better_player_plus sets `size` only on
+  /// `initialized`; there is no `onVideoSizeChanged` on Android and iOS's
+  /// `presentationSize` observer is gated behind `!isInitialized`), so on a
+  /// ladder the stamp froze at whatever rung the player opened on — the bottom
+  /// one, on a cold TV start (ARGY-282). When the session has exactly one
+  /// [rungs] entry nothing else can be playing, so that rung is the truth: this
+  /// is every TV session (min=max=display height, ARGY-276). Otherwise — a
+  /// phone ladder, a remux, direct play — the plugin's [height] stands; on a
+  /// copy it is right already. Null until a height is known.
+  @visibleForTesting
+  static String? qualityLabelFor(List<int> rungs, double? height) {
+    final int hi;
+    if (rungs.length == 1 && rungs.single > 0) {
+      hi = rungs.single;
+    } else if (height != null && height > 0) {
+      hi = height.round();
+    } else {
+      return null;
+    }
     return hi >= 2160 ? '4K' : '${hi}p';
   }
 
@@ -730,6 +756,7 @@ class PlaybackController extends ChangeNotifier
     bool stale() => gen != _restartGen;
     final old = _sessionId;
     _sessionId = null;
+    _sessionRungs = const [];
     // Held, not applied: [baseOffset] moves when the new source is up.
     _pendingOffset = offset;
     _windowAtInitSeconds = 0;
@@ -786,6 +813,7 @@ class PlaybackController extends ChangeNotifier
         return;
       }
       _sessionId = sess.id;
+      _sessionRungs = sess.rungs;
       final playlistUrl = '$baseUrl${sess.playlistUrl}';
       final ready = await (debugProbe ?? _waitForPlaylist)(
         playlistUrl,
