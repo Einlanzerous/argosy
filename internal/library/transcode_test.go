@@ -2,12 +2,14 @@ package library
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -222,5 +224,61 @@ func TestFileTranscodeServesPinnedMediaPlaylist(t *testing.T) {
 	}
 	if strings.Contains(string(onDisk), "#EXT-X-START") {
 		t.Errorf("the on-disk playlist was modified:\n%s", onDisk)
+	}
+}
+
+// TestToAPISessionCarriesRungs: the planned rung set reaches the client, so a
+// player without a track-switch signal can stamp a single-rung session from
+// the start response (ARGY-282). A remux plans no rungs and the key stays off
+// the wire, leaving the player's own size — right on a copy — in charge.
+func TestToAPISessionCarriesRungs(t *testing.T) {
+	m := transcode.NewManager(writeBackend{}, t.TempDir(), time.Minute, 4, testLogger())
+
+	// A TV-shaped request: min=max=display height pins the ladder to one rung.
+	tv, err := m.Start(transcode.StartRequest{
+		ItemID: "item-1", Source: "/x/y.mkv", Encoder: transcode.EncoderSoftware,
+		Method: transcode.MethodTranscode, VideoCodec: transcode.CodecH264,
+		SourceHeight: 1080, MinRungHeight: 1080, MaxRungHeight: 1080,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { m.Stop(tv.ID) })
+	got := toAPISession(tv)
+	if got.Rungs == nil || !slices.Equal(*got.Rungs, []int{1080}) {
+		t.Fatalf("TV-shaped session rungs = %v, want [1080]", got.Rungs)
+	}
+	body, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"rungs":[1080]`) {
+		t.Errorf("wire form lacks the rung set: %s", body)
+	}
+
+	// A phone with no hints gets the whole ladder, widest first.
+	phone, err := m.Start(transcode.StartRequest{
+		ItemID: "item-2", Source: "/x/z.mkv", Encoder: transcode.EncoderSoftware,
+		Method: transcode.MethodTranscode, VideoCodec: transcode.CodecH264, SourceHeight: 1080,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { m.Stop(phone.ID) })
+	if got := toAPISession(phone); got.Rungs == nil || !slices.Equal(*got.Rungs, []int{1080, 720, 480}) {
+		t.Errorf("unhinted session rungs = %v, want [1080 720 480]", got.Rungs)
+	}
+
+	// A remux copies the one variant there is: no rungs, no key.
+	remux := toAPISession(transcode.Session{ID: "copy", Method: transcode.MethodRemux})
+	if remux.Rungs != nil {
+		t.Errorf("remux rungs = %v, want nil", *remux.Rungs)
+	}
+	body, err = json.Marshal(remux)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), `"rungs"`) {
+		t.Errorf("remux wire form carries a rungs key: %s", body)
 	}
 }
