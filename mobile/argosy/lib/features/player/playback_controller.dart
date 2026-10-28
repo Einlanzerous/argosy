@@ -438,6 +438,17 @@ class PlaybackController extends ChangeNotifier
   @visibleForTesting
   double get debugLastGoodPosition => _lastGoodPosition;
 
+  /// The offset of a deliberate start or seek whose source never got attached
+  /// (the POST failed, the server had no session to give, the playlist never
+  /// came). Set when a (re)start fails before the swap, cleared when one
+  /// attaches; [_resumePoint] answers with it, so Retry goes where the viewer
+  /// asked to be rather than where a source-less playhead says they are.
+  double? _unreachedTarget;
+
+  /// Whether any source has ever been attached in this controller's life.
+  /// Until one has, the playhead is [baseOffset] + nothing and means nothing.
+  bool _everAttached = false;
+
   /// How far past the catalog end a position may read and still be believed:
   /// a file can outrun its catalogued runtime by a few seconds, and a player
   /// draining its last buffer reports a hair past the end. The server refuses
@@ -460,7 +471,14 @@ class PlaybackController extends ChangeNotifier
   /// report (ARGY-283: a wedged recovery POSTed startAt=44842 into a 1355s
   /// episode, ten times).
   double _resumePoint([double? candidate]) {
-    final p = candidate ?? position;
+    // A start the viewer asked for that never came up — a first play that
+    // died at the POST or on a playlist that never came, a seek whose session
+    // failed before the swap — is still where they want to be. The playhead
+    // says nothing about it: before anything is attached it reads 0, which is
+    // a believable position, and after a failed seek it is the old source's
+    // clock. Either way Retry would otherwise land somewhere the viewer did
+    // not ask for, and the next heartbeat would write it over the saved place.
+    final p = candidate ?? _unreachedTarget ?? position;
     final base = isSanePosition(p) ? p : _lastGoodPosition;
     if (!base.isFinite || base < 0) return 0;
     if (catalogDuration > 0 && base > catalogDuration) return catalogDuration;
@@ -744,11 +762,14 @@ class PlaybackController extends ChangeNotifier
           notificationConfiguration: _notificationConfig,
         ),
       );
+      _everAttached = true;
+      _unreachedTarget = null;
       if (offset > 0) {
         await _player!.seekTo(Duration(milliseconds: (offset * 1000).round()));
       }
       await _player!.play();
     } catch (_) {
+      if (!_everAttached) _unreachedTarget = offset;
       _fail('This stowed copy could not be played. Try stowing it again.');
     } finally {
       starting = false;
@@ -773,11 +794,14 @@ class PlaybackController extends ChangeNotifier
           notificationConfiguration: _notificationConfig,
         ),
       );
+      _everAttached = true;
+      _unreachedTarget = null;
       if (offset > 0) {
         await _player!.seekTo(Duration(milliseconds: (offset * 1000).round()));
       }
       await _player!.play();
     } catch (_) {
+      if (!_everAttached) _unreachedTarget = offset;
       _fail('This title could not be played.');
     } finally {
       starting = false;
@@ -910,8 +934,12 @@ class PlaybackController extends ChangeNotifier
       // `starting` would unmask player exceptions for the restart still live.
       if (!stale()) {
         if (attached) {
+          _everAttached = true;
+          _unreachedTarget = null;
           _commitPendingOffset();
         } else {
+          // The viewer's target stands until something actually attaches.
+          _unreachedTarget = offset;
           // Failed before the swap — a dead link, a server at capacity, a
           // playlist that never came — so the plugin still holds the previous
           // source, whose relative position is measured from the baseOffset it
@@ -1330,6 +1358,11 @@ class PlaybackController extends ChangeNotifier
   void _flush() {
     final pos = position;
     if (pos <= 0) return;
+    // Nothing has ever been attached: the playhead is whatever [baseOffset]
+    // happens to be plus no clock at all, not a place the viewer has been. A
+    // first start that died before the swap must not write that over the
+    // position it was asked to resume from.
+    if (!_everAttached && videoValue == null) return;
     // A dead stream has nothing new to say about where the viewer is, and a
     // position outside the title is not a position (ARGY-283). Either would
     // overwrite the resume point the server already holds — and past 95% of

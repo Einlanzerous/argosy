@@ -35,6 +35,9 @@ class _Server extends TranscodeApi {
   /// Airplane mode: every request dies on the socket.
   bool online = false;
 
+  /// A server at capacity: the POST answers, but with no session.
+  bool atCapacity = false;
+
   final starts = <double>[];
   final stops = <String>[];
 
@@ -48,6 +51,7 @@ class _Server extends TranscodeApi {
     starts.add(at);
     await Future<void>.delayed(Duration.zero);
     if (!online) throw const SocketException('Network is unreachable');
+    if (atCapacity) return null;
     final id = 's${at.floor()}';
     return TranscodeSession(
       id: id,
@@ -97,10 +101,22 @@ class _Library extends LibraryApi {
     watched.add(id);
     return null;
   }
+
+  /// `start()` asks for the next episode; a 404 is the terminal "none".
+  @override
+  Future<OnDeckItem?> getNextEpisode(
+    String id, {
+    Future<void>? abortTrigger,
+  }) async {
+    throw ApiException(404, 'no next episode');
+  }
 }
 
 class _Rig {
-  _Rig({bool withNext = false}) {
+  /// [live] is the incident's player: a session at 1046.7s with ~220s of
+  /// stale buffer. Without it the controller is as `start()` first finds it —
+  /// nothing attached, no plugin value, `baseOffset` 0.
+  _Rig({bool withNext = false, bool live = true}) {
     c = PlaybackController(
       libraryApi: library,
       transcodeApi: server,
@@ -134,10 +150,12 @@ class _Rig {
       );
     }
     c.onAdvance = () => advanced++;
-    // The player as the stall left it: the session started at 1046.7s and the
-    // plugin's clock is frozen at the end of the buffered tail.
-    c.baseOffset = _sessionStart;
-    c.debugVideoValue = _value(_staleRel);
+    if (live) {
+      // The player as the stall left it: the session started at 1046.7s and
+      // the plugin's clock is frozen at the end of the buffered tail.
+      c.baseOffset = _sessionStart;
+      c.debugVideoValue = _value(_staleRel);
+    }
   }
 
   final server = _Server();
@@ -320,6 +338,136 @@ void main() {
       await r.c.retry();
       await settle();
       expect(r.c.fatalError, isFalse);
+      expect(r.server.starts.last, closeTo(_stallAbs, 0.001));
+    });
+  });
+
+  group('a first start that fails before anything is attached', () {
+    // Nothing is attached yet, so the playhead reads baseOffset + nothing = 0,
+    // which is a perfectly believable position. Retry used to trust it and
+    // restart the episode at 0:00 — the ARGY-283 outcome, reachable from an
+    // ordinary start failure — and the next heartbeat wrote ~5s over the saved
+    // place. The saved position is the viewer's target until a source attaches.
+    const saved = 1046.7274135568748;
+
+    for (final (label, arrange, repair) in <(
+      String,
+      void Function(_Rig),
+      void Function(_Rig),
+    )>[
+      (
+        'the POST dies on the socket',
+        (r) => r.server.online = false,
+        (r) => r.server.online = true,
+      ),
+      (
+        'the server has no session to give',
+        (r) {
+          r.server.online = true;
+          r.server.atCapacity = true;
+        },
+        (r) => r.server.atCapacity = false,
+      ),
+      (
+        'the playlist never comes',
+        (r) {
+          r.server.online = true;
+          r.c.debugProbe = (url, cancelled) async => false;
+        },
+        (r) => r.c.debugProbe = (url, cancelled) async => true,
+      ),
+    ]) {
+      test('Retry resumes at the saved position when $label', () async {
+        final r = _Rig(live: false);
+        addTearDown(r.c.dispose);
+        arrange(r);
+
+        await r.c.start(saved);
+        await settle();
+        expect(r.c.fatalError, isTrue, reason: label);
+        expect(r.server.starts, [closeTo(saved, 0.001)], reason: label);
+        expect(r.c.videoValue, isNull, reason: 'nothing attached');
+        expect(r.c.position, 0, reason: 'the source-less playhead reads 0');
+
+        // The overlay's pause echo, the keepalive, leaving the screen: none
+        // of them may write the unattached 0 over the saved position.
+        r.c.handlePlayerEvent(_pause);
+        await settle();
+        expect(r.library.reports, isEmpty, reason: label);
+
+        repair(r);
+        await r.c.retry();
+        await settle();
+
+        expect(r.server.starts, hasLength(2), reason: label);
+        expect(
+          r.server.starts.last,
+          closeTo(saved, 0.001),
+          reason: '$label: Retry goes back to the saved position, not 0:00',
+        );
+        expect(r.c.fatalError, isFalse, reason: label);
+        expect(r.c.baseOffset, closeTo(saved, 0.001), reason: label);
+        expect(r.c.position, closeTo(saved, 0.001), reason: label);
+
+        // And the first report after it is the saved place, never below it.
+        r.c.handlePlayerEvent(_pause);
+        await settle();
+        expect(r.library.reports, hasLength(1), reason: label);
+        expect(
+          r.library.reports.single.positionSeconds,
+          greaterThanOrEqualTo(saved - 0.001),
+          reason: label,
+        );
+      });
+    }
+
+    test('leaving the screen after a failed first start reports nothing',
+        () async {
+      final r = _Rig(live: false); // disposed below
+      await r.c.start(saved);
+      await settle();
+      expect(r.c.fatalError, isTrue);
+      r.c.dispose();
+      await settle();
+      expect(r.library.reports, isEmpty);
+    });
+  });
+
+  group('a seek that fails before the swap', () {
+    test('Retry lands on the seek target, not the old playhead', () async {
+      final r = _Rig();
+      addTearDown(r.c.dispose);
+      const target = 900.0;
+
+      await r.c.seekTo(target);
+      await settle();
+      expect(r.c.fatalError, isTrue);
+      expect(r.server.starts, [target]);
+      // The old source is still what the plugin holds, so its offset stays…
+      expect(r.c.baseOffset, _sessionStart);
+      expect(r.c.position, closeTo(_stallAbs, 0.001));
+
+      r.server.online = true;
+      await r.c.retry();
+      await settle();
+      // …but Retry honours where the viewer asked to go.
+      expect(r.server.starts, [target, target]);
+      expect(r.c.fatalError, isFalse);
+      expect(r.c.baseOffset, target);
+    });
+
+    test('a later recovery from the stale source still restarts at the playhead',
+        () async {
+      // The incident's shape must be untouched by the seek rule: with no
+      // unreached target outstanding, an attached-then-dead source restarts
+      // from where it actually stopped.
+      final r = _Rig();
+      addTearDown(r.c.dispose);
+      await r.failOnce();
+      expect(r.server.starts, [closeTo(_stallAbs, 0.001)]);
+      r.server.online = true;
+      await r.c.retry();
+      await settle();
       expect(r.server.starts.last, closeTo(_stallAbs, 0.001));
     });
   });
