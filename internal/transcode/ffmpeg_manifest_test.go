@@ -525,3 +525,154 @@ func TestMediaPlaylistsPinStart(t *testing.T) {
 		})
 	}
 }
+
+// TestShapedLadderManifest runs the ARGY-179 hint shapes through the pinned
+// ffmpeg and asserts the output shape per case, because the hints change how
+// many outputs ffmpeg writes and which exit the single-rung encode takes:
+//
+//   - single-audio H.264 shaped to one rung → the single-output tail: a bare
+//     media playlist at index.m3u8, segments stream_%05d.m4s, no master;
+//   - the same request unhinted → a master with three variants;
+//   - multi-audio H.264 shaped to one rung → a master with one video variant
+//     and the audio rendition group;
+//   - HEVC shaped to one rung with an enumerated audio track → the one-variant
+//     master buildRemuxArgs already writes for a single-audio HEVC copy
+//     (ARGY-218), carrying a CODECS string NormalizePlaylist makes valid
+//     (ARGY-174) — this is the TV's min=max=2160 case, and the encoded leg is
+//     what is new;
+//   - HEVC shaped to one rung with no audio tracks → the bare media playlist,
+//     the needsCodecDeclaration fall-through, pinned so nobody "fixes" it by
+//     accident;
+//   - burn-in shaped to one rung → the filter_complex branch, one output.
+func TestShapedLadderManifest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test needs ffmpeg")
+	}
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	dir := t.TempDir()
+	h264 := filepath.Join(dir, "h264.mkv")
+	genMultiAudioSource(t, ffmpeg, h264)
+	hevc := filepath.Join(dir, "hevc.mkv")
+	haveX265 := hasEncoder(ffmpeg, "libx265")
+	if haveX265 {
+		genHEVCMultiAudioSource(t, ffmpeg, hevc)
+	}
+	pgs := filepath.Join(dir, "pgs.mkv")
+	genPGSSource(t, ffmpeg, pgs)
+
+	for _, tc := range []struct {
+		name       string
+		spec       Spec
+		needX265   bool
+		wantMaster bool
+		wantVars   int    // EXT-X-STREAM-INF lines on a master
+		wantAudio  bool   // an EXT-X-MEDIA:TYPE=AUDIO group on the master
+		segment    string // a media segment that must exist
+	}{
+		{
+			name: "single-audio h264 min=max=1080 → bare media playlist",
+			spec: Spec{Source: h264, Encoder: EncoderSoftware, SourceHeight: 1080, AudioTracks: oneTrack,
+				MinRungHeight: 1080, MaxRungHeight: 1080},
+			segment: "stream_00000.m4s",
+		},
+		{
+			name:       "single-audio h264 unhinted → three variants",
+			spec:       Spec{Source: h264, Encoder: EncoderSoftware, SourceHeight: 1080, AudioTracks: oneTrack},
+			wantMaster: true, wantVars: 3, segment: "stream_0_00000.m4s",
+		},
+		{
+			name: "multi-audio h264 single rung → one-variant master",
+			spec: Spec{Source: h264, Encoder: EncoderSoftware, SourceHeight: 1080, AudioTracks: dubSub,
+				MinRungHeight: 1080, MaxRungHeight: 1080},
+			wantMaster: true, wantVars: 1, wantAudio: true, segment: "stream_0_00000.m4s",
+		},
+		{
+			name: "hevc single rung with an audio track → one-variant master + audio group",
+			spec: Spec{Source: hevc, Encoder: EncoderSoftware, VideoCodec: CodecHEVC, SourceHeight: 2160,
+				AudioTracks: oneTrack, MinRungHeight: 2160, MaxRungHeight: 2160},
+			needX265: true, wantMaster: true, wantVars: 1, wantAudio: true, segment: "stream_0_00000.m4s",
+		},
+		{
+			name: "hevc single rung without audio tracks → bare media playlist",
+			spec: Spec{Source: hevc, Encoder: EncoderSoftware, VideoCodec: CodecHEVC, SourceHeight: 2160,
+				MinRungHeight: 2160, MaxRungHeight: 2160},
+			needX265: true, segment: "stream_00000.m4s",
+		},
+		{
+			// The synthesised PGS source is video, audio, subtitle — stream 2.
+			name: "burn-in single rung → filter_complex, one output",
+			spec: Spec{Source: pgs, Method: MethodTranscode, Encoder: EncoderSoftware, SourceHeight: 240,
+				BurnInSubtitle: 2, MinRungHeight: 240, MaxRungHeight: 240},
+			segment: "stream_00000.m4s",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.needX265 && !haveX265 {
+				t.Skip("ffmpeg built without libx265")
+			}
+			out := t.TempDir()
+			spec := tc.spec
+			spec.OutputDir = out
+			args := buildArgs(spec)
+			joined := strings.Join(args, " ")
+			if spec.burnsIn() {
+				if !strings.Contains(joined, "-filter_complex") || strings.Contains(joined, "split=") {
+					t.Errorf("burn-in single rung must composite in one filter_complex without a split\nargs: %s", joined)
+				}
+			}
+			// The scale filter count is the number of video outputs ffmpeg encodes.
+			if got := strings.Count(joined, "scale="); got != max(tc.wantVars, 1) {
+				t.Errorf("%d video outputs encoded, want %d\nargs: %s", got, max(tc.wantVars, 1), joined)
+			}
+			run(t, ffmpeg, out, args)
+
+			index, err := os.ReadFile(filepath.Join(out, PlaylistName))
+			if err != nil {
+				t.Fatalf("read index.m3u8: %v", err)
+			}
+			served := string(NormalizePlaylist(index))
+			t.Logf("index.m3u8 as served:\n%s", served)
+
+			isMedia := strings.Contains(served, "#EXT-X-TARGETDURATION")
+			vars := strings.Count(served, "#EXT-X-STREAM-INF")
+			switch {
+			case tc.wantMaster && isMedia:
+				t.Errorf("index.m3u8 is a media playlist, want a master")
+			case tc.wantMaster && vars != tc.wantVars:
+				t.Errorf("master has %d variants, want %d", vars, tc.wantVars)
+			case !tc.wantMaster && !isMedia:
+				t.Errorf("index.m3u8 is a master, want a bare media playlist")
+			case !tc.wantMaster && vars != 0:
+				t.Errorf("bare media playlist carries %d EXT-X-STREAM-INF lines", vars)
+			}
+			if hasAudio := strings.Contains(served, "#EXT-X-MEDIA:TYPE=AUDIO"); hasAudio != tc.wantAudio {
+				t.Errorf("audio rendition group present = %v, want %v", hasAudio, tc.wantAudio)
+			}
+			if _, err := os.Stat(filepath.Join(out, tc.segment)); err != nil {
+				names, _ := filepath.Glob(filepath.Join(out, "*"))
+				t.Errorf("segment %s missing (%v); output dir holds %v", tc.segment, err, names)
+			}
+			if resolveCodec(spec.VideoCodec) == CodecHEVC && tc.wantMaster {
+				codecs := codecsAttr(t, served)
+				if strings.Contains(codecs, ".B01") {
+					t.Errorf("served CODECS %q still carries ffmpeg's malformed .B01 constraint byte (ARGY-174)", codecs)
+				}
+				for _, c := range strings.Split(codecs, ",") {
+					if strings.HasPrefix(c, "hvc1") && !validHEVCCodecString(c) {
+						t.Errorf("served HEVC codec string %q is invalid", c)
+					}
+				}
+			}
+			// Every emitted playlist must be numerically named (allowlist-safe).
+			plists, _ := filepath.Glob(filepath.Join(out, "*.m3u8"))
+			for _, p := range plists {
+				if !numericPlaylist.MatchString(filepath.Base(p)) {
+					t.Errorf("playlist %q outside the numeric allowlist", filepath.Base(p))
+				}
+			}
+		})
+	}
+}

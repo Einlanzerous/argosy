@@ -20,6 +20,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -97,6 +100,13 @@ type Spec struct {
 	// re-encode path — the overlay changes the pixels, so there is nothing left
 	// to copy.
 	BurnInSubtitle int
+	// MinRungHeight/MaxRungHeight are the client's ladder hints (ARGY-179): the
+	// transcode path encodes only the rungs boundedRungs keeps inside them, per
+	// ruling 4 (maxHeight caps but the lowest rung is always kept; minHeight is
+	// soft; never empty). 0 = no hint. Ignored on a remux. Not PackageSpec's
+	// MaxHeight, which caps an offline package with different semantics.
+	MinRungHeight int
+	MaxRungHeight int
 }
 
 // burnsIn reports whether this spec draws an image subtitle into the video.
@@ -119,16 +129,26 @@ type StartRequest struct {
 	TranscodeAudio bool         // remux: re-encode audio to AAC instead of copying
 	AudioTracks    []AudioTrack // source audio streams; 2+ → multi-rendition HLS
 	BurnInSubtitle int          // source stream index of an image subtitle to burn in; 0 = none
+	// MinRungHeight/MaxRungHeight shape the ladder (ARGY-179; 0 = no hint). The
+	// session key takes the *effective* rung set they resolve to, not the raw
+	// values, and drops them on a remux — see sessionID.
+	MinRungHeight int
+	MaxRungHeight int
 }
 
 // Session is an immutable snapshot of a transcode session's public state,
 // suitable for the API and the The Helm dashboard.
 type Session struct {
-	ID         string    `json:"id"`
-	ItemID     string    `json:"itemId"`
-	AccountID  string    `json:"-"`
-	Encoder    string    `json:"encoder"`
-	Method     string    `json:"method"`
+	ID        string `json:"id"`
+	ItemID    string `json:"itemId"`
+	AccountID string `json:"-"`
+	Encoder   string `json:"encoder"`
+	Method    string `json:"method"`
+	// Rungs are the heights the session plans to encode, widest first — the
+	// ladder after the client's hints (ARGY-179). Empty on a remux, which copies
+	// one variant. A hardware→software fallback that swaps the codec re-resolves
+	// it and logs the change, so a snapshot taken afterwards reads the new set.
+	Rungs      []int     `json:"rungs,omitempty"`
 	State      State     `json:"state"`
 	StartAt    float64   `json:"startAt"`
 	OutputDir  string    `json:"-"`
@@ -163,6 +183,7 @@ type session struct {
 	errMsg     string
 	lastAccess time.Time
 	progress   Progress
+	rungs      []int // planned encode heights; rewritten by the software fallback
 	// servedPlaylist/servedSegment record how far a client actually got. Both
 	// are set only once an artifact has been handed over successfully — a 503
 	// while the manifest is still being written means nothing was served.
@@ -189,6 +210,7 @@ func (s *session) snapshot() Session {
 		StartedAt:  s.startedAt,
 		LastAccess: s.lastAccess,
 		Progress:   s.progress,
+		Rungs:      slices.Clone(s.rungs),
 
 		ServedPlaylist: s.servedPlaylist,
 		ServedSegment:  s.servedSegment,
@@ -209,6 +231,14 @@ func (s *session) setState(st State, errMsg string) {
 func (s *session) setEncoder(enc string) {
 	s.mu.Lock()
 	s.encoder = enc
+	s.mu.Unlock()
+}
+
+// setRungs replaces the planned rung set after a fallback changed the codec,
+// so snapshots describe the ladder actually being encoded.
+func (s *session) setRungs(rungs []int) {
+	s.mu.Lock()
+	s.rungs = rungs
 	s.mu.Unlock()
 }
 
@@ -304,8 +334,63 @@ func sessionID(req StartRequest) string {
 	// replacement that keeps its filename is caught too.
 	key := fmt.Sprintf("%s|%s|%s|%d|%s|%s|%s|%d", req.AccountID, req.ItemID, req.SourceIdentity,
 		int64(req.StartAt), req.Encoder, resolveCodec(req.VideoCodec), req.Method, req.BurnInSubtitle)
+	// The ladder hints key on the *effective* rung set, not the raw values, so
+	// two clients whose different hints resolve to the same rungs share one
+	// encode (ARGY-179). The heights are appended only when the hints changed
+	// the set: an unhinted request's key is byte-identical to the pre-hint key,
+	// so in-flight sessions rejoin across the deploy (ARGY-239), and a hint that
+	// resolves to the full ladder joins the unhinted session. That join holds
+	// for the codec the key was derived on: if a hardware→software fallback
+	// later re-resolves the session on the H.264 ladder, it does so with the
+	// hints of whichever request started it, so an unhinted HEVC start and a
+	// minHeight=500 one share a key yet would fall back to {1080,720,480} and
+	// {1080,720} respectively. The difference is only the 480 rung and minHeight
+	// is soft, so the key deliberately does not carry the fallback codec.
+	if shaped := shapedRungs(req); shaped != nil {
+		key += "|" + FormatRungs(shaped)
+	}
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+// PlannedRungs is the rung set a request will encode, widest first: nil for a
+// remux — a copy has one variant by construction, so the hints are dropped
+// before they reach the key or the encoder (ARGY-235 owns giving a remux a
+// ladder) — and otherwise the ladder for the source shaped by the hints per
+// ruling 4 (see boundedRungs). The raw Method is read here, before Start
+// normalises it: anything but MethodRemux is a transcode, as Start agrees.
+func PlannedRungs(req StartRequest) []int {
+	if req.Method == MethodRemux {
+		return nil
+	}
+	return rungHeights(boundedRungs(req.SourceHeight, req.VideoCodec, req.MinRungHeight, req.MaxRungHeight))
+}
+
+// shapedRungs returns the planned heights only when the hints changed the set
+// from the unbounded ladder; nil when there are no hints, on a remux, or when
+// the hints resolve to the full ladder anyway.
+func shapedRungs(req StartRequest) []int {
+	if req.Method == MethodRemux || (req.MinRungHeight <= 0 && req.MaxRungHeight <= 0) {
+		return nil
+	}
+	planned := PlannedRungs(req)
+	if slices.Equal(planned, rungHeights(rungsForCodec(req.SourceHeight, req.VideoCodec))) {
+		return nil
+	}
+	return planned
+}
+
+// FormatRungs renders a rung set for a log line: "2160,1080,720", or "copy"
+// for the empty set a remux carries.
+func FormatRungs(rungs []int) string {
+	if len(rungs) == 0 {
+		return "copy"
+	}
+	parts := make([]string, len(rungs))
+	for i, h := range rungs {
+		parts[i] = strconv.Itoa(h)
+	}
+	return strings.Join(parts, ",")
 }
 
 // Start begins a new session for the request, or returns the existing one if a
@@ -339,6 +424,7 @@ func (m *Manager) Start(req StartRequest) (Session, error) {
 		id: id, itemID: req.ItemID, accountID: req.AccountID, encoder: req.Encoder, method: method,
 		outputDir: outputDir, startAt: req.StartAt, startedAt: now,
 		state: StateStarting, lastAccess: now, cancel: cancel, done: make(chan struct{}),
+		rungs: PlannedRungs(req),
 	}
 	m.sessions[id] = s
 	m.mu.Unlock()
@@ -348,6 +434,7 @@ func (m *Manager) Start(req StartRequest) (Session, error) {
 		StartAt: req.StartAt, Encoder: req.Encoder, SourceHeight: req.SourceHeight, Method: method,
 		VideoCodec: req.VideoCodec, TranscodeAudio: req.TranscodeAudio, AudioTracks: req.AudioTracks,
 		BurnInSubtitle: req.BurnInSubtitle,
+		MinRungHeight:  req.MinRungHeight, MaxRungHeight: req.MaxRungHeight,
 	})
 	return s.snapshot(), nil
 }
@@ -370,7 +457,16 @@ func (m *Manager) run(ctx context.Context, s *session, spec Spec) {
 		if spec.Method == MethodTranscode {
 			// Software HEVC (libx265) at 4K is impractically slow; drop to the
 			// universal H.264 ladder so the session still plays at a sane speed.
+			// The ladder changes with the codec (an HEVC {2160} becomes an H.264
+			// {1080}), so the planned rung set is re-resolved under the same hints
+			// and logged again: the decision line described the plan, this line
+			// describes what is served. The session id is not recomputed — the
+			// client already holds it.
 			spec.VideoCodec = CodecH264
+			rungs := rungHeights(boundedRungs(spec.SourceHeight, CodecH264, spec.MinRungHeight, spec.MaxRungHeight))
+			s.setRungs(rungs)
+			m.logger.Info("transcode fallback", "id", s.id, "item", s.itemID,
+				"encoder", EncoderSoftware, "codec", CodecH264, "rungs", FormatRungs(rungs))
 		}
 		err = m.backend.Run(ctx, spec, s.updateProgress)
 	}

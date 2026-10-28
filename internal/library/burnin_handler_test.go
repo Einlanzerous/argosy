@@ -60,6 +60,19 @@ func (b *specBackend) await(t *testing.T) transcode.Spec {
 // nothing were burned in, which is what makes the override observable.
 func burnInFixture(t *testing.T) (*handlers, *specBackend, string) {
 	t.Helper()
+	return transcodeFixture(t, `{"streams":[
+		{"index":0,"codec_type":"video","codec_name":"h264","height":1080,"pix_fmt":"yuv420p"},
+		{"index":1,"codec_type":"audio","codec_name":"aac"},
+		{"index":2,"codec_type":"subtitle","codec_name":"subrip","tags":{"language":"eng"}},
+		{"index":3,"codec_type":"subtitle","codec_name":"hdmv_pgs_subtitle","tags":{"language":"eng"}}
+	]}`)
+}
+
+// transcodeFixture seeds one item with the given ffprobe JSON behind a handler
+// whose transcoder records the Spec it is handed, so a start-transcode test can
+// assert on the recipe the body produced.
+func transcodeFixture(t *testing.T, technical string) (*handlers, *specBackend, string) {
+	t.Helper()
 	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	if err := db.Migrate(ctx, dsn); err != nil {
@@ -92,12 +105,6 @@ func burnInFixture(t *testing.T) (*handlers, *specBackend, string) {
 		zeroAccount, "lib_"+suffix, root).Scan(&libID); err != nil {
 		t.Fatal(err)
 	}
-	technical := `{"streams":[
-		{"index":0,"codec_type":"video","codec_name":"h264","height":1080,"pix_fmt":"yuv420p"},
-		{"index":1,"codec_type":"audio","codec_name":"aac"},
-		{"index":2,"codec_type":"subtitle","codec_name":"subrip","tags":{"language":"eng"}},
-		{"index":3,"codec_type":"subtitle","codec_name":"hdmv_pgs_subtitle","tags":{"language":"eng"}}
-	]}`
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO media_items (library_id, kind, title, file_path, duration_seconds, technical)
 		 VALUES ($1,'movie','Film',$2,$3,$4) RETURNING id::text`,

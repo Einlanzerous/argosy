@@ -93,6 +93,7 @@ class _Rig {
       catalogDuration: 1440,
       isTranscode: true,
       hevc: false,
+      hevcHardware: false,
       subtitles: const [],
       preferredLanguages: const [],
       prefs: null,

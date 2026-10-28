@@ -140,6 +140,14 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
       catalogDuration: setup.item.durationSeconds?.toDouble() ?? 0,
       isTranscode: setup.isTranscode,
       hevc: setup.hevc,
+      hevcHardware: setup.hevcHardware,
+      // One rung at the panel's output resolution (ARGY-179): the server clamps
+      // to the source, so a 4K mode on a 1080p source still gets 1080. The
+      // value was read once into the setup, never here — nothing in this
+      // screen touches the display, so a mid-session mode change cannot
+      // re-key the session.
+      minHeight: setup.displayModeHeight,
+      maxHeight: setup.displayModeHeight,
       subtitles: setup.subtitles,
       preferredLanguages: setup.preferredLanguages,
       prefs: setup.prefs,
@@ -149,6 +157,12 @@ class _TvPlayerViewState extends ConsumerState<_TvPlayerView> {
       localPath: setup.localPath,
       localSubtitles: setup.localSubtitles,
       offlineQueue: ref.read(offlineProgressQueueProvider),
+    );
+    // Logged once per player so the device's output mode can be checked
+    // against what the server was asked for (ARGY-179 criterion 13).
+    debugPrint(
+      'tv player: displayModeHeight=${setup.displayModeHeight} '
+      'hevc=${setup.hevc} hevcHardware=${setup.hevcHardware}',
     );
     _controller.onAdvance = _advanceToNext;
     // No PiP on TV, but the activity can still be destroyed under a live

@@ -1913,16 +1913,45 @@ components:
         hevcHardware:
           type: boolean
           description: >
-            MediaCapabilities.decodingInfo's view of whether this client decodes
-            10-bit HEVC (Main 10) in hardware — both `smooth` and
-            `powerEfficient`. Read it asymmetrically: false is meaningful (the
-            device has recorded decode stats and they are bad), while true is
-            weak, because browsers report any supported configuration as smooth
-            and powerEfficient until stats have been recorded on the device. The
-            server treats it as a veto rather than a licence: a true only permits
-            a 10-bit HEVC source to keep its bit depth and HDR above 1080p, where
-            such a copy has been observed playing smoothly (ARGY-178). Absent or
-            false re-encodes to 8-bit, which is the pre-ARGY-178 behaviour.
+            Whether this client decodes 10-bit HEVC (Main 10) at 2160p in
+            hardware. Two kinds of client assert it, and they mean different
+            things. A browser sends MediaCapabilities.decodingInfo's view — both
+            `smooth` and `powerEfficient` — which is asymmetric: false is
+            meaningful (the device has recorded decode stats and they are bad),
+            while true is weak, because browsers report any supported
+            configuration as smooth and powerEfficient until stats have been
+            recorded on the device. A native client (Android phone or TV) sends
+            MediaCodecInfo's answer — a hardware-accelerated HEVC decoder that
+            lists Main 10 and supports 3840×2160 — which is a strong signal; iOS
+            has no equivalent query in the app and sends false. The server's
+            reading is the same for both: true permits a 10-bit HEVC source to
+            keep its bit depth and HDR above 1080p as a copy at native
+            resolution (ARGY-178), and absent or false re-encodes to 8-bit,
+            which is the pre-ARGY-178 behaviour.
+        minHeight:
+          type: integer
+          minimum: 1
+          description: >
+            Lowest ladder rung the client wants, in pixels of height. Rungs below
+            it are not encoded or advertised, unless nothing at or above it
+            survives the cap, in which case the highest surviving rung is kept —
+            so minHeight is a soft floor and the result is never empty. Omit for
+            the full ladder; either hint may be sent alone (a TV sends both equal
+            to its display mode height). Ignored on a remux, which copies one
+            variant. A present value that is not a positive integer is a 400, as
+            is minHeight greater than maxHeight. (ARGY-179)
+        maxHeight:
+          type: integer
+          minimum: 1
+          description: >
+            Highest rung the client can display, in pixels of height. Rungs above
+            it are not encoded or advertised (a 1080p output never receives a
+            2160 rung), except that the lowest rung available for the source is
+            always kept, so a cap below the ladder still receives that rung — the
+            one case the client gets more than it asked for, because nothing
+            smaller exists. A cap between two rungs resolves to the rung just
+            below it. Omit for no cap. Ignored on a remux. A present value that
+            is not a positive integer is a 400. (ARGY-179)
         burnInSubtitle:
           type: string
           description: >

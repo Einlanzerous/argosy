@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.34.0](https://github.com/Einlanzerous/argosy/compare/v0.33.3...v0.34.0) (2026-10-27)
+
+
+### Features
+
+* **mobile:** send hevcHardware and the TV display mode height with every transcode start (ARGY-275) ([#281](https://github.com/Einlanzerous/argosy/issues/281)) ([6d7fc24](https://github.com/Einlanzerous/argosy/commit/6d7fc24aeb543b5dd110284d427034eeedd46c24))
+* **transcode:** shape the ladder from minHeight/maxHeight hints and key sessions on the effective rung set (ARGY-276) ([#280](https://github.com/Einlanzerous/argosy/issues/280)) ([cba3fa1](https://github.com/Einlanzerous/argosy/commit/cba3fa1298d028d0b9c493a624055a75e0f95f12))
+
 ## [0.33.3](https://github.com/Einlanzerous/argosy/compare/v0.33.2...v0.33.3) (2026-10-25)
 
 
