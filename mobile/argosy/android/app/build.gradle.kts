@@ -123,5 +123,5 @@ dependencies {
     // share one version inside an APK. better_player_plus 1.3.4 → 1.10.1.
     // ARGY-278 (PR #279) bumps the plugin to 1.4.1, which pins 1.11.0; whichever
     // of that PR and this one merges second sets this to 1.11.0.
-    implementation("androidx.media3:media3-common:1.10.1")
+    implementation("androidx.media3:media3-common:1.11.0")
 }
