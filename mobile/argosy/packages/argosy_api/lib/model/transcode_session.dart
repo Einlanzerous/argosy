@@ -44,7 +44,7 @@ class TranscodeSession {
   /// Relative URL of the HLS media playlist for this session.
   String playlistUrl;
 
-  /// Heights the session plans to encode, widest first — the bitrate ladder after the client's minHeight/maxHeight hints (ARGY-179). Absent on a remux, which copies the source's one variant. A client whose player never reports a track switch (better_player_plus does not, ARGY-282) can label the picture from this when it holds exactly one rung: nothing else can be playing. 
+  /// Heights the session plans to encode, widest first — the bitrate ladder after the client's minHeight/maxHeight hints (ARGY-179). Absent on a remux, which copies the source's one variant. The plan can change after the start response: a hardware encode that fails at startup falls back to software H.264 and re-resolves the ladder under the same hints, and a later GET of the session reflects that. 
   List<int> rungs;
 
   ///

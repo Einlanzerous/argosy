@@ -518,10 +518,10 @@ func toAPISession(s transcode.Session) api.TranscodeSession {
 	if s.Err != "" {
 		out.Error = &s.Err
 	}
-	// The planned rung set rides along so a client without a track-switch
-	// signal can still stamp a single-rung session correctly (ARGY-282). Nil on
-	// a remux, where the picture is the source's one variant and the player's
-	// own size is already right.
+	// The planned rung set as of this snapshot (ARGY-282). Nil on a remux,
+	// which copies the source's one variant. A hardware→software fallback
+	// re-resolves it after Start has answered (setRungs), so a later snapshot
+	// can read a different set from the start response.
 	if len(s.Rungs) > 0 {
 		rungs := slices.Clone(s.Rungs)
 		out.Rungs = &rungs
