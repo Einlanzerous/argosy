@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/argosy_colors.dart';
 import '../../util/format.dart';
+import 'controls_visibility.dart';
 import 'playback_controller.dart';
 import 'track_sheet.dart';
 
@@ -33,17 +34,22 @@ class PlayerControls extends StatefulWidget {
 }
 
 class _PlayerControlsState extends State<PlayerControls> {
-  bool _visible = true;
+  // Show/hide state and the auto-hide countdown live in a notifier (ARGY-280)
+  // so the timer is gated on real playback rather than fired once at mount:
+  // the old one-shot timer usually went off while the transcode was still
+  // starting, found nothing to hide, and was never re-armed.
+  final ControlsVisibility _vis = ControlsVisibility();
   double? _dragValue;
-  Timer? _hideTimer;
   Timer? _ticker;
 
   PlaybackController get _c => widget.controller;
+  bool get _visible => _vis.visible;
 
   @override
   void initState() {
     super.initState();
     _c.addListener(_onState);
+    _vis.addListener(_onState);
     // Cheap repaint loop so the scrub bar + clock track playback smoothly and
     // the buffering spinner stays live even while the controls are hidden.
     _ticker = Timer.periodic(const Duration(milliseconds: 300), (_) {
@@ -51,37 +57,41 @@ class _PlayerControlsState extends State<PlayerControls> {
       // Credits-triggered roll-over (ARGY-90): the controller has no progress
       // event, so the repaint loop is also where we check for the early advance.
       _c.maybeAdvance();
+      _syncCanHide();
       setState(() {});
     });
-    _scheduleHide();
+    _syncCanHide();
   }
 
   @override
   void dispose() {
     _c.removeListener(_onState);
-    _hideTimer?.cancel();
+    _vis.removeListener(_onState);
+    _vis.dispose();
     _ticker?.cancel();
     super.dispose();
   }
 
   void _onState() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _syncCanHide();
+    setState(() {});
   }
 
-  void _toggle() {
-    setState(() => _visible = !_visible);
-    if (_visible) _scheduleHide();
+  /// The controls may only fade while the video is really playing: not while
+  /// the transcode is starting, not paused, not on the error overlay. Fed on
+  /// every controller update and every repaint tick (a repeat is a no-op in
+  /// the notifier), so the countdown arms the moment playback begins and is
+  /// dropped the moment it pauses — however the pause or resume was driven.
+  void _syncCanHide() {
+    final playing = _c.videoValue?.isPlaying ?? false;
+    _vis.setCanHide(playing && !_c.starting && !_c.fatalError);
   }
 
-  void _scheduleHide() {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(milliseconds: 3500), () {
-      final playing = _c.videoValue?.isPlaying ?? false;
-      if (mounted && playing && !_c.starting && !_c.fatalError) {
-        setState(() => _visible = false);
-      }
-    });
-  }
+  void _toggle() => _vis.toggle();
+
+  /// An interaction with a control: keep the overlay up and restart the fade.
+  void _scheduleHide() => _vis.touch();
 
   @override
   Widget build(BuildContext context) {
@@ -320,7 +330,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                     onChanged: duration > 0
                         ? (v) {
                             setState(() => _dragValue = v);
-                            _hideTimer?.cancel();
+                            _vis.hold();
                           }
                         : null,
                     onChangeEnd: duration > 0
@@ -366,7 +376,7 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   void _openTracks(TrackKind kind) {
-    _hideTimer?.cancel();
+    _vis.hold();
     showTrackSheet(context, _c, kind).then((_) => _scheduleHide());
   }
 
