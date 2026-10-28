@@ -1249,6 +1249,8 @@ export interface components {
             startedAt: string;
             /** @description Relative URL of the HLS media playlist for this session. */
             playlistUrl: string;
+            /** @description Heights the session plans to encode, widest first — the bitrate ladder after the client's minHeight/maxHeight hints (ARGY-179). Absent on a remux, which copies the source's one variant. The plan can change after the start response: a hardware encode that fails at startup falls back to software H.264 and re-resolves the ladder under the same hints, and a later GET of the session reflects that. */
+            rungs?: number[];
             error?: string;
             progress: components["schemas"]["TranscodeProgress"];
         };

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Einlanzerous/argosy/internal/api"
@@ -516,6 +517,14 @@ func toAPISession(s transcode.Session) api.TranscodeSession {
 	}
 	if s.Err != "" {
 		out.Error = &s.Err
+	}
+	// The planned rung set as of this snapshot (ARGY-282). Nil on a remux,
+	// which copies the source's one variant. A hardware→software fallback
+	// re-resolves it after Start has answered (setRungs), so a later snapshot
+	// can read a different set from the start response.
+	if len(s.Rungs) > 0 {
+		rungs := slices.Clone(s.Rungs)
+		out.Rungs = &rungs
 	}
 	return out
 }

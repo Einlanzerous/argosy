@@ -78,6 +78,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Fake clock for timer-driven state (the controls auto-hide, ARGY-280).
+  fake_async: ^1.3.3
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
