@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.35.0](https://github.com/Einlanzerous/argosy/compare/v0.34.0...v0.35.0) (2026-10-28)
+
+
+### Features
+
+* **api:** carry the planned rung set on TranscodeSession (ARGY-282) ([#285](https://github.com/Einlanzerous/argosy/issues/285)) ([ecdc344](https://github.com/Einlanzerous/argosy/commit/ecdc3447a3a47176e3e70afb2bf40c6bbad976a2))
+
+
+### Bug Fixes
+
+* **mobile:** auto-hide the player controls after playback starts (ARGY-280) ([#284](https://github.com/Einlanzerous/argosy/issues/284)) ([907766a](https://github.com/Einlanzerous/argosy/commit/907766a7ab51733c188be993c60396058b36928d))
+* **mobile:** give the player error overlay a scrim and a filled Retry (ARGY-284) ([#288](https://github.com/Einlanzerous/argosy/issues/288)) ([a4be246](https://github.com/Einlanzerous/argosy/commit/a4be246cb12a011c7180a73351c67f622e27b359))
+* **mobile:** keep a failed restart from walking the playhead out of the episode (ARGY-283) ([#286](https://github.com/Einlanzerous/argosy/issues/286)) ([664e1da](https://github.com/Einlanzerous/argosy/commit/664e1da89ff3769647e44a4381b4f359fbcef583))
+
 ## [0.34.0](https://github.com/Einlanzerous/argosy/compare/v0.33.3...v0.34.0) (2026-10-27)
 
 
