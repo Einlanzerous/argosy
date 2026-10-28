@@ -36,29 +36,52 @@ class _FailedPlayback extends PlaybackController {
   Future<void> retry() async => retries++;
 }
 
+class _PopObserver extends NavigatorObserver {
+  int pops = 0;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => pops++;
+}
+
 void main() {
   testWidgets('error overlay: scrim, message, filled Retry, back arrow',
       (tester) async {
     final c = _FailedPlayback();
     addTearDown(c.dispose);
-    var backs = 0;
+    final observer = _PopObserver();
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              const ColoredBox(color: Colors.white), // a bright frame
-              PlayerControls(
-                controller: c,
-                title: 'Pilot',
-                onBack: () => backs++,
+        navigatorObservers: [observer],
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => Scaffold(
+                      body: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          const ColoredBox(color: Colors.white), // bright frame
+                          PlayerControls(
+                            controller: c,
+                            title: 'Pilot',
+                            onBack: () {},
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('open player'),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
+    await tester.tap(find.text('open player'));
+    await tester.pumpAndSettle();
 
     final scrim = find.descendant(
       of: find.byType(PlayerModalShell),
@@ -78,6 +101,14 @@ void main() {
 
     await tester.tap(retry);
     expect(c.retries, 1);
+
+    // The back arrow must always leave, whatever the controller is doing.
+    expect(observer.pops, 0);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+    expect(observer.pops, 1);
+    expect(find.byType(PlayerControls), findsNothing);
+    expect(find.text('open player'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
   });
