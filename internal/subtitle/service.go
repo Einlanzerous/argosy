@@ -242,7 +242,15 @@ func (s *Service) VTT(ctx context.Context, t Target, trackID string) (string, er
 	// instead of serving the old file's captions (ARGY-238). This includes os:
 	// tracks, which are timed to one release.
 	dir := filepath.Join(s.cacheDir, fileid.ItemKey(t.ItemID, t.Identity))
-	dest := filepath.Join(dir, strings.ReplaceAll(trackID, ":", "-")+".vtt")
+	kind, arg, _ := strings.Cut(trackID, ":")
+	name := strings.ReplaceAll(trackID, ":", "-")
+	if kind == "embedded" {
+		// Versioned so a fix to the conversion reaches files already cached:
+		// a hit below is served as-is, forever. Bump on any change to what
+		// extractEmbedded writes. v2 = RepairVTT (ARGY-286).
+		name += ".v2"
+	}
+	dest := filepath.Join(dir, name+".vtt")
 	if _, err := os.Stat(dest); err == nil {
 		return dest, nil
 	}
@@ -258,7 +266,6 @@ func (s *Service) VTT(ctx context.Context, t Target, trackID string) (string, er
 	_ = tmp.Close()
 	defer func() { _ = os.Remove(tmpName) }() // no-op once renamed
 
-	kind, arg, _ := strings.Cut(trackID, ":")
 	switch kind {
 	case "embedded":
 		if err := s.extractEmbedded(ctx, t.Path, arg, tmpName); err != nil {
@@ -275,15 +282,30 @@ func (s *Service) VTT(ctx context.Context, t Target, trackID string) (string, er
 	return dest, nil
 }
 
-// extractEmbedded pulls one embedded subtitle stream out of the source and lets
-// ffmpeg convert it to WebVTT.
+// extractEmbedded pulls one embedded subtitle stream out of the source, lets
+// ffmpeg convert it to WebVTT, and repairs what ffmpeg gets wrong (RepairVTT).
 func (s *Service) extractEmbedded(ctx context.Context, src, streamIdx, dest string) error {
+	raw := dest + ".raw"
+	defer func() { _ = os.Remove(raw) }()
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-loglevel", "error",
-		"-i", src, "-map", "0:"+streamIdx, "-c:s", "webvtt", "-f", "webvtt", dest)
+		"-i", src, "-map", "0:"+streamIdx, "-c:s", "webvtt", "-f", "webvtt", raw)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("extract subtitle stream %s: %w: %s", streamIdx, err, strings.TrimSpace(string(out)))
 	}
-	return nil
+	in, err := os.Open(raw)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	if err := RepairVTT(in, out); err != nil {
+		_ = out.Close()
+		return fmt.Errorf("repair subtitle stream %s: %w", streamIdx, err)
+	}
+	return out.Close()
 }
 
 // fetchExternal downloads an OpenSubtitles file and converts it to WebVTT.

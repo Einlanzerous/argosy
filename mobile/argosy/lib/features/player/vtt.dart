@@ -60,3 +60,59 @@ String _formatTs(double seconds) {
   String p2(int n) => n.toString().padLeft(2, '0');
   return '${p2(h)}:${p2(m)}:${p2(s)}.${ms.toString().padLeft(3, '0')}';
 }
+
+final _blankLine = RegExp(r'\n[ \t]*\n');
+final _drawing = RegExp(
+  r'^m(\s+-?\d+(\.\d+)?){2}(\s+([mnlbspc]|-?\d+(\.\d+)?))*$',
+);
+const _metaPrefixes = ['WEBVTT', 'NOTE', 'STYLE', 'REGION'];
+
+/// Repairs WebVTT the server's ffmpeg conversion can produce from typeset ASS,
+/// mirroring `RepairVTT` in `internal/subtitle/vtt.go` (ARGY-286):
+///
+/// * a block with no timing line — the tail of a cue split off where an ASS
+///   `\N\N` paragraph break became a blank line — is joined back onto the cue
+///   before it;
+/// * lines that are ASS vector-drawing commands (`m 442 308 l …`) are dropped,
+///   and a cue left with no text goes with them.
+///
+/// This matters more here than in a browser: better_player's parser throws a
+/// `RangeError` on an untimed block of three or more lines, and since it only
+/// catches `Exception` the whole track is lost, not one cue. The server repairs
+/// what it converts now; this covers what it converted before, and anything
+/// stowed on the device.
+String repairVtt(String text) {
+  final blocks = <List<String>>[];
+  for (final raw in text.replaceAll('\r\n', '\n').split(_blankLine)) {
+    final b = raw.replaceAll(RegExp(r'^\n+|\n+$'), '');
+    if (b.trim().isEmpty) continue;
+    final lines = b.split('\n');
+    if (blocks.isEmpty || _isMeta(lines.first) || _hasTiming(lines)) {
+      blocks.add(lines);
+    } else if (_hasTiming(blocks.last)) {
+      blocks.last.addAll(lines); // orphan: the rest of the previous cue
+    }
+    // Otherwise it is text belonging to no cue; nothing can time it, so drop it.
+  }
+  final out = <String>[];
+  for (final lines in blocks) {
+    if (!_hasTiming(lines)) {
+      out.add(lines.join('\n'));
+      continue;
+    }
+    final t = lines.indexWhere((l) => l.contains('-->'));
+    final kept = lines
+        .sublist(t + 1)
+        .where((l) => !_drawing.hasMatch(l.trim()));
+    if (kept.isEmpty) continue;
+    out.add([...lines.sublist(0, t + 1), ...kept].join('\n'));
+  }
+  return '${out.join('\n\n')}\n';
+}
+
+bool _hasTiming(List<String> lines) =>
+    lines.take(2).any((l) => l.contains('-->'));
+
+bool _isMeta(String first) => _metaPrefixes.any(
+  (p) => first == p || first.startsWith('$p ') || first.startsWith('$p\t'),
+);
