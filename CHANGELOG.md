@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.1](https://github.com/Einlanzerous/argosy/compare/v0.35.0...v0.35.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **subtitle:** repair ffmpeg's WebVTT so typeset ASS tracks load on Android (ARGY-286) ([#289](https://github.com/Einlanzerous/argosy/issues/289)) ([92a07d9](https://github.com/Einlanzerous/argosy/commit/92a07d951cd9233ede2fb06853ebad6560ae9310))
+
 ## [0.35.0](https://github.com/Einlanzerous/argosy/compare/v0.34.0...v0.35.0) (2026-10-28)
 
 
