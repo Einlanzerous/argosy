@@ -338,9 +338,9 @@ class PlaybackController extends ChangeNotifier
   bool _tornDown = false;
 
   Map<String, String> get _authHeaders => {
-        ...ClientIdentity.header,
-        if (token != null && token!.isNotEmpty) 'Authorization': 'Bearer $token',
-      };
+    ...ClientIdentity.header,
+    if (token != null && token!.isNotEmpty) 'Authorization': 'Bearer $token',
+  };
 
   /// better_player_plus's own now-playing integration — **off on Android, kept
   /// on iOS** (ARGY-87).
@@ -1170,6 +1170,7 @@ class PlaybackController extends ChangeNotifier
     try {
       var vtt = await _subtitleContent(id);
       if (vtt == null) return;
+      vtt = repairVtt(vtt); // before the shift: it treats an orphan as a note
       if (baseOffset > 0) vtt = shiftVtt(vtt, -baseOffset);
       if (_activeSubtitleId != id || _disposed) return; // selection changed
       await ctrl.setupSubtitleSource(
