@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.36.0](https://github.com/Einlanzerous/argosy/compare/v0.35.2...v0.36.0) (2026-11-02)
+
+
+### Features
+
+* **web:** refresh progress on Beacon events and focus (ARGY-290) ([#295](https://github.com/Einlanzerous/argosy/issues/295)) ([b41d292](https://github.com/Einlanzerous/argosy/commit/b41d29295a29f0e685998eed937b986de88b6252))
+
+
+### Bug Fixes
+
+* **web:** keep fullscreen across auto-advance (ARGY-287) ([#294](https://github.com/Einlanzerous/argosy/issues/294)) ([7aefeb6](https://github.com/Einlanzerous/argosy/commit/7aefeb62e7f3154bbc2678cc25b242b757daa32e))
+
 ## [0.35.2](https://github.com/Einlanzerous/argosy/compare/v0.35.1...v0.35.2) (2026-11-02)
 
 
