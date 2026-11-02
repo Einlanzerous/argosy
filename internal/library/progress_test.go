@@ -610,7 +610,9 @@ func TestKeepaliveDoesNotOverwriteNewerProgress(t *testing.T) {
 		t.Fatalf("stored position after keepalive = %+v (err %v), want 500", got, err)
 	}
 
-	// An ordinary report still writes, including a deliberate rewind.
+	// Store level only: an ordinary write, including a rewind, still lands. The
+	// handler's write path is not run here (the device FK rejects the harness's
+	// zero-id session); the web request-body test and review cover it.
 	if _, err := h.store.SetProgress(ctx, zeroAccount, userID, "", itemID, 120, &dur); err != nil {
 		t.Fatal(err)
 	}
