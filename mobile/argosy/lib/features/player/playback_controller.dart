@@ -1325,38 +1325,60 @@ class PlaybackController extends ChangeNotifier
   void _startHeartbeat() {
     _heartbeat?.cancel();
     _pausedSince = null;
-    _heartbeat = Timer.periodic(const Duration(seconds: 10), (_) {
-      final now = DateTime.now();
-      if (videoValue?.isPlaying ?? false) {
-        _pausedSince = null;
-        _flush();
-        // Correct any drift in the session's extrapolated position — mostly
-        // from stalls, and from a transcode restart moving [baseOffset].
-        _pushSession();
-        return;
-      }
-      _pausedSince ??= now;
-      // The progress report is also the only thing that touches the session
-      // server-side, so a pause that stopped reporting got its session reaped
-      // five minutes in, and playback died on resume (ARGY-239). Keep reporting
-      // the unchanged position. Teardown cancels this timer and clears the
-      // session, so a detached host still leaves it to the reaper (ARGY-190).
-      if (keepsPausedSessionAlive(
-        hasSession: _sessionId != null,
-        pausedSince: _pausedSince,
-        now: now,
-      )) {
-        _flush();
-      }
-    });
+    _heartbeat = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _heartbeatTick(DateTime.now()),
+    );
   }
+
+  void _heartbeatTick(DateTime now) {
+    if (videoValue?.isPlaying ?? false) {
+      _pausedSince = null;
+      _flush();
+      // Correct any drift in the session's extrapolated position — mostly
+      // from stalls, and from a transcode restart moving [baseOffset].
+      _pushSession();
+      return;
+    }
+    _pausedSince ??= now;
+    // The progress report is also the only thing that touches the session
+    // server-side, so a pause that stopped reporting got its session reaped
+    // five minutes in, and playback died on resume (ARGY-239). Keep reporting
+    // the unchanged position. Teardown cancels this timer and clears the
+    // session, so a detached host still leaves it to the reaper (ARGY-190).
+    //
+    // It is a keepalive and not a position write (ARGY-289): the player's
+    // paused position can be older than what another device saved since, and a
+    // plain write — or its offline replay — would overwrite the newer one.
+    if (keepsPausedSessionAlive(
+      hasSession: _sessionId != null,
+      pausedSince: _pausedSince,
+      now: now,
+    )) {
+      _flush(keepalive: true);
+    }
+  }
+
+  @visibleForTesting
+  void debugHeartbeatTick(DateTime now) => _heartbeatTick(now);
+
+  @visibleForTesting
+  set debugSessionId(String? id) => _sessionId = id;
+
+  @visibleForTesting
+  void debugFlush() => _flush();
 
   /// Reports the current absolute position so Beacon + Continue-Watching stay
   /// live. Fire-and-forget, but a failure is no longer simply dropped: a
   /// position reported into a dead socket used to vanish, so an episode watched
   /// on a plane was still sitting at 0% on landing. It is queued instead and
   /// sent on the next successful report (ARGY-49).
-  void _flush() {
+  ///
+  /// [keepalive] only touches the session and presence: the server writes no
+  /// position, and so neither is a failure queued — replaying a paused
+  /// position later is exactly the overwrite the flag exists to prevent
+  /// (ARGY-289).
+  void _flush({bool keepalive = false}) {
     final pos = position;
     if (pos <= 0) return;
     // Nothing has ever been attached: the playhead is whatever [baseOffset]
@@ -1371,6 +1393,21 @@ class PlaybackController extends ChangeNotifier
     // recovery's heartbeat erased Ashley's place and put Continue at 0:00.
     if (fatalError || !isSanePosition(pos)) return;
     final duration = catalogDuration > 0 ? catalogDuration : null;
+    if (keepalive) {
+      unawaited(
+        libraryApi
+            .reportProgress(
+              itemId,
+              ProgressUpdate(
+                positionSeconds: pos,
+                durationSeconds: duration,
+                keepalive: true,
+              ),
+            )
+            .then<void>((_) {}, onError: (_) {}),
+      );
+      return;
+    }
     unawaited(
       libraryApi
           .reportProgress(

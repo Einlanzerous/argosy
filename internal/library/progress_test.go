@@ -2,9 +2,13 @@ package library
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -560,5 +564,59 @@ func TestSetProgressRefusesOutOfRange(t *testing.T) {
 	short := 100.0
 	if ps, err := store.SetProgress(ctx, accID, userID, "", bareID, 90000, &short); !errors.Is(err, ErrProgressOutOfRange) || ps != nil {
 		t.Fatalf("unmeasured item past client duration = %+v, %v; want ErrProgressOutOfRange", ps, err)
+	}
+}
+
+// TestKeepaliveDoesNotOverwriteNewerProgress is ARGY-289. Device A pauses at 100s
+// and keeps pinging; device B then saves 500s. A's next ping must not move the
+// stored position back to 100 (it did before the keepalive flag: the ping was an
+// ordinary last-write-wins report). An ordinary report, including a rewind, still
+// writes.
+func TestKeepaliveDoesNotOverwriteNewerProgress(t *testing.T) {
+	h, itemID := stowFixture(t, "keepalive.mkv", 16)
+	ctx := context.Background()
+	var userID string
+	if err := h.store.pool.QueryRow(ctx,
+		`INSERT INTO users (id, account_id, name) VALUES ($1,$1,'viewer') RETURNING id::text`, zeroAccount).Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	dur := 1000.0
+	put := func(body string) *api.PlayState {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/items/"+itemID+"/progress", strings.NewReader(body))
+		req.SetPathValue("itemId", itemID)
+		rec := httptest.NewRecorder()
+		h.reportProgress(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("PUT %s = %d: %s", body, rec.Code, rec.Body.String())
+		}
+		var ps api.PlayState
+		if err := json.NewDecoder(rec.Body).Decode(&ps); err != nil {
+			t.Fatal(err)
+		}
+		return &ps
+	}
+
+	// Device B saved 500s; device A (paused at 100s) pings.
+	if _, err := h.store.SetProgress(ctx, zeroAccount, userID, "", itemID, 500, &dur); err != nil {
+		t.Fatal(err)
+	}
+	ps := put(`{"positionSeconds":100,"durationSeconds":1000,"keepalive":true}`)
+	if ps.PositionSeconds != 500 {
+		t.Fatalf("keepalive response position = %v, want the stored 500", ps.PositionSeconds)
+	}
+	got, err := h.store.GetProgress(ctx, zeroAccount, userID, itemID)
+	if err != nil || got.PositionSeconds != 500 {
+		t.Fatalf("stored position after keepalive = %+v (err %v), want 500", got, err)
+	}
+
+	// Store level only: an ordinary write, including a rewind, still lands. The
+	// handler's write path is not run here (the device FK rejects the harness's
+	// zero-id session); the web request-body test and review cover it.
+	if _, err := h.store.SetProgress(ctx, zeroAccount, userID, "", itemID, 120, &dur); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := h.store.GetProgress(ctx, zeroAccount, userID, itemID); got.PositionSeconds != 120 {
+		t.Fatalf("rewind not saved: %v", got.PositionSeconds)
 	}
 }

@@ -169,10 +169,14 @@ export async function reportProgress(
   itemId: string,
   positionSeconds: number,
   durationSeconds?: number,
+  keepalive = false,
 ): Promise<void> {
   await api.PUT('/api/v1/items/{itemId}/progress', {
     params: { path: { itemId } },
-    body: { positionSeconds, durationSeconds },
+    // keepalive: a paused player's liveness ping. The server keeps the session
+    // alive but does not store the position (ARGY-289), so a stale pause cannot
+    // overwrite progress another device has saved since.
+    body: { positionSeconds, durationSeconds, ...(keepalive ? { keepalive: true } : {}) },
   })
 }
 

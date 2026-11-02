@@ -15,25 +15,31 @@ class ProgressUpdate {
   ProgressUpdate({
     required this.positionSeconds,
     this.durationSeconds,
+    this.keepalive,
   });
 
   num positionSeconds;
 
   num? durationSeconds;
 
+  /// A paused player's liveness ping (ARGY-289). The server keeps the transcode session and presence alive but writes no position and publishes no Beacon event, and answers with the stored play-state, so a stale paused position cannot overwrite what another device saved since. Absent or false is an ordinary position write.
+  bool? keepalive;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is ProgressUpdate &&
     other.positionSeconds == positionSeconds &&
-    other.durationSeconds == durationSeconds;
+    other.durationSeconds == durationSeconds &&
+    other.keepalive == keepalive;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (positionSeconds.hashCode) +
-    (durationSeconds == null ? 0 : durationSeconds!.hashCode);
+    (durationSeconds == null ? 0 : durationSeconds!.hashCode) +
+    (keepalive == null ? 0 : keepalive!.hashCode);
 
   @override
-  String toString() => 'ProgressUpdate[positionSeconds=$positionSeconds, durationSeconds=$durationSeconds]';
+  String toString() => 'ProgressUpdate[positionSeconds=$positionSeconds, durationSeconds=$durationSeconds, keepalive=$keepalive]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -42,6 +48,11 @@ class ProgressUpdate {
       json[r'durationSeconds'] = this.durationSeconds;
     } else {
       json[r'durationSeconds'] = null;
+    }
+    if (this.keepalive != null) {
+      json[r'keepalive'] = this.keepalive;
+    } else {
+      json[r'keepalive'] = null;
     }
     return json;
   }
@@ -67,6 +78,7 @@ class ProgressUpdate {
         durationSeconds: json[r'durationSeconds'] == null
             ? null
             : num.parse('${json[r'durationSeconds']}'),
+        keepalive: mapValueOfType<bool>(json, r'keepalive'),
       );
     }
     return null;

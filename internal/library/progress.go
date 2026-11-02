@@ -412,6 +412,10 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 	}
 	itemID := r.PathValue("itemId")
 	sess, _ := auth.SessionFromContext(r.Context())
+	if body.Keepalive != nil && *body.Keepalive {
+		h.keepalive(w, r, sess, itemID, float64(body.PositionSeconds), dur)
+		return
+	}
 	ps, err := h.store.SetProgress(r.Context(), catalogOf(r), userOf(r), sess.DeviceId.String(), itemID, float64(body.PositionSeconds), dur)
 	if errors.Is(err, ErrProgressOutOfRange) {
 		// A 4xx, so the client's offline queue drops the entry instead of
@@ -452,6 +456,43 @@ func (h *handlers) reportProgress(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	h.publishBeacon(r, sess, itemID, float64(body.PositionSeconds), durf, ps.Watched)
+	httpx.JSON(w, http.StatusOK, ps)
+}
+
+// keepalive serves a progress report flagged keepalive (ARGY-289): a paused
+// player's liveness ping. It refreshes the transcode session and this device's
+// presence, and answers with the position the server already holds, but never
+// writes play_state or publishes a Beacon event. The report is the only thing
+// that touches the session (ARGY-239), so the ping has to arrive; but its
+// position is whatever the pause froze at, and the store is last-write-wins, so
+// writing it would replace anything another device saved since.
+func (h *handlers) keepalive(w http.ResponseWriter, r *http.Request, sess api.Session, itemID string, pos float64, dur *float64) {
+	ps, err := h.store.GetProgress(r.Context(), catalogOf(r), userOf(r), itemID)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if ps == nil {
+		httpx.Error(w, http.StatusNotFound, "not found")
+		return
+	}
+	if h.tc != nil {
+		h.tc.TouchItem(accountOf(r), itemID)
+	}
+	if h.presence != nil {
+		var durf float64
+		if dur != nil {
+			durf = *dur
+		}
+		h.presence.Heartbeat(presence.Session{
+			AccountID:       sess.AccountId.String(),
+			UserID:          sess.UserId.String(),
+			DeviceID:        sess.DeviceId.String(),
+			ItemID:          itemID,
+			PositionSeconds: pos,
+			DurationSeconds: durf,
+		})
+	}
 	httpx.JSON(w, http.StatusOK, ps)
 }
 
