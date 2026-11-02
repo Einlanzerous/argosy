@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 import { api, describeLoadError } from '@/api/client'
 import PosterCard from '@/components/PosterCard.vue'
@@ -22,7 +22,7 @@ import {
   type OnDeckItem,
 } from '@/lib/playback'
 import { listVaults, getVault } from '@/lib/vaults'
-import { subscribeBeacon } from '@/lib/beacon'
+import { useLiveProgress } from '@/lib/useLiveProgress'
 import { useSessionStore } from '@/stores/session'
 import { setPage } from '@/lib/page'
 import type { components } from '@/api/schema'
@@ -177,20 +177,18 @@ const heroStyle = computed(() =>
   posterStyle(hero.value?.backdropUrl ?? hero.value?.posterUrl, hero.value?.title ?? ''),
 )
 
-// Beacon keeps "Continue Watching" live: when another of the user's devices
-// moves or finishes an item, refresh the rail (debounced, so a burst of
-// heartbeats collapses to one fetch). The fetch also reconciles anything missed
-// while disconnected — Beacon's onOpen fires on every (re)connect. A plain page
-// load is the polling fallback when SSE is unavailable.
-let closeBeacon: (() => void) | null = null
-let refreshTimer: ReturnType<typeof setTimeout> | null = null
-function refreshContinueSoon(): void {
-  if (refreshTimer) return
-  refreshTimer = setTimeout(async () => {
-    refreshTimer = null
-    continueItems.value = await getContinue().catch(() => continueItems.value)
-  }, 1500)
+// Beacon keeps the personal rails live (ARGY-290): when another of the user's
+// devices moves or finishes an item, Continue Watching AND On Deck refresh
+// together (debounced, so a burst of heartbeats collapses to one fetch). Tab
+// focus and Beacon reconnects reconcile anything missed. A rail whose refetch
+// fails keeps its previous items.
+async function refreshPersonalRails(): Promise<void> {
+  const [cont, deck] = await Promise.allSettled([getContinue(), getOnDeck()])
+  if (cont.status === 'fulfilled') continueItems.value = cont.value
+  if (deck.status === 'fulfilled') onDeckItems.value = deck.value
 }
+
+useLiveProgress({ refetch: refreshPersonalRails })
 
 // A rail that failed to load is an error, not an empty rail. Collapsing both to []
 // is how an edge 403'd every call and Home announced "the hold is empty" over a
@@ -227,15 +225,6 @@ async function load(): Promise<void> {
 onMounted(async () => {
   setPage('Home')
   await load()
-  closeBeacon = subscribeBeacon({
-    onPosition: refreshContinueSoon,
-    onOpen: refreshContinueSoon,
-  })
-})
-
-onUnmounted(() => {
-  closeBeacon?.()
-  if (refreshTimer) clearTimeout(refreshTimer)
 })
 </script>
 

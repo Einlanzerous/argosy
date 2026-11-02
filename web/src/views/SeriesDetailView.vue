@@ -8,6 +8,7 @@ import { posterStyle } from '@/lib/poster'
 import { formatRuntime } from '@/lib/format'
 import { setPage } from '@/lib/page'
 import { setWatched, setSeasonWatched, setSeriesWatched } from '@/lib/playback'
+import { patchSeriesProgress, seriesHasItem, useLiveProgress } from '@/lib/useLiveProgress'
 import type { components } from '@/api/schema'
 
 type SeriesDetail = components['schemas']['SeriesDetail']
@@ -220,13 +221,18 @@ function startOverSeries(): void {
   }
 }
 
+async function fetchSeries(id: string): Promise<SeriesDetail | null> {
+  const { data } = await api.GET('/api/v1/series/{seriesId}', {
+    params: { path: { seriesId: id } },
+  })
+  return data ?? null
+}
+
 async function load(id: string): Promise<void> {
   notFound.value = false
   series.value = null
   activeSeason.value = 0
-  const { data } = await api.GET('/api/v1/series/{seriesId}', {
-    params: { path: { seriesId: id } },
-  })
+  const data = await fetchSeries(id)
   if (!data) {
     notFound.value = true
     setPage('Not found')
@@ -237,6 +243,26 @@ async function load(id: string): Promise<void> {
   activeSeason.value = resumeSeasonIndex.value
   setPage(data.title)
 }
+
+// A silent refresh (ARGY-290) replaces the payload in ONE assignment and touches
+// nothing else: no spinner (series stays set), no season reset, no setPage. A
+// failed or empty answer keeps what is on screen, and so does a late answer for a
+// series the route has since left.
+async function refreshSilently(): Promise<void> {
+  const id = String(route.params.id)
+  const data = await fetchSeries(id)
+  if (!data || String(route.params.id) !== id) return
+  series.value = data
+  if (activeSeason.value >= data.seasons.length) activeSeason.value = resumeSeasonIndex.value
+}
+
+useLiveProgress({
+  relevant: (ev) => !!series.value && seriesHasItem(series.value, ev.itemId),
+  onChange: (ev) => {
+    if (series.value) patchSeriesProgress(series.value, ev)
+  },
+  refetch: refreshSilently,
+})
 
 function playFirst(): void {
   if (firstPlayable.value) void router.push({ name: 'player', params: { id: firstPlayable.value } })

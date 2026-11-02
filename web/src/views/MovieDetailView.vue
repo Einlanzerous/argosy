@@ -10,6 +10,7 @@ import { formatRuntime, formatClock } from '@/lib/format'
 import { getMovies, type MovieSummary } from '@/lib/manifest'
 import { getProgress, setWatched, type PlayState } from '@/lib/playback'
 import { setPage } from '@/lib/page'
+import { useLiveProgress } from '@/lib/useLiveProgress'
 import type { components } from '@/api/schema'
 
 type MovieDetail = components['schemas']['MediaItemDetail']
@@ -68,6 +69,25 @@ async function load(id: string): Promise<void> {
   const all = await getMovies({ sort: 'title' }).catch(() => [])
   related.value = all.filter((m) => m.id !== id).slice(0, 8)
 }
+
+// Progress made on another device (ARGY-290): patch the resume point at once,
+// then re-read progress only — the related rail is not worth refetching.
+useLiveProgress({
+  relevant: (ev) => !!movie.value && ev.itemId === movie.value.id,
+  onChange: (ev) => {
+    progress.value = {
+      ...(progress.value ?? {}),
+      positionSeconds: ev.positionSeconds,
+      watched: ev.watched,
+    } as PlayState
+  },
+  refetch: async () => {
+    const id = movie.value?.id
+    if (!id) return
+    const fresh = await getProgress(id).catch(() => undefined)
+    if (fresh !== undefined && movie.value?.id === id) progress.value = fresh
+  },
+})
 
 onMounted(() => load(String(route.params.id)))
 watch(
