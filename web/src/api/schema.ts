@@ -1704,6 +1704,8 @@ export interface components {
         ProgressUpdate: {
             positionSeconds: number;
             durationSeconds?: number | null;
+            /** @description A paused player's liveness ping (ARGY-289). The server keeps the transcode session and presence alive but writes no position and publishes no Beacon event, and answers with the stored play-state, so a stale paused position cannot overwrite what another device saved since. Absent or false is an ordinary position write. */
+            keepalive?: boolean | null;
         };
         WatchedUpdate: {
             watched: boolean;

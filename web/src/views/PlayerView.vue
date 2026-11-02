@@ -889,7 +889,7 @@ function bindVideo(el: HTMLVideoElement): void {
       flush()
     } else if (document.visibilityState === 'visible') {
       pausedSince ??= Date.now()
-      if (Date.now() - pausedSince < PAUSED_KEEPALIVE_LIMIT_MS) flush()
+      if (Date.now() - pausedSince < PAUSED_KEEPALIVE_LIMIT_MS) flush(true)
     }
   }, 10000)
 }
@@ -902,10 +902,13 @@ function updateQuality(el: HTMLVideoElement): void {
   quality.value = h >= 2160 ? '4K' : `${h}p`
 }
 
-function flush(): void {
+// keepalive marks a paused player's ping: it touches the transcode session but
+// the server stores no position, so the stale pause position cannot overwrite
+// progress another device saved meanwhile (ARGY-289).
+function flush(keepalive = false): void {
   const pos = video.value ? mediaPosition(video.value) : baseOffset.value
   if (pos > 0) {
-    void reportProgress(itemId, pos, duration.value || undefined).catch(() => {})
+    void reportProgress(itemId, pos, duration.value || undefined, keepalive).catch(() => {})
   }
 }
 
