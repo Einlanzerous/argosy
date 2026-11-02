@@ -4,7 +4,7 @@ What Switchyard's adversarial plan pass verifies an **ARGY** plan against.
 `REVIEW.md` is the judgement for a diff; this file is the judgement for a plan,
 before any diff exists. The procedure (workflow, verdict file, check row) lives
 in Switchyard (`.github/workflows/plan-review.yml`, `docs/plan-as-pr.md` there).
-`CLAUDE.md` outranks this file, as it does `REVIEW.md`. Counterparts:
+`CLAUDE.md`'s invariants are binding on a plan (section 2). Counterparts:
 `chronicle/REVIEW.md` § Reviewing a plan (CHRN-102) and `catenary/docs/plan-review.md`
 (CANT-150). Drawn from the hand review of ARGY-179 rev 1, so the playback-path
 checks are the errors an ARGY plan actually makes.
@@ -58,13 +58,19 @@ what decides it:
 - **Instance ownership** (ARGY-167): `internal/auth/owner.go`; the plan says
   whether it keys on instance or on per-library ownership.
 - **No secure-context browser APIs** (`crypto.randomUUID`, clipboard, service
-  workers): the web UI is served over plain HTTP.
+  workers): the web UI is served over plain HTTP. Decided by
+  `grep -rn randomUUID web/src`, whose only hit today is the comment in
+  `web/src/api/client.ts` explaining why it is avoided; a plan that adds a call
+  site, or another secure-context-only API, is bounced.
 - **Playlists and the SPA shell are uncacheable**: playlists `no-store` in
   `internal/library/transcode.go`, the shell in `internal/server/spa.go`; no
   `http.ServeFile` for content that changes within a second.
 - **Transcode sessions are reaped and the player survives it**: a new playback
   path says how it recovers a vanished session and how it keeps one alive while
-  paused (ARGY-107).
+  paused (ARGY-107). Decided by `Manager.Touch` and the idle reaper
+  (`idleTTL`, `idleSince`) in `internal/transcode/transcode.go`, and by the
+  paused keepalive in `web/src/views/PlayerView.vue` (and
+  `mobile/argosy/lib/features/player/playback_controller.dart` on phone/TV).
 - **One ffmpeg version**: `.ffmpeg-version`, checked by
   `scripts/check-ffmpeg-pin.sh` (`make check-ffmpeg`). A plan that relies on
   ffmpeg output shape or flags names the pinned version, not "ffmpeg".
@@ -78,7 +84,9 @@ ARGY-179 rev 1 got three things wrong here. A plan that adds or removes a rung,
 variant or codec, or changes what a client asks for, must state all of:
 
 1. **Which manifest shape the output has.** `buildArgs` (`internal/transcode/ffmpeg.go`)
-   picks between `buildRemuxArgs`, `buildSingleTranscodeArgs` and `buildLadderArgs`.
+   picks between `buildRemuxArgs` and `buildTranscodeArgs`; `buildTranscodeArgs`
+   then picks `buildSingleTranscodeArgs` when `len(rungs) == 1` and
+   `buildLadderArgs` otherwise.
    A single-variant output ends in `singleOutputTail`, which writes a **media
    playlist** with no master and no `CODECS`; a master (`hlsMasterTail`) is
    written only for a ladder, `multiAudio`, or `needsCodecDeclaration`. A plan
