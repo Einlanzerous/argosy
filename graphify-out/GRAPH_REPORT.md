@@ -4,190 +4,194 @@
 - cluster-only mode — file stats not available
 
 ## Summary
-- 7288 nodes · 12014 edges · 420 communities (304 shown, 116 thin omitted)
-- Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 687 edges (avg confidence: 0.8)
-- Token cost: 17,349 input · 3,889 output
+- 7312 nodes · 12085 edges · 421 communities (306 shown, 115 thin omitted)
+- Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 685 edges (avg confidence: 0.8)
+- Token cost: 17,565 input · 4,125 output
 
 ## Graph Freshness
-- Built from commit: `87581c66`
+- Built from commit: `00a6a474`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- Playback Controller Core
-- Transcoding and Beacon Pipeline
-- Account Auth Context
-- UI Modal Components
-- Artwork and Browse Providers
-- Download Job Manager
-- TV Settings Captions
-- Media Title Parsing
-- Library Filter Browse
-- API Route Handlers
-- API Client and Schema
-- Movie Detail Provider
-- Stale Transcode Job Tests
-- Library API Client
-- Browse Format Utilities
-- Player Setup Test Fakes
-- Search Screen Providers
+- Flutter Playback Controller
+- Web Player & Streaming API
+- Flutter App Providers
+- Account & Session Testing
+- Download & Stow Runner
+- Media Title Classification
+- TV Caption Settings UI
+- Flutter Artwork & Home Providers
+- Library Browse & Filter
+- HTTP API Route Handlers
+- TypeScript API Client
+- Stale Job State Tests
+- Player Modal & Navigation Shell
+- Dart Library API Client
+- Movie Detail & Vault
+- Flutter Player Providers
+- Playback Error & Formatting
+- Search Screen & Providers
 - Effective Metadata Resolution
-- Add to Vault UI
-- Detail and Poster Components
-- Auth API Client
-- Browse Filter and Library API
-- TV Series Episode Screen
-- TV Player Controls
-- Media Session Handler
-- Health Response Models
-- Stow Service Worker
-- Transcode Session Identity
-- TV PIN Pairing Screen
-- Home Screen Providers
 - TV Focusable Widget
+- Add to Vault UI
+- Detail Scaffold & Cards
+- Dart Auth API Client
+- Detail Widgets & Cast
+- TV Series Episode Screen
+- TV Player Controls Screen
+- Browse Manifest & Filters
+- Audio Session Handler
+- TV Pairing Screen
+- Stow Service & Encoding
+- Session Identity Tests
+- Home Screen Providers
 - Series Detail Screen
-- Next Episode Retry Logic
-- Player Screen Setup
-- TV Landing Focus
-- Stow Progress UI
-- Playback API TypeScript
-- Beacon and Session Providers
+- Project Architecture Docs
+- Settings & Library Management
 - Blob Identity Tests
-- Argosy Theme Tokens
+- FFmpeg Encoder Arguments
+- Flutter Theme & Tokens
 - TMDB API Client
-- FFmpeg Encoder Builder
-- Device Preferences and Transcode
-- Job State Models
-- Database Migration Tests
+- Database Migration & Tests
+- Encode Job Model
+- Beacon SSE Client
+- Mobile Pairing Screen
 - Stow API Test Fakes
-- Download Item Models
-- API Client Base
+- Download Item Model
+- Dart API Client Core
 - Transcode Build Args Tests
-- API Request Param Types
-- Pairing Screen Flow
-- Account Data Models
-- Search Overlay Vue
-- Miscellaneous Unit Tests
+- API Request & Response Types
+- Player Setup & Stow Store
+- Search Overlay UI
 - Player Controls UI
-- Device Preferences Models
-- OpenAPI Spec Documentation
-- Episode Format Utilities
+- Device Preferences Model
+- Account & Auth Store Methods
+- Dart Format Utilities
 - Live Session Sweeper
-- App Router Navigation
-- Device Data Models
+- App Router & Screens
+- Stow Button & Progress
+- Vault API Handlers
 - Offline Progress Queue
-- Vault Handlers
-- Stowed Item Models
-- API Exception Models
-- Account Sheet and Pairing
+- Stowed Item Model
 - Player Controls Autohide
-- Offline Recovery Tests
-- Browse Item Models
-- App and Account Providers
+- API Client Providers
+- VTT Repair Tests
+- Stow Controller Tests
+- TV Rail Focus Scope
+- Settings Screen Body
+- HLS Playback Decision
+- Media Item Model
+- OpenAPI Spec & Schema
 - HLS Manifest Tests
-- Player Providers Setup
-- Auth and Library Fakes
 - Media Item Detail Model
-- Playback Decision Models
-- TV Home Screen
+- Playback Info Model
+- Offline Recovery Tests
+- Client Identity Header
+- Settings Controller
 - Playback Progress Handlers
 - VTT Subtitle Parser
-- Profile Create Models
-- Subtitle Track Models
+- Profile Create Request
+- Subtitle Track Model
 - Detail Refresh After Play
 - Transcode Scheduler
 - Stow Controller
-- Argosy Color Palette
-- TypeScript Build Config
+- Argosy Color Tokens
+- TV Detail Focus Tests
+- TypeScript Project Config
 - Restart Gate Session
 - Shared API Data Models
-- Module Documentation
-- Burn-In Handler Tests
-- Continue Item Models
+- Module Architecture Docs
+- Poster Gradient & API Helper
+- Continue Item Model
 - TV Focus Ring Tests
 - Add to Vault Widget
-- PIN Pairing Controller
-- User Profiles Admin View
+- Browse Repository & Media Card
+- Account Model
 - Create Library Request
-- Beacon and Stream Handlers
-- Stow Library Handlers
-- Season Metadata Provider
-- TMDB Adaptive Tests
-- Episode Matcher
-- Auth Device Store Methods
-- API Client Configuration
-- Download Error Handling
-- File Download Management
-- Library HTTP Handlers
+- Link Status Response
+- Playback Session Tests
+- Download Exception Models
+- Beacon & Stream Handlers
+- Burn-In & Ladder Handler Tests
+- Stow File HTTP Handler
+- API Error & Metadata Provider
+- Adaptive Rate Limiting Tests
+- Media Season Matching
+- Health Response Model
+- File Download Handler
+- Request Logging Middleware
+- Library Route Handlers
 - Auth Controller Bootstrap
-- Track Sheet UI
-- TV Detail Widget Tests
-- Android Main Activity
-- Secure Token Storage
-- Episode Mapping Matching
-- Subtitle Format Extraction
-- Browse Filter State
+- Audio Track Sheet
+- Android MainActivity PiP
+- PIN Pairing Controller
+- VAAPI Hardware Encode Probe
+- Secure Token Store
+- Local FFmpeg Runner
+- Episode Mapping Matcher Tests
+- Subtitle Extraction Tests
+- Browse Filter Model
 - Stow File Store
 - Facet Model
-- Discovery Layout Model
-- Client Trace Identity
-- Project Docs and Invariants
-- API Client Utilities
+- Home Layout Model
+- Next Episode Retry Tests
 - Offline Progress Queue
-- library/transcode.go
+- Flutter Unit Tests
 - Subtitle Service Tests
-- FFmpeg Capabilities Probing
-- FFmpeg Package Args
+- Device Model
 - Episode Summary Model
 - Playback Session Model
 - TMDB Scan Stats Model
 - Vault Detail Model
-- Browse Filter Tests
+- Library Error State Tests
 - Seek Restart Race Tests
-- iOS App Delegate
-- TMDB Integration Tests
-- FFmpeg Transcode Backend
+- Profiles Management View
+- iOS App Delegate Setup
+- Stream URL Builder
+- TMDB Episode Group Tests
+- FFmpeg Package Args Tests
+- API Credential Error Tests
 - On Deck Item Model
-- Accounts Admin View
-- App Router Navigation
-- Beacon Event Client
-- Token Store Tests
-- TV Home Screen Tests
-- Device Capabilities Detection
+- App Router Configuration
+- Account Audit Log
+- Client Trace Tracking
+- Controls Visibility Timer
+- TV Home Focus Tests
 - Device Registration Request
 - Media Item Summary Model
 - Series Detail Model
 - Vault Model
 - Transcode Start Request
 - OpenSubtitles Client
-- Player View Setup
+- Argosy Mark Widget
 - Account Summary Model
 - Series Summary Model
-- Beacon Pub Sub Hub
-- mDNS Server Discovery
+- Pub-Sub Event Hub
+- Server Discovery
 - Frontend Dev Dependencies
-- Health Probe
+- Health Probe Tests
+- HTTP Downloader Tests
 - File Identity Service
-- Transcode File Handler Tests
-- Client Identity Header
-- Scan Library Result
+- Library Store Tests
+- Transcode Handler Tests
+- Fake API Test Doubles
+- Scan Library Result Model
 - Login View
-- API Response Models
-- Metadata Provider Context
+- API Model Registry
+- Metadata Provider Interface
 - Subtitle Language Service
-- Transcode Rungs Logic
+- Transcode Rung Tests
 - Media Card Widget
-- Controls Visibility Timer
 - Link Device Sheet
 - Scan Status Model
 - Session Model
 - Unmapped Season Model
 - TV Landing Focus Tests
-- Settings Controller
+- Device Auth Registration
 - Session Recovery Logic
 - Frontend Dependencies
-- Item Progress Tests
-- PiP Management
+- Picture-in-Picture Controller
 - Media Item Page Model
 - Library Model
 - Play State Model
@@ -196,12 +200,13 @@
 - Season Summary Model
 - Series Page Model
 - Transcode Cache Stats
-- Device Auth Registration
-- Account Lifecycle Management
+- Beacon VTT Utilities
+- SPA Handler Tests
 - Beacon Stream Tests
 - TMDB Retry Tests
 - Session Registry
-- Scan API Handlers
+- Scan Handler Tests
+- Device Capabilities
 - Transcode API Client
 - Account Create Request
 - Create Vault Request
@@ -209,153 +214,150 @@
 - Login Request Model
 - Ping Response Model
 - Transcode Progress Model
-- Update Vault Request
+- Update Vault Request Model
 - User Profile Model
 - Flutter App Dependencies
-- Watched Update Model
-- Middleware Logging Tests
-- SPA Handler
+- Transcode Client API
 - Account Conflict Error Model
 - Account Create Response Model
-- Device Switch Request Model
-- Link Start Request Model
-- Link Start Response Model
-- Password Change Request Model
-- Profile Update Request Model
+- Add Vault Item Request
+- Device Registration Response
+- Device Switch Request
+- Link Start Request
+- Link Start Response
+- Login Response Model
+- Password Change Request
+- Profile Update Request
 - Search Results Model
 - Stow Request Model
 - Transcode Capabilities Model
-- Library Owner Cache
-- User Profile Management
-- FFmpeg Pin CI Pipeline
-- Local Filesystem Store
+- Account Creation Flow
+- FFmpeg CI Build Config
+- API Error Model
+- Local Filesystem Storage
 - Health Check Tests
-- Account Providers Utilities
 - Stow API Client
-- Account Update Request Model
-- Device Rename Request Model
-- Error Model
-- Password Reset Response Model
-- Reorder Vault Request Model
-- Watched Bulk Result Model
-- OpenAPI Dart Code Generation
-- Account Provisioning Logic
-- Player Session Debug Hooks
-- Match and Scan CLI
+- Account Update Request
+- Link Approve Request
+- Password Reset Response
+- Reorder Vault Request
+- Watched Bulk Result
+- Watched Update Model
+- OpenAPI Code Generation
+- Playback Session Debug
+- Media Match Scan Tool
 - Beacon Event Model
-- Poster Card Widget
-- Burn-In Transcode Tests
-- Encoder Resolution Tests
-- Browse Repository
-- Up Next Logic
-- App Initialization
+- Burn-in Subtitle Tests
+- Hardware Encoder Selection
+- Up Next Episode Logic
 - Device Link Flow
-- Search Store
+- Search Store Logic
 - Stow Handler Tests
-- Media File Probe
+- Media File Probe Tool
+- Device Preferences Copy
 - Web Build Scripts
+- Next Episode Lookup
+- Catalog Owner Cache
 - Mobile Release Pipeline
-- Container Publish Workflow
-- Config Loading
-- Server Ping Handler
+- Container Image Publishing
+- Server Config Loader
+- HTTP Server Ping Health
 - Movie Hash Utility
-- Stream URL Builder
-- Client Write Tracker
-- Open Issue Backlog
+- PR Review Workflow
+- Mobile Client Bug Backlog
 - Beacon Hub Tests
 - Catalog Stream Tests
-- Build Identity Version
-- System Health API Client
+- Build Version Identity
 - Architecture Map Check
-- VTT Subtitle Parsing
-- Browse Facets
-- HTTP Server Middleware Interfaces
-- Argosy Theme
-- Healthcheck CLI
-- HEVC Subtitle Playback Issues
-- Library Identity Tests
-- Session Registry
+- Catalog Facets
+- HTTP Server Middleware
+- Argosy Theme TV
+- Healthcheck Probe Logic
+- HEVC Subtitle Playback
+- Session Registry Management
 - Account API Models
 - Transcode Session State
-- App Routes
-- Web Favicon Assets
+- App Navigation Routes
+- App Icon Assets
 - Device Caption Preferences
-- Movie List Params
-- Series List Params
-- Project README Screenshots
-- Service Discovery
-- Live Items Tracking
+- List Movies Params
+- List Series Params
+- App README Screenshots
+- Device Pairing Auth
+- Auth Client Tests
+- mDNS Service Discovery
+- Live Items Feed
 - Media Tool Versioning
-- Genre Names
-- Status Recorder Middleware
+- Media Genre Names
+- HTTP Status Recorder
 - OpenAPI Generator Config
 - Release Please Config
 - Web Package Config
 - Media Summary Models
 - Docker Dev Stack
-- HLS Seek Start Issues
-- OpenAPI Spec Access
+- HLS Playback Start Position
+- OpenAPI Spec Endpoint
+- Auth Middleware Tests
 - Config Parsing Tests
 - HTTP JSON Helpers
 - HTTP Helper Tests
-- Browse Filter Tests
+- Episode Artwork Tests
 - iOS Launch Screen Assets
-- Stow Queue Implementations
-- Prettier Config
-- Create Library Request Model
+- Prettier Format Config
+- Create Library Request
 - Health Response Model
-- Invalid Param Error Model
-- Link Status Response Model
+- Invalid Param Error
+- Link Status Response
 - Playback Info Model
-- Required Header Error Model
+- Required Header Error
 - Subtitle Track Model
-- Cookie Param Error Model
-- Unmarshaling Param Error Model
-- User Preferences Model
-- Vault Entry Model
+- Cookie Param Error
+- Unmarshaling Param Error
+- User Preferences Layout
+- Vault Entry Types
 - Mobile Brand Assets
-- Transcoding & Session Tickets
-- Knowledge Graph CI
+- Transcoding and Server Issues
+- Facets Unit Tests
 - Credits Lead Tests
-- App Icon Assets
-- Database Seed Script
+- App Icon Variants
+- Seed Sample Script
 - Transcode Start Tests
-- Media Item UI
+- Media Item Pages
 - Required Param Error
-- Argosy Black Logo
-- Argosy White Logo
+- Black Logo Assets
+- White Logo Assets
 - Database Schema Docs
-- Player Parity Audit
 - Mark Watched Feature
 - Per-Episode Ratings
-- Multi-Audio Track Picker
-- Library Error Handling
+- Multi-Audio Picker
+- Error Handling Issues
 - Audio Button Preferences
 - Node Type Definitions
-- Vue TypeScript ESLint
+- Vue ESLint TypeScript Config
 - Vue TypeScript Compiler
 - Vue Environment Types
 - Progress Reporting Tests
-- Fleet Device Management UI
+- Fleet Device Management Screenshot
 - Library Browse Screenshot
 - HLS Player Screenshot
 - Search Browse Screenshot
+- Playlist Cache Invariant
 - Seek Bar Drag
-- Playlist Caching
+- Playlist No-Store Policy
 - Back Navigation Behavior
 - Cast and Credits
-- In-Progress Season Open
+- Series Season Progress
 - Secure Context APIs
-- Device Code Pairing
+- Code Pairing Feature
 - Remaining Time Scrubber
-- Client Buffer Depth
-- Episode Header Title
-- Picker Viewport Bounds
-- Embedded Subtitle Tracks
+- Client Buffering Depth
+- Episode Title Header
+- Picker Viewport Constraint
+- Embedded Track Priority
 - Preferred Language Fold
 - VTT Cache Garbage Collection
-- Episode Identity Dedup
-- ABR Top Rung Start
+- Episode Identity Deduplication
+- ABR Top Rung Open
 - Transcode Host Release
 - HTTPS Address Probing
 - Up Next Countdown
@@ -363,17 +365,15 @@
 - Bounded Recovery Retries
 - Stow Feature
 - Caption Styling Position
-- Accurate Seek Remux
-- Lock Screen PiP Controls
+- Resumed Remux Seek
+- Lock Screen PiP Wakelock
 - Web Client HLS
-- Mobile CI Workflow File
 - Mobile CI Workflow
-- SQL Migrations
-- Media Source Package
-- Metadata Enrichment
-- Subtitles Package
+- Media Source Module
+- Metadata Enrichment Module
+- Subtitles Module
 - Mobile Analysis Options
-- Android App Icon
+- Android hdpi Foreground Icon
 - iOS Release Runbook
 - iOS Icon 20pt 1x
 - iOS Icon 20pt 2x
@@ -388,39 +388,40 @@
 - iOS Icon 60pt 3x
 - iOS Icon 76pt 1x
 - iOS Icon 76pt 2x
-- iOS Icon 83.5pt 2x
+- iOS iPad Pro Icon
 - API Analysis Options
-- Argosy API Package
+- Argosy API Pubspec
 - Mobile Client Docs
 - Account Model
 - Account Summary Model
 - Nullable Bool Type
 - Browse Filter Model
-- Client Model
+- API Client Model
 - Continue Item Model
 - Device Model
 - Device Preferences Model
 - Device Reference Model
-- Duration Model
-- Facet Model
-- Library Management
+- Duration Type
+- Facet Filter Component
+- Library Module
 - Map Data Structure
-- Media Item Details
+- Media Item Detail
 - Media Item Summary
-- On Deck Items
-- Playback State
-- User Profile Summary
-- Role Management
+- On Deck Item
+- Play State
+- Profile Summary
+- User Role
 - TMDB Scan Stats
-- Series Details
+- Series Detail
 - Application State
-- Stow Job Queue
+- Stow Job
 - Generic Type Parameter
 - Transcode Session
 - User Preferences
 - Vault Storage
 - Argosy Project Root
-- Web SPA Entry
+- Web SPA Entry Point
+- router/app_router.dart
 
 ## God Nodes (most connected - your core abstractions)
 1. `Request` - 146 edges
@@ -428,23 +429,23 @@
 3. `ServerInterfaceWrapper` - 80 edges
 4. `_` - 45 edges
 5. `_` - 45 edges
-6. `_` - 39 edges
-7. `Migrate()` - 38 edges
-8. `Argosy OpenAPI Spec` - 37 edges
-9. `DSN()` - 35 edges
-10. `_` - 35 edges
+6. `docs/plan-review.md — Plan Review Instructions` - 45 edges
+7. `_` - 39 edges
+8. `Migrate()` - 38 edges
+9. `Argosy OpenAPI Spec` - 37 edges
+10. `DSN()` - 35 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Graphify CI Workflow` --references--> `Argosy OpenAPI Spec`  [INFERRED]
-  .github/workflows/graphify.yml → proto/openapi/argosy.yaml
-- `Screenshot — Home Continue Watching & Newly Arrived Rails` --references--> `Cross-Device Resume`  [INFERRED]
-  assets/screenshots/home-rails.png → README.md
-- `Mobile Brand App Icon PNG` --semantically_similar_to--> `Argosy Wordmark SVG (currentColor)`  [INFERRED] [semantically similar]
-  mobile/argosy/assets/brand/app_icon.png → assets/argosy_mark.svg
 - `audio_service` --conceptually_related_to--> `Mobile Module`  [INFERRED]
   mobile/argosy/pubspec.yaml → CHANGELOG.md
 - `Argosy OpenAPI Spec` --conceptually_related_to--> `Fleet Module`  [INFERRED]
   proto/openapi/argosy.yaml → CHANGELOG.md
+- `Argosy OpenAPI Spec` --conceptually_related_to--> `Health Module`  [INFERRED]
+  proto/openapi/argosy.yaml → CHANGELOG.md
+- `Screenshot — Home Continue Watching & Newly Arrived Rails` --references--> `Cross-Device Resume`  [INFERRED]
+  assets/screenshots/home-rails.png → README.md
+- `argosy_api (local package)` --references--> `Argosy OpenAPI Spec`  [INFERRED]
+  mobile/argosy/pubspec.yaml → proto/openapi/argosy.yaml
 
 ## Import Cycles
 - None detected.
@@ -455,357 +456,359 @@
 - **PR Review Local Artefacts (judgement and ignore patterns)** — review_md, claude_md, github_review_ignore [INFERRED 0.80]
 - **Release Pipeline: release-please → mobile-release + publish** — github_workflows_release_please_job_release_please, github_workflows_release_please_job_mobile_release, github_workflows_release_please_job_publish, github_workflows_publish, github_workflows_mobile_release [EXTRACTED 1.00]
 - **GITHUB_TOKEN Tag Event Limitation Workaround (SERV-125)** — github_workflows_release_please_job_publish, github_workflows_release_please_job_mobile_release, github_workflows_publish [EXTRACTED 0.95]
+- **Transcode Pipeline** — changelog_transcode_module, changelog_helm, changelog_ballast, changelog_hls_cmaf, changelog_vaapi_nvenc, changelog_qsv, changelog_transcode_session [EXTRACTED 0.90]
 - **Auth Correctness Invariants** — concept_audit_detach, concept_timing_safe_signin, concept_403_vs_401, concept_reset_vs_change, concept_delete_account_guard, concept_instance_ownership, internal_auth [EXTRACTED 0.95]
 - **FFmpeg Version Pin Enforcement** — ffmpeg_version, scripts_check_ffmpeg_pin, deploy_dockerfile, deploy_dockerfile_dev, github_workflows_ci, concept_ffmpeg_pin [EXTRACTED 0.97]
-- **HLS Player Parity — Three Clients on One Contract** — web_src_views_playerview, mobile_argosy_lib_features_player_playback_controller, mobile_argosy_lib_features_player_tv_tv_player_screen, internal_transcode_playlist, concept_hls_delivery, concept_player_parity [EXTRACTED 0.98]
 - **Mobile/TV Parity Gaps: tickets tracking missing phone or TV implementations** — docs_player_parity_argy_252, docs_player_parity_argy_253, docs_player_parity_argy_254, docs_player_parity_argy_256, docs_player_parity_argy_257, docs_player_parity_argy_258 [EXTRACTED 0.95]
 - **Server-side fixes that cover all clients automatically** — docs_player_parity_argy_94, docs_player_parity_argy_106, docs_player_parity_argy_84, docs_player_parity_argy_150, docs_player_parity_argy_153, docs_player_parity_argy_155, docs_player_parity_server [EXTRACTED 0.95]
 - **Shared-class fixes requiring coverage across web, phone, and TV** — docs_player_parity_argy_103, docs_player_parity_argy_107, docs_player_parity_argy_220_223, docs_player_parity_argy_108, docs_player_parity_argy_90_101, docs_player_parity_argy_207, docs_player_parity_argy_125, docs_player_parity_argy_134, docs_player_parity_argy_178, docs_player_parity_argy_127_128_129, docs_player_parity_argy_154, docs_player_parity_argy_59, docs_player_parity_argy_248 [EXTRACTED 0.95]
 - **OpenAPI Spec → Dart Client Generation** — proto_openapi_argosy_yaml, mobile_argosy_packages_argosy_api_readme [EXTRACTED 0.95]
-- **Argosy Brand Icon Assets (SVG + PNG Favicons)** — web_public_argosy_mark_svg, web_public_apple_touch_icon, web_public_favicon_16x16, web_public_favicon_32x32, web_public_favicon_48x48, web_public_favicon_512x512 [INFERRED 0.95]
 - **PIN Code Pairing Flow** — proto_openapi_argosy_yaml_startlink, proto_openapi_argosy_yaml_getlinkstatus, proto_openapi_argosy_yaml_approvelink, changelog_pin_pairing [EXTRACTED 0.95]
 - **Device Fleet Management** — proto_openapi_argosy_yaml_registerdevice, proto_openapi_argosy_yaml_listdevices, proto_openapi_argosy_yaml_revokedevice, proto_openapi_argosy_yaml_renamedevice, proto_openapi_argosy_yaml_switchdeviceprofile, changelog_fleet_module [EXTRACTED 0.95]
-- **Transcode Pipeline** — changelog_transcode_module, changelog_helm, changelog_ballast, changelog_hls_cmaf, changelog_vaapi_nvenc, changelog_qsv, changelog_transcode_session [EXTRACTED 0.90]
+- **Argosy Brand Icon Assets (SVG + PNG Favicons)** — web_public_argosy_mark_svg, web_public_apple_touch_icon, web_public_favicon_16x16, web_public_favicon_32x32, web_public_favicon_48x48, web_public_favicon_512x512 [INFERRED 0.95]
+- **Player parity: web, mobile phone, and TV share HLS playback contract** — web_src_views_playerview_vue, mobile_argosy_lib_features_player_playback_controller_dart, mobile_argosy_lib_features_player_tv_tv_player_screen_dart [EXTRACTED 1.00]
+- **Auth invariants: audit detach, 401/403 correctness, instance ownership, DeleteAccount guard** — internal_auth_audit, internal_auth_handlers, internal_auth_auth, internal_auth_accounts, internal_auth_owner [EXTRACTED 1.00]
+- **OpenAPI contract fans out to Go, TS, and Dart generated consumers** — proto_openapi, internal_api_argosy_gen, web_src_api_schema_ts, mobile_argosy_packages_argosy_api [EXTRACTED 1.00]
 
-## Communities (420 total, 116 thin omitted)
+## Communities (421 total, 115 thin omitted)
 
-### Community 0 - "Playback Controller Core"
+### Community 0 - "Flutter Playback Controller"
 Cohesion: 0.01
 Nodes (162): argosy_audio_handler.dart, BetterPlayerController?, BetterPlayerController? get, BetterPlayerNotificationConfiguration get, BoxFit, class PlaybackController extends, double get, _accruePlayed (+154 more)
 
-### Community 1 - "Transcoding and Beacon Pipeline"
+### Community 1 - "Web Player & Streaming API"
 Cohesion: 0.02
-Nodes (145): HLS Delivery, Player Parity Requirement, VAAPI Hardware Encode Probe Invariant, Pull Request Template, internal/transcode — Transcoding, getToken(), BeaconEvent, subscribeBeacon() (+137 more)
+Nodes (132): Secure-Context Browser API Restriction, measuredBandwidth(), putPreferences(), rememberBandwidth(), reportProgress(), stopTranscode(), streamUrl(), activeAudioLabelShort (+124 more)
 
-### Community 2 - "Account Auth Context"
-Cohesion: 0.06
-Nodes (105): actorOf, auditEntry, ctxKey, Account, Context, ResponseRecorder, Session, Store (+97 more)
-
-### Community 3 - "UI Modal Components"
-Cohesion: 0.02
-Nodes (89): BorderRadius?, Color, CustomPainter, FocusNode, IconData, build, child, onBack (+81 more)
-
-### Community 4 - "Artwork and Browse Providers"
+### Community 2 - "Flutter App Providers"
 Cohesion: 0.03
-Nodes (90): ../account/account_sheet.dart, ../api/artwork.dart, api_providers.dart, ../browse/continue_card.dart, ../browse/media_poster_card.dart, ConsumerWidget, home_providers.dart, ArtworkResolver (+82 more)
+Nodes (65): ../account/account_providers.dart, account_providers.dart, ../api/api_providers.dart, ../../api/stream_urls.dart, app_info.dart, ../auth/auth_controller.dart, ../beacon/beacon_providers.dart, beacon_client.dart (+57 more)
 
-### Community 5 - "Download Job Manager"
+### Community 3 - "Account & Session Testing"
+Cohesion: 0.08
+Nodes (93): actorOf, ctxKey, Account, Context, ResponseRecorder, Session, Store, T (+85 more)
+
+### Community 4 - "Download & Stow Runner"
 Cohesion: 0.02
-Nodes (88): downloader.dart, absolute, _active, _activeDone, activeJob, _apiTimeout, baseUrl, _bytesOnDisk (+80 more)
+Nodes (92): downloader.dart, absolute, _active, _activeDone, activeJob, _apiTimeout, baseUrl, _bytesOnDisk (+84 more)
 
-### Community 6 - "TV Settings Captions"
+### Community 5 - "Media Title Classification"
+Cohesion: 0.05
+Nodes (64): C, Time, atoi(), cleanTitle(), episodeRange(), Context, Scanner, parseEpisode() (+56 more)
+
+### Community 6 - "TV Caption Settings UI"
 Cohesion: 0.03
 Nodes (87): _AboutRow, _ActionRow, active, autofocus, background, _captionBackgrounds, _captionColors, _CaptionColourPicker (+79 more)
 
-### Community 7 - "Media Title Parsing"
-Cohesion: 0.05
-Nodes (63): C, Time, atoi(), cleanTitle(), episodeRange(), Context, Scanner, parseEpisode() (+55 more)
+### Community 7 - "Flutter Artwork & Home Providers"
+Cohesion: 0.03
+Nodes (93): ../account/account_sheet.dart, ../api/artwork.dart, api_providers.dart, ../browse/continue_card.dart, ../browse/media_poster_card.dart, ConsumerWidget, _Hero, home_providers.dart (+85 more)
 
-### Community 8 - "Library Filter Browse"
+### Community 8 - "Library Browse & Filter"
 Cohesion: 0.03
 Nodes (77): browse_filter.dart, library_controller.dart, library_filter_sheet.dart, applyGenre, build, clearFacets, filter, libraryFacetsProvider (+69 more)
 
-### Community 9 - "API Route Handlers"
+### Community 9 - "HTTP API Route Handlers"
 Cohesion: 0.10
 Nodes (4): ServerInterfaceWrapper, ResponseWriter, Handler(), Request
 
-### Community 10 - "API Client and Schema"
-Cohesion: 0.05
-Nodes (44): api, authMiddleware, getInstallId(), setToken(), setUnauthorizedHandler(), $defs, operations, paths (+36 more)
+### Community 10 - "TypeScript API Client"
+Cohesion: 0.04
+Nodes (59): api, authMiddleware, getInstallId(), setToken(), setUnauthorizedHandler(), components, $defs, operations (+51 more)
 
-### Community 11 - "Movie Detail Provider"
-Cohesion: 0.03
-Nodes (73): add_to_vault.dart, ../api/api_providers.dart, AsyncValue, detail_providers.dart, api, container, context, detail (+65 more)
-
-### Community 12 - "Stale Transcode Job Tests"
+### Community 11 - "Stale Job State Tests"
 Cohesion: 0.07
 Nodes (47): State, fixture, T, TestEncodeFinishingAfterReplacementFails(), TestGetReportsStalePackage(), TestPendingJobFailsBeforeEncoding(), TestRequestRepackagesStaleJob(), TestSupersededWorkerCannotFinishResetJob() (+39 more)
 
-### Community 13 - "Library API Client"
+### Community 12 - "Player Modal & Navigation Shell"
+Cohesion: 0.03
+Nodes (64): AsyncValue, IconData, build, child, onBack, PlayerModalShell, build, SplashScreen (+56 more)
+
+### Community 13 - "Dart Library API Client"
 Cohesion: 0.03
 Nodes (71): addVaultItem, addVaultItemWithHttpInfo, apiClient, beaconStream, beaconStreamWithHttpInfo, createLibrary, createLibraryWithHttpInfo, createVault (+63 more)
 
-### Community 14 - "Browse Format Utilities"
-Cohesion: 0.10
-Nodes (21): episodeHeader(), episodeName(), formatClock(), formatRelative(), formatRuntime(), getProgress(), PlayState, setWatched() (+13 more)
-
-### Community 15 - "Player Setup Test Fakes"
+### Community 14 - "Movie Detail & Vault"
 Cohesion: 0.03
-Nodes (62): Directory, _FakeLibraryApi, _FileServer, ListTile, StowStore, container, getDevicePreferences, getMediaItem (+54 more)
+Nodes (77): add_to_vault.dart, detail_providers.dart, FocusNode, api, container, context, detail, itemId (+69 more)
 
-### Community 16 - "Search Screen Providers"
+### Community 15 - "Flutter Player Providers"
+Cohesion: 0.03
+Nodes (65): AnimationController, GlobalKey, auth, displayModeHeightF, hevcF, hevcHardwareF, item, lib (+57 more)
+
+### Community 16 - "Playback Error & Formatting"
+Cohesion: 0.04
+Nodes (61): ApiError, describeLoadError(), episodeHeader(), episodeLabel(), episodeName(), formatClock(), formatRelative(), formatRuntime() (+53 more)
+
+### Community 17 - "Search Screen & Providers"
 Cohesion: 0.04
 Nodes (59): ../browse/browse_repository.dart, ../browse/media_card.dart, build, query, res, SearchGroups, searchQueryProvider, searchResultsProvider (+51 more)
 
-### Community 17 - "Effective Metadata Resolution"
+### Community 18 - "Effective Metadata Resolution"
 Cohesion: 0.09
 Nodes (38): backdropURL(), decodeMap(), effectiveCast(), effectiveGenres(), effectiveOverview(), effectiveRating(), effectiveTitle(), effectiveYear() (+30 more)
 
-### Community 18 - "Add to Vault UI"
-Cohesion: 0.05
-Nodes (53): components, add(), createAndAdd(), creating, editable(), flash, flashAdded(), loaded (+45 more)
-
-### Community 19 - "Detail and Poster Components"
-Cohesion: 0.04
-Nodes (40): props, router, heroStyle, props, metaLine, props, ratingText, style (+32 more)
-
-### Community 20 - "Auth API Client"
-Cohesion: 0.03
-Nodes (57): apiClient, approveLink, approveLinkWithHttpInfo, changePassword, changePasswordWithHttpInfo, createAccount, createAccountWithHttpInfo, createProfile (+49 more)
-
-### Community 21 - "Browse Filter and Library API"
-Cohesion: 0.04
-Nodes (73): describeLoadError(), episodeLabel(), formatTitle(), BrowseFilter, Facet, filterQuery(), GENRES, getFacets() (+65 more)
-
-### Community 22 - "TV Series Episode Screen"
-Cohesion: 0.04
-Nodes (51): _EpisodeRow, FocusOnKeyEventCallback, active, _activeSeason, _busy, _combined, createState, didUpdateWidget (+43 more)
-
-### Community 23 - "TV Player Controls"
-Cohesion: 0.04
-Nodes (51): activeIndex, _advanceToNext, _beginPlayback, _Control, _ControlChip, _controlIndex, _controller, _ControlRow (+43 more)
-
-### Community 24 - "Media Session Handler"
-Cohesion: 0.04
-Nodes (46): BaseAudioHandler, media_session_state.dart, ArgosyAudioHandler, attach, _current, detach, isCurrent, MediaSessionTarget (+38 more)
-
-### Community 25 - "Health Response Models"
-Cohesion: 0.04
-Nodes (49): _, decode, degraded, encode, fromJson, hashCode, HealthResponse, HealthResponseStatusEnum (+41 more)
-
-### Community 26 - "Stow Service Worker"
-Cohesion: 0.04
-Nodes (47): @pragma, ../../api/token_store.dart, StowRunner, cancel, _cancelButtonId, _channelId, _connect, dispose (+39 more)
-
-### Community 27 - "Transcode Session Identity"
-Cohesion: 0.10
-Nodes (23): rungHeights(), T, TestSessionIDGoldenUnhinted(), TestSessionIDKeysOnEffectiveRungs(), TestSessionIDRemuxDropsHints(), TestSessionIDScopedToSourceIdentity(), cleanDir(), FormatRungs() (+15 more)
-
-### Community 28 - "TV PIN Pairing Screen"
-Cohesion: 0.04
-Nodes (46): _action, _active, autofocus, _backspace, baseUrl, build, _busy, _clear (+38 more)
-
-### Community 29 - "Home Screen Providers"
-Cohesion: 0.04
-Nodes (45): auth, backdropUrl, _buildGenreRows, _buildVaultRows, cards, cont, continueRow, _continueSubtitle (+37 more)
-
-### Community 30 - "TV Focusable Widget"
+### Community 19 - "TV Focusable Widget"
 Cohesion: 0.05
 Nodes (43): ActivateIntent, FocusNode get, autofocus, borderRadius, build, child, createState, dispose (+35 more)
 
-### Community 31 - "Series Detail Screen"
+### Community 20 - "Add to Vault UI"
+Cohesion: 0.06
+Nodes (52): add(), createAndAdd(), creating, editable(), flash, flashAdded(), loaded, menuStyle (+44 more)
+
+### Community 21 - "Detail Scaffold & Cards"
+Cohesion: 0.04
+Nodes (40): props, router, heroStyle, props, metaLine, props, ratingText, style (+32 more)
+
+### Community 22 - "Dart Auth API Client"
+Cohesion: 0.03
+Nodes (57): apiClient, approveLink, approveLinkWithHttpInfo, changePassword, changePasswordWithHttpInfo, createAccount, createAccountWithHttpInfo, createProfile (+49 more)
+
+### Community 23 - "Detail Widgets & Cast"
+Cohesion: 0.04
+Nodes (52): BorderRadius?, Color, CustomPainter, backdropUrl, border, build, _busy, cast (+44 more)
+
+### Community 24 - "TV Series Episode Screen"
+Cohesion: 0.04
+Nodes (54): _EpisodeRow, FocusOnKeyEventCallback, active, _activeSeason, _busy, _combined, createState, didUpdateWidget (+46 more)
+
+### Community 25 - "TV Player Controls Screen"
+Cohesion: 0.04
+Nodes (51): activeIndex, _advanceToNext, _beginPlayback, _Control, _ControlChip, _controlIndex, _controller, _ControlRow (+43 more)
+
+### Community 26 - "Browse Manifest & Filters"
+Cohesion: 0.06
+Nodes (47): BrowseFilter, Facet, filterQuery(), GENRES, getFacets(), getLibraries(), getMovies(), getSeries() (+39 more)
+
+### Community 27 - "Audio Session Handler"
+Cohesion: 0.04
+Nodes (46): BaseAudioHandler, media_session_state.dart, ArgosyAudioHandler, attach, _current, detach, isCurrent, MediaSessionTarget (+38 more)
+
+### Community 28 - "TV Pairing Screen"
+Cohesion: 0.04
+Nodes (48): _action, _active, autofocus, _backspace, baseUrl, build, _busy, _clear (+40 more)
+
+### Community 29 - "Stow Service & Encoding"
+Cohesion: 0.04
+Nodes (47): @pragma, ../../api/token_store.dart, StowRunner, cancel, _cancelButtonId, _channelId, _connect, dispose (+39 more)
+
+### Community 30 - "Session Identity Tests"
+Cohesion: 0.10
+Nodes (23): sessionID key must use effective (shaped) rungs, not raw hint values, rungHeights(), T, TestSessionIDGoldenUnhinted(), TestSessionIDKeysOnEffectiveRungs(), TestSessionIDRemuxDropsHints(), TestSessionIDScopedToSourceIdentity(), cleanDir() (+15 more)
+
+### Community 31 - "Home Screen Providers"
+Cohesion: 0.04
+Nodes (45): auth, backdropUrl, _buildGenreRows, _buildVaultRows, cards, cont, continueRow, _continueSubtitle (+37 more)
+
+### Community 32 - "Series Detail Screen"
 Cohesion: 0.04
 Nodes (44): episode_progress.dart, EpisodeSummary get, length >, 1, _activeSeason, _combined, _CombinedBadge, createState (+36 more)
 
-### Community 32 - "Next Episode Retry Logic"
-Cohesion: 0.09
-Nodes (21): advance, advanced, c, calls, _Clock, _duration, _failedAtStart, _finish (+13 more)
+### Community 33 - "Project Architecture Docs"
+Cohesion: 0.08
+Nodes (41): cmd/argosy — Entrypoint, 403 vs 401 Credential Response Invariant, Audit Context Detach Invariant, Audit writes must outlive the request (context.WithoutCancel), DeleteAccount Library Guard Invariant, HLS manifest shape: single-rung yields media playlist, ladder yields master, Instance-Level Ownership Model, API contract fans out to Go, TS, and Dart consumers via make generate (+33 more)
 
-### Community 33 - "Player Screen Setup"
-Cohesion: 0.05
-Nodes (43): AnimationController, GlobalKey, playerSetupProvider, _advanceToNext, _beginPlayback, build, _controller, createState (+35 more)
-
-### Community 34 - "TV Landing Focus"
-Cohesion: 0.05
-Nodes (42): InheritedWidget, build, _canClaim, child, claimOnMount, createState, dispose, initState (+34 more)
-
-### Community 35 - "Stow Progress UI"
+### Community 34 - "Settings & Library Management"
 Cohesion: 0.06
-Nodes (41): List, _showRowSheet, build, _chooseScope, _confirmCancel, _confirmRemove, entries, fraction (+33 more)
+Nodes (41): createLibrary(), deleteLibraryById(), getPreferences(), getUserPreferences(), putUserPreferences(), addBusy, addError, addLibrary() (+33 more)
 
-### Community 36 - "Playback API TypeScript"
-Cohesion: 0.04
-Nodes (57): ApiError, createLibrary(), deleteLibraryById(), ContinueItem, DevicePreferences, getNextEpisode(), getPlaybackInfo(), getPreferences() (+49 more)
-
-### Community 37 - "Beacon and Session Providers"
-Cohesion: 0.05
-Nodes (41): ../account/account_providers.dart, ../../api/stream_urls.dart, app_info.dart, ../auth/auth_controller.dart, beacon_client.dart, ../home/home_providers.dart, link_device_sheet.dart, accountProfilesProvider (+33 more)
-
-### Community 38 - "Blob Identity Tests"
+### Community 35 - "Blob Identity Tests"
 Cohesion: 0.18
 Nodes (27): blob(), Buffer, Context, Mutex, Pool, ReadCloser, T, newIdentityFixture() (+19 more)
 
-### Community 39 - "Argosy Theme Tokens"
+### Community 36 - "FFmpeg Encoder Arguments"
+Cohesion: 0.11
+Nodes (25): encoderFor(), resolveCodec(), vbrRateControl(), audioGroupVSM(), audioMaps(), bandwidthHint(), buildLadderArgs(), buildRemuxArgs() (+17 more)
+
+### Community 37 - "Flutter Theme & Tokens"
 Cohesion: 0.05
 Nodes (38): @immutable, argosy_colors.dart, argosy_tokens.dart, ArgosyTokens get, BuildContext, BrowseFilter, base, _body (+30 more)
 
-### Community 40 - "TMDB API Client"
+### Community 38 - "TMDB API Client"
 Cohesion: 0.10
 Nodes (22): Int64, DownloadImage(), Client, Context, Duration, Limiter, Logger, Mutex (+14 more)
 
-### Community 41 - "FFmpeg Encoder Builder"
-Cohesion: 0.11
-Nodes (24): encoderFor(), resolveCodec(), vbrRateControl(), audioGroupVSM(), audioMaps(), bandwidthHint(), buildLadderArgs(), buildRemuxArgs() (+16 more)
+### Community 39 - "Database Migration & Tests"
+Cohesion: 0.08
+Nodes (30): Context, Pool, Migrate(), Open(), T, TestMigrate(), T, TestLibraryManagement() (+22 more)
 
-### Community 42 - "Device Preferences and Transcode"
-Cohesion: 0.04
-Nodes (47): copy, DevicePreferencesCopy, last, lastTouched, resumeIndex, _touched, TranscodeApi, _Transcode (+39 more)
-
-### Community 43 - "Job State Models"
+### Community 40 - "Encode Job Model"
 Cohesion: 0.05
 Nodes (41): _, complete, decode, encode, encoder, error, failed, fromJson (+33 more)
 
-### Community 44 - "Database Migration Tests"
-Cohesion: 0.07
-Nodes (28): Context, Pool, Migrate(), Open(), T, TestMigrate(), T, TestFacets() (+20 more)
+### Community 41 - "Beacon SSE Client"
+Cohesion: 0.06
+Nodes (37): beacon_event.dart, dart:async, dart:convert, _attempt, _backoffFor, baseBackoff, _closed, _connect (+29 more)
 
-### Community 45 - "Stow API Test Fakes"
+### Community 42 - "Mobile Pairing Screen"
 Cohesion: 0.05
-Nodes (41): StowApi, _FakeStowApi, base, body, bytes, delay, deleteStowJob, events (+33 more)
+Nodes (39): active, _BackLink, build, _buildStep, _busy, _codePhase, createState, _defaultDeviceName (+31 more)
 
-### Community 46 - "Download Item Models"
+### Community 43 - "Stow API Test Fakes"
+Cohesion: 0.05
+Nodes (39): StowApi, _FakeStowApi, base, body, bytes, delay, deleteStowJob, events (+31 more)
+
+### Community 44 - "Download Item Model"
 Cohesion: 0.05
 Nodes (40): _, bytes, createdAt, decode, downloadUrl, durationSeconds, encode, error (+32 more)
 
-### Community 47 - "API Client Base"
+### Community 45 - "Dart API Client Core"
 Cohesion: 0.05
 Nodes (34): @Deprecated, Client get, addDefaultHeader, authentication, basePath, _client, decodeAsync, _defaultHeaderMap (+26 more)
 
-### Community 48 - "Transcode Build Args Tests"
+### Community 46 - "Transcode Build Args Tests"
 Cohesion: 0.15
 Nodes (35): buildArgs(), NewManager(), discardLogger(), Logger, T, newReq(), TestBuildArgsHLSLadder(), TestBuildArgsLadderMultiAudio() (+27 more)
 
-### Community 49 - "API Request Param Types"
+### Community 47 - "API Request & Response Types"
 Cohesion: 0.05
 Nodes (35): AccountCreateRequest, AccountUpdateRequest, BeaconStreamParams, bearerAuthContextKey, CreateVaultRequest, DeprovisionAccountParams, DeviceRenameRequest, Error (+27 more)
 
-### Community 50 - "Pairing Screen Flow"
-Cohesion: 0.05
-Nodes (37): active, _BackLink, build, _buildStep, _busy, _codePhase, createState, _defaultDeviceName (+29 more)
+### Community 48 - "Player Setup & Stow Store"
+Cohesion: 0.06
+Nodes (35): Directory, ListTile, StowStore, container, getDevicePreferences, getMediaItem, getPlaybackInfo, getProgress (+27 more)
 
-### Community 51 - "Account Data Models"
-Cohesion: 0.05
-Nodes (35): Account, fromJson, hashCode, id, listFromJson, account, AccountLookupResponse, fromJson (+27 more)
-
-### Community 52 - "Search Overlay Vue"
+### Community 49 - "Search Overlay UI"
 Cohesion: 0.07
 Nodes (32): browse, Chip, facetChips, go(), hasQuery, hasResults, input, loading (+24 more)
 
-### Community 53 - "Miscellaneous Unit Tests"
-Cohesion: 0.06
-Nodes (28): he and his, he has become a, Hello there, main, main, _hideAfter, main, make (+20 more)
-
-### Community 54 - "Player Controls UI"
+### Community 50 - "Player Controls UI"
 Cohesion: 0.06
 Nodes (35): controls_visibility.dart, _bottomBar, build, _c, _centerControls, controller, createState, dispose (+27 more)
 
-### Community 55 - "Device Preferences Models"
+### Community 51 - "Device Preferences Model"
 Cohesion: 0.06
 Nodes (36): _, audioLanguage, bottom, captionBackground, captionColor, captionPosition, captionScale, decode (+28 more)
 
-### Community 56 - "OpenAPI Spec Documentation"
-Cohesion: 0.08
-Nodes (35): Auth Module, PIN Device Pairing, argosy_api Dart Package README, Argosy OpenAPI Spec, AccountSummary schema, approveLink endpoint, changePassword endpoint, createProfile endpoint (+27 more)
+### Community 52 - "Account & Auth Store Methods"
+Cohesion: 0.15
+Nodes (15): comparePassword(), Store, Context, Device, DevicePreferences, ProfileSummary, Role, Session (+7 more)
 
-### Community 57 - "Episode Format Utilities"
+### Community 53 - "Dart Format Utilities"
 Cohesion: 0.06
 Nodes (34): base, diff, ep, _episodeCode, episodeHeader, episodeLabel, episodeName, episodeRatingLabel (+26 more)
 
-### Community 58 - "Live Session Sweeper"
+### Community 54 - "Live Session Sweeper"
 Cohesion: 0.14
 Nodes (25): entry, fakeLive, Live, Stats, Sweeper, dirSize(), Context, Duration (+17 more)
 
-### Community 59 - "App Router Navigation"
+### Community 55 - "App Router & Screens"
 Cohesion: 0.06
 Nodes (33): ../features/auth/pairing_screen.dart, ../features/browse/media_card.dart, ../features/detail/movie_detail_screen.dart, ../features/detail/series_detail_screen.dart, ../features/home/home_screen.dart, ../features/library/library_screen.dart, ../features/player/player_screen.dart, ../features/search/search_screen.dart (+25 more)
 
-### Community 60 - "Device Data Models"
-Cohesion: 0.06
-Nodes (32): createdAt, Device, fromJson, hashCode, id, lastClient, lastClientAt, lastSeenAt (+24 more)
+### Community 56 - "Stow Button & Progress"
+Cohesion: 0.08
+Nodes (32): _showRowSheet, build, _chooseScope, _confirmCancel, _confirmRemove, entries, fraction, item (+24 more)
 
-### Community 61 - "Offline Progress Queue"
+### Community 57 - "Vault API Handlers"
+Cohesion: 0.15
+Nodes (14): accountOf(), decodeJSON(), deref(), Context, handlers, Store, ResponseWriter, Vault (+6 more)
+
+### Community 58 - "Offline Progress Queue"
 Cohesion: 0.07
-Nodes (31): dart:io, OfflineProgressQueue, LibraryApi, _Library, _FakeLibraryApi, _Library, dir, failure (+23 more)
+Nodes (31): OfflineProgressQueue, LibraryApi, _Library, _FakeLibraryApi, _Library, dir, failure, _FakeLibraryApi (+23 more)
 
-### Community 62 - "Vault Handlers"
-Cohesion: 0.16
-Nodes (12): deref(), Context, handlers, Store, ResponseWriter, Vault, VaultEntry, scanVaultSummary() (+4 more)
-
-### Community 63 - "Stowed Item Models"
+### Community 59 - "Stowed Item Model"
 Cohesion: 0.06
 Nodes (32): bytes, copyWith, durationSeconds, episodeNumber, failure, fileName, fromJson, id (+24 more)
 
-### Community 64 - "API Exception Models"
-Cohesion: 0.06
-Nodes (30): code, innerException, message, stackTrace, toString, AddVaultItemRequest, fromJson, hashCode (+22 more)
-
-### Community 65 - "Account Sheet and Pairing"
-Cohesion: 0.09
-Nodes (32): _Actions, _Body, ConsumerState, ConsumerStatefulWidget, baseUrlProvider, fleetDevicesProvider, AccountSheet, build (+24 more)
-
-### Community 66 - "Player Controls Autohide"
+### Community 60 - "Player Controls Autohide"
 Cohesion: 0.06
 Nodes (30): AnimatedOpacity, MaterialPageRoute, PlaybackController, _bareVideo, c, drive, _DrivenPlayback, fade (+22 more)
 
-### Community 67 - "Offline Recovery Tests"
+### Community 61 - "API Client Providers"
 Cohesion: 0.06
-Nodes (30): advanced, atCapacity, attached, c, _duration, _error, failOnce, failUntilFatal (+22 more)
+Nodes (30): client_identity.dart, apiClientProvider, auth, basePath, build, _connectTimeout, httpClient, isNotFound (+22 more)
 
-### Community 68 - "Browse Item Models"
+### Community 62 - "VTT Repair Tests"
+Cohesion: 0.13
+Nodes (13): he and his, he has become a, Hello there, being, _broken, friends, main, _parse (+5 more)
+
+### Community 63 - "Stow Controller Tests"
+Cohesion: 0.06
+Nodes (29): _FakeLibraryApi, _FileServer, base, body, container, controller, detail, _detailFor (+21 more)
+
+### Community 64 - "TV Rail Focus Scope"
+Cohesion: 0.07
+Nodes (30): InheritedWidget, _TvLandingFocusScope, accent, build, child, children, createState, didChangeDependencies (+22 more)
+
+### Community 65 - "Settings Screen Body"
+Cohesion: 0.10
+Nodes (30): _Actions, _Body, ConsumerState, ConsumerStatefulWidget, baseUrlProvider, libraryApiProvider, transcodeApiProvider, initState (+22 more)
+
+### Community 66 - "HLS Playback Decision"
+Cohesion: 0.07
+Nodes (38): HLS Delivery, Pull Request Template, codecsFromTechnical(), decide(), Context, handlers, Store, ResponseWriter (+30 more)
+
+### Community 67 - "Media Item Model"
 Cohesion: 0.07
 Nodes (30): _, backdropUrl, decode, encode, entryId, fromJson, genres, hashCode (+22 more)
 
-### Community 69 - "App and Account Providers"
-Cohesion: 0.08
-Nodes (26): account_providers.dart, ../beacon/beacon_providers.dart, features/beacon/beacon_providers.dart, IconData get, isTv, ArgosyApp, build, _Avatar (+18 more)
+### Community 68 - "OpenAPI Spec & Schema"
+Cohesion: 0.09
+Nodes (30): argosy_api Dart Package README, Argosy OpenAPI Spec, AccountSummary schema, changePassword endpoint, createProfile endpoint, deleteAccount endpoint, deleteProfile endpoint, Device schema (+22 more)
 
-### Community 70 - "HLS Manifest Tests"
+### Community 69 - "HLS Manifest Tests"
 Cohesion: 0.18
 Nodes (26): Transcode Session Reap Invariant, blankCodecPrivateParamSets(), codecsAttr(), ebmlSize(), genHEVCInBandParamSetSource(), genHEVCMultiAudioSource(), genMultiAudioSource(), T (+18 more)
 
-### Community 71 - "Player Providers Setup"
-Cohesion: 0.07
-Nodes (27): dynamic get, auth, displayModeHeightF, hevcF, hevcHardwareF, item, lib, load (+19 more)
-
-### Community 72 - "Auth and Library Fakes"
-Cohesion: 0.07
-Nodes (27): AuthApi, _FakeAuthApi, _FakeAuthApi, _FakeLibraryApi, getUserPreferences, listContinue, listFacets, listLibraries (+19 more)
-
-### Community 73 - "Media Item Detail Model"
+### Community 70 - "Media Item Detail Model"
 Cohesion: 0.07
 Nodes (28): backdropUrl, cast, container, durationSeconds, episodeNumber, episodeTitle, filePath, fromJson (+20 more)
 
-### Community 74 - "Playback Decision Models"
+### Community 71 - "Playback Info Model"
 Cohesion: 0.07
 Nodes (29): _, audioCodec, container, decode, direct, directPlay, encode, fromJson (+21 more)
 
-### Community 75 - "TV Home Screen"
+### Community 72 - "Offline Recovery Tests"
+Cohesion: 0.06
+Nodes (30): advanced, atCapacity, attached, c, _duration, _error, failOnce, failUntilFatal (+22 more)
+
+### Community 73 - "Client Identity Header"
+Cohesion: 0.07
+Nodes (26): api/client_identity.dart, app.dart, dart:io, features/player/argosy_audio_handler.dart, build, clientHeaderName, ClientIdentity, debugSet (+18 more)
+
+### Community 74 - "Settings Controller"
 Cohesion: 0.08
-Nodes (27): _Hero, _EpisodeRow, card, createState, dispose, _Empty, entry, _firstAction (+19 more)
+Nodes (26): ../../api/device_preferences_copy.dart, AsyncNotifier, DevicePreferences get, dynamic get, authApiProvider, _confirmRetire, _submit, build (+18 more)
 
-### Community 76 - "Playback Progress Handlers"
+### Community 75 - "Playback Progress Handlers"
 Cohesion: 0.22
-Nodes (10): decodeJSON(), deviceOf(), Context, handlers, Store, PlayState, ResponseWriter, Session (+2 more)
+Nodes (9): deviceOf(), Context, handlers, Store, PlayState, ResponseWriter, Session, userOf() (+1 more)
 
-### Community 77 - "VTT Subtitle Parser"
+### Community 76 - "VTT Subtitle Parser"
 Cohesion: 0.07
 Nodes (27): _blankLine, blocks, dot, _drawing, end, _formatTs, h, _hasTiming (+19 more)
 
-### Community 78 - "Profile Create Models"
+### Community 77 - "Profile Create Request"
 Cohesion: 0.07
 Nodes (27): fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, name, operator, ProfileCreateRequest (+19 more)
 
-### Community 79 - "Subtitle Track Models"
+### Community 78 - "Subtitle Track Model"
 Cohesion: 0.07
 Nodes (28): _, burnIn, decode, default_, embedded, encode, forced, fromJson (+20 more)
 
-### Community 80 - "Detail Refresh After Play"
+### Community 79 - "Detail Refresh After Play"
 Cohesion: 0.08
 Nodes (24): Completer, fetches, gate, getSeries, main, _playAndClose, _pump, pumpAndSettle (+16 more)
 
-### Community 81 - "Transcode Scheduler"
+### Community 80 - "Transcode Scheduler"
 Cohesion: 0.15
 Nodes (19): Context, Duration, Logger, Mutex, Pool, Time, UnmappedSeason, NewScheduler() (+11 more)
 
-### Community 82 - "Stow Controller"
+### Community 81 - "Stow Controller"
 Cohesion: 0.08
 Nodes (26): build, cancel, _defaultSubtitleLine, _engine, _libraryApi, list, load, _onEvent (+18 more)
 
-### Community 83 - "Argosy Color Palette"
+### Community 82 - "Argosy Color Tokens"
 Cohesion: 0.07
 Nodes (26): accent, accentBg, accentBg2, accentHi, accentLine, accentSoft, ArgosyColors, bg (+18 more)
 
-### Community 84 - "TypeScript Build Config"
+### Community 83 - "TV Detail Focus Tests"
+Cohesion: 0.10
+Nodes (20): _film, _itemId, main, pump, _pumpMovie, pumpWidget, fail, _hasFocus (+12 more)
+
+### Community 84 - "TypeScript Project Config"
 Cohesion: 0.07
 Nodes (26): DOM, DOM.Iterable, env.d.ts, ESNext, node, src/**/*.d.ts, src/**/*.ts, src/**/*.vue (+18 more)
 
@@ -817,841 +820,849 @@ Nodes (4): RestartContext, RestartDeps, RestartGate, RestartSession
 Cohesion: 0.09
 Nodes (25): AddVaultItemRequest, ContinueItem, DeviceRef, DeviceRegistrationRequest, DeviceSwitchRequest, EpisodeSummary, Library, MediaItemDetail (+17 more)
 
-### Community 87 - "Module Documentation"
+### Community 87 - "Module Architecture Docs"
 Cohesion: 0.11
 Nodes (26): Argosy Changelog, Ballast Transcode Cache Worker, Beacon SSE Module, Detail Module, Fleet Module, Health Module, The Helm Transcode Session Orchestration, HLS/CMAF Bitrate Ladder (+18 more)
 
-### Community 88 - "Burn-In Handler Tests"
-Cohesion: 0.20
-Nodes (21): burnInFixture(), Context, handlers, Mutex, ResponseRecorder, T, postTranscode(), TestStartTranscodeBurnsInSelectedTrack() (+13 more)
+### Community 88 - "Poster Gradient & API Helper"
+Cohesion: 0.08
+Nodes (23): colors, _gradients, h, _hash, posterGradient, contentType, _decodeBodyBytes, mapDateTime (+15 more)
 
-### Community 89 - "Continue Item Models"
+### Community 89 - "Continue Item Model"
 Cohesion: 0.08
 Nodes (25): backdropUrl, ContinueItem, durationSeconds, episodeNumber, episodeTitle, fromJson, hashCode, id (+17 more)
 
 ### Community 90 - "TV Focus Ring Tests"
-Cohesion: 0.08
-Nodes (24): dx, dy, ep, _expectRingUnclipped, focusOffset, fromLTRB, main, reason (+16 more)
+Cohesion: 0.11
+Nodes (17): dx, dy, ep, _expectRingUnclipped, focusOffset, fromLTRB, main, reason (+9 more)
 
 ### Community 91 - "Add to Vault Widget"
 Cohesion: 0.08
 Nodes (24): AddVaultItemRequest get, detail_widgets.dart, LibraryApi get, _addTo, AddToVaultButton, _AddToVaultSheet, _AddToVaultSheetState, _api (+16 more)
 
-### Community 92 - "PIN Pairing Controller"
+### Community 92 - "Browse Repository & Media Card"
 Cohesion: 0.08
-Nodes (24): auth_controller.dart, baseUrl, code, connect, deviceName, dispose, error, _generation (+16 more)
+Nodes (21): ../library/browse_filter.dart, media_card.dart, copy, DevicePreferencesCopy, _api, browse, BrowseRepository, browseRepositoryProvider (+13 more)
 
-### Community 93 - "User Profiles Admin View"
-Cohesion: 0.10
-Nodes (16): busy, confirmDelete(), deleteTarget, editing, editorOpen, error, formName, formRole (+8 more)
+### Community 93 - "Account Model"
+Cohesion: 0.08
+Nodes (23): Account, fromJson, hashCode, id, listFromJson, account, AccountLookupResponse, fromJson (+15 more)
 
 ### Community 94 - "Create Library Request"
 Cohesion: 0.08
 Nodes (25): _, CreateLibraryRequest, CreateLibraryRequestKindEnum, CreateLibraryRequestKindEnumTypeTransformer, decode, encode, fromJson, hashCode (+17 more)
 
-### Community 95 - "Beacon and Stream Handlers"
+### Community 95 - "Link Status Response"
+Cohesion: 0.08
+Nodes (25): _, approved, decode, deviceName, encode, fromJson, hashCode, _instance (+17 more)
+
+### Community 96 - "Playback Session Tests"
+Cohesion: 0.09
+Nodes (22): client, _controller, main, client, _controller, _error, isTranscode, main (+14 more)
+
+### Community 97 - "Download Exception Models"
+Cohesion: 0.09
+Nodes (22): Exception, DownloadCancelled, DownloadHttpException, StowOutOfSpace, ApiException, code, innerException, message (+14 more)
+
+### Community 98 - "Beacon & Stream Handlers"
 Cohesion: 0.12
 Nodes (17): beaconHandler(), HandlerFunc, Store, Context, HandlerFunc, Store, Logger, resolveWithinRoot() (+9 more)
 
-### Community 96 - "Stow Library Handlers"
-Cohesion: 0.10
-Nodes (23): accountOf(), Context, HandlerFunc, handlers, Store, Logger, Manager, ResponseWriter (+15 more)
+### Community 99 - "Burn-In & Ladder Handler Tests"
+Cohesion: 0.22
+Nodes (20): burnInFixture(), handlers, Mutex, ResponseRecorder, T, postTranscode(), TestStartTranscodeBurnsInSelectedTrack(), TestStartTranscodeRejectsUnburnableTrack() (+12 more)
 
-### Community 97 - "Season Metadata Provider"
+### Community 100 - "Stow File HTTP Handler"
+Cohesion: 0.15
+Nodes (17): Context, HandlerFunc, handlers, Store, Logger, Manager, ResponseWriter, StowJob (+9 more)
+
+### Community 101 - "API Error & Metadata Provider"
 Cohesion: 0.12
 Nodes (11): IsPermanent(), Context, APIError, GroupedEpisodes, ImageDownloader, RequestStatser, SeasonMapper, SeasonRef (+3 more)
 
-### Community 98 - "TMDB Adaptive Tests"
+### Community 102 - "Adaptive Rate Limiting Tests"
 Cohesion: 0.18
 Nodes (20): drive(), Duration, Limiter, Mutex, ResponseWriter, Server, T, newAdaptiveTestTMDB() (+12 more)
 
-### Community 99 - "Episode Matcher"
+### Community 103 - "Media Season Matching"
 Cohesion: 0.19
 Nodes (14): Context, Logger, Pool, UnmappedSeason, NewMatcher(), SeasonMapping, localSeason, Matcher (+6 more)
 
-### Community 100 - "Auth Device Store Methods"
-Cohesion: 0.20
-Nodes (9): Store, Context, Device, DevicePreferences, Pool, Session, UserPreferences, UUID (+1 more)
+### Community 104 - "Health Response Model"
+Cohesion: 0.08
+Nodes (24): _, decode, degraded, encode, fromJson, hashCode, HealthResponse, HealthResponseStatusEnum (+16 more)
 
-### Community 101 - "API Client Configuration"
-Cohesion: 0.09
-Nodes (22): client_identity.dart, apiClientProvider, auth, basePath, build, _connectTimeout, httpClient, isNotFound (+14 more)
-
-### Community 102 - "Download Error Handling"
-Cohesion: 0.09
-Nodes (22): Exception, HttpServer, ApiFailure, DownloadCancelled, DownloadHttpException, StowOutOfSpace, ApiException, body (+14 more)
-
-### Community 103 - "File Download Management"
+### Community 105 - "File Download Handler"
 Cohesion: 0.09
 Nodes (22): Future, IOSink?, cancel, _cancelled, _client, downloadFile, DownloadHandle, DownloadProgress (+14 more)
 
-### Community 104 - "Library HTTP Handlers"
+### Community 106 - "Request Logging Middleware"
+Cohesion: 0.13
+Nodes (19): SanitizeClient(), T, TestWithLoggingIdentity(), Logger, orDash(), requestID(), ResponseRecorder, T (+11 more)
+
+### Community 107 - "Library Route Handlers"
 Cohesion: 0.24
 Nodes (11): catalogOf(), handlers, Logger, Manager, Pool, ResponseWriter, Store, isOwnerAdmin() (+3 more)
 
-### Community 105 - "Auth Controller Bootstrap"
+### Community 108 - "Auth Controller Bootstrap"
 Cohesion: 0.11
 Nodes (22): BaseUrlController, serverProbeProvider, tokenStoreProvider, adoptToken, AuthController, AuthStatus, _bootstrap, build (+14 more)
 
-### Community 106 - "Track Sheet UI"
+### Community 109 - "Audio Track Sheet"
 Cohesion: 0.09
 Nodes (22): _audioBase, _audioLabels, build, _c, controller, createState, _header, kind (+14 more)
 
-### Community 107 - "TV Detail Widget Tests"
-Cohesion: 0.09
-Nodes (21): _film, _itemId, main, pump, _pumpMovie, pumpWidget, fail, _FakeLibraryApi (+13 more)
-
-### Community 108 - "Android Main Activity"
+### Community 110 - "Android MainActivity PiP"
 Cohesion: 0.15
 Nodes (8): AudioServiceActivity, Bundle, Configuration, FlutterEngine, MethodChannel, MainActivity, PictureInPictureParams, RemoteAction
 
-### Community 109 - "Secure Token Storage"
+### Community 111 - "PIN Pairing Controller"
+Cohesion: 0.09
+Nodes (21): auth_controller.dart, baseUrl, code, connect, deviceName, dispose, error, _generation (+13 more)
+
+### Community 112 - "VAAPI Hardware Encode Probe"
+Cohesion: 0.19
+Nodes (20): VAAPI Hardware Encode Probe Invariant, builtEncoders(), deviceExists(), encodeWorks(), Context, hardwareWorks(), onPath(), Probe() (+12 more)
+
+### Community 113 - "Secure Token Store"
 Cohesion: 0.09
 Nodes (21): dart:math, FlutterSecureStorage, _baseUrl, bytes, clearToken, ensureInstallId, hasToken, hex (+13 more)
 
-### Community 110 - "Episode Mapping Matching"
+### Community 114 - "Local FFmpeg Runner"
+Cohesion: 0.12
+Nodes (11): Context, Context, Context, Reader, LocalFFmpeg, parseProgress(), Context, Mutex (+3 more)
+
+### Community 115 - "Episode Mapping Matcher Tests"
 Cohesion: 0.40
 Nodes (21): episodeTitles(), Pool, T, grouped(), mappingFixture(), mappingPool(), newMappingMatcher(), seasonMapping() (+13 more)
 
-### Community 111 - "Subtitle Format Extraction"
+### Community 116 - "Subtitle Extraction Tests"
 Cohesion: 0.19
 Nodes (19): T, TestExtractEmbeddedRepairsTypesetASS(), dropDrawings(), Reader, hasTiming(), isMetaBlock(), RepairVTT(), splitBlocks() (+11 more)
 
-### Community 112 - "Browse Filter State"
+### Community 117 - "Browse Filter Model"
 Cohesion: 0.10
 Nodes (21): activeCount, BrowseScope, BrowseSort, BrowseSortX, cleared, copyWith, genres, hasFacets (+13 more)
 
-### Community 113 - "Stow File Store"
+### Community 118 - "Stow File Store"
 Cohesion: 0.09
 Nodes (21): discardPartial, _ensureRoot, has, _index, _indexFile, itemDir, list, load (+13 more)
 
-### Community 114 - "Facet Model"
+### Community 119 - "Facet Model"
 Cohesion: 0.09
 Nodes (22): _, count, decode, encode, Facet, FacetTypeEnum, FacetTypeEnumTypeTransformer, fromJson (+14 more)
 
-### Community 115 - "Discovery Layout Model"
+### Community 120 - "Home Layout Model"
 Cohesion: 0.09
 Nodes (22): _, decode, discovery, encode, focused, fromJson, hashCode, homeLayout (+14 more)
 
-### Community 116 - "Client Trace Identity"
-Cohesion: 0.16
-Nodes (16): clientStamp, Trace, traceKey, DeviceLabel(), Context, Mutex, SanitizeClient(), TraceFromContext() (+8 more)
+### Community 121 - "Next Episode Retry Tests"
+Cohesion: 0.09
+Nodes (21): advance, advanced, c, calls, _Clock, _duration, _failedAtStart, _finish (+13 more)
 
-### Community 117 - "Project Docs and Invariants"
-Cohesion: 0.11
-Nodes (20): CLAUDE.md — Project Overview, cmd/argosy — Entrypoint, 403 vs 401 Credential Response Invariant, Audit Context Detach Invariant, DeleteAccount Library Guard Invariant, Playlist/SPA No-Cache Invariant, Reset Revokes Devices / Change Does Not, Secure-Context Browser API Restriction (+12 more)
-
-### Community 118 - "API Client Utilities"
-Cohesion: 0.10
-Nodes (19): dart:async, dart:convert, _dateEpochMarker, _dateFormatter, _deepEquality, defaultApiClient, _delimiters, _isEpochMarker (+11 more)
-
-### Community 119 - "Offline Progress Queue"
+### Community 122 - "Offline Progress Queue"
 Cohesion: 0.10
 Nodes (20): File?, at, durationSeconds, enqueue, _ensureFile, _file, _fileOverride, flush (+12 more)
 
-### Community 120 - "library/transcode.go"
-Cohesion: 0.09
-Nodes (29): codecsFromTechnical(), decide(), Context, handlers, Store, ResponseWriter, isHEVC(), planPlayback() (+21 more)
+### Community 123 - "Flutter Unit Tests"
+Cohesion: 0.08
+Nodes (22): main, main, _hideAfter, main, make, _tick, fire, main (+14 more)
 
-### Community 121 - "Subtitle Service Tests"
+### Community 124 - "Subtitle Service Tests"
 Cohesion: 0.20
 Nodes (19): T, TestSearchCacheIsKeyedByFileIdentity(), TestVTTCacheDirIsKeyedByFileIdentity(), NewService(), ResponseWriter, T, osSearchBody(), osTestService() (+11 more)
 
-### Community 122 - "FFmpeg Capabilities Probing"
-Cohesion: 0.21
-Nodes (19): builtEncoders(), deviceExists(), encodeWorks(), Context, hardwareWorks(), onPath(), Probe(), probeArgs() (+11 more)
+### Community 125 - "Device Model"
+Cohesion: 0.10
+Nodes (20): createdAt, Device, fromJson, hashCode, id, lastClient, lastClientAt, lastSeenAt (+12 more)
 
-### Community 123 - "FFmpeg Package Args"
-Cohesion: 0.23
-Nodes (18): Context, LocalFFmpeg, PackageArgs(), packageAudioMaps(), packageAudioMetadata(), packageRung(), argValue(), T (+10 more)
-
-### Community 124 - "Episode Summary Model"
+### Community 126 - "Episode Summary Model"
 Cohesion: 0.10
 Nodes (20): durationSeconds, episodeNumber, EpisodeSummary, fromJson, hashCode, id, listFromJson, mapFromJson (+12 more)
 
-### Community 125 - "Playback Session Model"
+### Community 127 - "Playback Session Model"
 Cohesion: 0.10
 Nodes (20): deviceId, durationSeconds, encoder, fromJson, hashCode, itemId, lastSeen, listFromJson (+12 more)
 
-### Community 126 - "TMDB Scan Stats Model"
+### Community 128 - "TMDB Scan Stats Model"
 Cohesion: 0.10
 Nodes (20): artworkExhausted, artworkRequests, artworkRetries, artworkThrottled, configuredRate, exhausted, fromJson, hashCode (+12 more)
 
-### Community 127 - "Vault Detail Model"
+### Community 129 - "Vault Detail Model"
 Cohesion: 0.10
 Nodes (20): canEdit, description, fromJson, hashCode, id, isOwner, itemCount, items (+12 more)
 
-### Community 128 - "Browse Filter Tests"
+### Community 130 - "Library Error State Tests"
 Cohesion: 0.10
 Nodes (19): main, failMovies, _lib, libs, listLibraries, listMovies, listSeries, main (+11 more)
 
-### Community 129 - "Seek Restart Race Tests"
+### Community 131 - "Seek Restart Race Tests"
 Cohesion: 0.10
 Nodes (20): alive, attached, c, _Clock, main, now, openGates, _play (+12 more)
 
-### Community 130 - "iOS App Delegate"
+### Community 132 - "Profiles Management View"
+Cohesion: 0.10
+Nodes (16): busy, confirmDelete(), deleteTarget, editing, editorOpen, error, formName, formRole (+8 more)
+
+### Community 133 - "iOS App Delegate Setup"
 Cohesion: 0.11
 Nodes (14): Any, Flutter, FlutterAppDelegate, FlutterImplicitEngineBridge, FlutterImplicitEngineDelegate, FlutterSceneDelegate, AppDelegate, Bool (+6 more)
 
-### Community 131 - "TMDB Integration Tests"
+### Community 134 - "Stream URL Builder"
+Cohesion: 0.10
+Nodes (18): double?, hatch_pattern.dart, _baseUrl, beacon, _build, streamItem, subtitle, _token (+10 more)
+
+### Community 135 - "TMDB Episode Group Tests"
 Cohesion: 0.28
 Nodes (19): NewTMDB(), episodeGroupServer(), Server, T, TestTMDBConfigured(), TestTMDBEpisodeGroupAllDropped(), TestTMDBEpisodeGroupDuplicateSeason(), TestTMDBEpisodeGroupNoTVDBGroup() (+11 more)
 
-### Community 132 - "FFmpeg Transcode Backend"
-Cohesion: 0.14
-Nodes (10): Context, Context, Reader, LocalFFmpeg, parseProgress(), Context, Mutex, blockingBackend (+2 more)
+### Community 136 - "FFmpeg Package Args Tests"
+Cohesion: 0.25
+Nodes (17): Context, LocalFFmpeg, PackageArgs(), packageAudioMaps(), packageAudioMetadata(), argValue(), T, TestPackageArgsHardwareEncoder() (+9 more)
 
-### Community 133 - "On Deck Item Model"
+### Community 137 - "API Credential Error Tests"
+Cohesion: 0.12
+Nodes (17): ApiFailure, TokenStore, main, _FakeTokenStore, load, main, savedBaseUrl, setBaseUrl (+9 more)
+
+### Community 138 - "On Deck Item Model"
 Cohesion: 0.10
 Nodes (19): backdropUrl, durationSeconds, episodeNumber, fromJson, hashCode, id, listFromJson, mapFromJson (+11 more)
 
-### Community 134 - "Accounts Admin View"
-Cohesion: 0.11
-Nodes (14): Account, accounts, busy, canManage, confirmDelete(), copied, deleteTarget, error (+6 more)
-
-### Community 135 - "App Router Navigation"
+### Community 139 - "App Router Configuration"
 Cohesion: 0.11
 Nodes (18): app_router.dart, ../features/auth/auth_controller.dart, ../features/auth/tv/tv_pairing_screen.dart, ../features/detail/tv/tv_movie_screen.dart, ../features/detail/tv/tv_series_screen.dart, ../features/home/tv/tv_home_screen.dart, ../features/library/tv/tv_library_screen.dart, ../features/player/tv/tv_player_screen.dart (+10 more)
 
-### Community 136 - "Beacon Event Client"
+### Community 140 - "Account Audit Log"
+Cohesion: 0.19
+Nodes (12): auditEntry, AccountSummary, Store, Context, row, Session, scanAccountSummary(), Store (+4 more)
+
+### Community 141 - "Client Trace Tracking"
+Cohesion: 0.20
+Nodes (12): clientStamp, clientTracker, Trace, traceKey, DeviceLabel(), Store, Context, Map (+4 more)
+
+### Community 142 - "Controls Visibility Timer"
 Cohesion: 0.11
-Nodes (18): beacon_event.dart, _attempt, _backoffFor, baseBackoff, _closed, _connect, _controller, dispose (+10 more)
+Nodes (18): PinPairingController, _arm, armed, _cancel, _canHide, ControlsVisibility, dispose, _disposed (+10 more)
 
-### Community 137 - "Token Store Tests"
-Cohesion: 0.12
-Nodes (16): TokenStore, main, _FakeTokenStore, load, main, savedBaseUrl, setBaseUrl, _FakeTokenStore (+8 more)
-
-### Community 138 - "TV Home Screen Tests"
+### Community 143 - "TV Home Focus Tests"
 Cohesion: 0.12
 Nodes (17): HomeData, _card, homeData, pump, pumpTvHome, pumpWidget, scrollBy, tvHomeHero (+9 more)
 
-### Community 139 - "Device Capabilities Detection"
-Cohesion: 0.11
-Nodes (17): _channel, DeviceCapabilities, _displayModeHeight, _displayProbed, _hevc4k, _hevcHardware, isTelevision, _isTv (+9 more)
-
-### Community 140 - "Device Registration Request"
+### Community 144 - "Device Registration Request"
 Cohesion: 0.11
 Nodes (18): deviceName, DeviceRegistrationRequest, email, fromJson, hashCode, installId, listFromJson, mapFromJson (+10 more)
 
-### Community 141 - "Media Item Summary Model"
+### Community 145 - "Media Item Summary Model"
 Cohesion: 0.11
 Nodes (18): backdropUrl, fromJson, genres, hashCode, id, kind, listFromJson, mapFromJson (+10 more)
 
-### Community 142 - "Series Detail Model"
+### Community 146 - "Series Detail Model"
 Cohesion: 0.11
 Nodes (18): backdropUrl, cast, fromJson, hashCode, id, listFromJson, mapFromJson, mapListFromJson (+10 more)
 
-### Community 143 - "Vault Model"
+### Community 147 - "Vault Model"
 Cohesion: 0.11
 Nodes (18): description, fromJson, hashCode, id, isOwner, itemCount, listFromJson, mapFromJson (+10 more)
 
-### Community 144 - "Transcode Start Request"
+### Community 148 - "Transcode Start Request"
 Cohesion: 0.11
 Nodes (17): int?, burnInSubtitle, fromJson, hashCode, hevc, hevcHardware, listFromJson, mapFromJson (+9 more)
 
-### Community 145 - "OpenSubtitles Client"
+### Community 149 - "OpenSubtitles Client"
 Cohesion: 0.20
 Nodes (11): apiError(), Client, Context, Mutex, Response, Time, NewOpenSubtitles(), externalLabel() (+3 more)
 
-### Community 146 - "Player View Setup"
-Cohesion: 0.18
-Nodes (18): authApiProvider, libraryApiProvider, transcodeApiProvider, _confirmRetire, _offlineSetup, initState, _PlayerView, _PlayerViewState (+10 more)
+### Community 150 - "Argosy Mark Widget"
+Cohesion: 0.11
+Nodes (16): ArgosyMark, _asset, build, size, DeviceRenameRequest, fromJson, hashCode, listFromJson (+8 more)
 
-### Community 147 - "Account Summary Model"
+### Community 151 - "Account Summary Model"
 Cohesion: 0.11
 Nodes (17): AccountSummary, createdAt, disabled, email, fromJson, hashCode, id, isOwner (+9 more)
 
-### Community 148 - "Series Summary Model"
+### Community 152 - "Series Summary Model"
 Cohesion: 0.11
 Nodes (17): backdropUrl, fromJson, genres, hashCode, id, listFromJson, mapFromJson, mapListFromJson (+9 more)
 
-### Community 149 - "Beacon Pub Sub Hub"
+### Community 153 - "Pub-Sub Event Hub"
 Cohesion: 0.18
 Nodes (9): Event, Hub, subscriber, Context, Logger, Mutex, Once, Pool (+1 more)
 
-### Community 150 - "mDNS Server Discovery"
+### Community 154 - "Server Discovery"
 Cohesion: 0.12
 Nodes (16): BonsoirDiscovery?, addresses, argosyServiceType, _browse, DiscoveredServer, discoverServer, discovery, found (+8 more)
 
-### Community 151 - "Frontend Dev Dependencies"
+### Community 155 - "Frontend Dev Dependencies"
 Cohesion: 0.12
 Nodes (17): eslint, eslint-plugin-vue, openapi-typescript, prettier, typescript, vite, @vitejs/plugin-vue, @vue/eslint-config-prettier (+9 more)
 
-### Community 152 - "Health Probe"
+### Community 156 - "Health Probe Tests"
 Cohesion: 0.24
 Nodes (15): Report, Client, Context, isAllDigits(), Probe(), Server, T, serve() (+7 more)
 
-### Community 153 - "File Identity Service"
+### Community 157 - "HTTP Downloader Tests"
+Cohesion: 0.12
+Nodes (16): HttpServer, body, cutAfter, dir, etag, ifRanges, main, ranges (+8 more)
+
+### Community 158 - "File Identity Service"
 Cohesion: 0.21
 Nodes (10): Identity(), ItemKey(), T, TestIdentity(), TestItemKey(), Context, Logger, Mutex (+2 more)
 
-### Community 154 - "Transcode File Handler Tests"
+### Community 159 - "Library Store Tests"
+Cohesion: 0.18
+Nodes (13): T, TestBrowseFilters(), TestParseFilter(), Pool, T, identityPool(), TestItemSourceCarriesIdentity(), TestLiveItemsMatchesTheDirectoriesVTTWrites() (+5 more)
+
+### Community 160 - "Transcode Handler Tests"
 Cohesion: 0.23
 Nodes (14): getTranscodeFile(), Context, handlers, Logger, ResponseRecorder, Session, T, TestFileTranscodeNormalizesServedPlaylist() (+6 more)
 
-### Community 155 - "Client Identity Header"
+### Community 161 - "Fake API Test Doubles"
 Cohesion: 0.12
-Nodes (16): build, clientHeaderName, ClientIdentity, debugSet, formatClientIdentity, header, hw, load (+8 more)
+Nodes (16): AuthApi, _FakeAuthApi, _FakeAuthApi, _FakeLibraryApi, getUserPreferences, listContinue, listFacets, listLibraries (+8 more)
 
-### Community 156 - "Scan Library Result"
+### Community 162 - "Scan Library Result Model"
 Cohesion: 0.12
 Nodes (16): error, errors, fromJson, hashCode, libraryId, listFromJson, mapFromJson, mapListFromJson (+8 more)
 
-### Community 157 - "Login View"
+### Community 163 - "Login View"
 Cohesion: 0.13
 Nodes (16): busy, defaultDeviceName(), deviceName, email, error, newProfileName, pair(), password (+8 more)
 
-### Community 158 - "API Response Models"
+### Community 164 - "API Model Registry"
 Cohesion: 0.12
 Nodes (14): AccountSummary, Device, DeviceRegistrationResponse, LinkStartResponse, PlaybackSession, PlayState, ScanLibraryResult, ScanStatus (+6 more)
 
-### Community 159 - "Metadata Provider Context"
+### Community 165 - "Metadata Provider Interface"
 Cohesion: 0.20
 Nodes (4): Context, EpisodeMeta, plainProvider, statsProvider
 
-### Community 160 - "Subtitle Language Service"
+### Community 166 - "Subtitle Language Service"
 Cohesion: 0.27
 Nodes (14): langCode(), langName(), BurnInStream(), embeddedLabel(), embeddedTracks(), RawMessage, Time, imageTracks() (+6 more)
 
-### Community 161 - "Transcode Rungs Logic"
+### Community 167 - "Transcode Rung Tests"
 Cohesion: 0.23
 Nodes (12): boundedRungs(), rungsForCodec(), Context, Mutex, T, TestBoundedRungsRuling4(), TestBoundedRungsUnhintedIsTheLadder(), TestBuildTranscodeArgsEncodesOnlySurvivingRungs() (+4 more)
 
-### Community 162 - "Media Card Widget"
+### Community 168 - "Media Card Widget"
 Cohesion: 0.12
 Nodes (15): backdropUrl, fromSeries, fromSummary, id, kind, kindLabel, MediaKind, posterUrl (+7 more)
 
-### Community 163 - "Controls Visibility Timer"
-Cohesion: 0.12
-Nodes (15): _arm, armed, _cancel, _canHide, dispose, _disposed, _held, hideAfter (+7 more)
-
-### Community 164 - "Link Device Sheet"
+### Community 169 - "Link Device Sheet"
 Cohesion: 0.13
 Nodes (15): build, _busy, _code, _confirmed, createState, dispose, _done, _error (+7 more)
 
-### Community 165 - "Scan Status Model"
+### Community 170 - "Scan Status Model"
 Cohesion: 0.12
 Nodes (15): finishedAt, fromJson, hashCode, libraries, listFromJson, mapFromJson, mapListFromJson, operator (+7 more)
 
-### Community 166 - "Session Model"
+### Community 171 - "Session Model"
 Cohesion: 0.12
 Nodes (15): accountId, deviceId, fromJson, hashCode, isOwner, listFromJson, mapFromJson, mapListFromJson (+7 more)
 
-### Community 167 - "Unmapped Season Model"
+### Community 172 - "Unmapped Season Model"
 Cohesion: 0.12
 Nodes (15): episodes, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, reason (+7 more)
 
-### Community 168 - "TV Landing Focus Tests"
+### Community 173 - "TV Landing Focus Tests"
 Cohesion: 0.13
 Nodes (15): action, build, createState, initState, _LateAction, _LateActionState, main, node (+7 more)
 
-### Community 169 - "Settings Controller"
-Cohesion: 0.14
-Nodes (14): ../../api/device_preferences_copy.dart, AsyncNotifier, DevicePreferences get, _device, setCaptionBackground, setCaptionColor, setCaptionPosition, setCaptionScale (+6 more)
+### Community 174 - "Device Auth Registration"
+Cohesion: 0.18
+Nodes (11): row, Wrong password is 403, never 401 (401 signs device out), DeviceRegistrationRequest, DeviceRegistrationResponse, credential(), generateToken(), Pool, hashToken() (+3 more)
 
-### Community 170 - "Session Recovery Logic"
+### Community 175 - "Session Recovery Logic"
 Cohesion: 0.13
 Nodes (14): bool get, _attempts, _from, _inFlight, keepsPausedSessionAlive, maxAttempts, onFatal, pausedKeepaliveLimit (+6 more)
 
-### Community 171 - "Frontend Dependencies"
+### Community 176 - "Frontend Dependencies"
 Cohesion: 0.13
 Nodes (15): @fontsource-variable/archivo, @fontsource-variable/hanken-grotesk, hls.js, openapi-fetch, pinia, vue, vue-router, dependencies (+7 more)
 
-### Community 172 - "Item Progress Tests"
-Cohesion: 0.24
-Nodes (12): T, TestGetItemEpisodeArtworkInheritsSeries(), TestGetItemEpisodeContext(), T, TestContinueWatchingAbandoned(), TestContinueWatchingDedup(), TestContinueWatchingLastDevice(), TestKeepaliveDoesNotOverwriteNewerProgress() (+4 more)
-
-### Community 173 - "PiP Management"
+### Community 177 - "Picture-in-Picture Controller"
 Cohesion: 0.13
 Nodes (14): _channel, debugHandle, enter, _handle, _handlerInstalled, isSupported, _owner, PiP (+6 more)
 
-### Community 174 - "Media Item Page Model"
+### Community 178 - "Media Item Page Model"
 Cohesion: 0.13
 Nodes (14): fromJson, hashCode, items, limit, listFromJson, mapFromJson, mapListFromJson, MediaItemPage (+6 more)
 
-### Community 175 - "Library Model"
+### Community 179 - "Library Model"
 Cohesion: 0.13
 Nodes (14): fromJson, hashCode, id, kind, listFromJson, mapFromJson, mapListFromJson, ModelLibrary (+6 more)
 
-### Community 176 - "Play State Model"
+### Community 180 - "Play State Model"
 Cohesion: 0.13
 Nodes (14): durationSeconds, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, PlayState (+6 more)
 
-### Community 177 - "Profile Summary Model"
+### Community 181 - "Profile Summary Model"
 Cohesion: 0.13
 Nodes (14): deviceCount, fromJson, hashCode, id, listFromJson, mapFromJson, mapListFromJson, name (+6 more)
 
-### Community 178 - "Progress Update Model"
+### Community 182 - "Progress Update Model"
 Cohesion: 0.13
 Nodes (14): durationSeconds, fromJson, hashCode, keepalive, listFromJson, mapFromJson, mapListFromJson, operator (+6 more)
 
-### Community 179 - "Season Summary Model"
+### Community 183 - "Season Summary Model"
 Cohesion: 0.13
 Nodes (14): episodes, fromJson, hashCode, id, listFromJson, mapFromJson, mapListFromJson, operator (+6 more)
 
-### Community 180 - "Series Page Model"
+### Community 184 - "Series Page Model"
 Cohesion: 0.13
 Nodes (14): fromJson, hashCode, items, limit, listFromJson, mapFromJson, mapListFromJson, offset (+6 more)
 
-### Community 181 - "Transcode Cache Stats"
+### Community 185 - "Transcode Cache Stats"
 Cohesion: 0.13
 Nodes (14): budgetBytes, fromJson, hashCode, listFromJson, liveDirs, mapFromJson, mapListFromJson, operator (+6 more)
 
-### Community 182 - "Device Auth Registration"
-Cohesion: 0.21
-Nodes (9): row, DeviceRegistrationRequest, DeviceRegistrationResponse, comparePassword(), credential(), generateToken(), hashToken(), scanDevice() (+1 more)
+### Community 186 - "Beacon VTT Utilities"
+Cohesion: 0.22
+Nodes (13): getToken(), BeaconEvent, subscribeBeacon(), subtitleUrl(), formatTs(), parseTs(), parseVttCues(), shiftTimingLine() (+5 more)
 
-### Community 183 - "Account Lifecycle Management"
-Cohesion: 0.27
-Nodes (8): AccountSummary, Store, Context, row, Session, scanAccountSummary(), hashPassword(), PasswordResetResponse
+### Community 187 - "SPA Handler Tests"
+Cohesion: 0.25
+Nodes (11): Caching and staleness invariants (no-store for playlists and shell), apiNotFound(), ResponseWriter, newSPAHandler(), setNoStore(), T, TestSPAHandlerAPINotFound(), TestSPAHandlerCaching() (+3 more)
 
-### Community 184 - "Beacon Stream Tests"
+### Community 188 - "Beacon Stream Tests"
 Cohesion: 0.19
 Nodes (8): Buffer, Mutex, Once, T, newStreamWriter(), TestBeaconStreamEndsOnHubDrain(), streamWriter, _Header
 
-### Community 185 - "TMDB Retry Tests"
+### Community 189 - "TMDB Retry Tests"
 Cohesion: 0.34
 Nodes (13): Server, T, newTestTMDB(), TestRetryAfterParsing(), TestTMDBBackoffCancellable(), TestTMDBDownloadImageRetriesAndShares429Handling(), TestTMDBMatchRunAgainst429Stub(), TestTMDBNonRetryableStatusNotRetried() (+5 more)
 
-### Community 186 - "Session Registry"
+### Community 190 - "Session Registry"
 Cohesion: 0.24
 Nodes (6): Context, Mutex, Time, key(), Registry, Session
 
-### Community 187 - "Scan API Handlers"
+### Community 191 - "Scan Handler Tests"
 Cohesion: 0.21
 Nodes (10): ResponseWriter, UUID, parseUUID(), T, TestScanHandlers(), TestToAPIScanStatus(), TestToAPIScanStatusCarriesTMDBStats(), toAPIScanStatus() (+2 more)
 
-### Community 188 - "Transcode API Client"
+### Community 192 - "Device Capabilities"
+Cohesion: 0.14
+Nodes (13): _channel, DeviceCapabilities, _displayModeHeight, _displayProbed, _hevc4k, _hevcHardware, isTelevision, _isTv (+5 more)
+
+### Community 193 - "Transcode API Client"
 Cohesion: 0.14
 Nodes (13): apiClient, getTranscodeCache, getTranscodeCacheWithHttpInfo, getTranscodeCapabilities, getTranscodeCapabilitiesWithHttpInfo, getTranscodeFile, getTranscodeFileWithHttpInfo, listTranscodeSessions (+5 more)
 
-### Community 189 - "Account Create Request"
+### Community 194 - "Account Create Request"
 Cohesion: 0.14
 Nodes (13): AccountCreateRequest, accountName, email, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson (+5 more)
 
-### Community 190 - "Create Vault Request"
+### Community 195 - "Create Vault Request"
 Cohesion: 0.14
 Nodes (13): CreateVaultRequest, description, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, name (+5 more)
 
-### Community 191 - "Device Ref Model"
+### Community 196 - "Device Ref Model"
 Cohesion: 0.14
 Nodes (13): DeviceRef, fromJson, hashCode, id, listFromJson, mapFromJson, mapListFromJson, name (+5 more)
 
-### Community 192 - "Login Request Model"
+### Community 197 - "Login Request Model"
 Cohesion: 0.14
 Nodes (13): email, fromJson, hashCode, listFromJson, LoginRequest, mapFromJson, mapListFromJson, operator (+5 more)
 
-### Community 193 - "Ping Response Model"
+### Community 198 - "Ping Response Model"
 Cohesion: 0.14
 Nodes (13): fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, PingResponse, requiredKeys (+5 more)
 
-### Community 194 - "Transcode Progress Model"
+### Community 199 - "Transcode Progress Model"
 Cohesion: 0.14
 Nodes (13): fps, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, outTimeMs (+5 more)
 
-### Community 195 - "Update Vault Request"
+### Community 200 - "Update Vault Request Model"
 Cohesion: 0.14
 Nodes (13): description, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, name, operator (+5 more)
 
-### Community 196 - "User Profile Model"
+### Community 201 - "User Profile Model"
 Cohesion: 0.14
 Nodes (13): fromJson, hashCode, id, listFromJson, mapFromJson, mapListFromJson, name, operator (+5 more)
 
-### Community 197 - "Flutter App Dependencies"
+### Community 202 - "Flutter App Dependencies"
 Cohesion: 0.14
 Nodes (14): Argosy Flutter pubspec.yaml, argosy_api (local package), audio_service, bonsoir (mDNS/Bonjour), device_info_plus, fake_async (dev), flutter_foreground_task, flutter_riverpod (+6 more)
 
-### Community 198 - "Watched Update Model"
+### Community 203 - "Transcode Client API"
 Cohesion: 0.15
-Nodes (12): int get, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, requiredKeys (+4 more)
+Nodes (12): TranscodeApi, _Transcode, _Server, _Transcoder, _Server, c, _controller, main (+4 more)
 
-### Community 199 - "Middleware Logging Tests"
-Cohesion: 0.19
-Nodes (11): ResponseRecorder, T, TestHealthzLoggingIsQuietOnlyWhenHealthy(), TestWithLoggingPreservesFlusher(), HandlerFunc, Logger, Manager, Pool (+3 more)
-
-### Community 200 - "SPA Handler"
-Cohesion: 0.28
-Nodes (10): apiNotFound(), ResponseWriter, newSPAHandler(), setNoStore(), T, TestSPAHandlerAPINotFound(), TestSPAHandlerCaching(), TestSPAHandlerFallsBackForNonAPI() (+2 more)
-
-### Community 201 - "Account Conflict Error Model"
+### Community 204 - "Account Conflict Error Model"
 Cohesion: 0.15
 Nodes (12): account, AccountConflictError, error, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson (+4 more)
 
-### Community 202 - "Account Create Response Model"
+### Community 205 - "Account Create Response Model"
 Cohesion: 0.15
 Nodes (12): account, AccountCreateResponse, fromJson, generatedPassword, hashCode, listFromJson, mapFromJson, mapListFromJson (+4 more)
 
-### Community 203 - "Device Switch Request Model"
+### Community 206 - "Add Vault Item Request"
+Cohesion: 0.15
+Nodes (12): AddVaultItemRequest, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, movieId, operator (+4 more)
+
+### Community 207 - "Device Registration Response"
+Cohesion: 0.15
+Nodes (12): device, DeviceRegistrationResponse, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator (+4 more)
+
+### Community 208 - "Device Switch Request"
 Cohesion: 0.15
 Nodes (12): DeviceSwitchRequest, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, password (+4 more)
 
-### Community 204 - "Link Start Request Model"
+### Community 209 - "Link Start Request"
 Cohesion: 0.15
 Nodes (12): deviceName, fromJson, hashCode, LinkStartRequest, listFromJson, mapFromJson, mapListFromJson, operator (+4 more)
 
-### Community 205 - "Link Start Response Model"
+### Community 210 - "Link Start Response"
 Cohesion: 0.15
 Nodes (12): code, expiresAt, fromJson, hashCode, LinkStartResponse, listFromJson, mapFromJson, mapListFromJson (+4 more)
 
-### Community 206 - "Password Change Request Model"
+### Community 211 - "Login Response Model"
+Cohesion: 0.15
+Nodes (12): account, fromJson, hashCode, listFromJson, LoginResponse, mapFromJson, mapListFromJson, operator (+4 more)
+
+### Community 212 - "Password Change Request"
 Cohesion: 0.15
 Nodes (12): currentPassword, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, newPassword, operator (+4 more)
 
-### Community 207 - "Profile Update Request Model"
+### Community 213 - "Profile Update Request"
 Cohesion: 0.15
 Nodes (12): fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, name, operator, ProfileUpdateRequest (+4 more)
 
-### Community 208 - "Search Results Model"
+### Community 214 - "Search Results Model"
 Cohesion: 0.15
 Nodes (12): fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, movies, operator, requiredKeys (+4 more)
 
-### Community 209 - "Stow Request Model"
+### Community 215 - "Stow Request Model"
 Cohesion: 0.15
 Nodes (12): fromJson, hashCode, hevc, listFromJson, mapFromJson, mapListFromJson, matroska, operator (+4 more)
 
-### Community 210 - "Transcode Capabilities Model"
+### Community 216 - "Transcode Capabilities Model"
 Cohesion: 0.15
 Nodes (12): available, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, requiredKeys (+4 more)
 
-### Community 211 - "Library Owner Cache"
+### Community 217 - "Account Creation Flow"
 Cohesion: 0.21
-Nodes (6): ownerCache, Instance-Level Ownership Model, Store, Context, internal/library — Catalog, RWMutex
+Nodes (7): AccountCreateRequest, AccountCreateResponse, EmailTakenError, generatePassword(), Account, hashPassword(), normalizeEmail()
 
-### Community 212 - "User Profile Management"
-Cohesion: 0.30
-Nodes (7): ProfileSummary, Role, UserProfile, isUniqueViolation(), parseUUID(), validRole(), LoginResponse
-
-### Community 213 - "FFmpeg Pin CI Pipeline"
+### Community 218 - "FFmpeg CI Build Config"
 Cohesion: 0.18
-Nodes (11): Single Pinned FFmpeg Version, deploy/Dockerfile, deploy/Dockerfile.dev, .ffmpeg-version — FFmpeg Pin, CI Workflow, Go CI Job, OpenAPI Drift CI Job, Web CI Job (+3 more)
+Nodes (11): Single Pinned FFmpeg Version, deploy/Dockerfile, deploy/Dockerfile.dev, .ffmpeg-version, CI Workflow, Go CI Job, OpenAPI Drift CI Job, Web CI Job (+3 more)
 
-### Community 214 - "Local Filesystem Store"
+### Community 219 - "API Error Model"
+Cohesion: 0.17
+Nodes (11): int get, Error, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator (+3 more)
+
+### Community 220 - "Local Filesystem Storage"
 Cohesion: 0.23
 Nodes (7): Context, ReadCloser, NewLocalFS(), T, mustWrite(), TestLocalFSWalk(), LocalFS
 
-### Community 215 - "Health Check Tests"
+### Community 221 - "Health Check Tests"
 Cohesion: 0.48
 Nodes (11): decodeHealthz(), Pool, T, stampVersion(), TestHealthcheckProbeAgreesWithTheHandler(), TestHealthcheckProbeGoesUnhealthyWhenTheDatabaseIs(), TestHealthzCarriesIdentityOnThe503Path(), TestHealthzReportsBuildIdentity() (+3 more)
 
-### Community 216 - "Account Providers Utilities"
-Cohesion: 0.09
-Nodes (19): devices, live, colors, _gradients, h, _hash, posterGradient, contentType (+11 more)
-
-### Community 217 - "Stow API Client"
+### Community 222 - "Stow API Client"
 Cohesion: 0.17
 Nodes (11): apiClient, deleteStowJob, deleteStowJobWithHttpInfo, getStowFile, getStowFileWithHttpInfo, getStowJob, getStowJobWithHttpInfo, listStowJobs (+3 more)
 
-### Community 218 - "Account Update Request Model"
+### Community 223 - "Account Update Request"
 Cohesion: 0.17
 Nodes (11): AccountUpdateRequest, disabled, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator (+3 more)
 
-### Community 219 - "Device Rename Request Model"
+### Community 224 - "Link Approve Request"
 Cohesion: 0.17
-Nodes (11): DeviceRenameRequest, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, name, operator (+3 more)
+Nodes (11): deviceName, fromJson, hashCode, LinkApproveRequest, listFromJson, mapFromJson, mapListFromJson, operator (+3 more)
 
-### Community 220 - "Error Model"
-Cohesion: 0.17
-Nodes (11): Error, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, requiredKeys (+3 more)
-
-### Community 221 - "Password Reset Response Model"
+### Community 225 - "Password Reset Response"
 Cohesion: 0.17
 Nodes (11): fromJson, generatedPassword, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, PasswordResetResponse (+3 more)
 
-### Community 222 - "Reorder Vault Request Model"
+### Community 226 - "Reorder Vault Request"
 Cohesion: 0.17
 Nodes (11): entryIds, fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, ReorderVaultRequest (+3 more)
 
-### Community 223 - "Watched Bulk Result Model"
+### Community 227 - "Watched Bulk Result"
 Cohesion: 0.17
 Nodes (11): fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, requiredKeys, toJson (+3 more)
 
-### Community 224 - "OpenAPI Dart Code Generation"
+### Community 228 - "Watched Update Model"
+Cohesion: 0.17
+Nodes (11): fromJson, hashCode, listFromJson, mapFromJson, mapListFromJson, operator, requiredKeys, toJson (+3 more)
+
+### Community 229 - "OpenAPI Code Generation"
 Cohesion: 0.17
 Nodes (11): @openapitools/openapi-generator-cli, description, devDependencies, @openapitools/openapi-generator-cli, name, private, scripts, dev (+3 more)
 
-### Community 225 - "Account Provisioning Logic"
-Cohesion: 0.24
-Nodes (6): AccountCreateRequest, AccountCreateResponse, EmailTakenError, generatePassword(), Account, normalizeEmail()
-
-### Community 226 - "Player Session Debug Hooks"
+### Community 230 - "Playback Session Debug"
 Cohesion: 0.18
 Nodes (11): @visibleForTesting, debugFlush, debugHeartbeatTick, debugLoadNextEpisode, debugSessionId, debugTickUpNext, encodedSoFarFrom, handlePlayerEvent (+3 more)
 
-### Community 227 - "Match and Scan CLI"
+### Community 231 - "Media Match Scan Tool"
 Cohesion: 0.27
 Nodes (8): main(), Logger, runMatch(), tmdbOptions(), Logger, runScan(), Config, Duration
 
-### Community 228 - "Beacon Event Model"
+### Community 232 - "Beacon Event Model"
 Cohesion: 0.18
 Nodes (10): DateTime, BeaconEvent, durationSeconds, itemId, originDeviceId, positionSeconds, tryParse, updatedAt (+2 more)
 
-### Community 229 - "Poster Card Widget"
-Cohesion: 0.18
-Nodes (10): double?, hatch_pattern.dart, build, imageUrl, onTap, PosterCard, progress, subtitle (+2 more)
-
-### Community 230 - "Burn-In Transcode Tests"
+### Community 233 - "Burn-in Subtitle Tests"
 Cohesion: 0.36
 Nodes (10): brightFrames(), buildPGS(), genPGSSource(), T, TestBuildArgsBurnInLadder(), TestBuildArgsBurnInRefusesRemux(), TestBuildArgsBurnInSingleRung(), TestBuildArgsWithoutBurnInUnchanged() (+2 more)
 
-### Community 231 - "Encoder Resolution Tests"
+### Community 234 - "Hardware Encoder Selection"
 Cohesion: 0.27
 Nodes (9): isHardwareEncoder(), ResolvedEncoder(), T, TestEncoderForResolution(), TestIsHardwareEncoder(), TestNVENCEncoderPieces(), TestQSVEncoderPieces(), TestSoftwareEncoderPieces() (+1 more)
 
-### Community 232 - "Browse Repository"
-Cohesion: 0.18
-Nodes (10): ../library/browse_filter.dart, media_card.dart, _api, browse, BrowseRepository, browseRepositoryProvider, libraries, _pageLimit (+2 more)
-
-### Community 233 - "Up Next Logic"
+### Community 235 - "Up Next Episode Logic"
 Cohesion: 0.24
 Nodes (4): isRealEnd(), REAL_END_SLACK_SECONDS, SeekHold, UP_NEXT_ARM_SECONDS
 
-### Community 234 - "App Initialization"
-Cohesion: 0.20
-Nodes (9): api/client_identity.dart, app.dart, features/player/argosy_audio_handler.dart, _initMediaSession, isTv, load, main, package:flutter_foreground_task/flutter_foreground_task.dart (+1 more)
-
-### Community 235 - "Device Link Flow"
+### Community 236 - "Device Link Flow"
 Cohesion: 0.27
 Nodes (7): generateLinkCode(), Store, Context, normalizePlatform(), nullIfEmpty(), LinkStartResponse, LinkStatusResponse
 
-### Community 236 - "Search Store"
+### Community 237 - "Search Store Logic"
 Cohesion: 0.22
 Nodes (7): Context, Store, searchTSQuery(), T, TestSearchStore(), TestSearchTSQuery(), SearchResults
 
-### Community 237 - "Stow Handler Tests"
+### Community 238 - "Stow Handler Tests"
 Cohesion: 0.51
 Nodes (9): handlers, ResponseRecorder, T, postStow(), stowFixture(), TestStowItemMissingFile404s(), TestStowItemNeedsPackagingWithoutManager(), TestStowItemPassthrough() (+1 more)
 
-### Community 238 - "Media File Probe"
+### Community 239 - "Media File Probe Tool"
 Cohesion: 0.33
 Nodes (8): Context, RawMessage, parseProbe(), ProbeFile(), T, TestParseProbe(), TestParseProbeMissingDuration(), Probe
 
-### Community 239 - "Web Build Scripts"
+### Community 240 - "Device Preferences Copy"
+Cohesion: 0.20
+Nodes (9): List, client, _controller, _fullPrefs, main, saved, setDevicePreferences, _track (+1 more)
+
+### Community 241 - "Web Build Scripts"
 Cohesion: 0.20
 Nodes (10): scripts, build, dev, format, format:check, gen:api, lint, preview (+2 more)
 
-### Community 241 - "Mobile Release Pipeline"
+### Community 242 - "Next Episode Lookup"
+Cohesion: 0.22
+Nodes (5): NEXT_EPISODE_MAX_ATTEMPTS, NEXT_EPISODE_RETRY_GAP_MS, NextEpisodeLookup, NextEpisodeOptions, State
+
+### Community 243 - "Catalog Owner Cache"
+Cohesion: 0.31
+Nodes (4): ownerCache, Store, Context, RWMutex
+
+### Community 244 - "Mobile Release Pipeline"
 Cohesion: 0.28
 Nodes (9): android/key.properties Signing Config, Play Store Service Account JSON Secret, Android Upload Keystore (PKCS12), Versioning Strategy (tag -> versionName, run_number -> versionCode), Mobile Release Workflow, Android Release Runbook, Android Build Job, Check Apple Secrets Job (+1 more)
 
-### Community 242 - "Container Publish Workflow"
+### Community 245 - "Container Image Publishing"
 Cohesion: 0.28
 Nodes (9): ghcr.io/einlanzerous/argosy (Container Image), publish.yml CI/CD Workflow, image (publish job), release-please.yml Workflow, release-please-config.json, release-please.yml: mobile-release job, release-please.yml: publish job, release-please.yml: release-please job (+1 more)
 
-### Community 243 - "Config Loading"
+### Community 246 - "Server Config Loader"
 Cohesion: 0.39
 Nodes (6): getenv(), Load(), parseDuration(), parseList(), parseSize(), resolveDatabaseURL()
 
-### Community 244 - "Server Ping Handler"
+### Community 247 - "HTTP Server Ping Health"
 Cohesion: 0.28
 Nodes (7): ResponseWriter, handlePing(), T, TestHandlePing(), TestHealthHandlerNoDB(), TestShutdownDrainsBeaconHub(), healthResponse
 
-### Community 245 - "Movie Hash Utility"
+### Community 248 - "Movie Hash Utility"
 Cohesion: 0.39
 Nodes (7): min64(), MovieHash(), sumChunk(), T, TestMovieHashDeterministicAndLong(), TestMovieHashEmpty(), TestMovieHashSmallFile()
 
-### Community 246 - "Stream URL Builder"
-Cohesion: 0.22
-Nodes (8): _baseUrl, beacon, _build, streamItem, StreamUrls, subtitle, _token, transcodeFile
+### Community 249 - "PR Review Workflow"
+Cohesion: 0.32
+Nodes (8): CLAUDE.md — Project Overview, SERV-126: Triage reviews PRs never reviewed (construct-server#141), SERV-59: Fresh-context PR Review, SERV-87: Workflow Fixes (max-turns, triage skip, cap overshoot), SERV-92: Shared PR Review Workflow Definition, Shared PR Review Reusable Workflow (construct-server), PR Review Workflow, REVIEW.md Judgement File
 
-### Community 247 - "Client Write Tracker"
-Cohesion: 0.54
-Nodes (4): clientTracker, Store, Map, Time
-
-### Community 248 - "Open Issue Backlog"
+### Community 250 - "Mobile Client Bug Backlog"
 Cohesion: 0.25
 Nodes (8): ARGY-107: Recover reaped session / keepalive while paused, ARGY-160: Change-password UI, ARGY-184/173: TV focus, ARGY-239: Phone keepalive (relates to ARGY-107), ARGY-247: Wrong-password wording, ARGY-249: App version in Settings, ARGY-259: Multiple miscellaneous gaps, ARGY-90/101: Credits-triggered Up Next
 
-### Community 249 - "Beacon Hub Tests"
+### Community 251 - "Beacon Hub Tests"
 Cohesion: 0.54
 Nodes (7): NewHub(), T, TestDrainClosesOnClose(), TestFanoutScopedByUser(), TestPublishDeliversOverPostgres(), TestSlowConsumerDoesNotBlock(), TestUnsubscribeStopsDelivery()
 
-### Community 250 - "Catalog Stream Tests"
+### Community 252 - "Catalog Stream Tests"
 Cohesion: 0.25
 Nodes (6): Context, Pool, T, ownerAccountID(), T, TestStreamHandler()
 
-### Community 251 - "Build Identity Version"
+### Community 253 - "Build Version Identity"
 Cohesion: 0.39
 Nodes (6): Get(), T, strptr(), TestGet(), TestGetDoesNotAliasPackageState(), Identity
 
-### Community 252 - "System Health API Client"
-Cohesion: 0.25
-Nodes (7): ApiClient, apiClient, getHealth, getHealthWithHttpInfo, ping, pingWithHttpInfo, SystemApi
-
-### Community 253 - "Architecture Map Check"
+### Community 254 - "Architecture Map Check"
 Cohesion: 0.32
 Nodes (6): annotate(), cited, drift_by, drift_how, ensure_pinned(), architecture-map-check.sh script
 
-### Community 254 - "VTT Subtitle Parsing"
-Cohesion: 0.46
-Nodes (7): formatTs(), parseTs(), parseVttCues(), shiftTimingLine(), shiftVtt(), vttBlocks(), VttCue
-
-### Community 255 - "Browse Facets"
+### Community 255 - "Catalog Facets"
 Cohesion: 0.29
 Nodes (5): Facet, FacetType, Context, Facet, Store
 
-### Community 256 - "HTTP Server Middleware Interfaces"
+### Community 256 - "HTTP Server Middleware"
 Cohesion: 0.48
 Nodes (7): MiddlewareFunc, ServeMux, ServerInterface, StdHTTPServerOptions, HandlerFromMux(), HandlerFromMuxWithBaseURL(), HandlerWithOptions()
 
-### Community 257 - "Argosy Theme"
+### Community 257 - "Argosy Theme TV"
 Cohesion: 0.29
 Nodes (6): argosy_theme.dart, base, buildArgosyThemeTv, copyWith, _scaleUp, up
 
-### Community 258 - "Healthcheck CLI"
+### Community 258 - "Healthcheck Probe Logic"
 Cohesion: 0.48
 Nodes (5): runHealthcheck(), T, TestHealthcheckProbesWhenADatabaseIsConfigured(), TestHealthcheckRefusesAConfiglessContainerWithoutProbing(), TestHealthcheckStillFailsOnDegraded()
 
-### Community 259 - "HEVC Subtitle Playback Issues"
+### Community 259 - "HEVC Subtitle Playback"
 Cohesion: 0.38
 Nodes (7): ARGY-178: Keep 10-bit HEVC when client decodes in hardware, ARGY-252: hevcHardware signal gap on phone/TV, ARGY-253: Image subtitle tracks filtered out on mobile, ARGY-59: Burn-in of image subtitles, Phone Client (mobile/argosy/lib), PlaybackController (shared phone/TV), TV Client (mobile/argosy/lib)
 
-### Community 260 - "Library Identity Tests"
-Cohesion: 0.57
-Nodes (6): Pool, T, identityPool(), TestItemSourceCarriesIdentity(), TestLiveItemsMatchesTheDirectoriesVTTWrites(), TestStowFileAnswersGoneForReplacedSource()
-
-### Community 261 - "Session Registry"
+### Community 260 - "Session Registry Management"
 Cohesion: 0.48
 Nodes (6): Duration, NewRegistry(), T, TestActiveScopingAndReap(), TestCloseRemovesSession(), TestHeartbeatDedupesByUserDeviceItem()
 
-### Community 262 - "Account API Models"
+### Community 261 - "Account API Models"
 Cohesion: 0.33
 Nodes (6): Account, AccountConflictError, AccountCreateResponse, AccountLookupResponse, LoginResponse, UserProfile
 
-### Community 263 - "Transcode Session State"
+### Community 262 - "Transcode Session State"
 Cohesion: 0.33
 Nodes (4): TranscodeProgress, TranscodeSession, TranscodeSessionMethod, TranscodeSessionState
 
-### Community 264 - "App Routes"
+### Community 263 - "App Navigation Routes"
 Cohesion: 0.33
 Nodes (6): build, _go, Routes.home, Routes.library, Routes.search, Routes.settings
 
-### Community 265 - "Web Favicon Assets"
+### Community 264 - "App Icon Assets"
 Cohesion: 0.33
 Nodes (6): Apple Touch Icon (180x180 PNG Logo), Argosy Mark SVG Logo, Favicon 16x16 PNG, Favicon 32x32 PNG, Favicon 48x48 PNG, Favicon 512x512 PNG
 
-### Community 266 - "Device Caption Preferences"
+### Community 265 - "Device Caption Preferences"
 Cohesion: 0.40
 Nodes (3): DevicePreferences, DevicePreferencesCaptionBackground, DevicePreferencesCaptionPosition
 
-### Community 267 - "Movie List Params"
+### Community 266 - "List Movies Params"
 Cohesion: 0.40
 Nodes (3): ListMoviesParams, ListMoviesParamsSort, ListMoviesParamsWatched
 
-### Community 268 - "Series List Params"
+### Community 267 - "List Series Params"
 Cohesion: 0.40
 Nodes (3): ListSeriesParams, ListSeriesParamsSort, ListSeriesParamsWatched
 
-### Community 269 - "Project README Screenshots"
+### Community 268 - "App README Screenshots"
 Cohesion: 0.40
 Nodes (5): Screenshot — Home Hero + Continue Watching, Screenshot — Home Continue Watching & Newly Arrived Rails, Screenshot — Cross-Device Resume Prompt, Cross-Device Resume, README.md — Argosy Project Overview
 
-### Community 270 - "Service Discovery"
+### Community 269 - "Device Pairing Auth"
+Cohesion: 0.40
+Nodes (5): Auth Module, PIN Device Pairing, approveLink endpoint, getLinkStatus endpoint, startLink endpoint
+
+### Community 270 - "Auth Client Tests"
+Cohesion: 0.60
+Nodes (4): T, TestAuthenticateDeviceRecordsClient(), TestClientTrackerThrottle(), TestSanitizeClient()
+
+### Community 271 - "mDNS Service Discovery"
 Cohesion: 0.50
 Nodes (4): Advertise(), Context, Logger, listenPort()
 
-### Community 271 - "Live Items Tracking"
+### Community 272 - "Live Items Feed"
 Cohesion: 0.40
 Nodes (3): Logger, Pool, LiveItems
 
-### Community 272 - "Media Tool Versioning"
+### Community 273 - "Media Tool Versioning"
 Cohesion: 0.60
 Nodes (4): Context, Logger, LogVersions(), version()
 
-### Community 273 - "Genre Names"
+### Community 274 - "Media Genre Names"
 Cohesion: 0.40
 Nodes (3): GenreNames(), T, TestGenreNames()
 
-### Community 275 - "OpenAPI Generator Config"
+### Community 276 - "OpenAPI Generator Config"
 Cohesion: 0.40
 Nodes (4): generator-cli, version, $schema, spaces
 
-### Community 276 - "Release Please Config"
+### Community 277 - "Release Please Config"
 Cohesion: 0.40
 Nodes (4): bootstrap-sha, include-component-in-tag, packages, $schema
 
-### Community 277 - "Web Package Config"
+### Community 278 - "Web Package Config"
 Cohesion: 0.40
 Nodes (4): name, private, type, version
 
-### Community 278 - "Media Summary Models"
+### Community 279 - "Media Summary Models"
 Cohesion: 0.50
 Nodes (4): MediaItemSummary, SearchResults, SeriesPage, SeriesSummary
 
-### Community 279 - "Docker Dev Stack"
+### Community 280 - "Docker Dev Stack"
 Cohesion: 0.83
 Nodes (4): Docker Compose Dev Stack, PostgreSQL Database Service, Go Server Service (air hot-reload), Vite Web Dev Server Service
 
-### Community 280 - "HLS Seek Start Issues"
+### Community 281 - "HLS Playback Start Position"
 Cohesion: 0.67
 Nodes (4): ARGY-103: Start at 0 not live edge, ARGY-228: EXT-X-START in served media playlists, ARGY-230: Pin duration to prevent seek finishing stream, ARGY-258: Start position gap (ARGY-103/228 related)
 
-### Community 281 - "OpenAPI Spec Access"
+### Community 282 - "OpenAPI Spec Endpoint"
 Cohesion: 0.67
 Nodes (4): GetSpec(), GetSwagger(), T, PathToRawSpec()
 
-### Community 282 - "Config Parsing Tests"
+### Community 283 - "Auth Middleware Tests"
+Cohesion: 0.67
+Nodes (3): T, TestRequireAdmin(), TestRequireProvisionToken()
+
+### Community 284 - "Config Parsing Tests"
 Cohesion: 0.67
 Nodes (3): T, TestLoadTMDBKnobs(), TestParseFloat()
 
-### Community 283 - "HTTP JSON Helpers"
+### Community 285 - "HTTP JSON Helpers"
 Cohesion: 0.67
 Nodes (3): Error(), ResponseWriter, JSON()
 
-### Community 284 - "HTTP Helper Tests"
+### Community 286 - "HTTP Helper Tests"
 Cohesion: 0.67
 Nodes (3): T, TestError(), TestJSON()
 
-### Community 285 - "Browse Filter Tests"
+### Community 287 - "Episode Artwork Tests"
 Cohesion: 0.67
-Nodes (3): T, TestBrowseFilters(), TestParseFilter()
+Nodes (3): T, TestGetItemEpisodeArtworkInheritsSeries(), TestGetItemEpisodeContext()
 
-### Community 286 - "iOS Launch Screen Assets"
+### Community 288 - "iOS Launch Screen Assets"
 Cohesion: 0.50
 Nodes (4): iOS Launch Image @1x (blank), iOS Launch Image @2x (blank), iOS Launch Image @3x (blank), Launch Screen Assets README
 
-### Community 287 - "Stow Queue Implementations"
-Cohesion: 0.50
-Nodes (4): MemoryStowQueue, StowQueueStore, ForegroundStowQueue, _RecordingQueue
-
-### Community 288 - "Prettier Config"
+### Community 289 - "Prettier Format Config"
 Cohesion: 0.50
 Nodes (3): printWidth, semi, singleQuote
 
-### Community 300 - "Mobile Brand Assets"
+### Community 301 - "Mobile Brand Assets"
 Cohesion: 0.67
 Nodes (3): Argosy Wordmark SVG (currentColor), Android App Icon — hdpi launcher, Mobile Brand App Icon PNG
 
-### Community 301 - "Transcoding & Session Tickets"
+### Community 302 - "Transcoding and Server Issues"
 Cohesion: 0.67
 Nodes (3): ARGY-150: 10-bit HEVC/H.264 transcodes to 8-bit, ARGY-94: Progress PUT / idle TTL, Server (internal/)
 
-### Community 302 - "Knowledge Graph CI"
-Cohesion: 0.67
-Nodes (3): .github/workflows/graphify.yml, Graphify CI Workflow, graphify-out/ — Knowledge Graph
-
-### Community 304 - "App Icon Assets"
+### Community 305 - "App Icon Variants"
 Cohesion: 1.00
 Nodes (3): App Icon Foreground (Ship Logo, Light on White), Argosy Brand Mark Light (Ship Logo on Dark), iOS App Icon 1024x1024 @1x
 
+### Community 420 - "router/app_router.dart"
+Cohesion: 0.19
+Nodes (11): features/beacon/beacon_providers.dart, isTv, ArgosyApp, build, beaconSyncProvider, isTelevisionProvider, platform/device_type.dart, router/app_router.dart (+3 more)
+
 ## Knowledge Gaps
-- **3870 isolated node(s):** `github.com/Einlanzerous/argosy`, `AccountCreateRequest`, `AccountUpdateRequest`, `CreateVaultRequest`, `DeviceRenameRequest` (+3865 more)
+- **3876 isolated node(s):** `github.com/Einlanzerous/argosy`, `AccountCreateRequest`, `AccountUpdateRequest`, `CreateVaultRequest`, `DeviceRenameRequest` (+3871 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **116 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **115 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Request` connect `API Route Handlers` to `HTTP Server Middleware Interfaces`, `Stow Library Handlers`, `Account Auth Context`, `TMDB Adaptive Tests`, `Library HTTP Handlers`, `TMDB API Client`, `FFmpeg Package Args`, `Playback Progress Handlers`, `Stale Transcode Job Tests`, `Scan API Handlers`, `Effective Metadata Resolution`, `OpenSubtitles Client`, `Server Ping Handler`, `library/transcode.go`, `Subtitle Service Tests`, `Transcode Session Identity`, `Vault Handlers`, `Beacon and Stream Handlers`?**
-  _High betweenness centrality (0.143) - this node is a cross-community bridge._
-- **Why does `Pull Request Template` connect `Transcoding and Beacon Pipeline` to `library/transcode.go`, `Playback Controller Core`, `TV Player Controls`?**
-  _High betweenness centrality (0.127) - this node is a cross-community bridge._
-- **Why does `NormalizePlaylist()` connect `HLS Manifest Tests` to `Stow Library Handlers`?**
-  _High betweenness centrality (0.123) - this node is a cross-community bridge._
+- **Why does `Pull Request Template` connect `HLS Playback Decision` to `Flutter Playback Controller`, `Project Architecture Docs`, `TV Player Controls Screen`, `Web Player & Streaming API`?**
+  _High betweenness centrality (0.355) - this node is a cross-community bridge._
+- **Why does `docs/plan-review.md — Plan Review Instructions` connect `Project Architecture Docs` to `HLS Playback Decision`, `Account & Session Testing`, `FFmpeg Encoder Arguments`, `FFmpeg Package Args Tests`, `Device Auth Registration`, `API Request & Response Types`, `VAAPI Hardware Encode Probe`, `FFmpeg CI Build Config`, `SPA Handler Tests`, `Session Identity Tests`?**
+  _High betweenness centrality (0.177) - this node is a cross-community bridge._
+- **Why does `Player parity across web, mobile phone, and TV` connect `Project Architecture Docs` to `HLS Playback Decision`?**
+  _High betweenness centrality (0.097) - this node is a cross-community bridge._
 - **What connects `github.com/Einlanzerous/argosy`, `AccountCreateRequest`, `AccountUpdateRequest` to the rest of the system?**
-  _3870 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Playback Controller Core` be split into smaller, more focused modules?**
+  _3876 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Flutter Playback Controller` be split into smaller, more focused modules?**
   _Cohesion score 0.012269938650306749 - nodes in this community are weakly interconnected._
-- **Should `Transcoding and Beacon Pipeline` be split into smaller, more focused modules?**
-  _Cohesion score 0.020169851380042462 - nodes in this community are weakly interconnected._
-- **Should `Account Auth Context` be split into smaller, more focused modules?**
-  _Cohesion score 0.06289506953223767 - nodes in this community are weakly interconnected._
+- **Should `Web Player & Streaming API` be split into smaller, more focused modules?**
+  _Cohesion score 0.022744102401354067 - nodes in this community are weakly interconnected._
+- **Should `Flutter App Providers` be split into smaller, more focused modules?**
+  _Cohesion score 0.034526854219948847 - nodes in this community are weakly interconnected._
