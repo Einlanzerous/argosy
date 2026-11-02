@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.2](https://github.com/Einlanzerous/argosy/compare/v0.35.1...v0.35.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* **player:** paused keepalive no longer overwrites newer progress (ARGY-289) ([#291](https://github.com/Einlanzerous/argosy/issues/291)) ([eee3b7a](https://github.com/Einlanzerous/argosy/commit/eee3b7a313cc81de1ad35234e16102db16b63090))
+
 ## [0.35.1](https://github.com/Einlanzerous/argosy/compare/v0.35.0...v0.35.1) (2026-10-31)
 
 
