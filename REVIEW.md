@@ -166,3 +166,7 @@ Open with a one-line tally — `2 important, 1 nit` — or **No blocking issues*
 Then ticket fidelity in a sentence. Then findings, most severe first.
 
 If the diff is clean, say so in one line and stop. Do not pad.
+
+## Reviewing a plan
+
+Everything above is for a **diff**. Switchyard's adversarial plan pass reviews a **plan**, the document before any code, against a checkout of this repository, and what an ARGY plan has to get right is written for it in [`docs/plan-review.md`](docs/plan-review.md): the checks it performs from this tree plus the plan JSON alone, its standing (advisory on a passing check, blocking only for a hole a person would bounce), and the exit condition for *ready for a human*.
