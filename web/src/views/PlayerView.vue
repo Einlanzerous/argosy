@@ -28,6 +28,7 @@ import {
 import { parseVttCues, shiftVtt } from '@/lib/vtt'
 import { RestartGate, type RestartContext } from '@/lib/restartGate'
 import { SeekHold, isRealEnd } from '@/lib/upNext'
+import { fullscreenTarget } from '@/lib/fullscreen'
 import { NextEpisodeLookup } from '@/lib/nextEpisode'
 import { useSessionStore } from '@/stores/session'
 import type { components } from '@/api/schema'
@@ -333,7 +334,8 @@ let subCues: VTTCue[] = []
 // Chrome auto-hide: controls fade out after a few idle seconds while playing,
 // and reappear on any pointer movement.
 const controlsVisible = ref(true)
-const isFullscreen = ref(false)
+// A remounted player (auto-advance) starts inside a fullscreen it did not request.
+const isFullscreen = ref(!!document.fullscreenElement)
 let hideTimer: ReturnType<typeof setTimeout> | null = null
 
 // Playback mode + the media offset at which the current source begins. Direct
@@ -1372,13 +1374,14 @@ function removeSubtitleEl(): void {
   if (subTrack) subTrack.mode = 'disabled'
 }
 
-// fullscreen toggles: exit when already fullscreen, otherwise expand the player.
+// fullscreen toggles: exit when already fullscreen, otherwise expand the stable
+// root in App.vue (ARGY-287) so fullscreen survives the keyed remount on auto-advance.
 function fullscreen(): void {
   if (document.fullscreenElement) {
     void document.exitFullscreen().catch(() => {})
     return
   }
-  const el = video.value?.closest('.player') as HTMLElement | null
+  const el = fullscreenTarget<HTMLElement>(video.value)
   if (el?.requestFullscreen) void el.requestFullscreen().catch(() => {})
 }
 
