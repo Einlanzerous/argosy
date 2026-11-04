@@ -32,8 +32,9 @@ class MainActivity : AudioServiceActivity() {
     private val channel = "dev.dodson.argosy/capabilities"
     private val pipChannel = "dev.dodson.argosy/pip"
 
-    // Set by Dart while a player screen is foregrounded with active playback;
-    // gates auto-enter-PiP on leave so we never shrink the browse UI.
+    // Set by Dart while a player screen is foregrounded; together with
+    // `isPlaying` it gates auto-enter-PiP on leave so we never shrink the browse
+    // UI or float a paused video.
     private var playbackActive = false
 
     // Mirrors the player's play/pause state so the PiP action shows the right
@@ -95,8 +96,8 @@ class MainActivity : AudioServiceActivity() {
                 "setPlaying" -> {
                     isPlaying = call.arguments == true
                     // Always rebuild, not just while floating: the params also drive
-                    // auto-enter, so a pause before leaving the app must show the
-                    // play icon when PiP opens.
+                    // auto-enter (armed only while playing, ARGY-292) and carry the
+                    // play/pause icon the PiP window opens with.
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         runCatching { setPictureInPictureParams(buildPipParams()) }
                     }
@@ -137,6 +138,10 @@ class MainActivity : AudioServiceActivity() {
         super.onDestroy()
     }
 
+    // A paused video must not float on leave: the user may be heading into split
+    // screen with another app (ARGY-292). The manual PiP button still works.
+    private fun autoEnterPip(): Boolean = playbackActive && isPlaying
+
     private fun isPipSupported(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
@@ -160,7 +165,7 @@ class MainActivity : AudioServiceActivity() {
             builder.setActions(listOf(playPauseAction()))
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            builder.setAutoEnterEnabled(playbackActive)
+            builder.setAutoEnterEnabled(autoEnterPip())
             builder.setSeamlessResizeEnabled(true)
         }
         return builder.build()
@@ -187,7 +192,7 @@ class MainActivity : AudioServiceActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
-            playbackActive && isPipSupported()
+            autoEnterPip() && isPipSupported()
         ) {
             enterPip()
         }
