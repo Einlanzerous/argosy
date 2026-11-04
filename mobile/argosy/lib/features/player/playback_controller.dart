@@ -490,6 +490,7 @@ class PlaybackController extends ChangeNotifier
   /// Begins playback at [offset] seconds of absolute media time. For transcode
   /// this starts ffmpeg at that offset; for direct play it seeks the element.
   Future<void> start(double offset) async {
+    _userPaused = false; // a fresh start plays (ARGY-292)
     // The saved position is the first thing believed about where we are, so it
     // is checked like any other: a server-side value past the end starts over.
     offset = _resumePoint(offset);
@@ -995,6 +996,12 @@ class PlaybackController extends ChangeNotifier
 
   // --- transport -----------------------------------------------------------
 
+  /// True once the viewer (on-screen, lock-screen or PiP control) asked for a
+  /// pause, until they ask to play again. Lets a consumer tell a pause from a
+  /// rebuffer, which both read as `isPlaying == false` (ARGY-292).
+  bool get userPaused => _userPaused;
+  bool _userPaused = false;
+
   /// Resumes playback. Absolute, not a toggle: media-session callbacks say what
   /// they mean, and a lock-screen "play" arriving while a "pause" is still in
   /// flight would double-flip a toggle back to paused.
@@ -1002,6 +1009,7 @@ class PlaybackController extends ChangeNotifier
   Future<void> play() async {
     final p = _player;
     if (p == null) return;
+    _userPaused = false;
     await p.play();
     _safeNotify();
   }
@@ -1011,6 +1019,7 @@ class PlaybackController extends ChangeNotifier
   Future<void> pause() async {
     final p = _player;
     if (p == null) return;
+    _userPaused = true;
     await p.pause();
     _safeNotify();
   }

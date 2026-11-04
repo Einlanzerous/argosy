@@ -240,8 +240,14 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     final v = _controller.videoValue;
     // A rebuffer reads as not-playing, but it isn't a pause: hold the last
     // state so a stall while leaving the app neither disarms auto-enter nor
-    // flips the PiP icon (ARGY-292).
-    if (v != null && v.isBuffering && _lastPipPlaying != null) return;
+    // flips the PiP icon. A pause the viewer asked for is not held, even
+    // mid-stall (ARGY-292).
+    if (v != null &&
+        v.isBuffering &&
+        !_controller.userPaused &&
+        _lastPipPlaying != null) {
+      return;
+    }
     final playing = v?.isPlaying ?? false;
     if (playing != _lastPipPlaying) {
       _lastPipPlaying = playing;
