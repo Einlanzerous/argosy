@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.2](https://github.com/Einlanzerous/argosy/compare/v0.36.1...v0.36.2) (2026-11-08)
+
+
+### Bug Fixes
+
+* **web:** never write a stale place on unmount or while a place hold is set (ARGY-295) ([#300](https://github.com/Einlanzerous/argosy/issues/300)) ([8cac2e7](https://github.com/Einlanzerous/argosy/commit/8cac2e7330b90714f721391b861f198ca2eb6ada))
+
 ## [0.36.1](https://github.com/Einlanzerous/argosy/compare/v0.36.0...v0.36.1) (2026-11-04)
 
 
