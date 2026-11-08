@@ -170,14 +170,17 @@ export async function reportProgress(
   positionSeconds: number,
   durationSeconds?: number,
   keepalive = false,
-): Promise<void> {
-  await api.PUT('/api/v1/items/{itemId}/progress', {
+): Promise<PlayState | null> {
+  // The stored PlayState comes back so the caller can record its own echo
+  // (updatedAt) and tell its writes from another device's (ARGY-295).
+  const { data } = await api.PUT('/api/v1/items/{itemId}/progress', {
     params: { path: { itemId } },
     // keepalive: a paused player's liveness ping. The server keeps the session
     // alive but does not store the position (ARGY-289), so a stale pause cannot
     // overwrite progress another device has saved since.
     body: { positionSeconds, durationSeconds, ...(keepalive ? { keepalive: true } : {}) },
   })
+  return data ?? null
 }
 
 export async function setWatched(itemId: string, watched: boolean): Promise<void> {

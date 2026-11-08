@@ -6,12 +6,13 @@ import { describe, expect, mock, test } from 'bun:test'
 
 type Captured = { url: string; body: Record<string, unknown> }
 const captured: Captured[] = []
+let nextEcho: unknown = null
 
 mock.module('@/api/client', () => ({
   api: {
     PUT: async (url: string, init: { body: Record<string, unknown> }) => {
       captured.push({ url, body: init.body })
-      return { data: null }
+      return { data: nextEcho }
     },
     GET: async () => ({ data: null }),
     POST: async () => ({ data: null }),
@@ -36,5 +37,13 @@ describe('reportProgress', () => {
     captured.length = 0
     await reportProgress('item-1', 42, 100, true)
     expect(captured[0].body.keepalive).toBe(true)
+  })
+
+  test('returns the stored PlayState so the caller can record its own echo', async () => {
+    nextEcho = { positionSeconds: 42, watched: false, updatedAt: '2026-11-08T00:00:00Z' }
+    const state = await reportProgress('item-1', 42, 100)
+    expect(state?.updatedAt).toBe('2026-11-08T00:00:00Z')
+    nextEcho = null
+    expect(await reportProgress('item-1', 42, 100)).toBeNull()
   })
 })
