@@ -5,6 +5,7 @@ import Hls from 'hls.js'
 import { api, getToken } from '@/api/client'
 import { CLIENT_HEADER, CLIENT_ID } from '@/lib/clientId'
 import { posterStyle } from '@/lib/poster'
+import { WriteGate } from '@/lib/writeGate'
 import { formatClock, formatTitle, episodeHeader, episodeName } from '@/lib/format'
 import {
   getNextEpisode,
@@ -348,6 +349,8 @@ let mode: 'direct' | 'transcode' = 'direct'
 // (ARGY-59).
 let nativeMode: 'direct' | 'transcode' = 'direct'
 const baseOffset = ref(0)
+// Decides when a progress write must degrade to a keepalive (ARGY-295).
+const writeGate = new WriteGate()
 let directAttached = false
 let hls: Hls | null = null
 // Set once a fragment has actually completed, which is what makes
@@ -429,6 +432,7 @@ onMounted(async () => {
     getPreferences().catch(() => null),
   ])
   item.value = data ?? null
+  writeGate.seed(progress)
   preferredLangs.value = playback?.preferredLanguages ?? []
   prefs.value = devicePrefs
   preferredAudioLang.value = devicePrefs?.audioLanguage ?? null
@@ -776,7 +780,9 @@ async function waitForPlaylist(url: string, cancelled: () => boolean): Promise<b
 }
 
 onBeforeUnmount(() => {
-  flush()
+  // A paused player that has not moved since its last accepted write must not
+  // write on the way out (Back from a stale pause): keepalive instead (ARGY-295).
+  flush(false, true)
   if (heartbeat) clearInterval(heartbeat)
   if (upNextTimer) clearInterval(upNextTimer)
   if (hideTimer) clearTimeout(hideTimer)
@@ -853,7 +859,7 @@ function bindVideo(el: HTMLVideoElement): void {
       if (!isRealEnd(mediaPosition(el), duration.value)) return
       upNextHeld.value = false
     }
-    void setWatched(itemId, true).catch(() => {})
+    if (writeGate.mayMarkWatched()) void setWatched(itemId, true).catch(() => {})
     // Roll into the next episode unless the viewer opted out (pref off or card
     // dismissed). Otherwise we leave the player on the finished episode.
     //
@@ -907,11 +913,19 @@ function updateQuality(el: HTMLVideoElement): void {
 // keepalive marks a paused player's ping: it touches the transcode session but
 // the server stores no position, so the stale pause position cannot overwrite
 // progress another device saved meanwhile (ARGY-289).
-function flush(keepalive = false): void {
-  const pos = video.value ? mediaPosition(video.value) : baseOffset.value
-  if (pos > 0) {
-    void reportProgress(itemId, pos, duration.value || undefined, keepalive).catch(() => {})
-  }
+//
+// writeGate may downgrade any write to a keepalive (placeHold, or an unchanged
+// paused position on unmount) so a stale place is never stored (ARGY-295).
+function flush(keepalive = false, unmount = false): void {
+  const el = video.value
+  const pos = el ? mediaPosition(el) : baseOffset.value
+  if (pos <= 0) return
+  const ka = keepalive || writeGate.keepaliveFor(pos, { paused: el ? el.paused : true, unmount })
+  void reportProgress(itemId, pos, duration.value || undefined, ka)
+    .then((state) => {
+      if (!ka) writeGate.accept(pos, state)
+    })
+    .catch(() => {})
 }
 
 // maybeUpNext drives the "Up Next / Play Next" card: it appears once playback
