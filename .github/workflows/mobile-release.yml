@@ -49,6 +49,13 @@ jobs:
           # pushed ref otherwise. At release time main HEAD == the tagged commit,
           # but checking out the tag is correct for dispatching older tags too.
           ref: ${{ inputs.tag || github.ref_name }}
+      # Pin the JDK (ARGY-302). ubuntu-latest moved to 26.04, whose default
+      # JDK 25 makes Kotlin target 25 while plugins' Java targets 17, and the
+      # Gradle build fails on the mismatch. 17 is what the local toolchain uses.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
