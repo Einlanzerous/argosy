@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.1](https://github.com/Einlanzerous/argosy/compare/v0.37.0...v0.37.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **mobile:** full-bleed expanded detail, larger season title, film actions like series (ARGY-311) ([#308](https://github.com/Einlanzerous/argosy/issues/308)) ([2920ac8](https://github.com/Einlanzerous/argosy/commit/2920ac89b8e9a1044c7fc22d3c76c6968170c5eb))
+
 ## [0.37.0](https://github.com/Einlanzerous/argosy/compare/v0.36.2...v0.37.0) (2026-11-17)
 
 
