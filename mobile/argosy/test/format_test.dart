@@ -117,4 +117,27 @@ void main() {
       expect(formatBytes(30 * 1024 * 1024 * 1024), '30 GB');
     });
   });
+
+  group('yearLabel / seriesMetaLine (ARGY-309)', () {
+    test('unknown year is null for null, 0 and negatives', () {
+      expect(yearLabel(null), isNull);
+      expect(yearLabel(0), isNull);
+      expect(yearLabel(-1), isNull);
+      expect(yearLabel(2024), '2024');
+    });
+
+    test('series meta omits an unknown year instead of printing 0', () {
+      expect(seriesMetaLine(1, 0), '1 season');
+      expect(seriesMetaLine(1, null), '1 season');
+      expect(seriesMetaLine(3, 2024), '3 seasons  •  2024');
+      expect(seriesMetaLine(1, 2024), '1 season  •  2024');
+    });
+
+    test('card subtitle and now-playing drop a zero year', () {
+      expect(yearRatingSubtitle(0, null), isNull);
+      expect(yearRatingSubtitle(0, 8.1), '★ 8.1');
+      expect(yearRatingSubtitle(2024, 8.1), '2024  ·  ★ 8.1');
+      expect(nowPlayingLabels(title: 'Film', year: 0).subtitle, isNull);
+    });
+  });
 }

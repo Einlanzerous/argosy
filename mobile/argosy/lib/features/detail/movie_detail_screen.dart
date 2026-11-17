@@ -131,7 +131,7 @@ class _MetaRow extends StatelessWidget {
     // (text, brass?) parts — score and kind read in brass, the rest dim. Built
     // as spans so the accents sit inline with the dot separators.
     final parts = <(String, bool)>[
-      if (movie.year != null) ('${movie.year}', false),
+      if (yearLabel(movie.year) case final year?) (year, false),
       if (runtime.isNotEmpty && runtime != '—') (runtime, false),
       if (movie.container != null) (movie.container!.toUpperCase(), false),
       if (rating != null && rating > 0)

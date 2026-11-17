@@ -315,9 +315,9 @@ class _Meta extends StatelessWidget {
             color: ArgosyColors.cream,
           ),
         ),
-        if (series.year != null) ...[
+        if (yearLabel(series.year) case final year?) ...[
           const SizedBox(height: 16),
-          Text('${series.year}', style: _dim),
+          Text(year, style: _dim),
         ],
         if (series.overview != null && series.overview!.isNotEmpty) ...[
           const SizedBox(height: 20),

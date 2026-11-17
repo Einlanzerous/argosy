@@ -262,7 +262,7 @@ class _MetaRow extends StatelessWidget {
       parts.add(w);
     }
 
-    if (year != null) add(Text('$year', style: dim));
+    if (yearLabel(year) case final label?) add(Text(label, style: dim));
     if (runtime.isNotEmpty && runtime != '—') add(Text(runtime, style: dim));
     if (rating != null && rating! > 0) {
       add(Text('★ ${rating!.toStringAsFixed(1)}', style: brass));
