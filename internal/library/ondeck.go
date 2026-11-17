@@ -34,7 +34,7 @@ WITH engaged AS (
 	JOIN episodes e ON e.media_item_id = mi.id
 	JOIN seasons sea ON sea.id = e.season_id
 	JOIN series sr ON sr.id = sea.series_id
-	WHERE l.account_id = $1 AND ps.user_id = $2 AND (ps.watched = true OR ps.position_seconds > 0)
+	WHERE l.account_id = $1 AND ps.user_id = $2 AND (ps.watched = true OR ps.position_seconds > 0 OR ps.position_seconds >= $4)
 ),
 frontier AS (
 	-- The latest episode engaged per series, whether it was finished, and the
@@ -73,7 +73,9 @@ FROM (
 ) nextup
 ORDER BY last_watched DESC
 LIMIT $3`
-	rows, err := s.pool.Query(ctx, q, accountID, userID, limit)
+	// $4 is abandonedSeconds, the same threshold Continue Watching uses
+	// (progress.go), so there is one definition of "sampled, not begun".
+	rows, err := s.pool.Query(ctx, q, accountID, userID, limit, abandonedSeconds)
 	if err != nil {
 		return nil, err
 	}
