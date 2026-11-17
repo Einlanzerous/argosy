@@ -5,7 +5,7 @@ import { api } from '@/api/client'
 import DetailScaffold from '@/components/DetailScaffold.vue'
 import AddToVault from '@/components/AddToVault.vue'
 import { posterStyle } from '@/lib/poster'
-import { formatRuntime } from '@/lib/format'
+import { formatRuntime, yearLabel, seasonCountLabel } from '@/lib/format'
 import { setPage } from '@/lib/page'
 import { setWatched, setSeasonWatched, setSeriesWatched } from '@/lib/playback'
 import { patchSeriesProgress, seriesHasItem, useLiveProgress } from '@/lib/useLiveProgress'
@@ -289,9 +289,9 @@ watch(
     :cast="series.cast"
   >
     <template #meta>
-      <span>{{ series.year ?? '—' }}</span>
-      <span class="sep">•</span>
-      <span>{{ series.seasons.length }} seasons</span>
+      <span v-if="yearLabel(series.year)">{{ yearLabel(series.year) }}</span>
+      <span v-if="yearLabel(series.year)" class="sep">•</span>
+      <span>{{ seasonCountLabel(series.seasons.length) }}</span>
     </template>
 
     <template #actions>

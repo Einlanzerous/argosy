@@ -134,7 +134,7 @@ String? _continueSubtitle(ContinueItem c) {
     return episodeLabel(c.seasonNumber!, c.episodeNumber!, c.episodeTitle);
   }
   if (c.seriesTitle != null) return formatTitle(c.title);
-  return c.year != null ? '${c.year}' : null;
+  return yearLabel(c.year);
 }
 
 ContinueEntry _continueEntry(ContinueItem c) => ContinueEntry(
@@ -194,7 +194,7 @@ HomeHero? _heroFrom(List<ContinueItem> cont, List<MediaItemSummary> recent) {
     return HomeHero(
       eyebrow: 'Featured in the hold',
       title: film.title,
-      subtitle: film.year != null ? '${film.year}' : null,
+      subtitle: yearLabel(film.year),
       kind: MediaKind.movie,
       detailId: film.id,
       playableId: film.id,

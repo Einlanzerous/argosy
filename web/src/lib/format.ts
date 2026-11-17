@@ -1,3 +1,15 @@
+// A release year as text, or null when unknown. Unknown is null/undefined or
+// <= 0 (older matches persisted 0, which rendered as a bare "0" — ARGY-309).
+export function yearLabel(year: number | null | undefined): string | null {
+  return year != null && year > 0 ? String(year) : null
+}
+
+// A series' meta line pieces: the year (when known) and the season count, which
+// is the seasons present in the library — what the episode tabs list.
+export function seasonCountLabel(count: number): string {
+  return `${count} season${count === 1 ? '' : 's'}`
+}
+
 // Runtime like "2h 04m" / "47m" from a duration in seconds.
 export function formatRuntime(seconds: number | null | undefined): string {
   if (!seconds || seconds <= 0) return '—'
