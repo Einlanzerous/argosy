@@ -15,7 +15,9 @@ class DevicePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: ArgosyColors.accentBg,
+        // Solid dark rather than a brass wash: it sits on key art, and a
+        // translucent pill vanished against a bright frame (ARGY-308).
+        color: ArgosyColors.bg2.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: ArgosyColors.accentLine),
       ),

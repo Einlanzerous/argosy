@@ -152,11 +152,28 @@ String formatRelativeTime(DateTime? when, {DateTime? now}) {
 /// "0" — ARGY-309), so every year display goes through here.
 String? yearLabel(int? year) => year != null && year > 0 ? '$year' : null;
 
+/// How many seasons a series holds, as the library has them: "3 seasons",
+/// "1 season". A series with exactly one season that isn't season 1 names it
+/// ("Season 17") instead of claiming "1 season" for the tail of a long show.
+/// [singleSeasonNumber] is that lone season's number; season 0 (specials) and
+/// season 1 still read "1 season".
+String seasonCountLabel(int seasonCount, {int? singleSeasonNumber}) {
+  if (seasonCount == 1 &&
+      singleSeasonNumber != null &&
+      singleSeasonNumber > 1) {
+    return 'Season $singleSeasonNumber';
+  }
+  return '$seasonCount season${seasonCount == 1 ? '' : 's'}';
+}
+
 /// A series' meta line: `1 season  •  2024`, dropping the year when unknown.
 /// The season count is the seasons present in the library, which is what the
 /// episode list below shows.
-String seriesMetaLine(int seasonCount, int? year) {
-  final seasons = '$seasonCount season${seasonCount == 1 ? '' : 's'}';
+String seriesMetaLine(int seasonCount, int? year, {int? singleSeasonNumber}) {
+  final seasons = seasonCountLabel(
+    seasonCount,
+    singleSeasonNumber: singleSeasonNumber,
+  );
   final y = yearLabel(year);
   return y == null ? seasons : '$seasons  •  $y';
 }

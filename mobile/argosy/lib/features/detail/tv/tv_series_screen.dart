@@ -286,13 +286,14 @@ class _Meta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = series.seasons.length;
+    final only = count == 1 ? series.seasons.first.seasonNumber : null;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Series · $count season${count == 1 ? '' : 's'}',
+          'Series · ${seasonCountLabel(count, singleSeasonNumber: only)}',
           style: const TextStyle(
             fontFamily: 'Archivo',
             fontSize: 14,

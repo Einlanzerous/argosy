@@ -291,7 +291,12 @@ watch(
     <template #meta>
       <span v-if="yearLabel(series.year)">{{ yearLabel(series.year) }}</span>
       <span v-if="yearLabel(series.year)" class="sep">•</span>
-      <span>{{ seasonCountLabel(series.seasons.length) }}</span>
+      <span>{{
+        seasonCountLabel(
+          series.seasons.length,
+          series.seasons.length === 1 ? series.seasons[0].seasonNumber : null,
+        )
+      }}</span>
     </template>
 
     <template #actions>

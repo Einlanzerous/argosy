@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api/artwork.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
-import '../../theme/button_styles.dart';
+import '../../widgets/action_pill.dart';
 import '../../widgets/hatch_pattern.dart';
 
 // The brass/ghost action-button styles now live in the shared theme module so
@@ -171,12 +171,25 @@ class WatchedButton extends ConsumerStatefulWidget {
     required this.onSet,
     this.watchedLabel = 'Watched',
     this.markLabel = 'Mark watched',
+    this.iconOnly = false,
+    this.square = false,
+    this.scopeIcon,
   });
+
+  /// A 50dp rounded-square icon button (the show-level action row).
+  final bool square;
+
+  /// A distinct glyph for a wider scope (the whole series), so two icon-only
+  /// watched buttons side by side are not identical.
+  final IconData? scopeIcon;
 
   final bool watched;
   final Future<void> Function(bool watched) onSet;
   final String watchedLabel;
   final String markLabel;
+
+  /// Icon circle with the label as tooltip (compact season header).
+  final bool iconOnly;
 
   @override
   ConsumerState<WatchedButton> createState() => _WatchedButtonState();
@@ -206,15 +219,15 @@ class _WatchedButtonState extends ConsumerState<WatchedButton> {
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton.icon(
-      style: ghostButtonStyle(context),
+    return ActionPill(
+      iconOnly: widget.iconOnly,
+      square: widget.square,
       onPressed: _busy ? null : _toggle,
-      icon: Icon(
-        widget.watched ? Icons.check_circle : Icons.check_circle_outline,
-        size: 18,
-        color: widget.watched ? ArgosyColors.accent : null,
-      ),
-      label: Text(widget.watched ? widget.watchedLabel : widget.markLabel),
+      icon:
+          widget.scopeIcon ??
+          (widget.watched ? Icons.check_circle : Icons.check_circle_outline),
+      iconColor: widget.watched ? ArgosyColors.accent : null,
+      label: widget.watched ? widget.watchedLabel : widget.markLabel,
     );
   }
 }

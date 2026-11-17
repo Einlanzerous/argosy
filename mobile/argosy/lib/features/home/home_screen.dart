@@ -5,10 +5,10 @@ import '../../api/artwork.dart';
 import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../theme/breakpoints.dart';
 import '../../theme/button_styles.dart';
 import '../../widgets/argosy_mark.dart';
 import '../../widgets/async_view.dart';
-import '../../widgets/device_pill.dart';
 import '../../widgets/hatch_pattern.dart';
 import '../../widgets/media_rail.dart';
 import '../account/account_sheet.dart';
@@ -33,19 +33,22 @@ class HomeScreen extends ConsumerWidget {
         titleSpacing: 16,
         // The logo-only ship mark + a separate "Argosy" wordmark (not the
         // combined logo-with-text image), so the two can be sized independently.
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const ArgosyMark(size: 44),
-            const SizedBox(width: 11),
-            Text(
-              'Argosy',
-              style: Theme.of(
-                context,
-              ).appBarTheme.titleTextStyle?.copyWith(fontSize: 23),
-            ),
-          ],
-        ),
+        // Expanded: the rail carries the brand, so only the avatar remains.
+        title: isExpandedWidth(context)
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const ArgosyMark(size: 44),
+                  const SizedBox(width: 11),
+                  Text(
+                    'Argosy',
+                    style: Theme.of(
+                      context,
+                    ).appBarTheme.titleTextStyle?.copyWith(fontSize: 23),
+                  ),
+                ],
+              ),
         actions: [
           // The Hold lives in the app bar, not behind Settings: Settings can't
           // render without the server, and what's stowed has to be reachable
@@ -76,7 +79,10 @@ class HomeScreen extends ConsumerWidget {
                       // live screens. Tapping a tile resumes the item directly (its
                       // id is the playable episode/film), not a detour through
                       // detail.
-                      _continueRail(context, home.continueRow),
+                      if (isExpandedWidth(context))
+                        _continueGrid(context, home.continueRow)
+                      else
+                        _continueRail(context, home.continueRow),
                       const SizedBox(height: 24),
                     ],
                     if (home.onDeck.isNotEmpty) ...[
@@ -120,6 +126,46 @@ class HomeScreen extends ConsumerWidget {
         ),
     ],
   );
+
+  /// Expanded: Continue Watching is a 4-up grid rather than a strip, so the
+  /// whole row is visible at once on a wide screen (ARGY-308).
+  Widget _continueGrid(BuildContext context, List<ContinueEntry> entries) {
+    const gap = 14.0;
+    const columns = 4;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Continue Watching',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, box) {
+              final w = (box.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                key: const ValueKey('continue-grid'),
+                spacing: gap,
+                runSpacing: 18,
+                children: [
+                  for (final e in entries.take(8))
+                    ContinueCard(
+                      entry: e,
+                      width: w,
+                      onTap: () => openPlayer(context, e.id, resume: true),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _continueRail(BuildContext context, List<ContinueEntry> entries) =>
       MediaRail(
@@ -204,20 +250,102 @@ class _Hero extends ConsumerWidget {
 
   final HomeHero hero;
 
+  /// Resume plus the cross-device note. Compact: Resume fills the row and a
+  /// two-line "from" over the device name sits right-aligned beside it.
+  /// Expanded: a padded (not full-width) Resume with "from NAME" inline.
+  Widget _heroResumeRow(BuildContext context, bool expanded) {
+    final device = hero.deviceLabel;
+    final brass = Theme.of(context).textTheme.labelMedium?.copyWith(
+      color: ArgosyColors.accentSoft,
+      fontWeight: FontWeight.w600,
+      fontSize: expanded ? 11.5 : 11,
+      height: 1.3,
+    );
+    final button = FilledButton.icon(
+      key: const ValueKey('hero-resume'),
+      style: brassButtonStyle(context, minimumSize: const Size(0, 48)).copyWith(
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: expanded ? 26 : 20),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      onPressed: () =>
+          openPlayer(context, hero.playableId!, resume: hero.percent != null),
+      icon: const Icon(Icons.play_arrow, size: 20),
+      label: Text(hero.percent != null ? 'Resume' : 'Play'),
+    );
+    if (expanded) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          button,
+          if (device != null) ...[
+            const SizedBox(width: 14),
+            Flexible(
+              child: Text(
+                'from $device',
+                key: const ValueKey('hero-from'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: brass,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: button),
+        if (device != null) ...[
+          const SizedBox(width: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 110),
+            child: Column(
+              key: const ValueKey('hero-from'),
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('from', style: brass),
+                Text(
+                  device,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: brass,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.argosy;
     final art = ref.watch(artworkResolverProvider);
     final bg = art(hero.backdropUrl ?? hero.posterUrl);
+    final expanded = isExpandedWidth(context);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+      padding: EdgeInsets.fromLTRB(
+        expanded ? 24 : 14,
+        4,
+        expanded ? 24 : 14,
+        0,
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(tokens.radiusXl + 2),
         child: GestureDetector(
           onTap: () => openDetail(context, hero.kind, hero.detailId),
           child: SizedBox(
-            height: 420,
+            // Expanded caps the hero so two rows of the Bridge stay visible
+            // beneath it instead of one stretched poster.
+            height: expanded ? 300 : 420,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -229,6 +357,8 @@ class _Hero extends ConsumerWidget {
                   )
                 else
                   const HatchPlaceholder(),
+                // A taller scrim: it starts higher and reaches full strength
+                // sooner, so the text holds on a bright frame (ARGY-308).
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -236,107 +366,157 @@ class _Hero extends ConsumerWidget {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Color(0x99000000),
+                        Color(0xB3000000),
                         Color(0xF2000000),
                       ],
-                      stops: [0.3, 0.7, 1],
+                      stops: [0.12, 0.55, 0.92],
                     ),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                  padding: EdgeInsets.fromLTRB(
+                    expanded ? 24 : 18,
+                    0,
+                    expanded ? 24 : 18,
+                    expanded ? 22 : 18,
+                  ),
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: ConstrainedBox(
+                      // Expanded: the text is a left column, not a full-width
+                      // line.
+                      constraints: BoxConstraints(
+                        maxWidth: expanded ? 520 : double.infinity,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.sync_alt,
-                            size: 13,
-                            color: ArgosyColors.accent,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            hero.eyebrow.toUpperCase(),
-                            style: Theme.of(context).textTheme.labelMedium
-                                ?.copyWith(
-                                  color: ArgosyColors.accent,
-                                  letterSpacing: 1.6,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        hero.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.displayMedium,
-                      ),
-                      if (hero.subtitle != null &&
-                          hero.subtitle!.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          hero.subtitle!,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                      if (hero.deviceLabel != null) ...[
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: DevicePill(
-                            label: 'Left off on ${hero.deviceLabel!}',
-                          ),
-                        ),
-                      ],
-                      if (hero.percent != null) ...[
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: LinearProgressIndicator(
-                                  value: hero.percent,
-                                  minHeight: 4,
-                                  backgroundColor: tokens.line2,
-                                  valueColor: AlwaysStoppedAnimation(
-                                    tokens.progress,
-                                  ),
-                                ),
+                          Container(
+                            key: const ValueKey('hero-eyebrow'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xD10E0E0D),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: ArgosyColors.accentLine,
                               ),
                             ),
-                            if (hero.remainingLabel != null) ...[
-                              const SizedBox(width: 11),
-                              Text(
-                                hero.remainingLabel!,
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(color: ArgosyColors.soft),
-                              ),
-                            ],
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.sync_alt,
+                                  size: 13,
+                                  color: ArgosyColors.accent,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  hero.eyebrow.toUpperCase(),
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        color: ArgosyColors.accent,
+                                        letterSpacing: 1.6,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            hero.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.displayMedium,
+                          ),
+                          // Compact: "S6 · E17 · title" left, "21m left" right,
+                          // then the bar. Expanded: the line, then bar + label.
+                          if (!expanded &&
+                                  (hero.subtitle?.isNotEmpty ?? false) ||
+                              !expanded && hero.remainingLabel != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    hero.subtitle ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ),
+                                if (hero.remainingLabel != null)
+                                  Text(
+                                    hero.remainingLabel!,
+                                    key: const ValueKey('hero-remaining'),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: ArgosyColors.soft,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                              ],
+                            ),
+                          ] else if (expanded &&
+                              (hero.subtitle?.isNotEmpty ?? false)) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              hero.subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
                           ],
-                        ),
-                      ],
-                      if (hero.playableId != null) ...[
-                        const SizedBox(height: 15),
-                        FilledButton.icon(
-                          style: brassButtonStyle(
-                            context,
-                            minimumSize: const Size.fromHeight(50),
-                          ),
-                          onPressed: () => openPlayer(
-                            context,
-                            hero.playableId!,
-                            resume: hero.percent != null,
-                          ),
-                          icon: const Icon(Icons.play_arrow, size: 20),
-                          label: Text(hero.percent != null ? 'Resume' : 'Play'),
-                        ),
-                      ],
-                    ],
+                          if (hero.percent != null) ...[
+                            SizedBox(height: expanded ? 12 : 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(2),
+                                    child: LinearProgressIndicator(
+                                      value: hero.percent,
+                                      minHeight: 4,
+                                      backgroundColor: tokens.line2,
+                                      valueColor: AlwaysStoppedAnimation(
+                                        tokens.progress,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (expanded &&
+                                    hero.remainingLabel != null) ...[
+                                  const SizedBox(width: 11),
+                                  Text(
+                                    hero.remainingLabel!,
+                                    key: const ValueKey('hero-remaining'),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: ArgosyColors.soft,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                          if (hero.playableId != null) ...[
+                            const SizedBox(height: 14),
+                            _heroResumeRow(context, expanded),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
