@@ -57,6 +57,7 @@ class HomeScreen extends ConsumerWidget {
       ),
       body: AsyncView(
         value: data,
+        keepStale: true,
         onRetry: () => ref.invalidate(homeDataProvider),
         builder: (home) => RefreshIndicator(
           color: ArgosyColors.accent,

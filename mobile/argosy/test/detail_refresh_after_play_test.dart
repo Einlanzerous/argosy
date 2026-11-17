@@ -9,6 +9,7 @@
 import 'dart:async';
 
 import 'package:argosy/api/api_providers.dart';
+import 'package:argosy/features/detail/detail_providers.dart';
 import 'package:argosy/features/detail/series_detail_screen.dart';
 import 'package:argosy/theme/argosy_theme.dart';
 import 'package:argosy_api/api.dart';
@@ -25,6 +26,9 @@ class _Library extends LibraryApi {
   /// test can look at the screen while the refetch is in flight.
   final List<bool> serverWatched = [];
   Completer<void>? gate;
+
+  /// Per-fetch gates, keyed by 1-based fetch number, to order the answers.
+  final Map<int, Completer<void>> gates = {};
   int fetches = 0;
 
   @override
@@ -36,7 +40,9 @@ class _Library extends LibraryApi {
         ? fetches
         : serverWatched.length - 1;
     fetches++;
+    final n = fetches;
     if (fetches > 1 && gate != null) await gate!.future;
+    if (gates[n] case final g?) await g.future;
     return _series(watched: serverWatched[i]);
   }
 
@@ -133,18 +139,50 @@ void main() {
   testWidgets('optimistic overrides yield to the refetched server state', (
     tester,
   ) async {
-    // The server says the episode is still unwatched after the return.
-    final api = _Library()..serverWatched.addAll([false, false]);
+    // The write lands (fetch 2, which the toggle triggers, reports it), then
+    // another device unmarks the episode before the player returns (fetch 3).
+    final api = _Library()..serverWatched.addAll([false, true, false]);
     await _pump(tester, api);
 
     await tester.tap(find.text('Mark season watched'));
     await tester.pumpAndSettle();
     expect(find.text('Not started'), findsNothing); // override applied
+    expect(api.fetches, 2); // ...and confirmed by a refetch (ARGY-291)
 
     await _playAndClose(tester);
     await tester.pumpAndSettle();
 
-    expect(api.fetches, 2);
+    expect(api.fetches, 3);
     expect(find.text('Not started'), findsOneWidget);
+  });
+
+  testWidgets('a refetch already in flight cannot undo a watched tap', (
+    tester,
+  ) async {
+    // Fetch 2 started before the write and answers with the old state; the
+    // toggle's own refetch (fetch 3) answers with the new one (ARGY-291).
+    final api = _Library()..serverWatched.addAll([false, false, true]);
+    await _pump(tester, api);
+
+    final stale = api.gates[2] = Completer<void>();
+    final fresh = api.gates[3] = Completer<void>();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SeriesDetailScreen)),
+    );
+    container.invalidate(seriesDetailProvider('series-1')); // e.g. app resume
+    await tester.pump();
+    expect(api.fetches, 2);
+
+    await tester.tap(find.text('Mark season watched'));
+    await tester.pump();
+    expect(api.fetches, 3);
+
+    // The newer answer arrives first and the stale one last: only the newer
+    // may count.
+    fresh.complete();
+    await tester.pumpAndSettle();
+    stale.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Not started'), findsNothing);
   });
 }

@@ -94,8 +94,22 @@ class _SeriesState extends ConsumerState<_Series> {
   @override
   void didUpdateWidget(covariant _Series oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.series, widget.series)) _watchedOverrides.clear();
+    if (!identical(oldWidget.series, widget.series)) {
+      _watchedOverrides.clear();
+      // A silent refresh keeps the season the viewer is on (ARGY-291), unless
+      // that season is gone.
+      if (_activeSeason >= widget.series.seasons.length) {
+        _activeSeason = _resumeSeasonIndex;
+      }
+    }
   }
+
+  /// Refetch after a watched write, so the server's answer replaces the
+  /// optimistic override. Invalidating also discards any refetch that was
+  /// already in flight (a Beacon or resume refresh started before the write),
+  /// whose stale answer would otherwise clear the override and undo the tap.
+  void _refetchAfterWrite() =>
+      ref.invalidate(seriesDetailProvider(widget.series.id));
 
   bool _isWatched(EpisodeSummary e) {
     final id = e.mediaItemId;
@@ -109,7 +123,9 @@ class _SeriesState extends ConsumerState<_Series> {
     await ref
         .read(libraryApiProvider)
         .setWatched(mediaItemId, WatchedUpdate(watched: next));
-    if (mounted) setState(() => _watchedOverrides[mediaItemId] = next);
+    if (!mounted) return;
+    setState(() => _watchedOverrides[mediaItemId] = next);
+    _refetchAfterWrite();
   }
 
   /// The season tab to open on: the one holding the resume episode (mapping its

@@ -59,7 +59,20 @@ Future<void> _pumpMovie(WidgetTester tester, _FakeLibraryApi api) async {
   await tester.pump();
 }
 
-SeriesDetail _series() => SeriesDetail(
+/// The series as the server would report it after [calls]: the fake persists
+/// writes, because the screen refetches after each one (ARGY-291).
+SeriesDetail _series([List<({String id, bool watched})> calls = const []]) {
+  bool watched(String id, bool initial) {
+    for (final c in calls.reversed) {
+      if (c.id == id) return c.watched;
+    }
+    return initial;
+  }
+
+  return _seriesWith(m1: watched('m1', false), m2: watched('m2', true));
+}
+
+SeriesDetail _seriesWith({required bool m1, required bool m2}) => SeriesDetail(
   id: 'series-1',
   title: 'Show',
   seasons: [
@@ -72,14 +85,14 @@ SeriesDetail _series() => SeriesDetail(
           episodeNumber: 1,
           title: 'Pilot',
           mediaItemId: 'm1',
-          watched: false,
+          watched: m1,
         ),
         EpisodeSummary(
           id: 'e2',
           episodeNumber: 2,
           title: 'Second',
           mediaItemId: 'm2',
-          watched: true,
+          watched: m2,
         ),
       ],
     ),
@@ -91,7 +104,9 @@ Future<void> _pumpSeries(WidgetTester tester, _FakeLibraryApi api) async {
     ProviderScope(
       overrides: [
         libraryApiProvider.overrideWithValue(api),
-        seriesDetailProvider('series-1').overrideWith((ref) async => _series()),
+        seriesDetailProvider(
+          'series-1',
+        ).overrideWith((ref) async => _series(api.calls)),
       ],
       child: const MaterialApp(home: TvSeriesScreen(seriesId: 'series-1')),
     ),
