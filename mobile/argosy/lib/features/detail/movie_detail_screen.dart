@@ -84,15 +84,15 @@ class _Body extends StatelessWidget {
       resumable: _resumable,
       watched: data.progress?.watched ?? false,
     );
-    final rest = <Widget>[
+    final resume = <Widget>[
       if (_resumable && data.progress != null) ...[
         const SizedBox(height: 14),
         _ResumeBar(percent: _percent, progress: data.progress!),
       ],
-      if (movie.overview != null && movie.overview!.isNotEmpty) ...[
-        const SizedBox(height: 16),
+    ];
+    final about = <Widget>[
+      if (movie.overview != null && movie.overview!.isNotEmpty)
         Text(movie.overview!, style: Theme.of(context).textTheme.bodyMedium),
-      ],
       if (movie.cast.isNotEmpty) ...[
         const SizedBox(height: 16),
         CastRow(cast: movie.cast),
@@ -106,16 +106,45 @@ class _Body extends StatelessWidget {
         const ReviewFlag(),
       ],
     ];
+    final rest = <Widget>[
+      ...resume,
+      if (about.isNotEmpty) ...[const SizedBox(height: 16), ...about],
+    ];
 
     if (expanded) {
       return FullBleedDetail(
         key: const ValueKey('movie-expanded'),
         backdropUrl: movie.backdropUrl,
         posterUrl: movie.posterUrl,
-        details: Column(
+        wide: true,
+        // Two columns: what it is and the actions on the left, the synopsis
+        // and credits on the right, so the box is wide and short.
+        details: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [titleBlock, const SizedBox(height: 16), actions, ...rest],
+          children: [
+            SizedBox(
+              key: const ValueKey('movie-info-left'),
+              width: FullBleedDetail.detailsWidth - 40,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  titleBlock,
+                  const SizedBox(height: 16),
+                  actions,
+                  ...resume,
+                ],
+              ),
+            ),
+            const SizedBox(width: 32),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: about,
+              ),
+            ),
+          ],
         ),
       );
     }

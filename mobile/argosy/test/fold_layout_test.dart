@@ -367,14 +367,23 @@ void main() {
       final box = find.byKey(const ValueKey('detail-info-box'));
       expect(tester.getTopLeft(box).dx, 24);
       expect(tester.getBottomLeft(box).dy, closeTo(_expanded.height - 24, 1));
+      // A film has no season panel, so its box spans the content width with
+      // the info in two columns (wide and short, not a lone corner card).
+      expect(tester.getSize(box).width, _expanded.width - 48);
       for (final t in [
         find.text('Brackwater'),
         find.widgetWithText(FilledButton, 'Resume'),
         find.byTooltip('Stow'),
-        find.textContaining('A ferry'),
       ]) {
         expect(tester.getTopLeft(t).dx, lessThan(24 + 380));
       }
+      final synopsis = find.textContaining('A ferry');
+      expect(tester.getTopLeft(synopsis).dx, greaterThan(24 + 380));
+      expect(
+        tester.getTopLeft(synopsis).dy,
+        lessThan(tester.getBottomLeft(find.byTooltip('Stow')).dy),
+        reason: 'synopsis beside the actions, not under them',
+      );
     });
   });
 
