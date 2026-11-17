@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.37.0](https://github.com/Einlanzerous/argosy/compare/v0.36.2...v0.37.0) (2026-11-17)
+
+
+### Features
+
+* **mobile:** folded/unfolded layouts for Bridge, Manifest and Series (ARGY-308) ([#307](https://github.com/Einlanzerous/argosy/issues/307)) ([9db0b31](https://github.com/Einlanzerous/argosy/commit/9db0b3184e6463d1e7e24bbbd15d254cc35c19fb))
+
+
+### Bug Fixes
+
+* **detail:** treat an unknown year as absent, not 0 (ARGY-309) ([#306](https://github.com/Einlanzerous/argosy/issues/306)) ([42a589d](https://github.com/Einlanzerous/argosy/commit/42a589d73735de551b096216b85361371f59ca3b))
+* **library:** On Deck follows the most recent episode, not the furthest (ARGY-306) ([#304](https://github.com/Einlanzerous/argosy/issues/304)) ([f72fe89](https://github.com/Einlanzerous/argosy/commit/f72fe89447ede581ad727259bbd23784ae2c7a0d))
+
 ## [0.36.2](https://github.com/Einlanzerous/argosy/compare/v0.36.1...v0.36.2) (2026-11-17)
 
 
