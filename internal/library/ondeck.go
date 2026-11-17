@@ -9,10 +9,26 @@ import (
 )
 
 // OnDeck returns each series' next "up next" episode for the user: the earliest
-// episode after the furthest one they've watched, that they haven't started yet.
-// In-progress episodes are intentionally excluded — those belong to Continue
-// Watching (/continue) — so the two home rows never show the same item. Series
-// are ordered by most-recent watch activity. Episode art falls back to the
+// episode after the one they most recently watched, that they haven't started
+// yet (ARGY-306). The frontier is the most recently engaged episode, not the
+// furthest, so a stray tap on a far-future episode cannot outrank real progress.
+//
+// Engaged means finished, or unfinished with at least abandonedSeconds of
+// progress. A row under that is a sample, not a start, and never counts
+// regardless of its age: SetWatched(false) keeps position_seconds and bumps
+// updated_at, so an age test would let an unwatched sample become the newest
+// activity. Ties on updated_at (a bulk mark-watched, or a combined rip whose one
+// file backs several episode rows) resolve to the furthest episode.
+//
+// In-progress episodes are intentionally excluded as picks — if the newest
+// engaged episode is unfinished it is Continue Watching's (/continue) and the
+// series has no On Deck entry — so no single episode is ever in both rows
+// (a series can be, via an older unfinished episode). Self-heal: an unwatched
+// stray that kept >= abandonedSeconds stays the newest engaged row until an
+// episode elsewhere is played past abandonedSeconds or finished; bulk
+// SetSeasonWatched/SetSeriesWatched(false) promote the furthest such row the
+// same way (accepted). Series are ordered by their latest engaged activity,
+// which now excludes sampled rows (intended). Episode art falls back to the
 // series' poster/backdrop.
 func (s *Store) OnDeck(ctx context.Context, accountID, userID string, limit int) ([]api.OnDeckItem, error) {
 	switch {
@@ -23,8 +39,9 @@ func (s *Store) OnDeck(ctx context.Context, accountID, userID string, limit int)
 	}
 	const q = `
 WITH engaged AS (
-	-- Episodes the user has engaged with (finished or started), with their ordinal
-	-- (season*1000 + episode) and progress state.
+	-- Episodes the user has really engaged with: finished, or unfinished and at
+	-- least $4 (abandonedSeconds) in — sub-threshold rows are samples, whatever
+	-- their age. With their ordinal (season*1000 + episode) and progress state.
 	SELECT sr.id AS series_id,
 	       (sea.season_number * 1000 + e.episode_number) AS pos,
 	       ps.watched, ps.updated_at
@@ -34,16 +51,17 @@ WITH engaged AS (
 	JOIN episodes e ON e.media_item_id = mi.id
 	JOIN seasons sea ON sea.id = e.season_id
 	JOIN series sr ON sr.id = sea.series_id
-	WHERE l.account_id = $1 AND ps.user_id = $2 AND (ps.watched = true OR ps.position_seconds > 0)
+	WHERE l.account_id = $1 AND ps.user_id = $2 AND (ps.watched = true OR ps.position_seconds >= $4)
 ),
 frontier AS (
-	-- The latest episode engaged per series, whether it was finished, and the
-	-- series' most recent activity. Only finished frontiers yield an on-deck pick;
-	-- an in-progress last episode is Continue Watching's job, not On Deck's.
+	-- The most recently engaged episode per series (ties: the furthest), whether
+	-- it was finished, and the series' most recent activity. Only finished
+	-- frontiers yield an on-deck pick; an in-progress last episode is Continue
+	-- Watching's job, not On Deck's.
 	SELECT DISTINCT ON (series_id) series_id, pos, watched,
 	       (SELECT max(updated_at) FROM engaged e2 WHERE e2.series_id = engaged.series_id) AS last_watched
 	FROM engaged
-	ORDER BY series_id, pos DESC
+	ORDER BY series_id, updated_at DESC, pos DESC
 ),
 candidates AS (
 	SELECT sr.id AS series_id, sr.title AS series_title,
@@ -73,7 +91,9 @@ FROM (
 ) nextup
 ORDER BY last_watched DESC
 LIMIT $3`
-	rows, err := s.pool.Query(ctx, q, accountID, userID, limit)
+	// $4 is abandonedSeconds: the one threshold Continue Watching also uses
+	// (progress.go), so there is one definition of "sampled, not begun".
+	rows, err := s.pool.Query(ctx, q, accountID, userID, limit, abandonedSeconds)
 	if err != nil {
 		return nil, err
 	}
