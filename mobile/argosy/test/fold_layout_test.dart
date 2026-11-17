@@ -7,6 +7,8 @@ import 'dart:io';
 
 import 'package:argosy/api/api_providers.dart';
 import 'package:argosy/features/browse/media_card.dart';
+import 'package:argosy/features/detail/detail_providers.dart';
+import 'package:argosy/features/detail/movie_detail_screen.dart';
 import 'package:argosy/features/detail/series_detail_screen.dart';
 import 'package:argosy/features/home/home_providers.dart';
 import 'package:argosy/features/home/home_screen.dart';
@@ -217,7 +219,7 @@ void main() {
 
       // Back is a 40dp rounded square.
       expect(
-        tester.getSize(find.byKey(const ValueKey('series-back'))),
+        tester.getSize(find.byKey(const ValueKey('detail-back'))),
         const Size(40, 40),
       );
 
@@ -225,17 +227,21 @@ void main() {
       expect(find.byKey(const ValueKey('series-left-pane')), findsNothing);
     });
 
-    testWidgets('expanded: two panes, labelled pills on the season panel', (
+    testWidgets('expanded: full-bleed art, info box bottom-left, season panel right', (
       tester,
     ) async {
       await pumpSeries(tester, _expanded);
 
-      final left = find.byKey(const ValueKey('series-left-pane'));
-      expect(left, findsOneWidget);
-      expect(tester.getSize(left).width, 340);
+      // ARGY-311: the art covers the screen; the info box is anchored
+      // bottom-left rather than squeezed under a top band.
+      expect(find.byKey(const ValueKey('series-expanded')), findsOneWidget);
+      final box = find.byKey(const ValueKey('detail-info-box'));
+      expect(tester.getSize(box).width, 380);
+      expect(tester.getTopLeft(box).dx, 24);
+      expect(tester.getBottomLeft(box).dy, closeTo(_expanded.height - 24, 1));
       expect(find.byKey(const ValueKey('series-season-pane')), findsOneWidget);
 
-      // Title + actions + synopsis + cast on the left.
+      // Title + actions + synopsis + cast inside the box.
       for (final t in [
         find.text('Lanternfish Harbour'),
         find.textContaining('A harbour town'),
@@ -246,8 +252,8 @@ void main() {
       ]) {
         expect(
           tester.getTopLeft(t).dx,
-          lessThan(340),
-          reason: 'left of the divider',
+          lessThan(24 + 380),
+          reason: 'inside the info box',
         );
       }
 
@@ -276,7 +282,98 @@ void main() {
         find.text('Episode 1'),
         find.textContaining('The tide turns in episode 1'),
       ]) {
-        expect(tester.getTopLeft(t).dx, greaterThan(340));
+        expect(tester.getTopLeft(t).dx, greaterThan(24 + 380));
+      }
+    });
+
+    testWidgets('the season title is sized to its action pills', (
+      tester,
+    ) async {
+      await pumpSeries(tester, _expanded);
+      final title = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const ValueKey('season-picker')),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(title.style?.fontSize, 22);
+    });
+  });
+
+  group('movie', () {
+    final film = MediaItemDetail(
+      id: 'film-1',
+      kind: 'movie',
+      title: 'Brackwater',
+      filePath: 'films/brackwater.mkv',
+      reviewRequired: false,
+      overview: 'A ferry, a storm and one long night on the estuary.',
+      cast: const ['C. Actor'],
+    );
+    Future<void> pumpMovie(WidgetTester tester, Size size) => pumpAt(
+      tester,
+      size,
+      const MovieDetailScreen(itemId: 'film-1'),
+      overrides: [
+        movieDetailProvider('film-1').overrideWith(
+          (ref) async => (
+            detail: film,
+            progress: PlayState(
+              positionSeconds: 600,
+              durationSeconds: 6000,
+              watched: false,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    testWidgets('compact: Resume wide, icon actions beside it, all above the '
+        'synopsis (ARGY-311)', (tester) async {
+      await pumpMovie(tester, _compact);
+      final resume = find.widgetWithText(FilledButton, 'Resume');
+      expect(resume, findsOneWidget);
+      for (final tip in ['Add to Vault', 'Stow', 'Mark watched']) {
+        final t = find.byTooltip(tip);
+        expect(t, findsOneWidget, reason: tip);
+        expect(
+          tester.getCenter(t).dy,
+          closeTo(tester.getCenter(resume).dy, 1),
+          reason: '$tip shares the Resume row',
+        );
+        expect(tester.getSize(t).width, lessThanOrEqualTo(50));
+      }
+      expect(
+        tester.getSize(resume).width,
+        greaterThan(tester.getSize(find.byTooltip('Stow')).width * 3),
+      );
+      final restart = find.text('Play from start');
+      expect(
+        tester.getTopLeft(restart).dy,
+        greaterThan(tester.getBottomLeft(resume).dy),
+      );
+      expect(
+        tester.getTopLeft(find.textContaining('A ferry')).dy,
+        greaterThan(tester.getBottomLeft(restart).dy),
+        reason: 'actions come before the synopsis',
+      );
+    });
+
+    testWidgets('expanded: full-bleed art with the info box bottom-left', (
+      tester,
+    ) async {
+      await pumpMovie(tester, _expanded);
+      expect(find.byKey(const ValueKey('movie-expanded')), findsOneWidget);
+      final box = find.byKey(const ValueKey('detail-info-box'));
+      expect(tester.getTopLeft(box).dx, 24);
+      expect(tester.getBottomLeft(box).dy, closeTo(_expanded.height - 24, 1));
+      for (final t in [
+        find.text('Brackwater'),
+        find.widgetWithText(FilledButton, 'Resume'),
+        find.byTooltip('Stow'),
+        find.textContaining('A ferry'),
+      ]) {
+        expect(tester.getTopLeft(t).dx, lessThan(24 + 380));
       }
     });
   });

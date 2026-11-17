@@ -38,51 +38,13 @@ class SeriesDetailScreen extends ConsumerWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: ArgosyColors.cream),
         leadingWidth: 56,
-        leading: const _BackSquare(),
+        leading: const DetailBackButton(),
       ),
       body: AsyncView(
         value: detail,
         keepStale: true,
         onRetry: () => ref.invalidate(seriesDetailProvider(seriesId)),
         builder: (series) => _Body(series: series),
-      ),
-    );
-  }
-}
-
-/// The back affordance over the backdrop: a 40dp rounded square on a dark glass
-/// fill, so it reads on bright key art where a bare arrow did not.
-class _BackSquare extends StatelessWidget {
-  const _BackSquare();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Tooltip(
-        message: MaterialLocalizations.of(context).backButtonTooltip,
-        child: Material(
-          color: const Color(0x8C141413),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(11),
-            side: const BorderSide(color: Color(0x29EAEAE5)),
-          ),
-          child: InkWell(
-            key: const ValueKey('series-back'),
-            customBorder: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(11),
-            ),
-            onTap: () => Navigator.of(context).maybePop(),
-            child: const SizedBox(
-              width: 40,
-              height: 40,
-              child: Icon(
-                Icons.chevron_left,
-                size: 26,
-                color: ArgosyColors.cream,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -355,54 +317,29 @@ class _BodyState extends ConsumerState<_Body> {
     ];
 
     if (expanded) {
-      // Two panes (ARGY-308): the title, actions and synopsis stay put on the
-      // left while the season scrolls on the right, so nothing stretches.
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            key: const ValueKey('series-left-pane'),
-            width: _kLeftPaneWidth,
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                DetailBackdrop(
-                  heightFactor: 0.34,
-                  minHeight: 240,
-                  backdropUrl: series.backdropUrl,
-                  posterUrl: series.posterUrl,
-                  child: titleBlock,
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [actions, const SizedBox(height: 16), ...about],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: ListView(
-              key: const ValueKey('series-season-pane'),
-              padding: EdgeInsets.only(
-                top: MediaQuery.paddingOf(context).top + kToolbarHeight,
-                bottom: 24,
-              ),
-              children: [
-                Align(
-                  alignment: Alignment.topLeft,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
-                    child: _seasonPanel(series, season, expanded: true),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+      // Full-bleed (ARGY-311): the artwork covers the screen, the show's info
+      // and actions sit in a box bottom-left, and the season scrolls in its own
+      // panel on the right.
+      return FullBleedDetail(
+        key: const ValueKey('series-expanded'),
+        backdropUrl: series.backdropUrl,
+        posterUrl: series.posterUrl,
+        details: Column(
+          key: const ValueKey('series-left-pane'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            titleBlock,
+            const SizedBox(height: 16),
+            actions,
+            if (about.isNotEmpty) ...[const SizedBox(height: 16), ...about],
+          ],
+        ),
+        side: ListView(
+          key: const ValueKey('series-season-pane'),
+          padding: const EdgeInsets.only(top: 8, bottom: 24),
+          children: [_seasonPanel(series, season, expanded: true)],
+        ),
       );
     }
 
@@ -487,7 +424,7 @@ class _BodyState extends ConsumerState<_Body> {
                   seasons: series.seasons,
                   active: _activeSeason,
                   onSelect: (i) => setState(() => _activeSeason = i),
-                  fontSize: expanded ? 18 : 17,
+                  fontSize: expanded ? 22 : 20,
                 ),
                 if (hasPlayable)
                   Text(
@@ -542,9 +479,6 @@ class _BodyState extends ConsumerState<_Body> {
   }
 }
 
-/// Width of the left column in the expanded two-pane layout.
-const double _kLeftPaneWidth = 340;
-
 /// The current season's name; with more than one season it opens a menu to
 /// switch (replacing the old chip strip, which does not scale to a 17-season
 /// series and cost a full row).
@@ -567,7 +501,7 @@ class _SeasonPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = Theme.of(context).textTheme.titleLarge?.copyWith(
       fontSize: fontSize,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w800,
     );
     final label = Text(
       _name(seasons[active]),

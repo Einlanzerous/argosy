@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api/api_providers.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../theme/breakpoints.dart';
 import '../../util/format.dart';
+import '../../widgets/action_pill.dart';
 import '../../widgets/async_view.dart';
 import '../stow/stow_button.dart';
 import 'add_to_vault.dart';
@@ -29,6 +31,8 @@ class MovieDetailScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: ArgosyColors.cream),
+        leadingWidth: 56,
+        leading: const DetailBackButton(),
       ),
       body: AsyncView(
         value: detail,
@@ -62,56 +66,76 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     final movie = data.detail;
     final tokens = context.argosy;
+    final expanded = isExpandedWidth(context);
+
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(movie.title, style: Theme.of(context).textTheme.displaySmall),
+        const SizedBox(height: 6),
+        _MetaRow(movie: movie),
+      ],
+    );
+    // Actions come before the synopsis, as on a series (ARGY-311): most people
+    // open a film to play it.
+    final actions = _Actions(
+      item: movie,
+      resumable: _resumable,
+      watched: data.progress?.watched ?? false,
+    );
+    final rest = <Widget>[
+      if (_resumable && data.progress != null) ...[
+        const SizedBox(height: 14),
+        _ResumeBar(percent: _percent, progress: data.progress!),
+      ],
+      if (movie.overview != null && movie.overview!.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text(movie.overview!, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+      if (movie.cast.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        CastRow(cast: movie.cast),
+      ],
+      if (movie.genres.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        GenreTagChips(genres: movie.genres),
+      ],
+      if (movie.reviewRequired) ...[
+        const SizedBox(height: 18),
+        const ReviewFlag(),
+      ],
+    ];
+
+    if (expanded) {
+      return FullBleedDetail(
+        key: const ValueKey('movie-expanded'),
+        backdropUrl: movie.backdropUrl,
+        posterUrl: movie.posterUrl,
+        details: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [titleBlock, const SizedBox(height: 16), actions, ...rest],
+        ),
+      );
+    }
 
     return ListView(
       padding: EdgeInsets.zero,
       children: [
         DetailBackdrop(
-          // Films lean into the full-screen "hero" look — the backdrop is the
-          // pitch; metadata and actions live a scroll below.
-          heightFactor: 0.62,
+          // Films lean into the full-screen "hero" look; the title and meta sit
+          // on the art, with the actions straight below.
+          heightFactor: 0.56,
           backdropUrl: movie.backdropUrl,
           posterUrl: movie.posterUrl,
-          child: Text(
-            movie.title,
-            style: Theme.of(context).textTheme.displaySmall,
-          ),
+          child: titleBlock,
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _MetaRow(movie: movie),
-              if (movie.overview != null && movie.overview!.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text(
-                  movie.overview!,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-              if (movie.cast.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                CastRow(cast: movie.cast),
-              ],
-              const SizedBox(height: 16),
-              GenreTagChips(genres: movie.genres),
-              const SizedBox(height: 20),
-              _Actions(
-                item: movie,
-                resumable: _resumable,
-                watched: data.progress?.watched ?? false,
-              ),
-              if (_resumable && data.progress != null) ...[
-                const SizedBox(height: 14),
-                _ResumeBar(percent: _percent, progress: data.progress!),
-              ],
-              if (movie.reviewRequired) ...[
-                const SizedBox(height: 18),
-                const ReviewFlag(),
-              ],
-              SizedBox(height: tokens.radius),
-            ],
+            children: [actions, ...rest, SizedBox(height: tokens.radius)],
           ),
         ),
       ],
@@ -179,33 +203,56 @@ class _Actions extends ConsumerWidget {
 
   String get itemId => item.id;
 
-  /// Gap between buttons, matched to the old Wrap's spacing.
-  static const double _gap = 12;
-
-  /// Play/Resume carries more weight than the actions beside it, so it takes a
-  /// larger share of the row rather than merely being first in a line of
-  /// equals.
-  static const int _primaryFlex = 3;
-  static const int _secondaryFlex = 2;
+  static const double _gap = 10;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final primary = FilledButton.icon(
-      style: brassButtonStyle(context),
-      onPressed: () => openPlayerThenRefresh(
-        context,
-        movieDetailProvider(itemId),
-        itemId,
-        resume: resumable,
-      ),
-      icon: const Icon(Icons.play_arrow, size: 20),
-      label: Text(resumable ? 'Resume' : 'Play'),
+    // Play/Resume takes the row; Vault, Stow and Watched follow as 50dp
+    // squares, the same family as a series' action row (ARGY-311).
+    final row = Row(
+      key: const ValueKey('movie-actions'),
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            style: brassButtonStyle(
+              context,
+              minimumSize: const Size(0, ActionPill.squareSize),
+            ),
+            onPressed: () => openPlayerThenRefresh(
+              context,
+              movieDetailProvider(itemId),
+              itemId,
+              resume: resumable,
+            ),
+            icon: const Icon(Icons.play_arrow, size: 20),
+            label: Text(resumable ? 'Resume' : 'Play'),
+          ),
+        ),
+        const SizedBox(width: _gap),
+        AddToVaultButton(movieId: itemId, iconOnly: true),
+        const SizedBox(width: _gap),
+        StowButton(item: item, square: true),
+        const SizedBox(width: _gap),
+        WatchedButton(
+          square: true,
+          watched: watched,
+          onSet: (next) async {
+            await ref
+                .read(libraryApiProvider)
+                .setWatched(itemId, WatchedUpdate(watched: next));
+            // Reflect the new watched/Resume state (and Continue Watching).
+            ref.invalidate(movieDetailProvider(itemId));
+          },
+        ),
+      ],
     );
-
-    // Ordered by how often they're reached. "Start over" only exists alongside
-    // Resume, and sits first so it stays next to the play action it qualifies.
-    final secondary = <Widget>[
-      if (resumable)
+    if (!resumable) return row;
+    // "Start over" only exists alongside Resume, so it rides directly under it.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        row,
+        const SizedBox(height: _gap),
         FilledButton.icon(
           style: ghostButtonStyle(context),
           onPressed: () => openPlayerThenRefresh(
@@ -215,68 +262,9 @@ class _Actions extends ConsumerWidget {
             startOver: true,
           ),
           icon: const Icon(Icons.replay, size: 18),
-          label: const Text('Start over'),
+          label: const Text('Play from start'),
         ),
-      StowButton(item: item),
-      AddToVaultButton(movieId: itemId),
-      WatchedButton(
-        watched: watched,
-        onSet: (next) async {
-          await ref
-              .read(libraryApiProvider)
-              .setWatched(itemId, WatchedUpdate(watched: next));
-          // Reflect the new watched/Resume state (and Continue Watching).
-          ref.invalidate(movieDetailProvider(itemId));
-        },
-      ),
-    ];
-
-    // Landscape has the width for one row; portrait pairs them up. Either way
-    // the buttons fill the row instead of sizing to their labels, so the block
-    // reads as a deliberate grid rather than as text of varying length — which
-    // is what the free-flowing Wrap produced (3 buttons then a lonely 4th).
-    if (MediaQuery.orientationOf(context) == Orientation.landscape) {
-      return Row(
-        children: [
-          Expanded(flex: _primaryFlex, child: primary),
-          for (final action in secondary) ...[
-            const SizedBox(width: _gap),
-            Expanded(flex: _secondaryFlex, child: action),
-          ],
-        ],
-      );
-    }
-
-    final rows = <Widget>[
-      Row(
-        children: [
-          Expanded(flex: _primaryFlex, child: primary),
-          const SizedBox(width: _gap),
-          Expanded(flex: _secondaryFlex, child: secondary.first),
-        ],
-      ),
-    ];
-    final rest = secondary.skip(1).toList();
-    for (var i = 0; i < rest.length; i += 2) {
-      rows.add(const SizedBox(height: _gap));
-      // A trailing odd button spans the full width. With Resume in play there
-      // are five actions, and a half-width button alone on the last row is the
-      // ragged look this layout exists to avoid.
-      rows.add(
-        i + 1 < rest.length
-            ? Row(
-                children: [
-                  Expanded(child: rest[i]),
-                  const SizedBox(width: _gap),
-                  Expanded(child: rest[i + 1]),
-                ],
-              )
-            : rest[i],
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: rows,
+      ],
     );
   }
 }
