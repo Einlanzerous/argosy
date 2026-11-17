@@ -6,9 +6,9 @@ import '../../api/api_providers.dart';
 import '../../api/artwork.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../theme/breakpoints.dart';
 import '../../util/format.dart';
 import '../../util/poster_gradient.dart';
-import '../../widgets/arg_chip.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
 import '../stow/stow_button.dart';
@@ -262,11 +262,91 @@ class _BodyState extends ConsumerState<_Body> {
     final season = series.seasons.isEmpty
         ? null
         : series.seasons[_activeSeason];
-    final playableGroups = [
-      if (season != null)
-        for (final g in _groupEpisodes(season.episodes))
-          if (g.first.mediaItemId != null) g,
+    final expanded = isExpandedWidth(context);
+
+    final meta = Text(
+      '${series.seasons.length} season${series.seasons.length == 1 ? '' : 's'}'
+      '${series.year != null ? '  •  ${series.year}' : ''}',
+      style: Theme.of(
+        context,
+      ).textTheme.labelLarge?.copyWith(color: ArgosyColors.dim),
+    );
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(series.title, style: Theme.of(context).textTheme.displaySmall),
+        const SizedBox(height: 4),
+        meta,
+      ],
+    );
+    final actions = _SeriesActions(
+      seriesId: series.id,
+      resume: resume,
+      firstPlayable: _firstPlayable,
+    );
+    final about = <Widget>[
+      if (series.overview != null && series.overview!.isNotEmpty) ...[
+        Text(series.overview!, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 16),
+      ],
+      if (series.cast.isNotEmpty) ...[
+        CastRow(cast: series.cast),
+        const SizedBox(height: 16),
+      ],
     ];
+
+    if (expanded) {
+      // Two panes (ARGY-308): the title, actions and synopsis stay put on the
+      // left while the season scrolls on the right, so nothing stretches.
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            key: const ValueKey('series-left-pane'),
+            width: _kLeftPaneWidth,
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                DetailBackdrop(
+                  heightFactor: 0.34,
+                  minHeight: 240,
+                  backdropUrl: series.backdropUrl,
+                  posterUrl: series.posterUrl,
+                  child: titleBlock,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [actions, const SizedBox(height: 16), ...about],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: ListView(
+              key: const ValueKey('series-season-pane'),
+              padding: EdgeInsets.only(
+                top: MediaQuery.paddingOf(context).top + kToolbarHeight,
+                bottom: 24,
+              ),
+              children: [
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 760),
+                    child: _seasonPanel(series, season, expanded: true),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -277,119 +357,188 @@ class _BodyState extends ConsumerState<_Body> {
           heightFactor: 0.52,
           backdropUrl: series.backdropUrl,
           posterUrl: series.posterUrl,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                series.title,
-                style: Theme.of(context).textTheme.displaySmall,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${series.seasons.length} season${series.seasons.length == 1 ? '' : 's'}'
-                '${series.year != null ? '  •  ${series.year}' : ''}',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: ArgosyColors.dim),
-              ),
-            ],
-          ),
+          child: titleBlock,
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (series.overview != null && series.overview!.isNotEmpty) ...[
-                Text(
-                  series.overview!,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (series.cast.isNotEmpty) ...[
-                CastRow(cast: series.cast),
-                const SizedBox(height: 16),
-              ],
-              _SeriesActions(
-                seriesId: series.id,
-                resume: resume,
-                firstPlayable: _firstPlayable,
-              ),
-            ],
+            children: [actions, const SizedBox(height: 16), ...about],
           ),
         ),
+        _seasonPanel(series, season, expanded: false),
+      ],
+    );
+  }
+
+  /// The season picker + its actions, then the episode rows. Watched and Stow
+  /// act on the season, so they live on its header (ARGY-308) rather than
+  /// trailing the list: icon circles when compact, labelled pills when there is
+  /// room.
+  Widget _seasonPanel(
+    SeriesDetail series,
+    SeasonSummary? season, {
+    required bool expanded,
+  }) {
+    if (season == null) return const SizedBox(height: 24);
+    final playableGroups = [
+      for (final g in _groupEpisodes(season.episodes))
+        if (g.first.mediaItemId != null) g,
+    ];
+    final playableEps = [
+      for (final e in season.episodes)
+        if (e.mediaItemId != null) e,
+    ];
+    final watchedCount = playableEps.where(_isWatched).length;
+    final hasPlayable = playableEps.isNotEmpty;
+    final iconOnly = !expanded;
+
+    final actions = <Widget>[
+      if (hasPlayable) ...[
         if (series.seasons.length > 1)
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: series.seasons.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (_, i) => ArgChip(
-                label:
-                    series.seasons[i].title ??
-                    'Season ${series.seasons[i].seasonNumber}',
-                selected: i == _activeSeason,
-                onTap: () => setState(() => _activeSeason = i),
-              ),
-            ),
+          WatchedButton(
+            iconOnly: iconOnly,
+            scopeIcon: Icons.done_all,
+            watched: _seriesAllWatched,
+            watchedLabel: 'Series watched',
+            markLabel: 'Mark series watched',
+            onSet: _setSeriesWatched,
           ),
-        const SizedBox(height: 8),
-        if (season != null)
-          for (final group in _groupEpisodes(season.episodes))
-            _EpisodeTile(
-              seriesId: series.id,
-              episodes: group,
-              seasonNumber: season.seasonNumber,
-              watched: _isWatched(group.first),
-              onSet: group.first.mediaItemId == null
-                  ? null
-                  : (next) =>
-                        _setEpisodeWatched(group.first.mediaItemId!, next),
-            ),
-        // Bulk controls sit under the episode list so they don't wedge empty
-        // space between the season chips and the episodes (ARGY-109).
-        if (season != null && season.episodes.any((e) => e.mediaItemId != null))
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                if (series.seasons.length > 1)
-                  WatchedButton(
-                    watched: _seriesAllWatched,
-                    watchedLabel: 'Series watched',
-                    markLabel: 'Mark series watched',
-                    onSet: _setSeriesWatched,
-                  ),
-                WatchedButton(
-                  watched: _seasonAllWatched(season),
-                  watchedLabel: 'Season watched',
-                  markLabel: 'Mark season watched',
-                  onSet: (next) => _setSeasonWatched(season.id, [
-                    for (final e in season.episodes)
-                      if (e.mediaItemId != null) e.mediaItemId!,
-                  ], next),
+        WatchedButton(
+          iconOnly: iconOnly,
+          watched: _seasonAllWatched(season),
+          watchedLabel: 'Season watched',
+          markLabel: 'Mark season watched',
+          onSet: (next) => _setSeasonWatched(season.id, [
+            for (final e in playableEps) e.mediaItemId!,
+          ], next),
+        ),
+        // One tap for the whole season (ARGY-229): the same groups the rows
+        // below are drawn from, so a combined rip stows once.
+        SeasonStowButton(
+          iconOnly: iconOnly,
+          seasonLabel: season.title ?? 'Season ${season.seasonNumber}',
+          entries: _seasonEntries(season.seasonNumber, playableGroups),
+          remainder: _seasonRemainder(season.seasonNumber, playableGroups),
+        ),
+      ],
+    ];
+
+    final header = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _SeasonPicker(
+                  seasons: series.seasons,
+                  active: _activeSeason,
+                  onSelect: (i) => setState(() => _activeSeason = i),
                 ),
-                // One tap for the whole season (ARGY-229): the same groups the
-                // rows above are drawn from, so a combined rip stows once.
-                SeasonStowButton(
-                  seasonLabel: season.title ?? 'Season ${season.seasonNumber}',
-                  entries: _seasonEntries(season.seasonNumber, playableGroups),
-                  remainder: _seasonRemainder(
-                    season.seasonNumber,
-                    playableGroups,
-                  ),
-                ),
-              ],
+              ),
+              if (iconOnly)
+                for (final a in actions) ...[const SizedBox(width: 8), a],
+            ],
+          ),
+          if (hasPlayable) ...[
+            const SizedBox(height: 2),
+            Text(
+              '$watchedCount of ${playableEps.length} watched',
+              key: const ValueKey('season-watched-count'),
+              style: Theme.of(context).textTheme.labelMedium,
             ),
+          ],
+          if (!iconOnly && actions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(spacing: 10, runSpacing: 10, children: actions),
+          ],
+        ],
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        header,
+        for (final group in _groupEpisodes(season.episodes))
+          _EpisodeTile(
+            seriesId: series.id,
+            episodes: group,
+            seasonNumber: season.seasonNumber,
+            watched: _isWatched(group.first),
+            onSet: group.first.mediaItemId == null
+                ? null
+                : (next) => _setEpisodeWatched(group.first.mediaItemId!, next),
           ),
         const SizedBox(height: 24),
       ],
+    );
+  }
+}
+
+/// Width of the left column in the expanded two-pane layout.
+const double _kLeftPaneWidth = 340;
+
+/// The current season's name; with more than one season it opens a menu to
+/// switch (replacing the old chip strip, which does not scale to a 17-season
+/// series and cost a full row).
+class _SeasonPicker extends StatelessWidget {
+  const _SeasonPicker({
+    required this.seasons,
+    required this.active,
+    required this.onSelect,
+  });
+
+  final List<SeasonSummary> seasons;
+  final int active;
+  final ValueChanged<int> onSelect;
+
+  String _name(SeasonSummary s) => s.title ?? 'Season ${s.seasonNumber}';
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.titleLarge;
+    final label = Text(
+      _name(seasons[active]),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+    if (seasons.length < 2) return label;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: PopupMenuButton<int>(
+        key: const ValueKey('season-picker'),
+        tooltip: 'Choose season',
+        color: ArgosyColors.panel,
+        onSelected: onSelect,
+        itemBuilder: (_) => [
+          for (var i = 0; i < seasons.length; i++)
+            PopupMenuItem(
+              value: i,
+              child: Text(
+                _name(seasons[i]),
+                style: TextStyle(
+                  color: i == active
+                      ? ArgosyColors.accentHi
+                      : ArgosyColors.cream,
+                ),
+              ),
+            ),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(child: label),
+              const Icon(Icons.arrow_drop_down, color: ArgosyColors.accentHi),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -407,40 +556,39 @@ class _SeriesActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    // Play/Resume takes the row; Vault is a square icon beside it (ARGY-308).
+    return Row(
       children: [
-        if (resume != null)
-          FilledButton.icon(
-            style: brassButtonStyle(context),
-            onPressed: () =>
-                openPlayerThenRefresh(
-                  context,
-                  seriesDetailProvider(seriesId),
-                  resume!.ep.mediaItemId!,
-                  resume: true,
-                ),
-            icon: const Icon(Icons.play_arrow, size: 20),
-            label: Text(
-              'Resume S${resume!.seasonNumber} Ep ${resume!.ep.episodeNumber}',
-            ),
-          )
-        else
-          FilledButton.icon(
-            style: brassButtonStyle(context),
-            onPressed: firstPlayable == null
-                ? null
-                : () => openPlayerThenRefresh(
+        Expanded(
+          child: resume != null
+              ? FilledButton.icon(
+                  style: brassButtonStyle(context),
+                  onPressed: () => openPlayerThenRefresh(
                     context,
                     seriesDetailProvider(seriesId),
-                    firstPlayable!,
+                    resume!.ep.mediaItemId!,
+                    resume: true,
                   ),
-            icon: const Icon(Icons.play_arrow, size: 20),
-            label: const Text('Play'),
-          ),
-        AddToVaultButton(seriesId: seriesId),
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: Text(
+                    'Resume S${resume!.seasonNumber} Ep ${resume!.ep.episodeNumber}',
+                  ),
+                )
+              : FilledButton.icon(
+                  style: brassButtonStyle(context),
+                  onPressed: firstPlayable == null
+                      ? null
+                      : () => openPlayerThenRefresh(
+                          context,
+                          seriesDetailProvider(seriesId),
+                          firstPlayable!,
+                        ),
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: const Text('Play'),
+                ),
+        ),
+        const SizedBox(width: 10),
+        AddToVaultButton(seriesId: seriesId, iconOnly: true),
       ],
     );
   }

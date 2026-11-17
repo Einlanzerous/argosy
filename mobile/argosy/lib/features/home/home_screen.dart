@@ -5,6 +5,7 @@ import '../../api/artwork.dart';
 import '../../router/app_router.dart';
 import '../../theme/argosy_colors.dart';
 import '../../theme/argosy_tokens.dart';
+import '../../theme/breakpoints.dart';
 import '../../theme/button_styles.dart';
 import '../../widgets/argosy_mark.dart';
 import '../../widgets/async_view.dart';
@@ -36,8 +37,11 @@ class HomeScreen extends ConsumerWidget {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ArgosyMark(size: 44),
-            const SizedBox(width: 11),
+            // The rail carries the mark when expanded; don't draw it twice.
+            if (!isExpandedWidth(context)) ...[
+              const ArgosyMark(size: 44),
+              const SizedBox(width: 11),
+            ],
             Text(
               'Argosy',
               style: Theme.of(
@@ -76,7 +80,10 @@ class HomeScreen extends ConsumerWidget {
                       // live screens. Tapping a tile resumes the item directly (its
                       // id is the playable episode/film), not a detour through
                       // detail.
-                      _continueRail(context, home.continueRow),
+                      if (isExpandedWidth(context))
+                        _continueGrid(context, home.continueRow)
+                      else
+                        _continueRail(context, home.continueRow),
                       const SizedBox(height: 24),
                     ],
                     if (home.onDeck.isNotEmpty) ...[
@@ -120,6 +127,46 @@ class HomeScreen extends ConsumerWidget {
         ),
     ],
   );
+
+  /// Expanded: Continue Watching is a 4-up grid rather than a strip, so the
+  /// whole row is visible at once on a wide screen (ARGY-308).
+  Widget _continueGrid(BuildContext context, List<ContinueEntry> entries) {
+    const gap = 14.0;
+    const columns = 4;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Continue Watching',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, box) {
+              final w = (box.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                key: const ValueKey('continue-grid'),
+                spacing: gap,
+                runSpacing: 18,
+                children: [
+                  for (final e in entries.take(8))
+                    ContinueCard(
+                      entry: e,
+                      width: w,
+                      onTap: () => openPlayer(context, e.id, resume: true),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _continueRail(BuildContext context, List<ContinueEntry> entries) =>
       MediaRail(
@@ -209,15 +256,18 @@ class _Hero extends ConsumerWidget {
     final tokens = context.argosy;
     final art = ref.watch(artworkResolverProvider);
     final bg = art(hero.backdropUrl ?? hero.posterUrl);
+    final expanded = isExpandedWidth(context);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+      padding: EdgeInsets.fromLTRB(expanded ? 24 : 14, 4, expanded ? 24 : 14, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(tokens.radiusXl + 2),
         child: GestureDetector(
           onTap: () => openDetail(context, hero.kind, hero.detailId),
           child: SizedBox(
-            height: 420,
+            // Expanded caps the hero so two rows of the Bridge stay visible
+            // beneath it instead of one stretched poster.
+            height: expanded ? 300 : 420,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -229,6 +279,8 @@ class _Hero extends ConsumerWidget {
                   )
                 else
                   const HatchPlaceholder(),
+                // A taller scrim: it starts higher and reaches full strength
+                // sooner, so the text holds on a bright frame (ARGY-308).
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -236,37 +288,63 @@ class _Hero extends ConsumerWidget {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Color(0x99000000),
+                        Color(0xB3000000),
                         Color(0xF2000000),
                       ],
-                      stops: [0.3, 0.7, 1],
+                      stops: [0.12, 0.55, 0.92],
                     ),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  padding: EdgeInsets.fromLTRB(
+                    expanded ? 24 : 18,
+                    0,
+                    expanded ? 24 : 18,
+                    expanded ? 22 : 18,
+                  ),
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: ConstrainedBox(
+                      // Expanded: the text is a left column, not a full-width
+                      // line.
+                      constraints: BoxConstraints(
+                        maxWidth: expanded ? 520 : double.infinity,
+                      ),
+                      child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.sync_alt,
-                            size: 13,
-                            color: ArgosyColors.accent,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            hero.eyebrow.toUpperCase(),
-                            style: Theme.of(context).textTheme.labelMedium
-                                ?.copyWith(
-                                  color: ArgosyColors.accent,
-                                  letterSpacing: 1.6,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ],
+                      Container(
+                        key: const ValueKey('hero-eyebrow'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: ArgosyColors.bg2.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: ArgosyColors.accentLine),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.sync_alt,
+                              size: 13,
+                              color: ArgosyColors.accent,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              hero.eyebrow.toUpperCase(),
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: ArgosyColors.accent,
+                                    letterSpacing: 1.6,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -323,9 +401,14 @@ class _Hero extends ConsumerWidget {
                       if (hero.playableId != null) ...[
                         const SizedBox(height: 15),
                         FilledButton.icon(
+                          key: const ValueKey('hero-resume'),
                           style: brassButtonStyle(
                             context,
-                            minimumSize: const Size.fromHeight(50),
+                            // Full-width on a phone; a fixed width when
+                            // expanded, where full-width would be a slab.
+                            minimumSize: expanded
+                                ? const Size(220, 48)
+                                : const Size.fromHeight(50),
                           ),
                           onPressed: () => openPlayer(
                             context,
@@ -337,6 +420,8 @@ class _Hero extends ConsumerWidget {
                         ),
                       ],
                     ],
+                      ),
+                    ),
                   ),
                 ),
               ],

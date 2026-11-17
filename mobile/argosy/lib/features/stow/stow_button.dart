@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/argosy_colors.dart';
 import '../../theme/button_styles.dart';
+import '../../widgets/action_pill.dart';
 import 'stow_controller.dart';
 import 'stowed_item.dart';
 
@@ -140,6 +141,7 @@ class SeasonStowButton extends ConsumerWidget {
     required this.seasonLabel,
     required this.entries,
     this.remainder,
+    this.iconOnly = false,
   });
 
   /// "Season 2" — named in the confirmation dialogs.
@@ -153,6 +155,10 @@ class SeasonStowButton extends ConsumerWidget {
   /// the season" means — or null when nothing in the season has been touched.
   /// When it is a strict subset, a tap asks which of the two to stow.
   final List<SeasonStowEntry>? remainder;
+
+  /// Draw as an icon circle (label becomes the tooltip) for the compact season
+  /// header; the state and the action behind it are unchanged.
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -189,56 +195,50 @@ class SeasonStowButton extends ConsumerWidget {
       // of the run and said nothing about them (ARGY-231) — and by the time the
       // queue drained, the app had usually been closed and reopened, which
       // until now was enough to lose the failures altogether.
-      final progress = FilledButton.icon(
-        style: ghostButtonStyle(context),
+      final progress = ActionPill(
+        iconOnly: iconOnly,
+        icon: Icons.sync,
         onPressed: () => _confirmCancel(context, ref, ids, remaining: busy),
         // Indeterminate until the first one lands: a determinate ring at zero
         // is a hairline circle that reads as nothing happening.
-        icon: _ProgressRing(fraction: stowed == 0 ? null : stowed / asked),
-        label: Text(
+        leading: _ProgressRing(fraction: stowed == 0 ? null : stowed / asked),
+        label:
           'Stowing season · $stowed of $asked'
           '${failed > 0 ? ' · $failed failed' : ''}',
-        ),
       );
       return failed == 0
           ? progress
           : Tooltip(message: failure ?? 'Stow failed', child: progress);
     }
     if (total > 0 && stowed == total) {
-      return FilledButton.icon(
-        style: ghostButtonStyle(context),
+      return ActionPill(
+        iconOnly: iconOnly,
         onPressed: () => _confirmRemove(context, ref, ids),
-        icon: const Icon(
-          Icons.offline_pin,
-          size: 18,
-          color: ArgosyColors.accentHi,
-        ),
-        label: const Text('Season stowed'),
+        icon: Icons.offline_pin,
+        iconColor: ArgosyColors.accentHi,
+        label: 'Season stowed',
       );
     }
     if (failed > 0) {
       return Tooltip(
         message: failure ?? 'Stow failed',
-        child: FilledButton.icon(
-          style: ghostButtonStyle(context),
+        child: ActionPill(
+          iconOnly: iconOnly,
           onPressed: () => _stow(context, ref),
-          icon: const Icon(
-            Icons.error_outline,
-            size: 18,
-            color: ArgosyColors.danger,
-          ),
+          icon: Icons.error_outline,
+          iconColor: ArgosyColors.danger,
           // How many, not just that something did. A season is dozens of
           // files, and "Retry season" over two failures out of forty-seven
           // reads as though the whole thing has to be done again.
-          label: Text('$failed failed · Retry'),
+          label: '$failed failed · Retry',
         ),
       );
     }
-    return FilledButton.icon(
-      style: ghostButtonStyle(context),
+    return ActionPill(
+      iconOnly: iconOnly,
       onPressed: () => _stow(context, ref),
-      icon: const Icon(Icons.download_for_offline_outlined, size: 18),
-      label: const Text('Stow season'),
+      icon: Icons.download_for_offline_outlined,
+      label: 'Stow season',
     );
   }
 

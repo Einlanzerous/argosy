@@ -4,18 +4,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
 import '../../theme/argosy_colors.dart';
-import 'detail_widgets.dart';
+import '../../theme/argosy_tokens.dart';
+import '../../theme/button_styles.dart';
 
 /// "Add to Vault" action — opens a sheet of the vaults the profile may curate
 /// (its own, or any shared household vault) and files the title into the chosen
 /// one, with an inline "new vault" path. Exactly one of [movieId] / [seriesId].
 class AddToVaultButton extends ConsumerWidget {
-  const AddToVaultButton({super.key, this.movieId, this.seriesId})
+  const AddToVaultButton({
+    super.key,
+    this.movieId,
+    this.seriesId,
+    this.iconOnly = false,
+  })
       : assert(movieId != null || seriesId != null,
             'AddToVaultButton needs a movieId or seriesId');
 
   final String? movieId;
   final String? seriesId;
+
+  /// A square icon button beside a wide Play/Resume (series actions, ARGY-308).
+  final bool iconOnly;
 
   /// Opens the add-to-vault sheet directly, without rendering the phone button —
   /// the TV detail screens drive it from their own focusable `+` affordance.
@@ -25,10 +34,36 @@ class AddToVaultButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    void open() =>
+        _AddToVaultSheet.show(context, movieId: movieId, seriesId: seriesId);
+    if (iconOnly) {
+      return Tooltip(
+        message: 'Add to Vault',
+        child: Semantics(
+          button: true,
+          label: 'Add to Vault',
+          excludeSemantics: true,
+          child: IconButton(
+            onPressed: open,
+            style: IconButton.styleFrom(
+              minimumSize: Size.square(kActionButtonSize.height),
+              backgroundColor: const Color(0x66141413),
+              foregroundColor: ArgosyColors.cream,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  context.argosy.radius,
+                ),
+                side: BorderSide(color: context.argosy.line2),
+              ),
+            ),
+            icon: const Icon(Icons.add, size: 22),
+          ),
+        ),
+      );
+    }
     return FilledButton.icon(
       style: ghostButtonStyle(context),
-      onPressed: () =>
-          _AddToVaultSheet.show(context, movieId: movieId, seriesId: seriesId),
+      onPressed: open,
       icon: const Icon(Icons.add, size: 18),
       label: const Text('Add to Vault'),
     );
