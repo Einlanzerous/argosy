@@ -117,33 +117,23 @@ class _Body extends StatelessWidget {
         backdropUrl: movie.backdropUrl,
         posterUrl: movie.posterUrl,
         wide: true,
-        // Two columns: what it is and the actions on the left, the synopsis
-        // and credits on the right, so the box is wide and short.
-        details: Row(
+        // Title, meta and a large Play row on top, then the synopsis and
+        // credits run the full width of the box below (ARGY-311).
+        details: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              key: const ValueKey('movie-info-left'),
-              width: FullBleedDetail.detailsWidth - 40,
+            titleBlock,
+            const SizedBox(height: 16),
+            ConstrainedBox(
+              key: const ValueKey('movie-actions-top'),
+              constraints: const BoxConstraints(maxWidth: _kWideActionsWidth),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  titleBlock,
-                  const SizedBox(height: 16),
-                  actions,
-                  ...resume,
-                ],
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [actions, ...resume],
               ),
             ),
-            const SizedBox(width: 32),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: about,
-              ),
-            ),
+            if (about.isNotEmpty) ...[const SizedBox(height: 20), ...about],
           ],
         ),
       );
@@ -171,6 +161,10 @@ class _Body extends StatelessWidget {
     );
   }
 }
+
+/// The action row's width in the wide film box: Play stays large without
+/// stretching across a tablet.
+const double _kWideActionsWidth = 560;
 
 class _MetaRow extends StatelessWidget {
   const _MetaRow({required this.movie});
