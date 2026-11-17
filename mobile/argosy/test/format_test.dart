@@ -21,8 +21,10 @@ void main() {
 
   group('formatTitle', () {
     test('humanizes an SxxExx code', () {
-      expect(formatTitle('The Good Place s01e01'),
-          'The Good Place · Season 1 Ep 1');
+      expect(
+        formatTitle('The Good Place s01e01'),
+        'The Good Place · Season 1 Ep 1',
+      );
     });
     test('leaves a plain title untouched', () {
       expect(formatTitle('Blade Runner'), 'Blade Runner');
@@ -38,8 +40,14 @@ void main() {
       expect(yearRatingSubtitle(2024, 8.12), '2024  ·  ★ 8.1');
     });
     test('year only', () => expect(yearRatingSubtitle(1999, null), '1999'));
-    test('drops a zero rating', () => expect(yearRatingSubtitle(2000, 0), '2000'));
-    test('null when empty', () => expect(yearRatingSubtitle(null, null), isNull));
+    test(
+      'drops a zero rating',
+      () => expect(yearRatingSubtitle(2000, 0), '2000'),
+    );
+    test(
+      'null when empty',
+      () => expect(yearRatingSubtitle(null, null), isNull),
+    );
   });
 
   group('nowPlayingLabels', () {
@@ -131,6 +139,19 @@ void main() {
       expect(seriesMetaLine(1, null), '1 season');
       expect(seriesMetaLine(3, 2024), '3 seasons  •  2024');
       expect(seriesMetaLine(1, 2024), '1 season  •  2024');
+    });
+
+    test('a lone season past 1 is named, not counted (option B)', () {
+      expect(seasonCountLabel(1, singleSeasonNumber: 1), '1 season');
+      expect(seasonCountLabel(1, singleSeasonNumber: 17), 'Season 17');
+      expect(seasonCountLabel(1, singleSeasonNumber: 0), '1 season');
+      expect(seasonCountLabel(1), '1 season');
+      expect(seasonCountLabel(3), '3 seasons');
+      expect(
+        seriesMetaLine(1, 2024, singleSeasonNumber: 17),
+        'Season 17  •  2024',
+      );
+      expect(seriesMetaLine(1, 0, singleSeasonNumber: 17), 'Season 17');
     });
 
     test('card subtitle and now-playing drop a zero year', () {

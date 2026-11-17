@@ -6,7 +6,12 @@ export function yearLabel(year: number | null | undefined): string | null {
 
 // A series' meta line pieces: the year (when known) and the season count, which
 // is the seasons present in the library — what the episode tabs list.
-export function seasonCountLabel(count: number): string {
+// A lone season that isn't season 1 is named ("Season 17") rather than counted;
+// season 0 (specials) and season 1 still read "1 season".
+export function seasonCountLabel(count: number, singleSeasonNumber?: number | null): string {
+  if (count === 1 && singleSeasonNumber != null && singleSeasonNumber > 1) {
+    return `Season ${singleSeasonNumber}`
+  }
   return `${count} season${count === 1 ? '' : 's'}`
 }
 

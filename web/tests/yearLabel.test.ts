@@ -13,4 +13,10 @@ describe('yearLabel (ARGY-309)', () => {
     expect(seasonCountLabel(1)).toBe('1 season')
     expect(seasonCountLabel(3)).toBe('3 seasons')
   })
+  test('a lone season past 1 is named, not counted', () => {
+    expect(seasonCountLabel(1, 1)).toBe('1 season')
+    expect(seasonCountLabel(1, 17)).toBe('Season 17')
+    expect(seasonCountLabel(1, 0)).toBe('1 season')
+    expect(seasonCountLabel(3, 17)).toBe('3 seasons')
+  })
 })

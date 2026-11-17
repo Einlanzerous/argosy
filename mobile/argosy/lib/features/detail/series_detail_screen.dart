@@ -306,7 +306,13 @@ class _BodyState extends ConsumerState<_Body> {
     final expanded = isExpandedWidth(context);
 
     final meta = Text(
-      seriesMetaLine(series.seasons.length, series.year),
+      seriesMetaLine(
+        series.seasons.length,
+        series.year,
+        singleSeasonNumber: series.seasons.length == 1
+            ? series.seasons.first.seasonNumber
+            : null,
+      ),
       style: Theme.of(
         context,
       ).textTheme.labelLarge?.copyWith(color: ArgosyColors.dim),
