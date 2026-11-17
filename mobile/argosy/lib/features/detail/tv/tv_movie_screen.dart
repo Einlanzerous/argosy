@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../api/api_providers.dart';
-import '../../../router/app_router.dart';
 import '../../../theme/argosy_colors.dart';
 import '../../../tv/tv_backdrop_scaffold.dart';
 import '../../../tv/tv_button.dart';
@@ -42,6 +41,7 @@ class TvMovieScreen extends ConsumerWidget {
               Expanded(
                 child: AsyncView(
                   value: detail,
+                  keepStale: true,
                   onRetry: () => ref.invalidate(movieDetailProvider(itemId)),
                   builder: (data) => _Movie(data: data),
                 ),
@@ -54,18 +54,57 @@ class TvMovieScreen extends ConsumerWidget {
   }
 }
 
-class _Movie extends StatelessWidget {
+class _Movie extends StatefulWidget {
   const _Movie({required this.data});
 
   final MovieDetailData data;
 
-  bool get _resumable {
-    final p = data.progress;
-    return p != null && !p.watched && p.positionSeconds > 5;
+  @override
+  State<_Movie> createState() => _MovieState();
+}
+
+/// Holds back a change to the action row's *layout* while the remote is in it
+/// (ARGY-291). A silent refresh can flip the row between "Resume · Play from
+/// start" and "Play" (another device finished or started the film, or this TV
+/// just toggled watched), which would pull the button out from under the focus.
+/// So while focus is inside the row the old layout stays, and the new one lands
+/// as soon as focus leaves. A screen re-entered later builds fresh from the
+/// provider. Everything that is not focusable updates at once.
+class _MovieState extends State<_Movie> {
+  /// The play state the action row and resume bar are drawn from.
+  late PlayState? _shownProgress = widget.data.progress;
+  final FocusNode _actionsFocus = FocusNode(
+    debugLabel: 'tv-movie-actions',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+
+  static bool _resumableOf(PlayState? p) =>
+      p != null && !p.watched && p.positionSeconds > 5;
+
+  bool get _resumable => _resumableOf(_shownProgress);
+
+  @override
+  void didUpdateWidget(covariant _Movie oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = widget.data.progress;
+    final layoutChanges = _resumableOf(next) != _resumable;
+    if (!layoutChanges || !_actionsFocus.hasFocus) _shownProgress = next;
+  }
+
+  void _onActionsFocus(bool focused) {
+    if (focused || identical(_shownProgress, widget.data.progress)) return;
+    setState(() => _shownProgress = widget.data.progress);
+  }
+
+  @override
+  void dispose() {
+    _actionsFocus.dispose();
+    super.dispose();
   }
 
   double get _percent {
-    final p = data.progress;
+    final p = _shownProgress;
     if (p == null || p.durationSeconds == null || p.durationSeconds == 0) {
       return 0;
     }
@@ -86,6 +125,7 @@ class _Movie extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final data = widget.data;
     final movie = data.detail;
     final quality = _container(movie.container);
     final genre = movie.genres.isNotEmpty ? movie.genres.first : null;
@@ -157,15 +197,19 @@ class _Movie extends StatelessWidget {
               _CastLine(cast: movie.cast),
             ],
             const SizedBox(height: 34),
-            _Actions(
-              itemId: movie.id,
-              resumable: _resumable,
-              progress: data.progress,
-              watched: data.progress?.watched ?? false,
+            Focus(
+              focusNode: _actionsFocus,
+              onFocusChange: _onActionsFocus,
+              child: _Actions(
+                itemId: movie.id,
+                resumable: _resumable,
+                progress: _shownProgress,
+                watched: data.progress?.watched ?? false,
+              ),
             ),
-            if (_resumable && data.progress != null) ...[
+            if (_resumable && _shownProgress != null) ...[
               const SizedBox(height: 22),
-              _ResumeBar(percent: _percent, progress: data.progress!),
+              _ResumeBar(percent: _percent, progress: _shownProgress!),
             ],
             if (movie.reviewRequired) ...[
               const SizedBox(height: 18),
@@ -289,15 +333,23 @@ class _Actions extends ConsumerStatefulWidget {
 }
 
 class _ActionsState extends ConsumerState<_Actions> {
-  /// Set once the viewer toggles watched (ARGY-257). Held here rather than by
-  /// invalidating [movieDetailProvider]: a reload swaps the whole screen for
-  /// the loading spinner, which would drop D-pad focus off the button that was
-  /// just pressed. The layout (Resume / Play from start) is left as loaded so
-  /// the row does not shift under the focused button.
+  /// Set once the viewer toggles watched (ARGY-257), so the button flips at
+  /// once; the refetch that follows brings the server's answer, and a new
+  /// [_Actions.watched] from it replaces the override (ARGY-269/291). The
+  /// row's layout is held by [_MovieState] while focus is in it.
   bool? _watchedOverride;
   bool _busy = false;
 
   bool get _watched => _watchedOverride ?? widget.watched;
+
+  @override
+  void didUpdateWidget(covariant _Actions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.progress, widget.progress) ||
+        oldWidget.watched != widget.watched) {
+      _watchedOverride = null;
+    }
+  }
 
   Future<void> _toggleWatched() async {
     if (_busy) return;
@@ -307,7 +359,12 @@ class _ActionsState extends ConsumerState<_Actions> {
       await ref
           .read(libraryApiProvider)
           .setWatched(widget.itemId, WatchedUpdate(watched: next));
-      if (mounted) setState(() => _watchedOverride = next);
+      if (mounted) {
+        setState(() => _watchedOverride = next);
+        // The server's answer, and with it Resume vs Play, comes from a
+        // refetch; invalidating also drops any stale refetch in flight.
+        ref.invalidate(movieDetailProvider(widget.itemId));
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -351,12 +408,22 @@ class _ActionsState extends ConsumerState<_Actions> {
             icon: Icons.play_arrow,
             primary: true,
             focusNode: _primary,
-            onSelect: () => openPlayer(context, itemId, resume: true),
+            onSelect: () => openPlayerThenRefresh(
+              context,
+              movieDetailProvider(itemId),
+              itemId,
+              resume: true,
+            ),
           ),
           const SizedBox(width: 18),
           TvButton(
             label: 'Play from start',
-            onSelect: () => openPlayer(context, itemId, startOver: true),
+            onSelect: () => openPlayerThenRefresh(
+              context,
+              movieDetailProvider(itemId),
+              itemId,
+              startOver: true,
+            ),
           ),
         ] else
           TvButton(
@@ -364,7 +431,11 @@ class _ActionsState extends ConsumerState<_Actions> {
             icon: Icons.play_arrow,
             primary: true,
             focusNode: _primary,
-            onSelect: () => openPlayer(context, itemId),
+            onSelect: () => openPlayerThenRefresh(
+              context,
+              movieDetailProvider(itemId),
+              itemId,
+            ),
           ),
         const SizedBox(width: 18),
         TvButton.icon(

@@ -33,6 +33,7 @@ class BeaconClient {
   final bool _ownsHttp;
 
   final _controller = StreamController<BeaconEvent>.broadcast();
+  final _opened = StreamController<void>.broadcast();
 
   bool _started = false;
   bool _closed = false;
@@ -43,6 +44,11 @@ class BeaconClient {
   /// Broadcast stream of position events. Listen before [start] to catch the
   /// first ones.
   Stream<BeaconEvent> get events => _controller.stream;
+
+  /// Fires each time the stream is (re)established with a 200. Beacon has no
+  /// Last-Event-ID replay, so every open after the first marks a window in which
+  /// events may have been lost, and the caller refetches to cover it (ARGY-291).
+  Stream<void> get opened => _opened.stream;
 
   /// Opens the stream and keeps it open across reconnects. Idempotent.
   void start() {
@@ -77,6 +83,7 @@ class BeaconClient {
       _scheduleReconnect();
       return;
     }
+    if (!_opened.isClosed) _opened.add(null);
 
     var event = 'message';
     final data = StringBuffer();
@@ -143,6 +150,7 @@ class BeaconClient {
     _lines?.cancel();
     _lines = null;
     if (!_controller.isClosed) _controller.close();
+    if (!_opened.isClosed) _opened.close();
     if (_ownsHttp) _http.close();
   }
 }

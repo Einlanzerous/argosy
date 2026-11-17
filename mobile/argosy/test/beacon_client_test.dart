@@ -91,6 +91,34 @@ void main() {
       expect(events.single.itemId, 'after');
     });
 
+    test('signals each successful open, and not a refused one', () async {
+      var connects = 0;
+      final client = BeaconClient(
+        resolveUrl: url,
+        baseBackoff: const Duration(milliseconds: 5),
+        httpClient: MockClient.streaming((req, _) async {
+          connects++;
+          // 1: open then drop; 2: refused (503); 3: open and stay up.
+          if (connects == 1) {
+            return http.StreamedResponse(const Stream<List<int>>.empty(), 200);
+          }
+          if (connects == 2) {
+            return http.StreamedResponse(const Stream<List<int>>.empty(), 503);
+          }
+          return http.StreamedResponse(StreamController<List<int>>().stream, 200);
+        }),
+      );
+      addTearDown(client.dispose);
+
+      var opens = 0;
+      client.opened.listen((_) => opens++);
+      client.start();
+
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(connects, 3);
+      expect(opens, 2);
+    });
+
     test('does not connect while there is no token', () async {
       var connects = 0;
       final client = BeaconClient(

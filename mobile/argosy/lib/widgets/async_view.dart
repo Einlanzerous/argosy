@@ -23,12 +23,18 @@ class AsyncView<T> extends StatelessWidget {
   /// Keep showing the previous data while a refresh is in flight instead of
   /// swapping the screen for the spinner (ARGY-266). A screen that refetches on
   /// return from the player would otherwise flash a spinner and drop D-pad focus.
+  ///
+  /// It also keeps the previous data when a refresh *fails* (ARGY-291). Screens
+  /// now refetch silently on app resume and on other devices' progress, and a
+  /// phone that resumes offline would otherwise trade the page it was showing
+  /// for "Couldn't load". A first load that fails still shows the error.
   final bool keepStale;
 
   @override
   Widget build(BuildContext context) {
     return value.when(
       skipLoadingOnReload: keepStale,
+      skipError: keepStale,
       data: builder,
       loading: () => const Center(
         child: CircularProgressIndicator(color: ArgosyColors.accent),

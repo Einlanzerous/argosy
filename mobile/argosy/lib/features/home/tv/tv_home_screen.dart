@@ -40,6 +40,7 @@ class TvHomeScreen extends ConsumerWidget {
               Expanded(
                 child: AsyncView(
                   value: data,
+                  keepStale: true,
                   onRetry: () => ref.invalidate(homeDataProvider),
                   builder: (home) => _Home(home: home),
                 ),
