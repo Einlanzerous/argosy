@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
 import '../../platform/device_capabilities.dart';
+import '../../util/format.dart';
 import 'offline_progress_queue.dart';
 import 'stow_runner.dart';
 import 'stow_service.dart';
@@ -221,7 +222,7 @@ class StowController extends Notifier<Map<String, StowStatus>> {
       final title = item.episodeTitle;
       return title == null || title.isEmpty ? code : '$code · $title';
     }
-    return item.year?.toString();
+    return yearLabel(item.year);
   }
 }
 

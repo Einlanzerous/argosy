@@ -706,9 +706,12 @@ func (m *Matcher) store(ctx context.Context, table, artworkSub, id string, match
 		"source":    "tmdb",
 		"tmdb_id":   match.TMDBID,
 		"title":     match.Title,
-		"year":      match.Year,
 		"overview":  match.Overview,
 		"genre_ids": match.GenreIDs,
+	}
+	// An unknown year is absent, not 0 (ARGY-309).
+	if match.Year > 0 {
+		pm["year"] = match.Year
 	}
 	// genres (names) and rating power the genre + rating filters; omit when absent
 	// so unmatched/unrated items don't carry empty facets.

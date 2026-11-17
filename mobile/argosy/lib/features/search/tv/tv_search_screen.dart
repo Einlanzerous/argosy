@@ -334,7 +334,7 @@ class _ResultTile extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '${card.kindLabel}${card.year != null ? ' · ${card.year}' : ''}',
+            '${card.kindLabel}${yearLabel(card.year) != null ? ' · ${yearLabel(card.year)}' : ''}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(

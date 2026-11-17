@@ -72,14 +72,22 @@ func effectiveTitle(over, prov map[string]any, fallback string) string {
 	return firstNonEmpty(mstr(over, "title"), mstr(prov, "title"), fallback)
 }
 
+// effectiveYear resolves the release year, override over provider over the
+// column. A year <= 0 is "unknown", never a value: TMDB matches with no release
+// date used to persist provider_metadata.year = 0, which rendered as "0" in
+// clients (ARGY-309). Treating it as absent here also covers rows already
+// written that way.
 func effectiveYear(over, prov map[string]any, fallback *int) *int {
-	if y, ok := mint(over, "year"); ok {
+	if y, ok := mint(over, "year"); ok && y > 0 {
 		return &y
 	}
-	if y, ok := mint(prov, "year"); ok {
+	if y, ok := mint(prov, "year"); ok && y > 0 {
 		return &y
 	}
-	return fallback
+	if fallback != nil && *fallback > 0 {
+		return fallback
+	}
+	return nil
 }
 
 func effectiveOverview(over, prov map[string]any) *string {

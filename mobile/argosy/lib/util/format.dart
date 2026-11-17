@@ -116,7 +116,7 @@ String episodeHeader(
         ? (title: name, subtitle: '$seriesTitle · $slot')
         : (title: slot, subtitle: seriesTitle);
   }
-  return (title: formatTitle(title), subtitle: year?.toString());
+  return (title: formatTitle(title), subtitle: yearLabel(year));
 }
 
 /// Compact episode label for a card subtitle: `S1 · E1 · The World of Swords`,
@@ -147,10 +147,25 @@ String formatRelativeTime(DateTime? when, {DateTime? now}) {
   return '${w.year}-${w.month.toString().padLeft(2, '0')}-${w.day.toString().padLeft(2, '0')}';
 }
 
+/// A release year as text, or null when it is unknown. Unknown is null or <= 0
+/// (older matches persisted 0 for "no release date", which rendered as a bare
+/// "0" — ARGY-309), so every year display goes through here.
+String? yearLabel(int? year) => year != null && year > 0 ? '$year' : null;
+
+/// A series' meta line: `1 season  •  2024`, dropping the year when unknown.
+/// The season count is the seasons present in the library, which is what the
+/// episode list below shows.
+String seriesMetaLine(int seasonCount, int? year) {
+  final seasons = '$seasonCount season${seasonCount == 1 ? '' : 's'}';
+  final y = yearLabel(year);
+  return y == null ? seasons : '$seasons  •  $y';
+}
+
 /// A poster's secondary line: `2024  ·  ★ 8.1` from a year + rating.
 String? yearRatingSubtitle(int? year, num? rating) {
   final parts = <String>[];
-  if (year != null) parts.add('$year');
+  final y = yearLabel(year);
+  if (y != null) parts.add(y);
   if (rating != null && rating > 0) parts.add('★ ${rating.toStringAsFixed(1)}');
   return parts.isEmpty ? null : parts.join('  ·  ');
 }

@@ -6,7 +6,7 @@ import DetailScaffold from '@/components/DetailScaffold.vue'
 import PosterCard from '@/components/PosterCard.vue'
 import PosterRail from '@/components/PosterRail.vue'
 import AddToVault from '@/components/AddToVault.vue'
-import { formatRuntime, formatClock } from '@/lib/format'
+import { formatRuntime, formatClock, yearLabel } from '@/lib/format'
 import { getMovies, type MovieSummary } from '@/lib/manifest'
 import { getProgress, setWatched, type PlayState } from '@/lib/playback'
 import { setPage } from '@/lib/page'
@@ -107,8 +107,8 @@ watch(
     :genres="movie.genres"
   >
     <template #meta>
-      <span>{{ movie.year ?? '—' }}</span>
-      <span class="sep">•</span>
+      <span v-if="yearLabel(movie.year)">{{ yearLabel(movie.year) }}</span>
+      <span v-if="yearLabel(movie.year)" class="sep">•</span>
       <span>{{ formatRuntime(movie.durationSeconds) }}</span>
       <span v-if="movie.container" class="sep">•</span>
       <span v-if="movie.container" class="badge">{{ movie.container.toUpperCase() }}</span>
