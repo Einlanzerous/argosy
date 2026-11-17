@@ -855,8 +855,7 @@ class _EpisodeTile extends ConsumerWidget {
                 StowPhase.requesting ||
                 StowPhase.packaging ||
                 StowPhase.downloading ||
-                StowPhase.retrying =>
-                  'Cancel download (${stowStatus.label})',
+                StowPhase.retrying => 'Cancel download (${stowStatus.label})',
                 _ => 'Stow $_episodeLabel for offline',
               }, style: Theme.of(sheet).textTheme.titleMedium),
               onTap: () => Navigator.of(sheet).pop(switch (stowStatus.phase) {

@@ -259,7 +259,12 @@ class _Hero extends ConsumerWidget {
     final expanded = isExpandedWidth(context);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(expanded ? 24 : 14, 4, expanded ? 24 : 14, 0),
+      padding: EdgeInsets.fromLTRB(
+        expanded ? 24 : 14,
+        4,
+        expanded ? 24 : 14,
+        0,
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(tokens.radiusXl + 2),
         child: GestureDetector(
@@ -311,115 +316,121 @@ class _Hero extends ConsumerWidget {
                         maxWidth: expanded ? 520 : double.infinity,
                       ),
                       child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        key: const ValueKey('hero-eyebrow'),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: ArgosyColors.bg2.withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: ArgosyColors.accentLine),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.sync_alt,
-                              size: 13,
-                              color: ArgosyColors.accent,
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            key: const ValueKey('hero-eyebrow'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
                             ),
-                            const SizedBox(width: 6),
+                            decoration: BoxDecoration(
+                              color: ArgosyColors.bg2.withValues(alpha: 0.92),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: ArgosyColors.accentLine,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.sync_alt,
+                                  size: 13,
+                                  color: ArgosyColors.accent,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  hero.eyebrow.toUpperCase(),
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        color: ArgosyColors.accent,
+                                        letterSpacing: 1.6,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            hero.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.displayMedium,
+                          ),
+                          if (hero.subtitle != null &&
+                              hero.subtitle!.isNotEmpty) ...[
+                            const SizedBox(height: 6),
                             Text(
-                              hero.eyebrow.toUpperCase(),
-                              style: Theme.of(context).textTheme.labelMedium
-                                  ?.copyWith(
-                                    color: ArgosyColors.accent,
-                                    letterSpacing: 1.6,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              hero.subtitle!,
+                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        hero.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.displayMedium,
-                      ),
-                      if (hero.subtitle != null &&
-                          hero.subtitle!.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          hero.subtitle!,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                      if (hero.deviceLabel != null) ...[
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: DevicePill(
-                            label: 'Left off on ${hero.deviceLabel!}',
-                          ),
-                        ),
-                      ],
-                      if (hero.percent != null) ...[
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: LinearProgressIndicator(
-                                  value: hero.percent,
-                                  minHeight: 4,
-                                  backgroundColor: tokens.line2,
-                                  valueColor: AlwaysStoppedAnimation(
-                                    tokens.progress,
+                          if (hero.deviceLabel != null) ...[
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: DevicePill(
+                                label: 'Left off on ${hero.deviceLabel!}',
+                              ),
+                            ),
+                          ],
+                          if (hero.percent != null) ...[
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: LinearProgressIndicator(
+                                      value: hero.percent,
+                                      minHeight: 4,
+                                      backgroundColor: tokens.line2,
+                                      valueColor: AlwaysStoppedAnimation(
+                                        tokens.progress,
+                                      ),
+                                    ),
                                   ),
                                 ),
+                                if (hero.remainingLabel != null) ...[
+                                  const SizedBox(width: 11),
+                                  Text(
+                                    hero.remainingLabel!,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(color: ArgosyColors.soft),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                          if (hero.playableId != null) ...[
+                            const SizedBox(height: 15),
+                            FilledButton.icon(
+                              key: const ValueKey('hero-resume'),
+                              style: brassButtonStyle(
+                                context,
+                                // Full-width on a phone; a fixed width when
+                                // expanded, where full-width would be a slab.
+                                minimumSize: expanded
+                                    ? const Size(220, 48)
+                                    : const Size.fromHeight(50),
+                              ),
+                              onPressed: () => openPlayer(
+                                context,
+                                hero.playableId!,
+                                resume: hero.percent != null,
+                              ),
+                              icon: const Icon(Icons.play_arrow, size: 20),
+                              label: Text(
+                                hero.percent != null ? 'Resume' : 'Play',
                               ),
                             ),
-                            if (hero.remainingLabel != null) ...[
-                              const SizedBox(width: 11),
-                              Text(
-                                hero.remainingLabel!,
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(color: ArgosyColors.soft),
-                              ),
-                            ],
                           ],
-                        ),
-                      ],
-                      if (hero.playableId != null) ...[
-                        const SizedBox(height: 15),
-                        FilledButton.icon(
-                          key: const ValueKey('hero-resume'),
-                          style: brassButtonStyle(
-                            context,
-                            // Full-width on a phone; a fixed width when
-                            // expanded, where full-width would be a slab.
-                            minimumSize: expanded
-                                ? const Size(220, 48)
-                                : const Size.fromHeight(50),
-                          ),
-                          onPressed: () => openPlayer(
-                            context,
-                            hero.playableId!,
-                            resume: hero.percent != null,
-                          ),
-                          icon: const Icon(Icons.play_arrow, size: 20),
-                          label: Text(hero.percent != null ? 'Resume' : 'Play'),
-                        ),
-                      ],
-                    ],
+                        ],
                       ),
                     ),
                   ),

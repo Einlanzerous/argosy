@@ -111,10 +111,7 @@ class _Header extends StatelessWidget {
                 style: text.displaySmall,
               ),
             ),
-            if (countLabel != null) ...[
-              const SizedBox(width: 14),
-              countLabel,
-            ],
+            if (countLabel != null) ...[const SizedBox(width: 14), countLabel],
             const SizedBox(width: 24),
             Expanded(child: chips),
             const SizedBox(width: 12),
@@ -331,7 +328,12 @@ class _Grid extends StatelessWidget {
         // 600dp window minus the rail is ~516dp), never smaller than ~140dp.
         final columns = (box.maxWidth / 140).floor().clamp(3, 6);
         return GridView.builder(
-          padding: EdgeInsets.fromLTRB(expanded ? 24 : 18, 10, expanded ? 24 : 18, 28),
+          padding: EdgeInsets.fromLTRB(
+            expanded ? 24 : 18,
+            10,
+            expanded ? 24 : 18,
+            28,
+          ),
           gridDelegate: expanded
               ? SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: columns,
