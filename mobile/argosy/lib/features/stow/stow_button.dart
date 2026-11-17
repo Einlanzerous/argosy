@@ -18,13 +18,23 @@ import 'stowed_item.dart';
 /// network — and a single opaque spinner across both is the fastest way to make
 /// a twenty-minute encode look like a hang.
 class StowButton extends ConsumerWidget {
-  const StowButton({super.key, required this.item, this.subtitleLine});
+  const StowButton({
+    super.key,
+    required this.item,
+    this.subtitleLine,
+    this.square = false,
+  });
 
   final MediaItemDetail item;
 
   /// Secondary line recorded with the stow, for the offline list. Defaults to
   /// the year, or the episode code for an episode.
   final String? subtitleLine;
+
+  /// A 50dp rounded-square icon button beside a wide Play/Resume (the film's
+  /// action row, ARGY-311). The phase still reads, as the glyph (a progress
+  /// ring while busy) and the tooltip.
+  final bool square;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,6 +43,7 @@ class StowButton extends ConsumerWidget {
     ref.watch(stowedItemsProvider);
     final controller = ref.read(stowControllerProvider.notifier);
     final status = controller.statusFor(item.id);
+    if (square) return _square(context, ref, controller, status);
 
     switch (status.phase) {
       case StowPhase.stowed:
@@ -83,6 +94,53 @@ class StowButton extends ConsumerWidget {
           onPressed: () => controller.stow(item, subtitleLine: subtitleLine),
           icon: const Icon(Icons.download_for_offline_outlined, size: 18),
           label: const Text('Stow'),
+        );
+    }
+  }
+
+  Widget _square(
+    BuildContext context,
+    WidgetRef ref,
+    StowController controller,
+    StowStatus status,
+  ) {
+    switch (status.phase) {
+      case StowPhase.stowed:
+        return ActionPill(
+          square: true,
+          icon: Icons.offline_pin,
+          iconColor: ArgosyColors.accentHi,
+          label: 'Stowed · remove download',
+          onPressed: () => _confirmRemove(context, ref),
+        );
+      case StowPhase.requesting:
+      case StowPhase.packaging:
+      case StowPhase.downloading:
+      case StowPhase.retrying:
+        final why = status.phase == StowPhase.retrying ? status.message : null;
+        return ActionPill(
+          square: true,
+          icon: Icons.download_for_offline_outlined,
+          leading: _ProgressRing(fraction: status.fraction),
+          label: why == null
+              ? '${status.label} · tap to cancel'
+              : '${status.label} — $why',
+          onPressed: () => controller.cancel(item.id),
+        );
+      case StowPhase.failed:
+        return ActionPill(
+          square: true,
+          icon: Icons.error_outline,
+          iconColor: ArgosyColors.danger,
+          label: 'Retry stow — ${status.message ?? 'stow failed'}',
+          onPressed: () => controller.stow(item, subtitleLine: subtitleLine),
+        );
+      case StowPhase.none:
+        return ActionPill(
+          square: true,
+          icon: Icons.download_for_offline_outlined,
+          label: 'Stow',
+          onPressed: () => controller.stow(item, subtitleLine: subtitleLine),
         );
     }
   }
