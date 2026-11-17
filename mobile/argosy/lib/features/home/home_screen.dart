@@ -9,7 +9,6 @@ import '../../theme/breakpoints.dart';
 import '../../theme/button_styles.dart';
 import '../../widgets/argosy_mark.dart';
 import '../../widgets/async_view.dart';
-import '../../widgets/device_pill.dart';
 import '../../widgets/hatch_pattern.dart';
 import '../../widgets/media_rail.dart';
 import '../account/account_sheet.dart';
@@ -34,22 +33,22 @@ class HomeScreen extends ConsumerWidget {
         titleSpacing: 16,
         // The logo-only ship mark + a separate "Argosy" wordmark (not the
         // combined logo-with-text image), so the two can be sized independently.
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // The rail carries the mark when expanded; don't draw it twice.
-            if (!isExpandedWidth(context)) ...[
-              const ArgosyMark(size: 44),
-              const SizedBox(width: 11),
-            ],
-            Text(
-              'Argosy',
-              style: Theme.of(
-                context,
-              ).appBarTheme.titleTextStyle?.copyWith(fontSize: 23),
-            ),
-          ],
-        ),
+        // Expanded: the rail carries the brand, so only the avatar remains.
+        title: isExpandedWidth(context)
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const ArgosyMark(size: 44),
+                  const SizedBox(width: 11),
+                  Text(
+                    'Argosy',
+                    style: Theme.of(
+                      context,
+                    ).appBarTheme.titleTextStyle?.copyWith(fontSize: 23),
+                  ),
+                ],
+              ),
         actions: [
           // The Hold lives in the app bar, not behind Settings: Settings can't
           // render without the server, and what's stowed has to be reachable
@@ -251,6 +250,80 @@ class _Hero extends ConsumerWidget {
 
   final HomeHero hero;
 
+  /// Resume plus the cross-device note. Compact: Resume fills the row and a
+  /// two-line "from" over the device name sits right-aligned beside it.
+  /// Expanded: a padded (not full-width) Resume with "from NAME" inline.
+  Widget _heroResumeRow(BuildContext context, bool expanded) {
+    final device = hero.deviceLabel;
+    final brass = Theme.of(context).textTheme.labelMedium?.copyWith(
+      color: ArgosyColors.accentSoft,
+      fontWeight: FontWeight.w600,
+      fontSize: expanded ? 11.5 : 11,
+      height: 1.3,
+    );
+    final button = FilledButton.icon(
+      key: const ValueKey('hero-resume'),
+      style: brassButtonStyle(context, minimumSize: const Size(0, 48)).copyWith(
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: expanded ? 26 : 20),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      onPressed: () =>
+          openPlayer(context, hero.playableId!, resume: hero.percent != null),
+      icon: const Icon(Icons.play_arrow, size: 20),
+      label: Text(hero.percent != null ? 'Resume' : 'Play'),
+    );
+    if (expanded) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          button,
+          if (device != null) ...[
+            const SizedBox(width: 14),
+            Flexible(
+              child: Text(
+                'from $device',
+                key: const ValueKey('hero-from'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: brass,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: button),
+        if (device != null) ...[
+          const SizedBox(width: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 110),
+            child: Column(
+              key: const ValueKey('hero-from'),
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('from', style: brass),
+                Text(
+                  device,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: brass,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.argosy;
@@ -326,7 +399,7 @@ class _Hero extends ConsumerWidget {
                               vertical: 5,
                             ),
                             decoration: BoxDecoration(
-                              color: ArgosyColors.bg2.withValues(alpha: 0.92),
+                              color: const Color(0xD10E0E0D),
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
                                 color: ArgosyColors.accentLine,
@@ -360,30 +433,55 @@ class _Hero extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.displayMedium,
                           ),
-                          if (hero.subtitle != null &&
-                              hero.subtitle!.isNotEmpty) ...[
+                          // Compact: "S6 · E17 · title" left, "21m left" right,
+                          // then the bar. Expanded: the line, then bar + label.
+                          if (!expanded &&
+                                  (hero.subtitle?.isNotEmpty ?? false) ||
+                              !expanded && hero.remainingLabel != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    hero.subtitle ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ),
+                                if (hero.remainingLabel != null)
+                                  Text(
+                                    hero.remainingLabel!,
+                                    key: const ValueKey('hero-remaining'),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: ArgosyColors.soft,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                              ],
+                            ),
+                          ] else if (expanded &&
+                              (hero.subtitle?.isNotEmpty ?? false)) ...[
                             const SizedBox(height: 6),
                             Text(
                               hero.subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ],
-                          if (hero.deviceLabel != null) ...[
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: DevicePill(
-                                label: 'Left off on ${hero.deviceLabel!}',
-                              ),
-                            ),
-                          ],
                           if (hero.percent != null) ...[
-                            const SizedBox(height: 14),
+                            SizedBox(height: expanded ? 12 : 8),
                             Row(
                               children: [
                                 Expanded(
                                   child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(3),
+                                    borderRadius: BorderRadius.circular(2),
                                     child: LinearProgressIndicator(
                                       value: hero.percent,
                                       minHeight: 4,
@@ -394,41 +492,27 @@ class _Hero extends ConsumerWidget {
                                     ),
                                   ),
                                 ),
-                                if (hero.remainingLabel != null) ...[
+                                if (expanded &&
+                                    hero.remainingLabel != null) ...[
                                   const SizedBox(width: 11),
                                   Text(
                                     hero.remainingLabel!,
+                                    key: const ValueKey('hero-remaining'),
                                     style: Theme.of(context)
                                         .textTheme
                                         .labelMedium
-                                        ?.copyWith(color: ArgosyColors.soft),
+                                        ?.copyWith(
+                                          color: ArgosyColors.soft,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                   ),
                                 ],
                               ],
                             ),
                           ],
                           if (hero.playableId != null) ...[
-                            const SizedBox(height: 15),
-                            FilledButton.icon(
-                              key: const ValueKey('hero-resume'),
-                              style: brassButtonStyle(
-                                context,
-                                // Full-width on a phone; a fixed width when
-                                // expanded, where full-width would be a slab.
-                                minimumSize: expanded
-                                    ? const Size(220, 48)
-                                    : const Size.fromHeight(50),
-                              ),
-                              onPressed: () => openPlayer(
-                                context,
-                                hero.playableId!,
-                                resume: hero.percent != null,
-                              ),
-                              icon: const Icon(Icons.play_arrow, size: 20),
-                              label: Text(
-                                hero.percent != null ? 'Resume' : 'Play',
-                              ),
-                            ),
+                            const SizedBox(height: 14),
+                            _heroResumeRow(context, expanded),
                           ],
                         ],
                       ),

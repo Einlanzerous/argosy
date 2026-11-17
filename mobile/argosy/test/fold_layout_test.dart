@@ -18,6 +18,7 @@ import 'package:argosy/features/stow/stow_store.dart';
 import 'package:argosy/router/scaffold_with_nav.dart';
 import 'package:argosy/theme/argosy_theme.dart';
 import 'package:argosy/theme/breakpoints.dart';
+import 'package:argosy/widgets/device_pill.dart';
 import 'package:argosy_api/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -173,14 +174,52 @@ void main() {
       expect(find.byTooltip('Add to Vault'), findsOneWidget);
       expect(find.text('Add to Vault'), findsNothing);
 
-      // Season header: picker, count, and icon-only Watched + Stow.
-      expect(find.byKey(const ValueKey('season-picker')), findsOneWidget);
+      // Show-level: Mark series watched is a 50dp square in the top row,
+      // beside Vault, level with Resume.
+      final seriesWatched = find.byTooltip('Mark series watched');
+      expect(seriesWatched, findsOneWidget);
+      expect(tester.getSize(seriesWatched), const Size(50, 50));
+      expect(
+        tester.getCenter(seriesWatched).dy,
+        closeTo(tester.getCenter(resume).dy, 1),
+      );
+      expect(
+        tester.getCenter(seriesWatched).dx,
+        greaterThan(tester.getCenter(find.byTooltip('Add to Vault')).dx),
+      );
+
+      // Season header: picker + count on the left, exactly two icon circles
+      // (Watched, Stow) on the same row at the right.
+      final picker = find.byKey(const ValueKey('season-picker'));
+      expect(picker, findsOneWidget);
       expect(find.text('1 of 2 watched'), findsOneWidget);
-      expect(find.byTooltip('Mark season watched'), findsOneWidget);
-      expect(find.byTooltip('Mark series watched'), findsOneWidget);
-      expect(find.byTooltip('Stow season'), findsOneWidget);
+      final markSeason = find.byTooltip('Mark season watched');
+      final stow = find.byTooltip('Stow season');
+      expect(markSeason, findsOneWidget);
+      expect(stow, findsOneWidget);
+      expect(tester.getSize(markSeason), const Size(44, 44));
+      expect(tester.getSize(stow), const Size(44, 44));
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('season-actions')),
+          matching: find.byType(IconButton),
+        ),
+        findsNWidgets(2),
+      );
+      expect(
+        (tester.getCenter(markSeason).dy - tester.getCenter(picker).dy).abs(),
+        lessThan(24),
+        reason: 'same row as the season title',
+      );
+      expect(tester.getCenter(markSeason).dx, greaterThan(300));
       expect(find.text('Mark season watched'), findsNothing);
       expect(find.text('Stow season'), findsNothing);
+
+      // Back is a 40dp rounded square.
+      expect(
+        tester.getSize(find.byKey(const ValueKey('series-back'))),
+        const Size(40, 40),
+      );
 
       // Single column: no left pane.
       expect(find.byKey(const ValueKey('series-left-pane')), findsNothing);
@@ -203,6 +242,7 @@ void main() {
         find.text('CAST'),
         find.widgetWithText(FilledButton, 'Resume S1 Ep 2'),
         find.byTooltip('Add to Vault'),
+        find.byTooltip('Mark series watched'),
       ]) {
         expect(
           tester.getTopLeft(t).dx,
@@ -211,10 +251,28 @@ void main() {
         );
       }
 
-      // Season panel on the right carries labelled pills and the episode rows.
+      // Season panel on the right: two labelled pills on the title row (they
+      // must not wrap), then the episode rows.
+      final markWatched = find.text('Mark watched');
+      final stow = find.text('Stow');
+      expect(markWatched, findsOneWidget);
+      expect(stow, findsOneWidget);
+      expect(
+        tester.getCenter(markWatched).dy,
+        closeTo(tester.getCenter(stow).dy, 1),
+      );
+      expect(
+        (tester.getCenter(markWatched).dy -
+                tester
+                    .getCenter(find.byKey(const ValueKey('season-picker')))
+                    .dy)
+            .abs(),
+        lessThan(24),
+        reason: 'same row as the season title',
+      );
       for (final t in [
-        find.text('Mark season watched'),
-        find.text('Stow season'),
+        markWatched,
+        stow,
         find.text('Episode 1'),
         find.textContaining('The tide turns in episode 1'),
       ]) {
@@ -240,7 +298,21 @@ void main() {
         overrides: [override],
       );
       expect(find.text('Manifest'), findsOneWidget);
-      expect(find.text('14 titles'), findsOneWidget);
+      // The count follows the title on its baseline; sort stays on the right.
+      expect(find.text('14'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('14')).dx,
+        lessThan(tester.getTopLeft(find.text('Recently Added')).dx),
+      );
+      expect(
+        tester.getBottomLeft(find.text('14')).dy,
+        closeTo(tester.getBottomLeft(find.text('Manifest')).dy, 8),
+      );
+      expect(
+        tester.getTopLeft(find.text('14')).dx -
+            tester.getTopRight(find.text('Manifest')).dx,
+        lessThan(24),
+      );
       expect(find.text('Search the Manifest…'), findsNothing);
       expect(find.text('THE MANIFEST'), findsNothing);
       for (final chip in ['All', 'Movies', 'Shows']) {
@@ -316,7 +388,27 @@ void main() {
       expect(find.text('CONTINUE WATCHING'), findsOneWidget);
       expect(find.byKey(const ValueKey('continue-grid')), findsNothing);
       final resume = find.byKey(const ValueKey('hero-resume'));
-      expect(tester.getSize(resume).width, greaterThan(300));
+      expect(tester.getSize(resume).width, greaterThan(200));
+      expect(tester.getSize(resume).height, 48);
+      // No device pill above the bar; the note is "from / <device>" beside
+      // Resume, and the remaining time sits right of the episode line.
+      expect(find.byType(DevicePill), findsNothing);
+      expect(find.text('from'), findsOneWidget);
+      expect(find.text('Sony Bravia'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Sony Bravia')).dx,
+        greaterThan(tester.getTopRight(resume).dx),
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('hero-remaining'))).dx,
+        greaterThanOrEqualTo(tester.getTopRight(find.text('S1 · E3')).dx),
+      );
+      // Right-aligned: its right edge is the hero text column's.
+      expect(
+        tester.getTopRight(find.byKey(const ValueKey('hero-remaining'))).dx,
+        closeTo(tester.getTopRight(resume).dx + 12 + 110, 40),
+      );
+      expect(find.text('Argosy'), findsOneWidget);
     });
 
     testWidgets('expanded: capped hero, fixed Resume, 4-up continue grid', (
@@ -329,7 +421,16 @@ void main() {
         overrides: [override],
       );
       final resume = find.byKey(const ValueKey('hero-resume'));
-      expect(tester.getSize(resume).width, inInclusiveRange(220, 300));
+      expect(tester.getSize(resume).width, inInclusiveRange(120, 300));
+      // "from <device>" inline to its right; progress row is bar + label.
+      expect(find.text('from Sony Bravia'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('from Sony Bravia')).dx,
+        greaterThan(tester.getTopRight(resume).dx),
+      );
+      expect(find.byKey(const ValueKey('hero-remaining')), findsOneWidget);
+      // Only the avatar remains in the app bar: the rail carries the brand.
+      expect(find.text('Argosy'), findsNothing);
 
       // Hero is capped at 300dp: the grid's top sits just below it.
       final grid = find.byKey(const ValueKey('continue-grid'));

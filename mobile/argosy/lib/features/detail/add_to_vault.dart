@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/api_providers.dart';
 import '../../theme/argosy_colors.dart';
-import '../../theme/argosy_tokens.dart';
 import '../../theme/button_styles.dart';
+import '../../widgets/action_pill.dart';
 
 /// "Add to Vault" action — opens a sheet of the vaults the profile may curate
 /// (its own, or any shared household vault) and files the title into the chosen
@@ -46,14 +46,13 @@ class AddToVaultButton extends ConsumerWidget {
           child: IconButton(
             onPressed: open,
             style: IconButton.styleFrom(
-              minimumSize: Size.square(kActionButtonSize.height),
+              minimumSize: Size.square(ActionPill.squareSize),
+              fixedSize: Size.square(ActionPill.squareSize),
               backgroundColor: const Color(0x66141413),
               foregroundColor: ArgosyColors.cream,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(
-                  context.argosy.radius,
-                ),
-                side: BorderSide(color: context.argosy.line2),
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: ArgosyColors.line3),
               ),
             ),
             icon: const Icon(Icons.add, size: 22),

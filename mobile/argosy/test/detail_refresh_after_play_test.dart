@@ -144,7 +144,7 @@ void main() {
     final api = _Library()..serverWatched.addAll([false, true, false]);
     await _pump(tester, api);
 
-    await tester.tap(find.text('Mark season watched'));
+    await tester.tap(find.text('Mark watched'));
     await tester.pumpAndSettle();
     expect(find.text('Not started'), findsNothing); // override applied
     expect(api.fetches, 2); // ...and confirmed by a refetch (ARGY-291)
@@ -173,7 +173,7 @@ void main() {
     await tester.pump();
     expect(api.fetches, 2);
 
-    await tester.tap(find.text('Mark season watched'));
+    await tester.tap(find.text('Mark watched'));
     await tester.pump();
     expect(api.fetches, 3);
 

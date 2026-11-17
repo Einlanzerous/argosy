@@ -9,6 +9,7 @@ import '../../theme/argosy_tokens.dart';
 import '../../theme/breakpoints.dart';
 import '../../util/format.dart';
 import '../../util/poster_gradient.dart';
+import '../../widgets/action_pill.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/hatch_pattern.dart';
 import '../stow/stow_button.dart';
@@ -36,12 +37,52 @@ class SeriesDetailScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: ArgosyColors.cream),
+        leadingWidth: 56,
+        leading: const _BackSquare(),
       ),
       body: AsyncView(
         value: detail,
         keepStale: true,
         onRetry: () => ref.invalidate(seriesDetailProvider(seriesId)),
         builder: (series) => _Body(series: series),
+      ),
+    );
+  }
+}
+
+/// The back affordance over the backdrop: a 40dp rounded square on a dark glass
+/// fill, so it reads on bright key art where a bare arrow did not.
+class _BackSquare extends StatelessWidget {
+  const _BackSquare();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Tooltip(
+        message: MaterialLocalizations.of(context).backButtonTooltip,
+        child: Material(
+          color: const Color(0x8C141413),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(11),
+            side: const BorderSide(color: Color(0x29EAEAE5)),
+          ),
+          child: InkWell(
+            key: const ValueKey('series-back'),
+            customBorder: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
+            onTap: () => Navigator.of(context).maybePop(),
+            child: const SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(
+                Icons.chevron_left,
+                size: 26,
+                color: ArgosyColors.cream,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -280,10 +321,22 @@ class _BodyState extends ConsumerState<_Body> {
         meta,
       ],
     );
+    // Show-level actions (Resume, Vault, Mark series watched) sit up top;
+    // season-level ones live on the season header.
     final actions = _SeriesActions(
       seriesId: series.id,
       resume: resume,
       firstPlayable: _firstPlayable,
+      seriesWatched: series.seasons.length > 1 && _seriesPlayable.isNotEmpty
+          ? WatchedButton(
+              square: true,
+              scopeIcon: Icons.done_all,
+              watched: _seriesAllWatched,
+              watchedLabel: 'Series watched',
+              markLabel: 'Mark series watched',
+              onSet: _setSeriesWatched,
+            )
+          : null,
     );
     final about = <Widget>[
       if (series.overview != null && series.overview!.isNotEmpty) ...[
@@ -393,22 +446,14 @@ class _BodyState extends ConsumerState<_Body> {
     final hasPlayable = playableEps.isNotEmpty;
     final iconOnly = !expanded;
 
+    // Exactly two season-scoped actions, on the title row, right-aligned.
     final actions = <Widget>[
       if (hasPlayable) ...[
-        if (series.seasons.length > 1)
-          WatchedButton(
-            iconOnly: iconOnly,
-            scopeIcon: Icons.done_all,
-            watched: _seriesAllWatched,
-            watchedLabel: 'Series watched',
-            markLabel: 'Mark series watched',
-            onSet: _setSeriesWatched,
-          ),
         WatchedButton(
           iconOnly: iconOnly,
           watched: _seasonAllWatched(season),
-          watchedLabel: 'Season watched',
-          markLabel: 'Mark season watched',
+          watchedLabel: expanded ? 'Watched' : 'Season watched',
+          markLabel: expanded ? 'Mark watched' : 'Mark season watched',
           onSet: (next) => _setSeasonWatched(season.id, [
             for (final e in playableEps) e.mediaItemId!,
           ], next),
@@ -417,6 +462,7 @@ class _BodyState extends ConsumerState<_Body> {
         // below are drawn from, so a combined rip stows once.
         SeasonStowButton(
           iconOnly: iconOnly,
+          shortLabels: expanded,
           seasonLabel: season.title ?? 'Season ${season.seasonNumber}',
           entries: _seasonEntries(season.seasonNumber, playableGroups),
           remainder: _seasonRemainder(season.seasonNumber, playableGroups),
@@ -426,33 +472,46 @@ class _BodyState extends ConsumerState<_Body> {
 
     final header = Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: _SeasonPicker(
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SeasonPicker(
                   seasons: series.seasons,
                   active: _activeSeason,
                   onSelect: (i) => setState(() => _activeSeason = i),
+                  fontSize: expanded ? 18 : 17,
                 ),
-              ),
-              if (iconOnly)
-                for (final a in actions) ...[const SizedBox(width: 8), a],
-            ],
-          ),
-          if (hasPlayable) ...[
-            const SizedBox(height: 2),
-            Text(
-              '$watchedCount of ${playableEps.length} watched',
-              key: const ValueKey('season-watched-count'),
-              style: Theme.of(context).textTheme.labelMedium,
+                if (hasPlayable)
+                  Text(
+                    '$watchedCount of ${playableEps.length} watched',
+                    key: const ValueKey('season-watched-count'),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelMedium?.copyWith(fontSize: 12),
+                  ),
+              ],
             ),
-          ],
-          if (!iconOnly && actions.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(spacing: 10, runSpacing: 10, children: actions),
+          ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            // Natural width (the pills must not wrap or truncate); capped so a
+            // long "Stowing season · 3 of 12" state can't crowd the title out.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Row(
+                key: const ValueKey('season-actions'),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < actions.length; i++) ...[
+                    if (i > 0) SizedBox(width: iconOnly ? 8 : 10),
+                    Flexible(child: actions[i]),
+                  ],
+                ],
+              ),
+            ),
           ],
         ],
       ),
@@ -489,17 +548,22 @@ class _SeasonPicker extends StatelessWidget {
     required this.seasons,
     required this.active,
     required this.onSelect,
+    required this.fontSize,
   });
 
   final List<SeasonSummary> seasons;
   final int active;
   final ValueChanged<int> onSelect;
+  final double fontSize;
 
   String _name(SeasonSummary s) => s.title ?? 'Season ${s.seasonNumber}';
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.titleLarge;
+    final style = Theme.of(context).textTheme.titleLarge?.copyWith(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w700,
+    );
     final label = Text(
       _name(seasons[active]),
       maxLines: 1,
@@ -548,11 +612,16 @@ class _SeriesActions extends StatelessWidget {
     required this.seriesId,
     required this.resume,
     required this.firstPlayable,
+    this.seriesWatched,
   });
 
   final String seriesId;
   final _Playable? resume;
   final String? firstPlayable;
+
+  /// "Mark series watched" as a square icon button, when the show has several
+  /// seasons: show-level, so it sits beside Vault rather than on a season.
+  final Widget? seriesWatched;
 
   @override
   Widget build(BuildContext context) {
@@ -562,7 +631,10 @@ class _SeriesActions extends StatelessWidget {
         Expanded(
           child: resume != null
               ? FilledButton.icon(
-                  style: brassButtonStyle(context),
+                  style: brassButtonStyle(
+                    context,
+                    minimumSize: const Size(0, ActionPill.squareSize),
+                  ),
                   onPressed: () => openPlayerThenRefresh(
                     context,
                     seriesDetailProvider(seriesId),
@@ -575,7 +647,10 @@ class _SeriesActions extends StatelessWidget {
                   ),
                 )
               : FilledButton.icon(
-                  style: brassButtonStyle(context),
+                  style: brassButtonStyle(
+                    context,
+                    minimumSize: const Size(0, ActionPill.squareSize),
+                  ),
                   onPressed: firstPlayable == null
                       ? null
                       : () => openPlayerThenRefresh(
@@ -589,6 +664,10 @@ class _SeriesActions extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         AddToVaultButton(seriesId: seriesId, iconOnly: true),
+        if (seriesWatched != null) ...[
+          const SizedBox(width: 10),
+          seriesWatched!,
+        ],
       ],
     );
   }

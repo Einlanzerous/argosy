@@ -172,8 +172,12 @@ class WatchedButton extends ConsumerStatefulWidget {
     this.watchedLabel = 'Watched',
     this.markLabel = 'Mark watched',
     this.iconOnly = false,
+    this.square = false,
     this.scopeIcon,
   });
+
+  /// A 50dp rounded-square icon button (the show-level action row).
+  final bool square;
 
   /// A distinct glyph for a wider scope (the whole series), so two icon-only
   /// watched buttons side by side are not identical.
@@ -217,6 +221,7 @@ class _WatchedButtonState extends ConsumerState<WatchedButton> {
   Widget build(BuildContext context) {
     return ActionPill(
       iconOnly: widget.iconOnly,
+      square: widget.square,
       onPressed: _busy ? null : _toggle,
       icon:
           widget.scopeIcon ??

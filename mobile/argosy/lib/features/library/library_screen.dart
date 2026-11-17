@@ -83,7 +83,6 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final title = Text('Manifest', style: text.displaySmall);
     final countLabel = count == null
         ? null
         : Text(
@@ -134,11 +133,34 @@ class _Header extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: title),
-              if (countLabel != null) ...[
-                countLabel,
-                const SizedBox(width: 12),
-              ],
+              // The count follows the title on its baseline ("Manifest  24");
+              // only the sort pill is pushed to the right.
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Manifest',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.displaySmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    if (count != null) ...[
+                      const SizedBox(width: 10),
+                      Text(
+                        '$count',
+                        key: const ValueKey('manifest-count'),
+                        style: text.labelMedium?.copyWith(fontSize: 13),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
               sort,
             ],
           ),

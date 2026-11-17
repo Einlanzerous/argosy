@@ -142,7 +142,12 @@ class SeasonStowButton extends ConsumerWidget {
     required this.entries,
     this.remainder,
     this.iconOnly = false,
+    this.shortLabels = false,
   });
+
+  /// Terse pill text ("Stow") for the expanded season header; the tooltip and
+  /// semantics keep the full wording.
+  final bool shortLabels;
 
   /// "Season 2" — named in the confirmation dialogs.
   final String seasonLabel;
@@ -239,6 +244,7 @@ class SeasonStowButton extends ConsumerWidget {
       onPressed: () => _stow(context, ref),
       icon: Icons.download_for_offline_outlined,
       label: 'Stow season',
+      shortLabel: shortLabels ? 'Stow' : null,
     );
   }
 
