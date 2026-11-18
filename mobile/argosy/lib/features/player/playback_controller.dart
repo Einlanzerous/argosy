@@ -13,6 +13,7 @@ import '../stow/offline_progress_queue.dart';
 import 'argosy_audio_handler.dart';
 import 'media_session_state.dart';
 import 'session_recovery.dart';
+import 'stall_tracker.dart';
 import 'vtt.dart';
 
 enum _NextFetch { unfetched, fetched, failed }
@@ -314,6 +315,69 @@ class PlaybackController extends ChangeNotifier
 
   /// True while a session is (re)starting — the overlay shows a spinner.
   bool starting = false;
+
+  /// Times rebuffers and reports each one to the server (ARGY-313).
+  late final StallTracker _stalls = StallTracker(onReport: _reportStall);
+
+  @visibleForTesting
+  StallTracker get debugStalls => _stalls;
+
+  /// `remux`, `transcode` or `direct` for the stall report; null when unknown.
+  String? _delivery;
+
+  /// Test seam: where stall reports go instead of the network.
+  @visibleForTesting
+  void Function(PlaybackEvent event)? debugStallSink;
+
+  /// Seconds buffered ahead of the playhead, from the plugin's buffered ranges
+  /// (both in the player's own timeline). Null when it reports none.
+  double? _bufferedAheadSeconds() {
+    final v = videoValue;
+    if (v == null) return null;
+    final at = v.position;
+    for (final r in v.buffered) {
+      if (r.start <= at && at <= r.end) {
+        return (r.end - at).inMilliseconds / 1000.0;
+      }
+    }
+    return null;
+  }
+
+  /// Fire-and-forget: a failed send never touches playback and is not queued.
+  void _reportStall(StallReport r) {
+    if (isOffline) return;
+    final delivery = _delivery;
+    final ahead = r.bufferedAheadSeconds;
+    final event = PlaybackEvent(
+      kind: PlaybackEventKindEnum.stall,
+      positionSeconds: baseOffset + r.positionSeconds,
+      durationMs: r.duration.inMilliseconds,
+      cause: switch (r.cause) {
+        StallCause.seek => PlaybackEventCauseEnum.seek,
+        StallCause.resume => PlaybackEventCauseEnum.resume,
+        StallCause.play => PlaybackEventCauseEnum.play,
+      },
+      ended: r.ended,
+      sessionId: _sessionId,
+      bufferedAheadSeconds: ahead,
+      delivery: switch (delivery) {
+        'remux' => PlaybackEventDeliveryEnum.remux,
+        'transcode' => PlaybackEventDeliveryEnum.transcode,
+        'direct' => PlaybackEventDeliveryEnum.direct,
+        _ => null,
+      },
+    );
+    final sink = debugStallSink;
+    if (sink != null) {
+      sink(event);
+      return;
+    }
+    unawaited(
+      libraryApi
+          .reportPlaybackEvent(itemId, event)
+          .then<void>((_) {}, onError: (_) {}),
+    );
+  }
 
   /// Set when playback hits an unrecoverable error; the overlay offers a retry.
   bool fatalError = false;
@@ -749,6 +813,7 @@ class PlaybackController extends ChangeNotifier
   Future<void> _startLocal(double offset) async {
     baseOffset = 0;
     starting = true;
+    _stalls.disarm();
     _safeNotify();
     try {
       // No `subtitles:` here on purpose: captions are driven through
@@ -781,6 +846,7 @@ class PlaybackController extends ChangeNotifier
   Future<void> _startDirect(double offset) async {
     baseOffset = 0;
     starting = true;
+    _stalls.disarm();
     _safeNotify();
     try {
       // Direct play authenticates via the `?token=` URL (proven in the ARGY-77
@@ -796,6 +862,7 @@ class PlaybackController extends ChangeNotifier
         ),
       );
       _everAttached = true;
+      _delivery = 'direct';
       _unreachedTarget = null;
       if (offset > 0) {
         await _player!.seekTo(Duration(milliseconds: (offset * 1000).round()));
@@ -825,6 +892,8 @@ class PlaybackController extends ChangeNotifier
     _pendingOffset = offset;
     _windowAtInitSeconds = 0;
     starting = true;
+    _stalls.disarm();
+    _delivery = null;
     fatalError = false;
     errorMessage = null;
     // The session's position is absolute, so it has to be re-anchored the moment
@@ -877,6 +946,7 @@ class PlaybackController extends ChangeNotifier
         return;
       }
       _sessionId = sess.id;
+      _delivery = sess.method.value;
       final playlistUrl = '$baseUrl${sess.playlistUrl}';
       final ready = await (debugProbe ?? _waitForPlaylist)(
         playlistUrl,
@@ -1020,6 +1090,8 @@ class PlaybackController extends ChangeNotifier
     final p = _player;
     if (p == null) return;
     _userPaused = true;
+    // A stall the viewer paused through is not one they sat through.
+    _stalls.disarm();
     await p.pause();
     _safeNotify();
   }
@@ -1053,6 +1125,7 @@ class PlaybackController extends ChangeNotifier
     // the new position is still inside the window (ARGY-207).
     _closeUpNext();
     _noteSeek();
+    _stalls.noteSeek();
     // Deliberate, so it is the new last good position whatever happens next.
     _lastGoodPosition = t;
 
@@ -1485,6 +1558,15 @@ class PlaybackController extends ChangeNotifier
         // budget, and as the place a later restart may fall back to. A
         // restart's own target is not a reading (ARGY-283).
         final p = position;
+        // Real playback: from here buffering is a stall, not start-up (ARGY-313).
+        final pv = videoValue;
+        if (!starting &&
+            _pendingOffset == null &&
+            pv != null &&
+            pv.isPlaying &&
+            !pv.isBuffering) {
+          _stalls.arm();
+        }
         if (isSanePosition(p)) {
           if (!starting && _pendingOffset == null) _lastGoodPosition = p;
           _recovery.progressed(p);
@@ -1514,7 +1596,16 @@ class PlaybackController extends ChangeNotifier
         // extrapolates position from the last push, so leaving it "playing"
         // would let it drift past the video.
         _pushSession(phase: MediaPhase.buffering);
+        if (!starting && _pendingOffset == null) {
+          _stalls.bufferingStart(
+            positionSeconds: videoValue == null
+                ? 0
+                : videoValue!.position.inMilliseconds / 1000.0,
+            bufferedAheadSeconds: _bufferedAheadSeconds(),
+          );
+        }
       case BetterPlayerEventType.bufferingEnd:
+        _stalls.bufferingEnd();
         _pushSession();
       case BetterPlayerEventType.finished:
         // The plugin posts `seekTo` then `finished` for a target past its
@@ -1576,6 +1667,7 @@ class PlaybackController extends ChangeNotifier
       case BetterPlayerEventType.seekTo:
         _seekJustIssued = true;
         _noteSeek();
+        _stalls.noteSeek();
         _pushSession();
         _flush();
       default:
@@ -1670,6 +1762,7 @@ class PlaybackController extends ChangeNotifier
   /// video doesn't trip this.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _stalls.noteResume();
     if (state != AppLifecycleState.detached || _disposed || _tornDown) return;
     _teardown();
     // The route has to go too: the activity is gone but this widget tree isn't,
@@ -1691,6 +1784,8 @@ class PlaybackController extends ChangeNotifier
     _upNextTimer?.cancel();
     _upNextTimer = null;
     _setWakelock(false);
+    // Before the player goes: a stall still open is reported as abandoned.
+    _stalls.abandon();
     _flush();
     // Ahead of the audio-handler detach: that releases the foreground service,
     // and on the detached path the process is only alive *because* of it — a

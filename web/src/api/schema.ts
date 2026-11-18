@@ -803,6 +803,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/items/{itemId}/playback-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a client-side playback event (a rebuffer stall)
+         * @description Fire-and-forget telemetry from a player (ARGY-313). The server cannot see
+         *     a rebuffer: the progress heartbeat fires on a timer whatever the player is
+         *     doing, so a stall and a pause look the same from here. The player reports
+         *     each stall when it ends, and the server writes one `playback stall` log
+         *     line carrying ids only (never a title or path). Nothing is stored.
+         *
+         *     A separate endpoint rather than a field on `PUT .../progress`, because
+         *     progress is an idempotent last-write-wins upsert that is queued and
+         *     replayed offline, while an event is a one-shot observation that must
+         *     never touch the resume position, the Beacon or the offline queue.
+         *     `kind` leaves room for other event kinds later.
+         */
+        post: operations["reportPlaybackEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{itemId}/progress": {
         parameters: {
             query?: never;
@@ -1706,6 +1736,33 @@ export interface components {
             durationSeconds?: number | null;
             /** @description A paused player's liveness ping (ARGY-289). The server keeps the transcode session and presence alive but writes no position and publishes no Beacon event, and answers with the stored play-state, so a stale paused position cannot overwrite what another device saved since. Absent or false is an ordinary position write. */
             keepalive?: boolean | null;
+        };
+        PlaybackEvent: {
+            /** @enum {string} */
+            kind: "stall";
+            /** @description Absolute playhead position when the stall began. */
+            positionSeconds: number;
+            /**
+             * Format: int64
+             * @description How long the player was stalled; so far when ended is false.
+             */
+            durationMs: number;
+            /**
+             * @description seek: within a few seconds of a user seek. resume: shortly after the app returned to the foreground or left PiP. play: mid-playback.
+             * @enum {string}
+             */
+            cause: "seek" | "resume" | "play";
+            /** @description False when the viewer left the player mid-stall. Absent means true. */
+            ended?: boolean | null;
+            /** @description Transcode session id, when there is one. */
+            sessionId?: string | null;
+            /** @description Seconds buffered ahead of the playhead when the stall began, if known. */
+            bufferedAheadSeconds?: number | null;
+            /**
+             * @description Delivery method, when the client knows it.
+             * @enum {string|null}
+             */
+            delivery?: "remux" | "transcode" | "direct" | null;
         };
         WatchedUpdate: {
             watched: boolean;
@@ -3535,6 +3592,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OnDeckItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    reportPlaybackEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackEvent"];
+            };
+        };
+        responses: {
+            /** @description Logged */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed body, unknown kind or cause, or a non-finite or out-of-range number. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];

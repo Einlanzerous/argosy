@@ -1321,6 +1321,45 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/items/{itemId}/playback-events:
+    post:
+      tags: [library]
+      operationId: reportPlaybackEvent
+      summary: Report a client-side playback event (a rebuffer stall)
+      description: |
+        Fire-and-forget telemetry from a player (ARGY-313). The server cannot see
+        a rebuffer: the progress heartbeat fires on a timer whatever the player is
+        doing, so a stall and a pause look the same from here. The player reports
+        each stall when it ends, and the server writes one `playback stall` log
+        line carrying ids only (never a title or path). Nothing is stored.
+
+        A separate endpoint rather than a field on `PUT .../progress`, because
+        progress is an idempotent last-write-wins upsert that is queued and
+        replayed offline, while an event is a one-shot observation that must
+        never touch the resume position, the Beacon or the offline queue.
+        `kind` leaves room for other event kinds later.
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaybackEvent"
+      responses:
+        "204":
+          description: Logged
+        "400":
+          description: Malformed body, unknown kind or cause, or a non-finite or out-of-range number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/items/{itemId}/progress:
     get:
       tags: [library]
@@ -2840,6 +2879,28 @@ components:
             publishes no Beacon event, and answers with the stored play-state,
             so a stale paused position cannot overwrite what another device
             saved since. Absent or false is an ordinary position write.
+
+    PlaybackEvent:
+      type: object
+      required: [kind, positionSeconds, durationMs, cause]
+      properties:
+        kind: { type: string, enum: [stall] }
+        positionSeconds: { type: number, description: "Absolute playhead position when the stall began." }
+        durationMs: { type: integer, format: int64, description: "How long the player was stalled; so far when ended is false." }
+        cause:
+          type: string
+          enum: [seek, resume, play]
+          description: >-
+            seek: within a few seconds of a user seek. resume: shortly after the
+            app returned to the foreground or left PiP. play: mid-playback.
+        ended: { type: boolean, nullable: true, description: "False when the viewer left the player mid-stall. Absent means true." }
+        sessionId: { type: string, nullable: true, description: "Transcode session id, when there is one." }
+        bufferedAheadSeconds: { type: number, nullable: true, description: "Seconds buffered ahead of the playhead when the stall began, if known." }
+        delivery:
+          type: string
+          nullable: true
+          enum: [remux, transcode, direct]
+          description: Delivery method, when the client knows it.
 
     WatchedUpdate:
       type: object
