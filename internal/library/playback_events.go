@@ -102,7 +102,10 @@ func (h *handlers) reportPlaybackEvent(w http.ResponseWriter, r *http.Request) {
 	if body.Delivery != nil {
 		delivery = string(*body.Delivery)
 	}
-	ended := body.Ended == nil || *body.Ended
+	recovered := body.Recovered != nil && *body.Recovered
+	// A recovered stall was cut short by definition; "ended=true recovered=true"
+	// would read as a contradiction in the log.
+	ended := (body.Ended == nil || *body.Ended) && !recovered
 
 	h.logger.Info("playback stall",
 		"req", w.Header().Get("X-Request-Id"),
@@ -113,6 +116,7 @@ func (h *handlers) reportPlaybackEvent(w http.ResponseWriter, r *http.Request) {
 		"cause", string(body.Cause),
 		"dur_ms", body.DurationMs,
 		"ended", ended,
+		"recovered", recovered,
 		"pos", strconv.FormatFloat(pos, 'f', 1, 64),
 		"ahead_s", aheadField,
 		"delivery", delivery,

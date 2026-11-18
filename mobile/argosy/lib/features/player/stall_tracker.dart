@@ -18,6 +18,7 @@ class StallReport {
     required this.duration,
     required this.cause,
     required this.ended,
+    this.recovered = false,
     this.bufferedAheadSeconds,
   });
 
@@ -30,6 +31,10 @@ class StallReport {
   /// False when the viewer left the player mid-stall; [duration] is then the
   /// time so far.
   final bool ended;
+
+  /// True when the stall ended because the controller's recovery restarted the
+  /// session after the stream died. [ended] is false then too.
+  final bool recovered;
   final double? bufferedAheadSeconds;
 }
 
@@ -129,10 +134,17 @@ class StallTracker {
     _armed = false;
   }
 
+  /// The stream died mid-stall and recovery is about to restart the session.
+  /// A stall still open is reported with the time so far, `ended: false` and
+  /// `recovered: true`: it is the longest stall there is, and the restart that
+  /// follows would otherwise disarm it away. Without an open stall nothing is
+  /// reported (an error while playing is not a stall).
+  void recover() => _finish(ended: false, recovered: true);
+
   bool _within(DateTime? at, DateTime now) =>
       at != null && now.difference(at) <= causeWindow;
 
-  void _finish({required bool ended}) {
+  void _finish({required bool ended, bool recovered = false}) {
     final start = _stallStart;
     if (start == null) return;
     _stallStart = null;
@@ -148,6 +160,7 @@ class StallTracker {
         duration: took,
         cause: _stallCause,
         ended: ended,
+        recovered: recovered,
         bufferedAheadSeconds: _stallAhead,
       ),
     );

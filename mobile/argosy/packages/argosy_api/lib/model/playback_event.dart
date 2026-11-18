@@ -18,6 +18,7 @@ class PlaybackEvent {
     required this.durationMs,
     required this.cause,
     this.ended,
+    this.recovered,
     this.sessionId,
     this.bufferedAheadSeconds,
     this.delivery,
@@ -34,8 +35,11 @@ class PlaybackEvent {
   /// seek: within a few seconds of a user seek. resume: shortly after the app returned to the foreground or left PiP. play: mid-playback.
   PlaybackEventCauseEnum cause;
 
-  /// False when the viewer left the player mid-stall. Absent means true.
+  /// False when the stall was cut short: the viewer left the player, or recovery restarted it. Absent means true.
   bool? ended;
+
+  /// True when the stall ended because the player's recovery restarted the session (the stream died), not because it caught up. Implies ended is false.
+  bool? recovered;
 
   /// Transcode session id, when there is one.
   String? sessionId;
@@ -53,6 +57,7 @@ class PlaybackEvent {
     other.durationMs == durationMs &&
     other.cause == cause &&
     other.ended == ended &&
+    other.recovered == recovered &&
     other.sessionId == sessionId &&
     other.bufferedAheadSeconds == bufferedAheadSeconds &&
     other.delivery == delivery;
@@ -65,12 +70,13 @@ class PlaybackEvent {
     (durationMs.hashCode) +
     (cause.hashCode) +
     (ended == null ? 0 : ended!.hashCode) +
+    (recovered == null ? 0 : recovered!.hashCode) +
     (sessionId == null ? 0 : sessionId!.hashCode) +
     (bufferedAheadSeconds == null ? 0 : bufferedAheadSeconds!.hashCode) +
     (delivery == null ? 0 : delivery!.hashCode);
 
   @override
-  String toString() => 'PlaybackEvent[kind=$kind, positionSeconds=$positionSeconds, durationMs=$durationMs, cause=$cause, ended=$ended, sessionId=$sessionId, bufferedAheadSeconds=$bufferedAheadSeconds, delivery=$delivery]';
+  String toString() => 'PlaybackEvent[kind=$kind, positionSeconds=$positionSeconds, durationMs=$durationMs, cause=$cause, ended=$ended, recovered=$recovered, sessionId=$sessionId, bufferedAheadSeconds=$bufferedAheadSeconds, delivery=$delivery]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -82,6 +88,11 @@ class PlaybackEvent {
       json[r'ended'] = this.ended;
     } else {
       json[r'ended'] = null;
+    }
+    if (this.recovered != null) {
+      json[r'recovered'] = this.recovered;
+    } else {
+      json[r'recovered'] = null;
     }
     if (this.sessionId != null) {
       json[r'sessionId'] = this.sessionId;
@@ -129,6 +140,7 @@ class PlaybackEvent {
         durationMs: mapValueOfType<int>(json, r'durationMs')!,
         cause: PlaybackEventCauseEnum.fromJson(json[r'cause'])!,
         ended: mapValueOfType<bool>(json, r'ended'),
+        recovered: mapValueOfType<bool>(json, r'recovered'),
         sessionId: mapValueOfType<String>(json, r'sessionId'),
         bufferedAheadSeconds: json[r'bufferedAheadSeconds'] == null
             ? null

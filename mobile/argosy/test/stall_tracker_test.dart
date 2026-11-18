@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io';
 import 'dart:ui' show AppLifecycleState;
 
@@ -132,9 +133,9 @@ void main() {
         stall(400);
         tick(100);
       }
-      // 6 stalls in ~3s: the first goes, then one more after 2s has passed.
-      expect(reports.length, lessThanOrEqualTo(2));
-      expect(reports.length, greaterThanOrEqualTo(1));
+      // 6 stalls of 400ms + 100ms gaps: the first goes at t=0.4s, and the next
+      // that lands 2s or more after it goes at t=2.4s. The rest are dropped.
+      expect(reports, hasLength(2));
 
       tick(2500);
       final before = reports.length;
@@ -157,6 +158,26 @@ void main() {
       t.bufferingEnd();
       expect(reports, hasLength(1));
       expect(t.armed, isFalse);
+    });
+
+    test('recovery mid-stall reports it as recovered, not ended', () {
+      t.arm();
+      t.bufferingStart(positionSeconds: 52);
+      tick(180000);
+      t.recover();
+      t.disarm(); // the restart that follows
+
+      expect(reports, hasLength(1));
+      expect(reports.single.ended, isFalse);
+      expect(reports.single.recovered, isTrue);
+      expect(reports.single.duration, const Duration(minutes: 3));
+      expect(reports.single.positionSeconds, 52);
+    });
+
+    test('recovery with no open stall reports nothing', () {
+      t.arm();
+      t.recover();
+      expect(reports, isEmpty);
     });
 
     test('leaving with no open stall reports nothing', () {
@@ -264,6 +285,37 @@ void main() {
       c.didChangeAppLifecycleState(AppLifecycleState.detached);
       expect(sent, hasLength(1));
       expect(sent.single.ended, isFalse);
+    });
+
+    test('a stall the stream dies in is reported once, as recovered', () async {
+      playing();
+      c.handlePlayerEvent(ev(BetterPlayerEventType.bufferingStart));
+      await realMs(300);
+      c.handlePlayerEvent(ev(BetterPlayerEventType.exception));
+      await realMs(100); // the deferred restart runs and disarms the tracker
+
+      expect(sent, hasLength(1));
+      expect(sent.single.recovered, isTrue);
+      expect(sent.single.ended, isFalse);
+      expect(sent.single.sessionId, 's500');
+      expect(sent.single.positionSeconds, closeTo(600, 0.001));
+    });
+
+    test('an error while playing, with no stall open, reports nothing', () async {
+      playing();
+      c.handlePlayerEvent(ev(BetterPlayerEventType.exception));
+      await realMs(100);
+      expect(sent, isEmpty);
+    });
+
+    test('a seek restart drops the open stall', () async {
+      playing();
+      c.handlePlayerEvent(ev(BetterPlayerEventType.bufferingStart));
+      await realMs(300);
+      unawaited(c.seekTo(1000)); // beyond the encoded window: a restart
+      await realMs(100);
+      c.handlePlayerEvent(ev(BetterPlayerEventType.bufferingEnd));
+      expect(sent, isEmpty);
     });
 
     test('a failing send never reaches playback', () async {

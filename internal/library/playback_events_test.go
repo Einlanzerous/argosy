@@ -75,6 +75,25 @@ func TestPlaybackEventLogsStall(t *testing.T) {
 	}
 }
 
+// A stall that ended in a recovery restart is logged as cut short and
+// recovered, never as ended.
+func TestPlaybackEventLogsRecovered(t *testing.T) {
+	h, itemID := stowFixture(t, "film.mp4", 1024)
+	var buf bytes.Buffer
+	h.logger = slog.New(slog.NewTextHandler(&buf, nil))
+
+	rec := postPlaybackEvent(h, itemID, `{"kind":"stall","positionSeconds":52,"durationMs":180000,"cause":"play","ended":false,"recovered":true}`)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	out := buf.String()
+	for _, want := range []string{"recovered=true", "ended=false", "dur_ms=180000"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log line missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestPlaybackEventRejectsGarbage(t *testing.T) {
 	h, itemID := stowFixture(t, "film.mp4", 1024)
 	var buf bytes.Buffer

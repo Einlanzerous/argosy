@@ -1752,8 +1752,10 @@ export interface components {
              * @enum {string}
              */
             cause: "seek" | "resume" | "play";
-            /** @description False when the viewer left the player mid-stall. Absent means true. */
+            /** @description False when the stall was cut short: the viewer left the player, or recovery restarted it. Absent means true. */
             ended?: boolean | null;
+            /** @description True when the stall ended because the player's recovery restarted the session (the stream died), not because it caught up. Implies ended is false. */
+            recovered?: boolean | null;
             /** @description Transcode session id, when there is one. */
             sessionId?: string | null;
             /** @description Seconds buffered ahead of the playhead when the stall began, if known. */

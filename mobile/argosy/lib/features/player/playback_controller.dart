@@ -358,6 +358,7 @@ class PlaybackController extends ChangeNotifier
         StallCause.play => PlaybackEventCauseEnum.play,
       },
       ended: r.ended,
+      recovered: r.recovered ? true : null,
       sessionId: _sessionId,
       bufferedAheadSeconds: ahead,
       delivery: switch (delivery) {
@@ -1701,6 +1702,10 @@ class PlaybackController extends ChangeNotifier
       case RecoveryDecision.duplicate:
         return;
       case RecoveryDecision.restart:
+        // A stall the stream died in is reported now, while the session it
+        // belongs to is still the current one: the restart disarms the tracker
+        // and would drop it (ARGY-313).
+        _stalls.recover();
         // Deferred: this is running inside the plugin's own listener, and the
         // restart replaces the data source that listener belongs to.
         Timer.run(() {

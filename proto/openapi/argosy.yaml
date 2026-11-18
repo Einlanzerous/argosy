@@ -2893,7 +2893,8 @@ components:
           description: >-
             seek: within a few seconds of a user seek. resume: shortly after the
             app returned to the foreground or left PiP. play: mid-playback.
-        ended: { type: boolean, nullable: true, description: "False when the viewer left the player mid-stall. Absent means true." }
+        ended: { type: boolean, nullable: true, description: "False when the stall was cut short: the viewer left the player, or recovery restarted it. Absent means true." }
+        recovered: { type: boolean, nullable: true, description: "True when the stall ended because the player's recovery restarted the session (the stream died), not because it caught up. Implies ended is false." }
         sessionId: { type: string, nullable: true, description: "Transcode session id, when there is one." }
         bufferedAheadSeconds: { type: number, nullable: true, description: "Seconds buffered ahead of the playhead when the stall began, if known." }
         delivery:
