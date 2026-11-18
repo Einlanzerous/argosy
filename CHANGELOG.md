@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.1](https://github.com/Einlanzerous/argosy/compare/v0.38.0...v0.38.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **mobile:** resume after a rebuffer instead of staying paused (ARGY-314) ([#312](https://github.com/Einlanzerous/argosy/issues/312)) ([73b7e8b](https://github.com/Einlanzerous/argosy/commit/73b7e8bc49cf0028d6d458a6f2ce0f7510b5ed46))
+
 ## [0.38.0](https://github.com/Einlanzerous/argosy/compare/v0.37.1...v0.38.0) (2026-11-18)
 
 
