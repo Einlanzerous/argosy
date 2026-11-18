@@ -312,6 +312,8 @@ class PlaybackController extends ChangeNotifier
   Future<bool> Function(String url, bool Function() cancelled)? debugProbe;
   @visibleForTesting
   Future<void> Function(String playlistUrl)? debugAttach;
+  @visibleForTesting
+  Future<void> Function(Duration to)? debugSeekPlayer;
 
   /// True while a session is (re)starting — the overlay shows a spinner.
   bool starting = false;
@@ -991,6 +993,11 @@ class PlaybackController extends ChangeNotifier
         _discardSession(sess.id, offset);
         return;
       }
+      await _rebaseSourceClock();
+      if (stale()) {
+        _discardSession(sess.id, offset);
+        return;
+      }
       // Normally `initialized` committed this already; this covers a source that
       // came up without one.
       _commitPendingOffset();
@@ -1027,6 +1034,29 @@ class PlaybackController extends ChangeNotifier
         _safeNotify();
       }
     }
+  }
+
+  /// Clears the plugin's remembered seek target after a source swap (ARGY-316).
+  ///
+  /// better_player_plus keeps ONE `VideoPlayerController` across data sources,
+  /// and its `_seekPosition` (set by every `seekTo`, cleared only once the
+  /// polled position passes it) survives `setNetworkDataSource`. A skip burst
+  /// that seeks natively inside the old session's window and then restarts the
+  /// transcode leaves that old *relative* target behind, and `value.position`
+  /// reports `_seekPosition ?? position` — so the new source, which really is
+  /// at ~0, reads as frozen at the old relative target, and `baseOffset +
+  /// position` lands minutes past `startAt`. Seeking the fresh source to its own
+  /// 0 overwrites the stale target with one the real position passes at once.
+  /// Best-effort: a failed seek must not fail an attach that worked.
+  Future<void> _rebaseSourceClock() async {
+    try {
+      final seek = debugSeekPlayer;
+      if (seek != null) {
+        await seek(Duration.zero);
+      } else {
+        await _player?.seekTo(Duration.zero);
+      }
+    } catch (_) {}
   }
 
   /// Moves [baseOffset] to where the new source starts.
