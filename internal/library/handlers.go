@@ -92,6 +92,8 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("GET /api/v1/items/{itemId}/next-episode", mw(http.HandlerFunc(h.getNextEpisode)))
 	mux.Handle("GET /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.getProgress)))
 	mux.Handle("PUT /api/v1/items/{itemId}/progress", mw(http.HandlerFunc(h.reportProgress)))
+	// Client-reported playback events (ARGY-313): rebuffer stalls, logged only.
+	mux.Handle("POST /api/v1/items/{itemId}/playback-events", mw(http.HandlerFunc(h.reportPlaybackEvent)))
 	mux.Handle("POST /api/v1/items/{itemId}/watched", mw(http.HandlerFunc(h.setWatched)))
 	// Bulk watched (ARGY-109): mark a whole season / series watched or unwatched.
 	mux.Handle("POST /api/v1/series/{seriesId}/watched", mw(http.HandlerFunc(h.setSeriesWatched)))

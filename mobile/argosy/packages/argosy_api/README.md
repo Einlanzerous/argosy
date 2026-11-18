@@ -122,6 +122,7 @@ Class | Method | HTTP request | Description
 *LibraryApi* | [**listVaults**](doc//LibraryApi.md#listvaults) | **GET** /api/v1/vaults | List vaults visible to the current profile (own + shared)
 *LibraryApi* | [**removeVaultItem**](doc//LibraryApi.md#removevaultitem) | **DELETE** /api/v1/vaults/{vaultId}/items/{entryId} | Remove an item from a vault
 *LibraryApi* | [**reorderVault**](doc//LibraryApi.md#reordervault) | **PUT** /api/v1/vaults/{vaultId}/order | Reorder a vault's items
+*LibraryApi* | [**reportPlaybackEvent**](doc//LibraryApi.md#reportplaybackevent) | **POST** /api/v1/items/{itemId}/playback-events | Report a client-side playback event (a rebuffer stall)
 *LibraryApi* | [**reportProgress**](doc//LibraryApi.md#reportprogress) | **PUT** /api/v1/items/{itemId}/progress | Heartbeat — upsert the resume position for the current profile
 *LibraryApi* | [**search**](doc//LibraryApi.md#search) | **GET** /api/v1/search | Full-text search across the account's films and series
 *LibraryApi* | [**setSeasonWatched**](doc//LibraryApi.md#setseasonwatched) | **POST** /api/v1/seasons/{seasonId}/watched | Mark every episode of a season watched / unwatched for the current profile
@@ -184,6 +185,7 @@ Class | Method | HTTP request | Description
  - [PasswordResetResponse](doc//PasswordResetResponse.md)
  - [PingResponse](doc//PingResponse.md)
  - [PlayState](doc//PlayState.md)
+ - [PlaybackEvent](doc//PlaybackEvent.md)
  - [PlaybackInfo](doc//PlaybackInfo.md)
  - [PlaybackSession](doc//PlaybackSession.md)
  - [ProfileCreateRequest](doc//ProfileCreateRequest.md)

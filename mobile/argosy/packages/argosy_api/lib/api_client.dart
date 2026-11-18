@@ -257,6 +257,8 @@ class ApiClient {
           return PingResponse.fromJson(value);
         case 'PlayState':
           return PlayState.fromJson(value);
+        case 'PlaybackEvent':
+          return PlaybackEvent.fromJson(value);
         case 'PlaybackInfo':
           return PlaybackInfo.fromJson(value);
         case 'PlaybackSession':

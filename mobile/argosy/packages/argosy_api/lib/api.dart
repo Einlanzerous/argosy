@@ -71,6 +71,7 @@ part 'model/password_change_request.dart';
 part 'model/password_reset_response.dart';
 part 'model/ping_response.dart';
 part 'model/play_state.dart';
+part 'model/playback_event.dart';
 part 'model/playback_info.dart';
 part 'model/playback_session.dart';
 part 'model/profile_create_request.dart';

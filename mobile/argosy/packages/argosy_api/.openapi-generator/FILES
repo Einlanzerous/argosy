@@ -52,6 +52,7 @@ lib/model/password_change_request.dart
 lib/model/password_reset_response.dart
 lib/model/ping_response.dart
 lib/model/play_state.dart
+lib/model/playback_event.dart
 lib/model/playback_info.dart
 lib/model/playback_session.dart
 lib/model/profile_create_request.dart

@@ -1577,6 +1577,60 @@ class LibraryApi {
     }
   }
 
+  /// Report a client-side playback event (a rebuffer stall)
+  ///
+  /// Fire-and-forget telemetry from a player (ARGY-313). The server cannot see a rebuffer: the progress heartbeat fires on a timer whatever the player is doing, so a stall and a pause look the same from here. The player reports each stall when it ends, and the server writes one `playback stall` log line carrying ids only (never a title or path). Nothing is stored.  A separate endpoint rather than a field on `PUT .../progress`, because progress is an idempotent last-write-wins upsert that is queued and replayed offline, while an event is a one-shot observation that must never touch the resume position, the Beacon or the offline queue. `kind` leaves room for other event kinds later. 
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] itemId (required):
+  ///
+  /// * [PlaybackEvent] playbackEvent (required):
+  Future<Response> reportPlaybackEventWithHttpInfo(String itemId, PlaybackEvent playbackEvent, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final path = r'/api/v1/items/{itemId}/playback-events'
+      .replaceAll('{itemId}', itemId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = playbackEvent;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      path,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Report a client-side playback event (a rebuffer stall)
+  ///
+  /// Fire-and-forget telemetry from a player (ARGY-313). The server cannot see a rebuffer: the progress heartbeat fires on a timer whatever the player is doing, so a stall and a pause look the same from here. The player reports each stall when it ends, and the server writes one `playback stall` log line carrying ids only (never a title or path). Nothing is stored.  A separate endpoint rather than a field on `PUT .../progress`, because progress is an idempotent last-write-wins upsert that is queued and replayed offline, while an event is a one-shot observation that must never touch the resume position, the Beacon or the offline queue. `kind` leaves room for other event kinds later. 
+  ///
+  /// Parameters:
+  ///
+  /// * [String] itemId (required):
+  ///
+  /// * [PlaybackEvent] playbackEvent (required):
+  Future<void> reportPlaybackEvent(String itemId, PlaybackEvent playbackEvent, { Future<void>? abortTrigger, }) async {
+    final response = await reportPlaybackEventWithHttpInfo(itemId, playbackEvent, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Heartbeat — upsert the resume position for the current profile
   ///
   /// Note: This method returns the HTTP [Response].
