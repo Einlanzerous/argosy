@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.2](https://github.com/Einlanzerous/argosy/compare/v0.38.1...v0.38.2) (2026-11-18)
+
+
+### Bug Fixes
+
+* **mobile:** a media-button pause during a rebuffer pauses instead of resuming (ARGY-317) ([#314](https://github.com/Einlanzerous/argosy/issues/314)) ([ef04505](https://github.com/Einlanzerous/argosy/commit/ef04505ab9679d94fd79690b1b925ea8e278fe64))
+* **player:** clear the plugin's stale seek target after a transcode restart (ARGY-316) ([#315](https://github.com/Einlanzerous/argosy/issues/315)) ([79d657a](https://github.com/Einlanzerous/argosy/commit/79d657a631f1c19c93588cfb27031726544025d5))
+
 ## [0.38.1](https://github.com/Einlanzerous/argosy/compare/v0.38.0...v0.38.1) (2026-11-18)
 
 
