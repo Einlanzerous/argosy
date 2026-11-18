@@ -253,7 +253,7 @@ void main() {
     });
 
     test('during a rebuffer (playing=false, not user-paused) pauses', () async {
-      handler.push(target, PlaybackState(playing: false, processingState: AudioProcessingState.buffering));
+      handler.push(target, PlaybackState(processingState: AudioProcessingState.buffering));
       await handler.click();
       expect(target.paused, 1);
       expect(target.played, 0);
@@ -261,7 +261,7 @@ void main() {
 
     test('after the viewer paused plays', () async {
       target.userPaused = true;
-      handler.push(target, PlaybackState(playing: false));
+      handler.push(target, PlaybackState());
       await handler.click();
       expect(target.played, 1);
       expect(target.paused, 0);
