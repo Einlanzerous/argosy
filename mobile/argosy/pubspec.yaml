@@ -75,6 +75,20 @@ dependencies:
   audio_service: ^0.18.19
   flutter_foreground_task: ^10.0.0
 
+# better_player_plus >=1.3.5 forwards ExoPlayer's isPlaying, which turns false
+# while the player rebuffers, as a "pause", and the plugin's Dart answers it by
+# pausing for real, so every stall left the player paused (ARGY-314). This is
+# 1.4.1 plus upstream PR #155 (follow playWhenReady; Dart follows platform
+# play/pause instead of echoing it). Delete the override once upstream ships an
+# equivalent fix on a line we can take (2.x needs Flutter >=3.47); the ^1.4.1
+# constraint above stays. Keep the media3-common pin in
+# android/app/build.gradle.kts equal to the plugin's Media3 version.
+dependency_overrides:
+  better_player_plus:
+    git:
+      url: https://github.com/Einlanzerous/better_player_plus.git
+      ref: 0e3ce41c1a4b5029e48ccc4cbeacc2eadcd23e17
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

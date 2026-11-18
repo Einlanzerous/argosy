@@ -75,10 +75,11 @@ packages:
   better_player_plus:
     dependency: "direct main"
     description:
-      name: better_player_plus
-      sha256: "49c02ec4d975cf0da3f55c3bf07a4eb3eeab2b417790d8fa3e29a77947cb02f1"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: "0e3ce41c1a4b5029e48ccc4cbeacc2eadcd23e17"
+      resolved-ref: "0e3ce41c1a4b5029e48ccc4cbeacc2eadcd23e17"
+      url: "https://github.com/Einlanzerous/better_player_plus.git"
+    source: git
     version: "1.4.1"
   bonsoir:
     dependency: "direct main"
