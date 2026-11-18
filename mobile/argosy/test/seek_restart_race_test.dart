@@ -218,6 +218,41 @@ void main() {
     },
   );
 
+  test('a restart clears the plugin\'s stale seek target (ARGY-316)', () async {
+    // better_player_plus keeps one VideoPlayerController across sources and its
+    // `_seekPosition` survives the swap, so a native skip inside the old window
+    // followed by a restart left the new source reading frozen at the old
+    // relative target. Every attach must be followed by a seek of the plugin to
+    // the new source's own 0, before playback is asked to start.
+    final r = _Rig();
+    addTearDown(r.c.dispose);
+    final order = <String>[];
+    r.c.debugAttach = (url) async => order.add('attach $url');
+    r.c.debugSeekPlayer = (to) async => order.add('seek ${to.inSeconds}');
+
+    await r.c.seekTo(600);
+    await _settle();
+    // Skip burst past the produced window: two restarts back to back.
+    final a = r.c.seekTo(1100);
+    await _settle();
+    final b = r.c.seekTo(1110);
+    await Future.wait([a, b]);
+
+    expect(order.last, 'seek 0');
+    expect(order[order.length - 2], 'attach http://localhost/p/s1110');
+    expect(r.c.baseOffset, 1110);
+    expect(r.c.position, 1110);
+  });
+
+  test('a failing rebase seek does not fail the attach', () async {
+    final r = _Rig();
+    addTearDown(r.c.dispose);
+    r.c.debugSeekPlayer = (to) async => throw StateError('not initialized');
+    await r.c.seekTo(600);
+    expect(r.c.fatalError, isFalse);
+    expect(r.c.baseOffset, 600);
+  });
+
   test('position stays on the target during the swap', () async {
     final r = _Rig();
     addTearDown(r.c.dispose);
