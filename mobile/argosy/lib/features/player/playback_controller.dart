@@ -1100,6 +1100,7 @@ class PlaybackController extends ChangeNotifier
   /// True once the viewer (on-screen, lock-screen or PiP control) asked for a
   /// pause, until they ask to play again. Lets a consumer tell a pause from a
   /// rebuffer, which both read as `isPlaying == false` (ARGY-292).
+  @override
   bool get userPaused => _userPaused;
   bool _userPaused = false;
 

@@ -239,11 +239,48 @@ void main() {
       expect(target.seeks, [200.0]);
     });
   });
+
+  // ARGY-317: a raw media key toggles on the viewer's intent, not on the
+  // published `playing` flag (false while rebuffering).
+  group('media button click', () {
+    late ArgosyAudioHandler handler;
+    late _FakeTarget target;
+
+    setUp(() {
+      handler = ArgosyAudioHandler();
+      target = _FakeTarget();
+      handler.attach(target, _futurama);
+    });
+
+    test('during a rebuffer (playing=false, not user-paused) pauses', () async {
+      handler.push(target, PlaybackState(processingState: AudioProcessingState.buffering));
+      await handler.click();
+      expect(target.paused, 1);
+      expect(target.played, 0);
+    });
+
+    test('after the viewer paused plays', () async {
+      target.userPaused = true;
+      handler.push(target, PlaybackState());
+      await handler.click();
+      expect(target.played, 1);
+      expect(target.paused, 0);
+    });
+
+    test('while plainly playing pauses', () async {
+      handler.push(target, PlaybackState(playing: true));
+      await handler.click();
+      expect(target.paused, 1);
+      expect(target.played, 0);
+    });
+  });
 }
 
 class _FakeTarget implements MediaSessionTarget {
   int played = 0;
   int paused = 0;
+  @override
+  bool userPaused = false;
   final List<double> seeks = [];
 
   @override

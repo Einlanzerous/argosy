@@ -14,6 +14,10 @@ abstract class MediaSessionTarget {
   Future<void> play();
   Future<void> pause();
 
+  /// True once the viewer asked for a pause, until they ask to play again.
+  /// Unlike the published `playing` flag it stays false through a rebuffer.
+  bool get userPaused;
+
   /// Seeks to [seconds] of *absolute* media time.
   Future<void> seekTo(double seconds);
 }
@@ -66,6 +70,31 @@ class ArgosyAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> pause() async => _current?.pause();
+
+  /// A raw hardware media key (headset or Bluetooth button). audio_service
+  /// delivers PLAY, PAUSE, PLAY_PAUSE and HEADSETHOOK alike as
+  /// [MediaButton.media], so the key can't say which was pressed. The default
+  /// toggles on `playbackState.playing`, which we publish as false while
+  /// rebuffering, so a pause key mid-stall resumed playback. Toggle on the
+  /// viewer's intent instead. Notification buttons bypass this (they use
+  /// KEYCODE_BYPASS_PLAY/PAUSE and call play()/pause() directly) (ARGY-317).
+  @override
+  Future<void> click([MediaButton button = MediaButton.media]) async {
+    switch (button) {
+      case MediaButton.media:
+        final t = _current;
+        if (t == null) return;
+        if (t.userPaused) {
+          await t.play();
+        } else {
+          await t.pause();
+        }
+      case MediaButton.next:
+        await skipToNext();
+      case MediaButton.previous:
+        await skipToPrevious();
+    }
+  }
 
   @override
   Future<void> seek(Duration position) async =>
