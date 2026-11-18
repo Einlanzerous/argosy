@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.0](https://github.com/Einlanzerous/argosy/compare/v0.37.1...v0.38.0) (2026-11-18)
+
+
+### Features
+
+* **player:** report rebuffer stalls to the server and log them (ARGY-313) ([#310](https://github.com/Einlanzerous/argosy/issues/310)) ([25e6f76](https://github.com/Einlanzerous/argosy/commit/25e6f768ac7e165e7fcb52097bca271a6a53b9c1))
+
 ## [0.37.1](https://github.com/Einlanzerous/argosy/compare/v0.37.0...v0.37.1) (2026-11-17)
 
 
