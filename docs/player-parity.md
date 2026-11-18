@@ -34,6 +34,7 @@ not run; "unverified" marks what only reading could not settle.
 | ARGY-108 | Back goes to the title page | shared | ok | ok | ok | none |
 | ARGY-84 | `-noaccurate_seek` on resumed remux | server | n/a | n/a | n/a | none |
 | ARGY-190 | Release the transcode when the host dies | mobile-only | n/a | ok | ok | none |
+| ARGY-314 | A rebuffer resumes by itself (better_player_plus fork follows `playWhenReady`, not `isPlaying`) | mobile-only | n/a (hls.js has no echo) | ok | ok | none |
 
 ## Transport, advance, capabilities
 
