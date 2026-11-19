@@ -151,8 +151,16 @@ func planPlayback(videoCodec, audioCodec string, clientHEVC, clientHEVCHardware,
 	return p
 }
 
-// codecsFromTechnical pulls the first video/audio codec names out of the stored
-// ffprobe JSON.
+// codecsFromTechnical pulls the video and audio codec names out of the stored
+// ffprobe JSON that the playback decision gates on: the first video stream, and
+// the first audio stream a browser can't play, falling back to the first audio
+// stream when every track is playable.
+//
+// Audio can't simply be the first stream. A multi-audio remux maps every track
+// and either copies them all or transcodes them all, so a playable first track
+// says nothing about the rest. Modern Family S7–S11 is a Turkish AAC track ahead
+// of the English E-AC-3 default: the decision saw `aac` and copied the E-AC-3
+// into the rendition Firefox picked, which then never played (ARGY-319).
 func codecsFromTechnical(technical []byte) (video, audio string) {
 	var t struct {
 		Streams []struct {
@@ -163,11 +171,17 @@ func codecsFromTechnical(technical []byte) (video, audio string) {
 	if len(technical) > 0 {
 		_ = json.Unmarshal(technical, &t)
 	}
+	audioBlocked := false
 	for _, s := range t.Streams {
 		if s.CodecType == "video" && video == "" {
 			video = s.CodecName
 		}
-		if s.CodecType == "audio" && audio == "" {
+		if s.CodecType != "audio" || audioBlocked {
+			continue
+		}
+		if !directAudio[strings.ToLower(s.CodecName)] {
+			audio, audioBlocked = s.CodecName, true
+		} else if audio == "" {
 			audio = s.CodecName
 		}
 	}
