@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.3](https://github.com/Einlanzerous/argosy/compare/v0.38.2...v0.38.3) (2026-11-19)
+
+
+### Bug Fixes
+
+* **transcode:** gate the audio copy on every mapped track, not the first (ARGY-319) ([#317](https://github.com/Einlanzerous/argosy/issues/317)) ([0918fc6](https://github.com/Einlanzerous/argosy/commit/0918fc69a2713bb40d3a50345b72740700a37a7d))
+
 ## [0.38.2](https://github.com/Einlanzerous/argosy/compare/v0.38.1...v0.38.2) (2026-11-18)
 
 
