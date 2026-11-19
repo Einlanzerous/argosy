@@ -164,6 +164,43 @@ func TestCodecsFromTechnical(t *testing.T) {
 	}
 }
 
+// A multi-audio remux maps and copies every track, so the audio the decision
+// gates on is the first unplayable one, not the first one (ARGY-319: Modern
+// Family S7+ is Turkish AAC ahead of the English E-AC-3 default).
+func TestCodecsFromTechnicalGatesOnUnplayableAudio(t *testing.T) {
+	cases := []struct{ name, raw, wantV, wantA string }{
+		{"playable first, unplayable second (ARGY-319)",
+			`{"streams":[{"codec_type":"video","codec_name":"h264"},{"codec_type":"audio","codec_name":"aac"},{"codec_type":"audio","codec_name":"eac3"},{"codec_type":"subtitle","codec_name":"subrip"}]}`,
+			"h264", "eac3"},
+		{"first unplayable wins",
+			`{"streams":[{"codec_type":"video","codec_name":"h264"},{"codec_type":"audio","codec_name":"aac"},{"codec_type":"audio","codec_name":"truehd"},{"codec_type":"audio","codec_name":"dts"}]}`,
+			"h264", "truehd"},
+		{"all playable keeps the first",
+			`{"streams":[{"codec_type":"video","codec_name":"hevc"},{"codec_type":"audio","codec_name":"opus"},{"codec_type":"audio","codec_name":"aac"}]}`,
+			"hevc", "opus"},
+		{"audio ahead of video still finds the video",
+			`{"streams":[{"codec_type":"audio","codec_name":"eac3"},{"codec_type":"video","codec_name":"h264"}]}`,
+			"h264", "eac3"},
+	}
+	for _, c := range cases {
+		v, a := codecsFromTechnical([]byte(c.raw))
+		if v != c.wantV || a != c.wantA {
+			t.Errorf("%s: codecs = (%q,%q), want (%q,%q)", c.name, v, a, c.wantV, c.wantA)
+		}
+	}
+}
+
+// End to end through the decision: the Modern Family shape must transcode its
+// audio on the remux path instead of copying the E-AC-3 through.
+func TestPlanPlaybackMultiAudioTranscodesHiddenUnplayableTrack(t *testing.T) {
+	raw := []byte(`{"streams":[{"codec_type":"video","codec_name":"h264"},{"codec_type":"audio","codec_name":"aac"},{"codec_type":"audio","codec_name":"eac3"}]}`)
+	v, a := codecsFromTechnical(raw)
+	p := planPlayback(v, a, true, true, false, false, 1080)
+	if p.method != methodRemux || !p.transcodeAudio {
+		t.Errorf("plan = %+v, want remux with transcodeAudio", p)
+	}
+}
+
 func TestAudioTracksFromTechnical(t *testing.T) {
 	// Two audio streams (English dub tagged default + Japanese), interleaved with
 	// video/subtitle streams. Audio index is relative to audio streams, not the
