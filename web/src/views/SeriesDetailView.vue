@@ -248,10 +248,21 @@ async function load(id: string): Promise<void> {
 // nothing else: no spinner (series stays set), no season reset, no setPage. A
 // failed or empty answer keeps what is on screen, and so does a late answer for a
 // series the route has since left.
+// Every caller (live progress and the watched toggles) shares this one guard: a
+// request counter drops any answer that a later request has superseded, so an
+// earlier GET landing last can't overwrite a newer payload with stale state. A
+// network error keeps what is on screen rather than rejecting.
+let refreshSeq = 0
 async function refreshSilently(): Promise<void> {
   const id = String(route.params.id)
-  const data = await fetchSeries(id)
-  if (!data || String(route.params.id) !== id) return
+  const seq = ++refreshSeq
+  let data: SeriesDetail | null
+  try {
+    data = await fetchSeries(id)
+  } catch {
+    return
+  }
+  if (!data || seq !== refreshSeq || String(route.params.id) !== id) return
   series.value = data
   if (activeSeason.value >= data.seasons.length) activeSeason.value = resumeSeasonIndex.value
 }
