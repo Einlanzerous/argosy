@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.38.4](https://github.com/Einlanzerous/argosy/compare/v0.38.3...v0.38.4) (2026-11-20)
+
+
+### Bug Fixes
+
+* **detail:** resume the series where home does (ARGY-320) ([#319](https://github.com/Einlanzerous/argosy/issues/319)) ([3f50a75](https://github.com/Einlanzerous/argosy/commit/3f50a7582cc7ce38ee438115a68acb40fb2a8460))
+* **library:** a season or series unwatch clears saved positions (ARGY-322) ([#321](https://github.com/Einlanzerous/argosy/issues/321)) ([075414b](https://github.com/Einlanzerous/argosy/commit/075414b80c99cbd0ca6c71dbbcf1684e00f7fe30))
+* **player:** a skip while paused stays paused across a restart (ARGY-318) ([#322](https://github.com/Einlanzerous/argosy/issues/322)) ([50fd067](https://github.com/Einlanzerous/argosy/commit/50fd0670784a5ff8f4ee98b770111516f74b95c2))
+* **web:** resume the series where home does (ARGY-321) ([#320](https://github.com/Einlanzerous/argosy/issues/320)) ([89b513e](https://github.com/Einlanzerous/argosy/commit/89b513e39bce9eb74ba4a0f6960b44c02f7b8dbf))
+
 ## [0.38.3](https://github.com/Einlanzerous/argosy/compare/v0.38.2...v0.38.3) (2026-11-19)
 
 
