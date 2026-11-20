@@ -186,8 +186,10 @@ func (s *Store) SetWatched(ctx context.Context, accountID, userID, itemID string
 
 // SetSeriesWatched flips the watched flag for every backing file of a series'
 // episodes (ARGY-109). Returns nil when the series isn't in the account (→ 404).
-// Resume positions are left intact — only the watched flag is written — matching
-// the single-item SetWatched. Combined rips (one file → several episodes) are
+// Marking watched leaves resume positions alone; unwatching resets them to 0
+// (ARGY-322) — a bulk unwatch means "start over", and the sampled strays it used
+// to leave behind (S8E3 at 13s) became the series' newest engaged row. The
+// single-item SetWatched keeps its position on purpose. Combined rips (one file → several episodes) are
 // deduped so a file is written once.
 func (s *Store) SetSeriesWatched(ctx context.Context, accountID, userID, seriesID string, watched bool) (*api.WatchedBulkResult, error) {
 	var ok bool
@@ -209,7 +211,10 @@ func (s *Store) SetSeriesWatched(ctx context.Context, accountID, userID, seriesI
 		     JOIN seasons se ON se.id = e.season_id
 		     WHERE se.series_id = $2 AND e.media_item_id IS NOT NULL
 		 ) q
-		 ON CONFLICT (user_id, media_item_id) DO UPDATE SET watched = EXCLUDED.watched, updated_at = now()`,
+		 ON CONFLICT (user_id, media_item_id) DO UPDATE SET
+		   watched = EXCLUDED.watched,
+		   position_seconds = CASE WHEN EXCLUDED.watched THEN play_state.position_seconds ELSE 0 END,
+		   updated_at = now()`,
 		userID, seriesID, watched)
 	if err != nil {
 		return nil, err
@@ -239,7 +244,10 @@ func (s *Store) SetSeasonWatched(ctx context.Context, accountID, userID, seasonI
 		     FROM episodes e
 		     WHERE e.season_id = $2 AND e.media_item_id IS NOT NULL
 		 ) q
-		 ON CONFLICT (user_id, media_item_id) DO UPDATE SET watched = EXCLUDED.watched, updated_at = now()`,
+		 ON CONFLICT (user_id, media_item_id) DO UPDATE SET
+		   watched = EXCLUDED.watched,
+		   position_seconds = CASE WHEN EXCLUDED.watched THEN play_state.position_seconds ELSE 0 END,
+		   updated_at = now()`,
 		userID, seasonID, watched)
 	if err != nil {
 		return nil, err
