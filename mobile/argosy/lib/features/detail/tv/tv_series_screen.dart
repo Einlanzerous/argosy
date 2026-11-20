@@ -193,23 +193,14 @@ class _SeriesState extends ConsumerState<_Series> {
         if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
   ];
 
-  static bool _touched(EpisodeSummary e) =>
-      (e.watched ?? false) || (e.positionSeconds ?? 0) > 5;
-
-  /// The episode to resume: the last in-progress one, else the one after the
-  /// last finished episode. Null when nothing's been started.
+  /// The episode to resume, as the server answers it (ARGY-320): the same
+  /// recency rule as Continue Watching and On Deck, so stray sub-threshold
+  /// positions left by a bulk unwatch cannot outrank real progress. Null when
+  /// nothing's been started or the series is finished.
   _Playable? get _resumeTarget {
-    final playable = _playable;
-    var lastTouched = -1;
-    for (var i = 0; i < playable.length; i++) {
-      if (_touched(playable[i].ep)) lastTouched = i;
-    }
-    if (lastTouched == -1) return null;
-    final last = playable[lastTouched];
-    if (!(last.ep.watched ?? false) && (last.ep.positionSeconds ?? 0) > 5) {
-      return last;
-    }
-    return lastTouched + 1 < playable.length ? playable[lastTouched + 1] : null;
+    final id = widget.series.resumeItemId;
+    if (id == null) return null;
+    return _playable.where((p) => p.ep.mediaItemId == id).firstOrNull;
   }
 
   String? get _firstPlayable =>

@@ -21,6 +21,7 @@ class SeriesDetail {
     this.backdropUrl,
     this.seasons = const [],
     this.cast = const [],
+    this.resumeItemId,
   });
 
   String id;
@@ -41,6 +42,9 @@ class SeriesDetail {
   /// Top-billed cast names from the metadata provider. Omitted when none.
   List<String> cast;
 
+  /// The mediaItemId the Resume button should open for the current profile: the most recently engaged episode if unfinished, else the next one after it. Same frontier rule as /continue and /ondeck (ARGY-320), so stray sub-threshold positions left by a bulk unwatch never outrank real progress; a stale stray is the next episode, not skipped. Null when nothing has been watched or the series is finished. 
+  String? resumeItemId;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is SeriesDetail &&
     other.id == id &&
@@ -50,7 +54,8 @@ class SeriesDetail {
     other.posterUrl == posterUrl &&
     other.backdropUrl == backdropUrl &&
     _deepEquality.equals(other.seasons, seasons) &&
-    _deepEquality.equals(other.cast, cast);
+    _deepEquality.equals(other.cast, cast) &&
+    other.resumeItemId == resumeItemId;
 
   @override
   int get hashCode =>
@@ -62,10 +67,11 @@ class SeriesDetail {
     (posterUrl == null ? 0 : posterUrl!.hashCode) +
     (backdropUrl == null ? 0 : backdropUrl!.hashCode) +
     (seasons.hashCode) +
-    (cast.hashCode);
+    (cast.hashCode) +
+    (resumeItemId == null ? 0 : resumeItemId!.hashCode);
 
   @override
-  String toString() => 'SeriesDetail[id=$id, title=$title, year=$year, overview=$overview, posterUrl=$posterUrl, backdropUrl=$backdropUrl, seasons=$seasons, cast=$cast]';
+  String toString() => 'SeriesDetail[id=$id, title=$title, year=$year, overview=$overview, posterUrl=$posterUrl, backdropUrl=$backdropUrl, seasons=$seasons, cast=$cast, resumeItemId=$resumeItemId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -93,6 +99,11 @@ class SeriesDetail {
     }
       json[r'seasons'] = this.seasons;
       json[r'cast'] = this.cast;
+    if (this.resumeItemId != null) {
+      json[r'resumeItemId'] = this.resumeItemId;
+    } else {
+      json[r'resumeItemId'] = null;
+    }
     return json;
   }
 
@@ -127,6 +138,7 @@ class SeriesDetail {
         cast: json[r'cast'] is Iterable
             ? (json[r'cast'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        resumeItemId: mapValueOfType<String>(json, r'resumeItemId'),
       );
     }
     return null;

@@ -5,6 +5,7 @@ package library
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/jackc/pgx/v5"
@@ -318,7 +319,7 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 		`SELECT se.id::text, se.season_number, se.title,
 		        e.id::text, e.episode_number, e.title, e.media_item_id::text,
 		        e.provider_metadata, e.metadata,
-		        mi.duration_seconds, ps.position_seconds, ps.watched
+		        mi.duration_seconds, ps.position_seconds, ps.watched, ps.updated_at
 		 FROM seasons se
 		 LEFT JOIN episodes e ON e.season_id = se.id
 		 LEFT JOIN media_items mi ON mi.id = e.media_item_id
@@ -331,6 +332,7 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 	defer rows.Close()
 
 	idx := map[string]int{} // season id -> index in detail.Seasons
+	var flat []resumeEp
 	for rows.Next() {
 		var seasonID string
 		var seasonNum int
@@ -340,8 +342,9 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 		var epProv, epOver []byte
 		var epDuration, epPosition *float64
 		var epWatched *bool
+		var epUpdated *time.Time
 		if err := rows.Scan(&seasonID, &seasonNum, &seasonTitle, &epID, &epNum, &epTitle, &epMediaItem,
-			&epProv, &epOver, &epDuration, &epPosition, &epWatched); err != nil {
+			&epProv, &epOver, &epDuration, &epPosition, &epWatched, &epUpdated); err != nil {
 			return nil, err
 		}
 		i, ok := idx[seasonID]
@@ -372,9 +375,21 @@ func (s *Store) GetSeries(ctx context.Context, accountID, userID, seriesID strin
 			}
 			ep.Watched = epWatched
 			detail.Seasons[i].Episodes = append(detail.Seasons[i].Episodes, ep)
+			if ep.MediaItemId != nil {
+				r := resumeEp{item: *ep.MediaItemId, updated: epUpdated}
+				r.watched = epWatched != nil && *epWatched
+				if epPosition != nil {
+					r.position = float64(*epPosition)
+				}
+				flat = append(flat, r)
+			}
 		}
 	}
-	return &detail, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	detail.ResumeItemId = seriesResume(flat)
+	return &detail, nil
 }
 
 func (s *Store) seriesSummary(id, title string, year *int, prov, over []byte) api.SeriesSummary {

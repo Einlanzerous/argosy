@@ -3,9 +3,11 @@ package library
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/jackc/pgx/v5"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // OnDeck returns each series' next "up next" episode for the user: the earliest
@@ -69,7 +71,8 @@ candidates AS (
 	       sea.season_number, e.episode_number, e.title AS ep_title,
 	       mi.id AS item_id, mi.duration_seconds,
 	       (sea.season_number * 1000 + e.episode_number) AS pos,
-	       COALESCE(ps.watched, false) AS watched, COALESCE(ps.position_seconds, 0) AS position
+	       COALESCE(ps.watched, false) AS watched, COALESCE(ps.position_seconds, 0) AS position,
+	       ps.updated_at AS touched
 	FROM series sr
 	JOIN libraries l ON l.id = sr.library_id
 	JOIN seasons sea ON sea.series_id = sr.id
@@ -86,14 +89,19 @@ FROM (
 	       f.last_watched
 	FROM candidates c
 	JOIN frontier f ON f.series_id = c.series_id AND f.watched = true
-	WHERE c.pos > f.pos AND c.watched = false AND c.position = 0
+	WHERE c.pos > f.pos AND c.watched = false
+	  -- Untouched, or a sample Continue Watching has aged out. This is exactly the
+	  -- complement of Continue's in_progress filter (progress.go), so an episode is
+	  -- in one row or the other, never both, and a stale sub-threshold stray does
+	  -- not make On Deck skip an episode the viewer never saw (ARGY-320).
+	  AND (c.position = 0 OR (c.position < $4 AND c.touched < now() - $5::interval))
 	ORDER BY c.series_id, c.pos ASC
 ) nextup
 ORDER BY last_watched DESC
 LIMIT $3`
-	// $4 is abandonedSeconds: the one threshold Continue Watching also uses
-	// (progress.go), so there is one definition of "sampled, not begun".
-	rows, err := s.pool.Query(ctx, q, accountID, userID, limit, abandonedSeconds)
+	// $4/$5 are abandonedSeconds/abandonedAfter: the thresholds Continue Watching
+	// also uses (progress.go), so there is one definition of "sampled, not begun".
+	rows, err := s.pool.Query(ctx, q, accountID, userID, limit, abandonedSeconds, abandonedAfter)
 	if err != nil {
 		return nil, err
 	}
@@ -189,4 +197,58 @@ LIMIT 1`
 		item.DurationSeconds = &d
 	}
 	return &item, nil
+}
+
+// resumeEp is one playable episode in series order, with the viewer's progress.
+type resumeEp struct {
+	item     openapi_types.UUID
+	watched  bool
+	position float64
+	updated  *time.Time
+}
+
+// seriesResume picks the media item the series detail's Resume button opens, by
+// the same rule as OnDeck / Continue Watching (ARGY-320): the frontier is the
+// most recently engaged episode (finished, or >= abandonedSeconds in), ties to
+// the furthest. If it is unfinished, that is the answer; if finished, the next
+// playable episode backed by a different file. With nothing engaged, the most
+// recent unfinished episode past a few seconds (a fresh start still resumes).
+// Stray samples left by a bulk unwatch never outrank real progress. Nil when
+// nothing has been touched or the series is finished. eps is in series order.
+func seriesResume(eps []resumeEp) *openapi_types.UUID {
+	frontier := -1
+	newer := func(i int) bool {
+		if frontier < 0 {
+			return true
+		}
+		a, b := eps[i].updated, eps[frontier].updated
+		if a == nil {
+			return false
+		}
+		return b == nil || !a.Before(*b) // ties: the furthest, i.e. the later index
+	}
+	for pass := 0; pass < 2 && frontier < 0; pass++ {
+		for i, e := range eps {
+			ok := e.watched || e.position >= abandonedSeconds
+			if pass == 1 {
+				ok = !e.watched && e.position > 5
+			}
+			if ok && newer(i) {
+				frontier = i
+			}
+		}
+	}
+	if frontier < 0 {
+		return nil
+	}
+	f := eps[frontier]
+	if !f.watched {
+		return &f.item
+	}
+	for _, e := range eps[frontier+1:] {
+		if e.item != f.item {
+			return &e.item
+		}
+	}
+	return nil
 }
