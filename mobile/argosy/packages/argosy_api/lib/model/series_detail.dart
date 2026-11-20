@@ -42,7 +42,7 @@ class SeriesDetail {
   /// Top-billed cast names from the metadata provider. Omitted when none.
   List<String> cast;
 
-  /// The mediaItemId the Resume button should open for the current profile: the most recently engaged episode if unfinished, else the next one after it. Same recency rule as /continue and /ondeck (ARGY-320), so stray sub-threshold positions left by a bulk unwatch never win. Null when nothing has been watched or the series is finished. 
+  /// The mediaItemId the Resume button should open for the current profile: the most recently engaged episode if unfinished, else the next one after it. Same frontier rule as /continue and /ondeck (ARGY-320), so stray sub-threshold positions left by a bulk unwatch never outrank real progress; a stale stray is the next episode, not skipped. Null when nothing has been watched or the series is finished. 
   String? resumeItemId;
 
   @override

@@ -71,7 +71,8 @@ candidates AS (
 	       sea.season_number, e.episode_number, e.title AS ep_title,
 	       mi.id AS item_id, mi.duration_seconds,
 	       (sea.season_number * 1000 + e.episode_number) AS pos,
-	       COALESCE(ps.watched, false) AS watched, COALESCE(ps.position_seconds, 0) AS position
+	       COALESCE(ps.watched, false) AS watched, COALESCE(ps.position_seconds, 0) AS position,
+	       ps.updated_at AS touched
 	FROM series sr
 	JOIN libraries l ON l.id = sr.library_id
 	JOIN seasons sea ON sea.series_id = sr.id
@@ -88,14 +89,19 @@ FROM (
 	       f.last_watched
 	FROM candidates c
 	JOIN frontier f ON f.series_id = c.series_id AND f.watched = true
-	WHERE c.pos > f.pos AND c.watched = false AND c.position = 0
+	WHERE c.pos > f.pos AND c.watched = false
+	  -- Untouched, or a sample Continue Watching has aged out. This is exactly the
+	  -- complement of Continue's in_progress filter (progress.go), so an episode is
+	  -- in one row or the other, never both, and a stale sub-threshold stray does
+	  -- not make On Deck skip an episode the viewer never saw (ARGY-320).
+	  AND (c.position = 0 OR (c.position < $4 AND c.touched < now() - $5::interval))
 	ORDER BY c.series_id, c.pos ASC
 ) nextup
 ORDER BY last_watched DESC
 LIMIT $3`
-	// $4 is abandonedSeconds: the one threshold Continue Watching also uses
-	// (progress.go), so there is one definition of "sampled, not begun".
-	rows, err := s.pool.Query(ctx, q, accountID, userID, limit, abandonedSeconds)
+	// $4/$5 are abandonedSeconds/abandonedAfter: the thresholds Continue Watching
+	// also uses (progress.go), so there is one definition of "sampled, not begun".
+	rows, err := s.pool.Query(ctx, q, accountID, userID, limit, abandonedSeconds, abandonedAfter)
 	if err != nil {
 		return nil, err
 	}
