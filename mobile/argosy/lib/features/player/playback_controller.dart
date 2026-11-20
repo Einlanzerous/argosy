@@ -315,6 +315,12 @@ class PlaybackController extends ChangeNotifier
   @visibleForTesting
   Future<void> Function(Duration to)? debugSeekPlayer;
 
+  /// How many times a restart asked the (absent) native player to play.
+  @visibleForTesting
+  int debugPlayCalls = 0;
+  @visibleForTesting
+  set debugUserPaused(bool v) => _userPaused = v;
+
   /// True while a session is (re)starting — the overlay shows a spinner.
   bool starting = false;
 
@@ -880,6 +886,19 @@ class PlaybackController extends ChangeNotifier
     }
   }
 
+  /// A restart autoplays, except when the viewer had paused (ARGY-318): an
+  /// in-window skip is a native seek that leaves a paused player paused, so a
+  /// skip that forces a restart must agree. Only the viewer's own pause counts —
+  /// a rebuffer or recovery restart leaves [_userPaused] false and still plays.
+  Future<void> _playAfterAttach() async {
+    if (_userPaused) return;
+    if (debugAttach != null) {
+      debugPlayCalls++;
+      return;
+    }
+    await _player!.play();
+  }
+
   Future<void> _startTranscodeAt(double offset) async {
     // The choke point (ARGY-283): whatever a caller derived, the session starts
     // somewhere inside the title.
@@ -1001,7 +1020,7 @@ class PlaybackController extends ChangeNotifier
       // Normally `initialized` committed this already; this covers a source that
       // came up without one.
       _commitPendingOffset();
-      if (debugAttach == null) await _player!.play();
+      await _playAfterAttach();
       if (stale()) return;
       await _applyActiveSubtitle();
       // The winning restart is proof the server is reachable (ARGY-264).

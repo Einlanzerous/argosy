@@ -151,6 +151,30 @@ void _tick(PlaybackController c, _Clock clock, double seconds) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('a restart autoplays, but not one the viewer paused (ARGY-318)', () async {
+    final r = _Rig();
+    addTearDown(r.c.dispose);
+
+    // No deliberate pause: a restart plays.
+    await r.c.seekTo(100);
+    await _settle();
+    expect(r.c.debugPlayCalls, 1);
+
+    // The viewer paused, then skipped far enough to restart: stays paused.
+    r.c.debugUserPaused = true;
+    await r.c.seekTo(900);
+    await _settle();
+    expect(r.attached.last, 'http://localhost/p/s900');
+    expect(r.c.debugPlayCalls, 1);
+    expect(r.c.userPaused, isTrue);
+
+    // Playing again re-arms autoplay for the next restart.
+    r.c.debugUserPaused = false;
+    await r.c.seekTo(1200);
+    await _settle();
+    expect(r.c.debugPlayCalls, 2);
+  });
+
   test('a second seek while the first awaits the playlist wins', () async {
     final r = _Rig();
     addTearDown(r.c.dispose);
