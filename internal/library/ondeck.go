@@ -3,9 +3,11 @@ package library
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Einlanzerous/argosy/internal/api"
 	"github.com/jackc/pgx/v5"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // OnDeck returns each series' next "up next" episode for the user: the earliest
@@ -189,4 +191,58 @@ LIMIT 1`
 		item.DurationSeconds = &d
 	}
 	return &item, nil
+}
+
+// resumeEp is one playable episode in series order, with the viewer's progress.
+type resumeEp struct {
+	item     openapi_types.UUID
+	watched  bool
+	position float64
+	updated  *time.Time
+}
+
+// seriesResume picks the media item the series detail's Resume button opens, by
+// the same rule as OnDeck / Continue Watching (ARGY-320): the frontier is the
+// most recently engaged episode (finished, or >= abandonedSeconds in), ties to
+// the furthest. If it is unfinished, that is the answer; if finished, the next
+// playable episode backed by a different file. With nothing engaged, the most
+// recent unfinished episode past a few seconds (a fresh start still resumes).
+// Stray samples left by a bulk unwatch never outrank real progress. Nil when
+// nothing has been touched or the series is finished. eps is in series order.
+func seriesResume(eps []resumeEp) *openapi_types.UUID {
+	frontier := -1
+	newer := func(i int) bool {
+		if frontier < 0 {
+			return true
+		}
+		a, b := eps[i].updated, eps[frontier].updated
+		if a == nil {
+			return false
+		}
+		return b == nil || !a.Before(*b) // ties: the furthest, i.e. the later index
+	}
+	for pass := 0; pass < 2 && frontier < 0; pass++ {
+		for i, e := range eps {
+			ok := e.watched || e.position >= abandonedSeconds
+			if pass == 1 {
+				ok = !e.watched && e.position > 5
+			}
+			if ok && newer(i) {
+				frontier = i
+			}
+		}
+	}
+	if frontier < 0 {
+		return nil
+	}
+	f := eps[frontier]
+	if !f.watched {
+		return &f.item
+	}
+	for _, e := range eps[frontier+1:] {
+		if e.item != f.item {
+			return &e.item
+		}
+	}
+	return nil
 }

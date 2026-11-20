@@ -40,6 +40,7 @@ class _Library extends LibraryApi {
   }) async => SeriesDetail(
     id: 'series-1',
     title: 'Lanternfish Harbour',
+    resumeItemId: 'm12',
     overview: 'A harbour town and the people who keep its lights on.',
     cast: const ['A. Actor', 'B. Actress'],
     seasons: [

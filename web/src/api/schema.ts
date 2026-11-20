@@ -2056,6 +2056,11 @@ export interface components {
             seasons: components["schemas"]["SeasonSummary"][];
             /** @description Top-billed cast names from the metadata provider. Omitted when none. */
             cast?: string[];
+            /**
+             * Format: uuid
+             * @description The mediaItemId the Resume button should open for the current profile: the most recently engaged episode if unfinished, else the next one after it. Same recency rule as /continue and /ondeck (ARGY-320), so stray sub-threshold positions left by a bulk unwatch never win. Null when nothing has been watched or the series is finished.
+             */
+            resumeItemId?: string | null;
         };
     };
     responses: {

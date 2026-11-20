@@ -217,10 +217,18 @@ class _BodyState extends ConsumerState<_Body> {
         if (e.mediaItemId != null) (ep: e, seasonNumber: s.seasonNumber),
   ];
 
-  /// The episode to resume: the last in-progress one, else the one after the
-  /// last episode you finished. Null when nothing's been started.
+  /// The episode to resume. The server answers with the same recency rule that
+  /// drives Continue Watching and On Deck (ARGY-320), so stray sub-threshold
+  /// positions left by a bulk unwatch cannot outrank real progress. While an
+  /// optimistic watched toggle is pending the server's answer is stale, so fall
+  /// back to the local furthest-along guess until the refetch lands.
   _Playable? get _resumeTarget {
     final playable = _playable;
+    if (_watchedOverrides.isEmpty) {
+      final id = widget.series.resumeItemId;
+      if (id == null) return null;
+      return playable.where((p) => p.ep.mediaItemId == id).firstOrNull;
+    }
     final i = resumeIndex([
       for (final p in playable) p.ep,
     ], isWatched: _isWatched);
