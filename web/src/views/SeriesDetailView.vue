@@ -95,6 +95,7 @@ async function toggleEpisodeWatched(row: EpisodeRow): Promise<void> {
   try {
     await setWatched(id, next)
     for (const e of row.episodes) e.watched = next
+    void refreshSilently()
   } finally {
     const s = new Set(busyItems.value)
     s.delete(id)
@@ -115,6 +116,7 @@ async function markSeason(watched: boolean): Promise<void> {
   try {
     await setSeasonWatched(s.id, watched)
     for (const e of s.episodes) if (e.mediaItemId) e.watched = watched
+    void refreshSilently()
   } finally {
     seasonBusy.value = false
   }
@@ -137,6 +139,7 @@ async function markSeries(watched: boolean): Promise<void> {
   try {
     await setSeriesWatched(s.id, watched)
     for (const se of s.seasons) for (const e of se.episodes) if (e.mediaItemId) e.watched = watched
+    void refreshSilently()
   } finally {
     seriesBusy.value = false
   }
@@ -174,18 +177,15 @@ const playableEpisodes = computed(() =>
   ),
 )
 
-// Resume target: the episode you're mid-way through, otherwise the next one
-// after the last episode you touched (watched or partially watched).
+// Resume target (ARGY-321): the server decides, with the same recency rule as
+// Home's Continue Watching (SeriesDetail.resumeItemId, ARGY-320). A client-side
+// "furthest along" pick let stray sub-120s positions left by a bulk unwatch beat
+// real recent progress. The id can be stale for a beat after a local change; the
+// live-progress refetch and the watched toggles below refresh it.
 const resumeTarget = computed(() => {
-  const eps = playableEpisodes.value
-  let lastTouched = -1
-  eps.forEach((x, i) => {
-    if (x.ep.watched || (x.ep.positionSeconds ?? 0) > 5) lastTouched = i
-  })
-  if (lastTouched < 0) return null
-  const touched = eps[lastTouched]
-  if (epInProgress(touched.ep)) return touched
-  return eps[lastTouched + 1] ?? null
+  const id = series.value?.resumeItemId
+  if (!id) return null
+  return playableEpisodes.value.find((x) => x.ep.mediaItemId === id) ?? null
 })
 
 // The season tab to open on: the one holding the resume episode (mapping its
@@ -248,10 +248,21 @@ async function load(id: string): Promise<void> {
 // nothing else: no spinner (series stays set), no season reset, no setPage. A
 // failed or empty answer keeps what is on screen, and so does a late answer for a
 // series the route has since left.
+// Every caller (live progress and the watched toggles) shares this one guard: a
+// request counter drops any answer that a later request has superseded, so an
+// earlier GET landing last can't overwrite a newer payload with stale state. A
+// network error keeps what is on screen rather than rejecting.
+let refreshSeq = 0
 async function refreshSilently(): Promise<void> {
   const id = String(route.params.id)
-  const data = await fetchSeries(id)
-  if (!data || String(route.params.id) !== id) return
+  const seq = ++refreshSeq
+  let data: SeriesDetail | null
+  try {
+    data = await fetchSeries(id)
+  } catch {
+    return
+  }
+  if (!data || seq !== refreshSeq || String(route.params.id) !== id) return
   series.value = data
   if (activeSeason.value >= data.seasons.length) activeSeason.value = resumeSeasonIndex.value
 }
