@@ -67,3 +67,26 @@ func TestCloseRemovesSession(t *testing.T) {
 		t.Errorf("after close active = %d, want 0", got)
 	}
 }
+
+// CountPlaying backs the service-token summary (ARGY-325): all accounts, only
+// the playing state, and nothing the reaper has not yet swept but the TTL has
+// already expired.
+func TestCountPlaying(t *testing.T) {
+	r := NewRegistry(45 * time.Second)
+	now := time.Now()
+	r.clock = func() time.Time { return now }
+
+	if n, at := r.CountPlaying(); n != 0 || !at.Equal(now) {
+		t.Fatalf("empty registry = (%d, %v), want (0, now)", n, at)
+	}
+	r.Heartbeat(Session{AccountID: "a", UserID: "u1", DeviceID: "d", ItemID: "i"})
+	r.Heartbeat(Session{AccountID: "b", UserID: "u2", DeviceID: "d", ItemID: "i"})
+	r.Heartbeat(Session{AccountID: "b", UserID: "u3", DeviceID: "d", ItemID: "i", State: "paused"})
+	if n, _ := r.CountPlaying(); n != 2 {
+		t.Fatalf("count = %d, want 2 (both accounts, paused excluded)", n)
+	}
+	now = now.Add(46 * time.Second) // past the TTL, reaper has not run
+	if n, _ := r.CountPlaying(); n != 0 {
+		t.Fatalf("count = %d after the TTL, want 0", n)
+	}
+}

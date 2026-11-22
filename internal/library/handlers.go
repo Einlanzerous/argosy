@@ -44,7 +44,7 @@ type handlers struct {
 // file server onto mux. artworkDir == "" disables artwork serving. tc may be nil
 // to disable the transcode (The Helm) endpoints; sweeper may be nil to disable
 // the cache-stats endpoint; stowMgr may be nil to disable offline packaging.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub, preferredLangs []string, stowMgr *stow.Manager, stowPassthroughMax int64) {
+func RegisterRoutes(mux httpx.Router, pool *pgxpool.Pool, authStore *auth.Store, artworkDir, artworkBase string, logger *slog.Logger, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub, preferredLangs []string, stowMgr *stow.Manager, stowPassthroughMax int64) {
 	normalized := make([]string, 0, len(preferredLangs))
 	for _, l := range preferredLangs {
 		normalized = append(normalized, subtitle.LangCode(l))
@@ -82,6 +82,12 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, authStore *auth.Stor
 	mux.Handle("PUT /api/v1/vaults/{vaultId}/order", mw(http.HandlerFunc(h.reorderVault)))
 	if pres != nil {
 		mux.Handle("GET /api/v1/sessions", mw(http.HandlerFunc(h.listSessions)))
+		// Same condition as /sessions: with no registry the route does not exist,
+		// so a client can never read a count of 0 from a server that isn't
+		// tracking presence. It authenticates with a service token, not a device
+		// session (ARGY-325).
+		mux.Handle("GET /api/v1/sessions/summary",
+			auth.ServiceTokenMiddleware(authStore, auth.ScopeSessionsSummary)(http.HandlerFunc(h.sessionsSummary)))
 	}
 	// Beacon SSE authenticates inline (?token=), like streaming, since an
 	// EventSource can't set the Authorization header.

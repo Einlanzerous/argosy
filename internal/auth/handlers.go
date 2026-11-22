@@ -24,7 +24,7 @@ const (
 )
 
 // RegisterRoutes wires the auth endpoints (the OpenAPI auth surface) onto mux.
-func RegisterRoutes(mux *http.ServeMux, store *Store) {
+func RegisterRoutes(mux httpx.Router, store *Store) {
 	mux.HandleFunc("POST /api/v1/auth/login", handleLogin(store))
 	mux.HandleFunc("POST /api/v1/auth/devices", handleRegisterDevice(store))
 	mux.Handle("GET /api/v1/auth/devices", requireAuth(store, handleListDevices(store)))
@@ -66,7 +66,7 @@ func RegisterRoutes(mux *http.ServeMux, store *Store) {
 // account — it is always scoped to an existing one — so this route is gated
 // on the static provisioning token instead. Callers register it only when a
 // token is configured; otherwise the route doesn't exist and answers 404.
-func RegisterProvisioning(mux *http.ServeMux, store *Store, token string) {
+func RegisterProvisioning(mux httpx.Router, store *Store, token string) {
 	mux.Handle("POST /api/v1/admin/accounts", requireProvisionToken(token, handleCreateAccount(store)))
 	mux.Handle("GET /api/v1/admin/accounts", requireProvisionToken(token, handleLookupAccount(store)))
 	mux.Handle("DELETE /api/v1/admin/accounts", requireProvisionToken(token, handleDeprovisionAccount(store)))

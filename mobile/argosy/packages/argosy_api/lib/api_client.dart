@@ -293,6 +293,8 @@ class ApiClient {
           return SeriesSummary.fromJson(value);
         case 'Session':
           return Session.fromJson(value);
+        case 'SessionsSummary':
+          return SessionsSummary.fromJson(value);
         case 'StowJob':
           return StowJob.fromJson(value);
         case 'StowRequest':

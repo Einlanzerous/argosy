@@ -45,6 +45,9 @@ func main() {
 		case "match":
 			runMatch(cfg, logger, os.Args[2:])
 			return
+		case "service-token":
+			runServiceToken(cfg, logger, os.Args[2:])
+			return
 		case "healthcheck":
 			// The container's HEALTHCHECK probe (ARGY-216). Exits rather than
 			// returning: its status code IS the answer, and it must not fall

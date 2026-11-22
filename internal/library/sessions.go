@@ -56,3 +56,21 @@ func (h *handlers) listSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }
+
+// sessionsSummary answers GET /api/v1/sessions/summary for a service token
+// (Satlink's "watching now").
+//
+// It sums EVERY account, on purpose: the estate dashboard wants how many people
+// are watching this server, not how many a given household is. That is the
+// opposite of listSessions, which scopes to what its caller may see, and it is
+// safe only because the body is a bare count. Do not add a session, user,
+// device, item, position, encoder or method field here — the credential that
+// reaches this handler is deliberately unable to read any of them.
+//
+// A 0 is a measurement (nobody is watching). When there is no presence
+// registry the route is never registered, so "not tracking" is a 404 and can
+// not be mistaken for 0.
+func (h *handlers) sessionsSummary(w http.ResponseWriter, _ *http.Request) {
+	n, asOf := h.presence.CountPlaying()
+	httpx.JSON(w, http.StatusOK, api.SessionsSummary{WatchingNow: n, AsOf: asOf})
+}
