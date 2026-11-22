@@ -54,19 +54,26 @@ func (s *Store) audit(ctx context.Context, e auditEntry) {
 	// client disconnects — and the mutation has already committed by then. The
 	// trail must survive a closed browser tab, so detach from cancellation.
 	ctx = context.WithoutCancel(ctx)
-	detail := e.detail
-	if detail == nil {
-		detail = map[string]any{}
-	}
-	detailJSON, err := json.Marshal(detail)
-	if err != nil {
-		detailJSON = []byte(`{}`)
-	}
-	_, err = s.pool.Exec(ctx,
+	detailJSON, _ := marshalDetail(e.detail)
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO audit_log (actor_type, actor_account_id, actor_user_id, action, target_type, target_id, detail)
 		 VALUES ($1, nullif($2, '')::uuid, nullif($3, '')::uuid, $4, $5, nullif($6, '')::uuid, $7)`,
 		e.actorType, e.actorAccountID, e.actorUserID, e.action, e.targetType, e.targetID, detailJSON)
 	if err != nil {
 		slog.Warn("audit write failed", "action", e.action, "target", e.targetID, "err", err)
 	}
+}
+
+// marshalDetail renders an audit detail map, `{}` when empty. The error is
+// returned for callers (the transactional writer) that must not drop a row; the
+// best-effort writer ignores it and gets `{}`.
+func marshalDetail(detail map[string]any) ([]byte, error) {
+	if detail == nil {
+		detail = map[string]any{}
+	}
+	b, err := json.Marshal(detail)
+	if err != nil {
+		return []byte(`{}`), err
+	}
+	return b, nil
 }

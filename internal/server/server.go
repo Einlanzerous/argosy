@@ -28,7 +28,16 @@ import (
 // pool may be nil when no database is configured; scheduler may be nil to
 // disable the scan trigger/status endpoints.
 func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *stevedore.Scheduler, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub, stowMgr *stow.Manager) (*http.Server, error) {
-	mux := http.NewServeMux()
+	srv, _, err := build(cfg, logger, pool, scheduler, tc, caps, encoder, sweeper, subs, pres, hub, stowMgr)
+	return srv, err
+}
+
+// build is New plus the recorder every route was registered through, which the
+// route-class test reads to enumerate the live mux (ARGY-325). Every
+// registration, here and in the Register* functions, goes through it: a route
+// added by reaching around it would be invisible to that test.
+func build(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *stevedore.Scheduler, tc *transcode.Manager, caps transcode.Capabilities, encoder string, sweeper *ballast.Sweeper, subs *subtitle.Service, pres *presence.Registry, hub *beacon.Hub, stowMgr *stow.Manager) (*http.Server, *httpx.RouteRecorder, error) {
+	mux := httpx.NewRouteRecorder()
 
 	mux.HandleFunc("GET /healthz", healthHandler(pool))
 	mux.HandleFunc("GET /api/v1/ping", handlePing)
@@ -56,13 +65,13 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 
 	spa, err := newSPAHandler()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	mux.Handle("/", spa)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           withLogging(logger, mux),
+		Handler:           withLogging(logger, mux.Mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	// Beacon streams are long-lived and therefore never idle, and Shutdown waits
@@ -73,7 +82,7 @@ func New(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, scheduler *
 	if hub != nil {
 		srv.RegisterOnShutdown(hub.Close)
 	}
-	return srv, nil
+	return srv, mux, nil
 }
 
 // healthResponse is the body of `GET /healthz`, identical on the 200 and the

@@ -1581,6 +1581,39 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/sessions/summary:
+    get:
+      tags: [library]
+      operationId: getSessionsSummary
+      summary: Count of live playing sessions across all accounts (service token)
+      description: >
+        How many playback sessions are in state `playing` right now, summed
+        across every account on purpose: this is an estate-health reading, not a
+        household view. The body is exactly this count and the instant it was
+        read; it carries no user, device, item, position, encoder or method.
+        `0` is a real measurement. Authenticates with a service token (minted
+        with `argosy service-token mint`, scope `sessions:summary`) and accepts
+        no other credential: a device token or the provisioning token is 401.
+        Registered only when presence tracking is enabled; otherwise the route
+        does not exist and answers 404, never `watchingNow: 0`.
+      security:
+        - serviceToken: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionsSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: The token store could not be read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/v1/beacon:
     get:
       tags: [library]
@@ -1896,6 +1929,13 @@ components:
       type: http
       scheme: bearer
       description: Per-device token issued by registerDevice.
+    serviceToken:
+      type: http
+      scheme: bearer
+      description: >-
+        Scoped service token (ARGY-325), stored hashed in service_tokens and
+        valid only on the routes that name it. Not interchangeable with
+        bearerAuth: a device token is not a service token and vice versa.
     provisionToken:
       type: apiKey
       in: header
@@ -2914,6 +2954,23 @@ components:
       required: [updated]
       properties:
         updated: { type: integer, description: "Backing files whose watched state was written." }
+
+    SessionsSummary:
+      type: object
+      description: >
+        The whole body of GET /api/v1/sessions/summary. Adding a field here
+        widens what a service token can read; that is a security decision.
+      required: [watchingNow, asOf]
+      additionalProperties: false
+      properties:
+        watchingNow:
+          type: integer
+          minimum: 0
+          description: Sessions in state `playing`, across all accounts.
+        asOf:
+          type: string
+          format: date-time
+          description: When the count was read.
 
     PlaybackSession:
       type: object

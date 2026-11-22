@@ -979,6 +979,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count of live playing sessions across all accounts (service token)
+         * @description How many playback sessions are in state `playing` right now, summed across every account on purpose: this is an estate-health reading, not a household view. The body is exactly this count and the instant it was read; it carries no user, device, item, position, encoder or method. `0` is a real measurement. Authenticates with a service token (minted with `argosy service-token mint`, scope `sessions:summary`) and accepts no other credential: a device token or the provisioning token is 401. Registered only when presence tracking is enabled; otherwise the route does not exist and answers 404, never `watchingNow: 0`.
+         */
+        get: operations["getSessionsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/beacon": {
         parameters: {
             query?: never;
@@ -1772,6 +1792,16 @@ export interface components {
         WatchedBulkResult: {
             /** @description Backing files whose watched state was written. */
             updated: number;
+        };
+        /** @description The whole body of GET /api/v1/sessions/summary. Adding a field here widens what a service token can read; that is a security decision. */
+        SessionsSummary: {
+            /** @description Sessions in state `playing`, across all accounts. */
+            watchingNow: number;
+            /**
+             * Format: date-time
+             * @description When the count was read.
+             */
+            asOf: string;
         };
         PlaybackSession: {
             /** Format: uuid */
@@ -3871,6 +3901,36 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getSessionsSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionsSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The token store could not be read */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     beaconStream: {

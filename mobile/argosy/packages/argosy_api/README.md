@@ -108,6 +108,7 @@ Class | Method | HTTP request | Description
 *LibraryApi* | [**getProgress**](doc//LibraryApi.md#getprogress) | **GET** /api/v1/items/{itemId}/progress | Current play-state (resume position) for the item
 *LibraryApi* | [**getScanStatus**](doc//LibraryApi.md#getscanstatus) | **GET** /api/v1/scan/status | Current/last scan sweep status
 *LibraryApi* | [**getSeries**](doc//LibraryApi.md#getseries) | **GET** /api/v1/series/{seriesId} | Series detail with seasons and episodes
+*LibraryApi* | [**getSessionsSummary**](doc//LibraryApi.md#getsessionssummary) | **GET** /api/v1/sessions/summary | Count of live playing sessions across all accounts (service token)
 *LibraryApi* | [**getSubtitle**](doc//LibraryApi.md#getsubtitle) | **GET** /api/v1/items/{itemId}/subtitles/{trackId} | A subtitle track as WebVTT
 *LibraryApi* | [**getVault**](doc//LibraryApi.md#getvault) | **GET** /api/v1/vaults/{vaultId} | Vault detail with its items
 *LibraryApi* | [**listContinue**](doc//LibraryApi.md#listcontinue) | **GET** /api/v1/continue | Continue-watching / on-deck items for the current profile
@@ -203,6 +204,7 @@ Class | Method | HTTP request | Description
  - [SeriesPage](doc//SeriesPage.md)
  - [SeriesSummary](doc//SeriesSummary.md)
  - [Session](doc//Session.md)
+ - [SessionsSummary](doc//SessionsSummary.md)
  - [StowJob](doc//StowJob.md)
  - [StowRequest](doc//StowRequest.md)
  - [SubtitleTrack](doc//SubtitleTrack.md)
@@ -227,6 +229,10 @@ Class | Method | HTTP request | Description
 
 Authentication schemes defined for the API:
 ### bearerAuth
+
+- **Type**: HTTP Bearer authentication
+
+### serviceToken
 
 - **Type**: HTTP Bearer authentication
 

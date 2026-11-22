@@ -95,6 +95,28 @@ func (r *Registry) Active(accountID string) []Session {
 	return r.filter(func(s *Session) bool { return s.AccountID == accountID })
 }
 
+// CountPlaying returns how many sessions are in the playing state across ALL
+// accounts, plus the instant it was read. It is the one number behind the
+// service-token summary route (ARGY-325) and deliberately returns no session,
+// user, device or item: the caller it exists for may learn a count and nothing
+// else. Active(accountID) is the per-account view and stays that.
+//
+// A session past the TTL is not counted even if the reaper has not swept it
+// yet (the sweep runs every ttl/2), so the count never lags the TTL.
+func (r *Registry) CountPlaying() (int, time.Time) {
+	now := r.clock()
+	cutoff := now.Add(-r.ttl)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, s := range r.sessions {
+		if s.State == StatePlaying && !s.LastSeen.Before(cutoff) {
+			n++
+		}
+	}
+	return n, now
+}
+
 // ActiveForUser returns a single user's live sessions, most-recently-active first.
 func (r *Registry) ActiveForUser(userID string) []Session {
 	return r.filter(func(s *Session) bool { return s.UserID == userID })

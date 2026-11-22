@@ -64,6 +64,8 @@ type Store struct {
 	owner ownerCache
 	// clients throttles devices.last_client writes (ARGY-262); see client.go.
 	clients clientTracker
+	// refusals sheds repeat service-token refusal audits; see service_token.go.
+	refusals refusalLimiter
 }
 
 // NewStore returns a Store backed by pool.

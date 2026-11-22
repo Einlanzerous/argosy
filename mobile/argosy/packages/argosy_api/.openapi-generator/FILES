@@ -70,6 +70,7 @@ lib/model/series_detail.dart
 lib/model/series_page.dart
 lib/model/series_summary.dart
 lib/model/session.dart
+lib/model/sessions_summary.dart
 lib/model/stow_job.dart
 lib/model/stow_request.dart
 lib/model/subtitle_track.dart

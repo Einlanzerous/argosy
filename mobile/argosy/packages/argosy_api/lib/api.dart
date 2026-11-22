@@ -89,6 +89,7 @@ part 'model/series_detail.dart';
 part 'model/series_page.dart';
 part 'model/series_summary.dart';
 part 'model/session.dart';
+part 'model/sessions_summary.dart';
 part 'model/stow_job.dart';
 part 'model/stow_request.dart';
 part 'model/subtitle_track.dart';
