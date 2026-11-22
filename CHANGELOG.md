@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.0](https://github.com/Einlanzerous/argosy/compare/v0.38.4...v0.39.0) (2026-11-22)
+
+
+### Features
+
+* **auth:** scoped service token and count-only sessions summary route (ARGY-325) ([#324](https://github.com/Einlanzerous/argosy/issues/324)) ([30bec10](https://github.com/Einlanzerous/argosy/commit/30bec10a31117876331bbf69000d4b4eaa10d221))
+
 ## [0.38.4](https://github.com/Einlanzerous/argosy/compare/v0.38.3...v0.38.4) (2026-11-20)
 
 
