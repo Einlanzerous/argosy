@@ -11,10 +11,15 @@
 // not in Firefox, so the Escape and backdrop paths are handled here.
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
-defineProps<{
-  /** Accessible name for the dialog (the visible heading's text). */
-  label: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** Accessible name for the dialog (the visible heading's text). */
+    label: string
+    /** False when only an in-dialog button may end it (Escape and backdrop do nothing). */
+    dismissable?: boolean
+  }>(),
+  { dismissable: true },
+)
 const emit = defineEmits<{ close: [] }>()
 
 const el = ref<HTMLDialogElement | null>(null)
@@ -41,13 +46,24 @@ function onClose(): void {
   if (!tearingDown) emit('close')
 }
 
+function onCancel(e: Event): void {
+  if (!props.dismissable) e.preventDefault()
+}
+
 function onBackdropClick(e: MouseEvent): void {
-  if (e.target === el.value) emit('close')
+  if (props.dismissable && e.target === el.value) emit('close')
 }
 </script>
 
 <template>
-  <dialog ref="el" class="arg-dialog" :aria-label="label" @close="onClose" @click="onBackdropClick">
+  <dialog
+    ref="el"
+    class="arg-dialog"
+    :aria-label="label"
+    @cancel="onCancel"
+    @close="onClose"
+    @click="onBackdropClick"
+  >
     <slot />
   </dialog>
 </template>

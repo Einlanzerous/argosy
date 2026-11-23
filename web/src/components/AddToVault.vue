@@ -100,7 +100,6 @@ async function createAndAdd(): Promise<void> {
     class="arg-ghost"
     type="button"
     :popovertarget="menuId"
-    aria-haspopup="menu"
     :aria-expanded="open"
   >
     <span aria-hidden="true">＋</span> {{ flash || 'Add to Vault' }}

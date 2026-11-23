@@ -163,7 +163,12 @@ onMounted(() => {
     </template>
 
     <!-- Password-reset modal: confirm, then show the one-time password. -->
-    <ArgDialog v-if="resetTarget" label="Reset password" @close="resetTarget = null">
+    <ArgDialog
+      v-if="resetTarget"
+      label="Reset password"
+      :dismissable="!resetResult"
+      @close="resetTarget = null"
+    >
       <div class="modal">
         <template v-if="!resetResult">
           <h3>Reset password for “{{ resetTarget.name }}”?</h3>
