@@ -41,6 +41,11 @@ export default defineConfig({
     },
   },
   build: {
+    // Firefox is the primary browser: es2022 plus Firefox 160 (the estate floor,
+    // 2026-11-22; the quarterly frontend-audit raises it) and the Chrome/Safari
+    // versions Baseline Widely available implies. Newer features are progressive
+    // enhancement behind @supports or feature detection.
+    target: ['es2022', 'firefox160', 'chrome120', 'safari17'],
     outDir: fileURLToPath(new URL('../internal/webui/dist', import.meta.url)),
     emptyOutDir: true,
   },

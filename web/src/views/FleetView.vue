@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { enterCommits } from '@/lib/ime'
+import ArgDialog from '@/components/ArgDialog.vue'
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api/client'
@@ -166,7 +168,7 @@ onMounted(() => {
     </div>
 
     <!-- Rename modal -->
-    <div v-if="renameTarget" class="scrim" @click.self="renameTarget = null">
+    <ArgDialog v-if="renameTarget" label="Rename device" @close="renameTarget = null">
       <div class="modal">
         <h3>Rename device</h3>
         <input
@@ -174,8 +176,7 @@ onMounted(() => {
           class="field"
           type="text"
           autofocus
-          @keydown.enter="confirmRename"
-          @keydown.esc="renameTarget = null"
+          @keydown.enter="enterCommits($event) && confirmRename()"
         />
         <div class="modal-actions">
           <button class="btn" type="button" @click="renameTarget = null">Cancel</button>
@@ -184,10 +185,10 @@ onMounted(() => {
           </button>
         </div>
       </div>
-    </div>
+    </ArgDialog>
 
     <!-- Retire confirmation modal -->
-    <div v-if="retireTarget" class="scrim" @click.self="retireTarget = null">
+    <ArgDialog v-if="retireTarget" label="Retire device" @close="retireTarget = null">
       <div class="modal">
         <h3>Retire “{{ retireTarget.name }}”?</h3>
         <p class="modal-body">
@@ -203,7 +204,7 @@ onMounted(() => {
           </button>
         </div>
       </div>
-    </div>
+    </ArgDialog>
   </div>
 </template>
 
@@ -376,16 +377,6 @@ onMounted(() => {
   color: var(--arg-dim);
   font: 500 14px var(--arg-body);
 }
-.scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(12, 12, 11, 0.6);
-  backdrop-filter: blur(3px);
-}
 .modal {
   width: min(420px, calc(100vw - 48px));
   padding: 22px;
@@ -414,7 +405,6 @@ onMounted(() => {
   font: 500 14px var(--arg-body);
 }
 .field:focus {
-  outline: none;
   border-color: var(--arg-accent);
 }
 .modal-actions {

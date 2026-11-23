@@ -45,7 +45,9 @@ onMounted(() => {
         <h1 class="arg-page-title">Vaults</h1>
         <div class="arg-count">Your curated cargo — collections of films &amp; series</div>
       </div>
-      <button class="new" type="button" @click="creating = !creating">＋ New Vault</button>
+      <button class="new" type="button" @click="creating = !creating">
+        <span aria-hidden="true">＋</span> New Vault
+      </button>
     </header>
 
     <form v-if="creating" class="creator" @submit.prevent="create">
@@ -119,7 +121,6 @@ onMounted(() => {
   background: transparent;
   color: var(--arg-cream);
   font: 500 14px var(--arg-body);
-  outline: none;
 }
 .creator input[type='text']:focus {
   border-color: var(--arg-accent);

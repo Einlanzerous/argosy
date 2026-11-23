@@ -167,6 +167,26 @@ Then ticket fidelity in a sentence. Then findings, most severe first.
 
 If the diff is clean, say so in one line and stop. Do not pad.
 
+## Frontend (`web/`)
+
+Firefox is the primary browser; the floor is Firefox 160 (see `CLAUDE.md`).
+CI builds and lints but cannot see these, so check them in a diff that touches
+`web/src/`:
+
+- Motion is gated on `prefers-reduced-motion`. The global block in `style.css`
+  covers CSS animations and transitions; new JS-driven motion needs its own check.
+- Modals are `<ArgDialog>` (a native `<dialog>` opened with `showModal()`), not a
+  div scrim with `@click.self`. Menus are `popover`. `closedby` and CSS anchor
+  positioning are not in Firefox 160: handle dismissal and position in JS.
+- Enter handlers on text fields guard IME composition (`enterCommits` in
+  `web/src/lib/ime.ts`, which checks `isComposing` and keyCode 229), or sit in a
+  `<form @submit.prevent>`.
+- No `outline: none` without a `:focus-visible` ring that replaces it.
+- New CSS is in Firefox 160 or behind `@supports`. No `::-webkit-` rule without
+  its standard property.
+- Icon-only glyphs carry `aria-hidden`; toggle buttons expose `aria-pressed` or
+  `aria-expanded`.
+
 ## Reviewing a plan
 
 Everything above is for a **diff**. Switchyard's adversarial plan pass reviews a **plan**, the document before any code, against a checkout of this repository, and what an ARGY plan has to get right is written for it in [`docs/plan-review.md`](docs/plan-review.md): the checks it performs from this tree plus the plan JSON alone, its standing (advisory on a passing check, blocking only for a hole a person would bounce), and the exit condition for *ready for a human*.

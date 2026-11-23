@@ -295,7 +295,6 @@ select {
   background: #141413;
   color: var(--arg-cream);
   font: 500 15px var(--arg-body);
-  outline: none;
 }
 input:focus,
 select:focus {

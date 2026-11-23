@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { enterCommits } from '@/lib/ime'
+import ArgDialog from '@/components/ArgDialog.vue'
 import { computed, onMounted, ref } from 'vue'
 import { api } from '@/api/client'
 import { useSessionStore } from '@/stores/session'
@@ -146,7 +148,7 @@ onMounted(() => {
     </template>
 
     <!-- Create / edit modal -->
-    <div v-if="editorOpen" class="scrim" @click.self="editorOpen = false">
+    <ArgDialog v-if="editorOpen" label="Profile" @close="editorOpen = false">
       <div class="modal">
         <h3>{{ editing ? 'Edit profile' : 'New profile' }}</h3>
         <input
@@ -155,8 +157,7 @@ onMounted(() => {
           type="text"
           placeholder="Profile name"
           autofocus
-          @keydown.enter="save"
-          @keydown.esc="editorOpen = false"
+          @keydown.enter="enterCommits($event) && save()"
         />
         <div class="seg">
           <button type="button" :class="{ on: formRole === 'viewer' }" @click="formRole = 'viewer'">
@@ -181,10 +182,10 @@ onMounted(() => {
           </button>
         </div>
       </div>
-    </div>
+    </ArgDialog>
 
     <!-- Delete confirmation modal -->
-    <div v-if="deleteTarget" class="scrim" @click.self="deleteTarget = null">
+    <ArgDialog v-if="deleteTarget" label="Delete profile" @close="deleteTarget = null">
       <div class="modal">
         <h3>Delete “{{ deleteTarget.name }}”?</h3>
         <p class="modal-body">
@@ -205,7 +206,7 @@ onMounted(() => {
           </button>
         </div>
       </div>
-    </div>
+    </ArgDialog>
   </div>
 </template>
 
@@ -346,16 +347,6 @@ onMounted(() => {
   color: var(--arg-dim);
   font: 500 14px var(--arg-body);
 }
-.scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(12, 12, 11, 0.6);
-  backdrop-filter: blur(3px);
-}
 .modal {
   width: min(420px, calc(100vw - 48px));
   padding: 22px;
@@ -384,7 +375,6 @@ onMounted(() => {
   font: 500 14px var(--arg-body);
 }
 .field:focus {
-  outline: none;
   border-color: var(--arg-accent);
 }
 .seg {

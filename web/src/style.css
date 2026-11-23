@@ -68,6 +68,7 @@ body {
 
 #app {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 a {
@@ -79,6 +80,14 @@ button,
 input,
 select {
   font-family: inherit;
+}
+
+/* One visible keyboard ring for everything. Fields used to drop their outline
+   and only recolour the border on :focus; scoped rules with their own ring
+   (PosterCard, the player seek bar) are more specific and still win. */
+:focus-visible {
+  outline: 2px solid var(--arg-accent);
+  outline-offset: 2px;
 }
 
 /* Firefox and Chromium 121+ take the standard properties; Safari still needs
@@ -241,5 +250,26 @@ select {
   }
   to {
     transform: none;
+  }
+}
+
+/* Honour the OS "reduce motion" setting everywhere (ARGY-326). Entrance fades,
+   rises and the looping glow/pulse collapse to their end state; transitions
+   become instant. The player's prep spinner is the one exception: it is the only
+   sign that work is in progress, so it keeps turning, slower. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  .prep-spinner {
+    animation-duration: 2.4s !important;
+    animation-iteration-count: infinite !important;
   }
 }

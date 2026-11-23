@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ArgDialog from '@/components/ArgDialog.vue'
 import { computed, onMounted, ref } from 'vue'
 import { api } from '@/api/client'
 import { useSessionStore } from '@/stores/session'
@@ -162,7 +163,7 @@ onMounted(() => {
     </template>
 
     <!-- Password-reset modal: confirm, then show the one-time password. -->
-    <div v-if="resetTarget" class="scrim" @click.self="resetTarget = null">
+    <ArgDialog v-if="resetTarget" label="Reset password" @close="resetTarget = null">
       <div class="modal">
         <template v-if="!resetResult">
           <h3>Reset password for “{{ resetTarget.name }}”?</h3>
@@ -195,10 +196,10 @@ onMounted(() => {
           </div>
         </template>
       </div>
-    </div>
+    </ArgDialog>
 
     <!-- Delete confirmation modal -->
-    <div v-if="deleteTarget" class="scrim" @click.self="deleteTarget = null">
+    <ArgDialog v-if="deleteTarget" label="Delete account" @close="deleteTarget = null">
       <div class="modal">
         <h3>Delete “{{ deleteTarget.name }}”?</h3>
         <p class="modal-body">
@@ -214,7 +215,7 @@ onMounted(() => {
           </button>
         </div>
       </div>
-    </div>
+    </ArgDialog>
   </div>
 </template>
 
@@ -350,16 +351,6 @@ onMounted(() => {
   text-align: center;
   color: var(--arg-dim);
   font: 500 14px var(--arg-body);
-}
-.scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(12, 12, 11, 0.6);
-  backdrop-filter: blur(3px);
 }
 .modal {
   width: min(440px, calc(100vw - 48px));

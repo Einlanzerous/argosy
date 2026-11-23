@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ArgDialog from '@/components/ArgDialog.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '@/api/client'
 import { formatRelative } from '@/lib/format'
@@ -375,8 +376,8 @@ onUnmounted(() => {
 
     <!-- Change-password modal (ARGY-160): the inputs only exist while this is
          open, so password managers stay quiet on ordinary Settings visits. -->
-    <div v-if="pwOpen" class="scrim" @click.self="closePwModal">
-      <form class="modal" @submit.prevent="changePassword" @keydown.esc="closePwModal">
+    <ArgDialog v-if="pwOpen" label="Change password" @close="closePwModal">
+      <form class="modal" @submit.prevent="changePassword">
         <h3>Change password</h3>
         <p class="modal-body">
           Prove the current password to set a new one. Devices already in the Fleet stay signed in.
@@ -415,7 +416,7 @@ onUnmounted(() => {
           </button>
         </div>
       </form>
-    </div>
+    </ArgDialog>
 
     <p v-if="appVersion" class="app-version">Argosy {{ appVersion }}</p>
   </div>
@@ -635,7 +636,6 @@ h2 {
   background: transparent;
   color: var(--arg-cream);
   font: 500 13px var(--arg-body);
-  outline: none;
 }
 .addlib input {
   flex: 1;
@@ -675,16 +675,6 @@ h2 {
   color: var(--arg-accent);
 }
 /* Change-password modal (ARGY-160) — same idiom as the Profiles editor. */
-.scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(12, 12, 11, 0.6);
-  backdrop-filter: blur(3px);
-}
 .modal {
   width: min(420px, calc(100vw - 48px));
   padding: 22px;
@@ -713,7 +703,6 @@ h2 {
   font: 500 14px var(--arg-body);
 }
 .field:focus {
-  outline: none;
   border-color: var(--arg-accent);
 }
 .error {

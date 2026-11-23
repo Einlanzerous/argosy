@@ -252,10 +252,11 @@ watch(
           <button
             class="filters-toggle"
             :class="{ on: panelOpen || activeCount > 0 }"
+            :aria-expanded="panelOpen"
             type="button"
             @click="panelOpen = !panelOpen"
           >
-            <span class="i">⚑</span> Filters
+            <span class="i" aria-hidden="true">⚑</span> Filters
             <span v-if="activeCount" class="fbadge">{{ activeCount }}</span>
             <span class="caret">{{ panelOpen ? '▴' : '▾' }}</span>
           </button>
@@ -266,6 +267,7 @@ watch(
               :key="k.key"
               class="kind"
               :class="{ on: scope === k.key }"
+              :aria-pressed="scope === k.key"
               type="button"
               @click="setKind(k.key)"
             >
@@ -280,6 +282,7 @@ watch(
             :key="s.key"
             class="sort"
             :class="{ on: sort === s.key }"
+            :aria-pressed="sort === s.key"
             type="button"
             @click="setSort(s.key)"
           >
@@ -297,6 +300,7 @@ watch(
               :key="g"
               class="chip"
               :class="{ on: genres.includes(g) }"
+              :aria-pressed="genres.includes(g)"
               type="button"
               @click="toggleGenre(g)"
             >
@@ -314,6 +318,7 @@ watch(
                 :key="w.key"
                 class="chip"
                 :class="{ on: watched === w.key }"
+                :aria-pressed="watched === w.key"
                 type="button"
                 @click="setWatched(w.key)"
               >
@@ -623,7 +628,6 @@ watch(
   background: transparent;
   color: var(--arg-cream);
   font: 500 13px var(--arg-body);
-  outline: none;
 }
 .year:focus {
   border-color: var(--arg-accent);

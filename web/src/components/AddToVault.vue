@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { listVaults, createVault, addToVault, type Vault } from '@/lib/vaults'
 
 // Exactly one of these identifies the title being filed.
 const props = defineProps<{ movieId?: string; seriesId?: string }>()
 
 const triggerEl = ref<HTMLElement | null>(null)
+const menuEl = ref<HTMLElement | null>(null)
+const newInput = ref<HTMLInputElement | null>(null)
+// The menu is a popover="auto": the browser gives it top-layer stacking, Escape,
+// click-outside dismissal and focus return to the trigger. `open` mirrors its
+// state for aria-expanded. The trigger toggles it declaratively via popovertarget
+// (a click on the trigger while open is then a close, not a dismiss-then-reopen).
+const menuId = `atv-menu-${Math.random().toString(36).slice(2, 8)}`
 const open = ref(false)
 const vaults = ref<Vault[]>([])
 const loaded = ref(false)
@@ -14,7 +21,7 @@ const creating = ref(false)
 const newName = ref('')
 // The menu is teleported to <body> and positioned with fixed coords so it
 // escapes the detail hero's `overflow: hidden` (which otherwise clips it).
-const menuStyle = ref<{ top: string; left: string }>({ top: '0px', left: '0px' })
+// Anchor positioning is not in Firefox, so the coordinates stay JS-computed.
 
 const MENU_WIDTH = 248
 
@@ -23,18 +30,36 @@ function editable(v: Vault): boolean {
   return v.isOwner || v.shared
 }
 
-async function toggle(): Promise<void> {
-  open.value = !open.value
-  if (!open.value) return
+// Runs just before the popover is shown, so it never paints at 0,0.
+function onBeforeToggle(e: Event): void {
+  if ((e as ToggleEvent).newState !== 'open') return
   const r = triggerEl.value?.getBoundingClientRect()
-  if (r) {
+  if (r && menuEl.value) {
     const left = Math.min(r.left, window.innerWidth - MENU_WIDTH - 12)
-    menuStyle.value = { top: `${r.bottom + 6}px`, left: `${Math.max(12, left)}px` }
+    menuEl.value.style.top = `${r.bottom + 6}px`
+    menuEl.value.style.left = `${Math.max(12, left)}px`
+  }
+}
+
+async function onToggle(e: Event): Promise<void> {
+  open.value = (e as ToggleEvent).newState === 'open'
+  if (!open.value) {
+    creating.value = false
+    return
   }
   if (!loaded.value) {
     vaults.value = (await listVaults().catch(() => [])).filter(editable)
     loaded.value = true
   }
+}
+
+function closeMenu(): void {
+  menuEl.value?.hidePopover()
+}
+
+function startCreating(): void {
+  creating.value = true
+  void nextTick(() => newInput.value?.focus())
 }
 
 function ref_(): { movieId?: string; seriesId?: string } {
@@ -51,7 +76,7 @@ function flashAdded(name: string): void {
 async function add(v: Vault): Promise<void> {
   await addToVault(v.id, ref_()).catch(() => {})
   flashAdded(v.name)
-  open.value = false
+  closeMenu()
 }
 
 async function createAndAdd(): Promise<void> {
@@ -65,46 +90,56 @@ async function createAndAdd(): Promise<void> {
   newName.value = ''
   creating.value = false
   loaded.value = false
-  open.value = false
+  closeMenu()
 }
 </script>
 
 <template>
-  <button ref="triggerEl" class="arg-ghost" type="button" @click="toggle">
-    <span>＋</span> {{ flash || 'Add to Vault' }}
+  <button
+    ref="triggerEl"
+    class="arg-ghost"
+    type="button"
+    :popovertarget="menuId"
+    aria-haspopup="menu"
+    :aria-expanded="open"
+  >
+    <span aria-hidden="true">＋</span> {{ flash || 'Add to Vault' }}
   </button>
   <Teleport to="body">
-    <template v-if="open">
-      <div class="atv-scrim" @click="open = false" />
-      <div class="atv-menu" :style="menuStyle">
-        <div class="menu-head">Add to…</div>
-        <button v-for="v in vaults" :key="v.id" class="row" type="button" @click="add(v)">
-          <span class="nm">{{ v.name }}</span>
-          <span v-if="v.shared" class="sh">shared</span>
-        </button>
-        <div v-if="loaded && !vaults.length" class="none">No vaults yet</div>
-        <form v-if="creating" class="new" @submit.prevent="createAndAdd">
-          <input v-model="newName" type="text" placeholder="New vault name…" autofocus />
-          <button type="submit">Create</button>
-        </form>
-        <button v-else class="row create" type="button" @click="creating = true">
-          ＋ New vault…
-        </button>
-      </div>
-    </template>
+    <div
+      :id="menuId"
+      ref="menuEl"
+      class="atv-menu"
+      popover="auto"
+      @beforetoggle="onBeforeToggle"
+      @toggle="onToggle"
+    >
+      <div class="menu-head">Add to…</div>
+      <button v-for="v in vaults" :key="v.id" class="row" type="button" @click="add(v)">
+        <span class="nm">{{ v.name }}</span>
+        <span v-if="v.shared" class="sh">shared</span>
+      </button>
+      <div v-if="loaded && !vaults.length" class="none">No vaults yet</div>
+      <form v-if="creating" class="new" @submit.prevent="createAndAdd">
+        <input ref="newInput" v-model="newName" type="text" placeholder="New vault name…" />
+        <button type="submit">Create</button>
+      </form>
+      <button v-else class="row create" type="button" @click="startCreating">
+        <span aria-hidden="true">＋</span> New vault…
+      </button>
+    </div>
   </Teleport>
 </template>
 
 <style scoped>
-.atv-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-}
 .atv-menu {
+  /* Override the UA popover box (centred, inset: 0); top/left are set inline. */
   position: fixed;
-  z-index: 201;
+  inset: auto;
+  margin: 0;
   width: 248px;
+  color: var(--arg-cream);
+  overflow: visible;
   padding: 8px;
   border-radius: var(--arg-r);
   border: 1px solid var(--arg-line-2);
@@ -165,7 +200,6 @@ async function createAndAdd(): Promise<void> {
   background: transparent;
   color: var(--arg-cream);
   font: 500 13px var(--arg-body);
-  outline: none;
 }
 .new button {
   padding: 8px 12px;
