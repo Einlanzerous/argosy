@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.1](https://github.com/Einlanzerous/argosy/compare/v0.39.0...v0.39.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **web:** frontend quality pass: Firefox 160 floor, motion, focus, modals (ARGY-326) ([#326](https://github.com/Einlanzerous/argosy/issues/326)) ([adddda0](https://github.com/Einlanzerous/argosy/commit/adddda0303da682e0ba20a4988a590e9b8548d2a))
+
 ## [0.39.0](https://github.com/Einlanzerous/argosy/compare/v0.38.4...v0.39.0) (2026-11-22)
 
 
