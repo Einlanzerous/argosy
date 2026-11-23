@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { enterCommits } from '@/lib/ime'
+import ArgDialog from '@/components/ArgDialog.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
@@ -77,12 +79,7 @@ function submit(): void {
   else if (series.value.length) openSeries(series.value[0])
 }
 
-function onKey(e: KeyboardEvent): void {
-  if (e.key === 'Escape') closeSearch()
-}
-
 onMounted(async () => {
-  window.addEventListener('keydown', onKey)
   input.value?.focus()
   // A genre chip filters the Library by genre.
   const facets = await getFacets(6)
@@ -95,30 +92,29 @@ onMounted(async () => {
     }))
 })
 onUnmounted(() => {
-  window.removeEventListener('keydown', onKey)
   if (debounce) clearTimeout(debounce)
 })
 </script>
 
 <template>
-  <div class="scrim" @click.self="closeSearch">
+  <ArgDialog class="scrim" label="Search" @close="closeSearch">
     <div class="panel">
       <div class="eyebrow">The Manifest</div>
       <div class="prompt">What are we watching?</div>
       <div class="field">
-        <span class="icon">⌕</span>
+        <span class="icon" aria-hidden="true">⌕</span>
         <input
           ref="input"
           v-model="query"
           type="text"
           placeholder="Search titles, genres…"
-          @keyup.enter="submit"
+          @keydown.enter="enterCommits($event) && submit()"
         />
       </div>
       <template v-if="!hasQuery">
         <div class="chips">
           <button v-for="b in browse" :key="b.label" class="chip" type="button" @click="go(b.to)">
-            <span class="chip-icon">{{ b.icon }}</span> {{ b.label }}
+            <span class="chip-icon" aria-hidden="true">{{ b.icon }}</span> {{ b.label }}
           </button>
         </div>
         <div class="hint">Press a tag to browse, or start typing to search the Manifest</div>
@@ -164,17 +160,11 @@ onUnmounted(() => {
         <div v-if="searched && !hasResults" class="hint">No matches for "{{ query.trim() }}"</div>
       </div>
     </div>
-  </div>
+  </ArgDialog>
 </template>
 
 <style scoped>
 .scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 40px;
   background: rgba(10, 10, 9, 0.82);
   backdrop-filter: blur(10px);
@@ -227,7 +217,6 @@ onUnmounted(() => {
   background: var(--arg-panel-2);
   color: var(--arg-cream);
   font: 500 18px var(--arg-body);
-  outline: none;
 }
 .field input:focus {
   border-color: var(--arg-accent);

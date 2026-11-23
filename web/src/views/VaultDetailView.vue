@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { enterCommits } from '@/lib/ime'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
@@ -99,7 +100,7 @@ watch(vaultId, load)
             v-model="nameDraft"
             class="name-edit"
             type="text"
-            @keyup.enter="saveName"
+            @keydown.enter="enterCommits($event) && saveName()"
             @blur="saveName"
           />
           <h1 v-else>{{ vault.name }}</h1>
@@ -180,7 +181,6 @@ h1 {
   border: none;
   border-bottom: 2px solid var(--arg-accent);
   color: var(--arg-cream);
-  outline: none;
 }
 .badge {
   padding: 4px 10px;

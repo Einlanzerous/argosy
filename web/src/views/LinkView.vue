@@ -181,7 +181,6 @@ input {
   background: #141413;
   color: var(--arg-cream);
   font: 500 15px var(--arg-body);
-  outline: none;
 }
 input:focus {
   border-color: var(--arg-accent);

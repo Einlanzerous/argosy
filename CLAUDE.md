@@ -32,6 +32,14 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
   bails without it.
 - To regenerate the report locally: `graphify extract .` then `graphify cluster-only . --no-viz --backend=claude` (0.9.x split the report out of extract; the explicit backend keeps community naming from being skipped — if you still see "Community N" placeholders, run `graphify label . --backend=claude`). Semantic extraction needs `ANTHROPIC_API_KEY`; CI refreshes the committed report + cache on every push to main.
 
+## Browser target
+
+Firefox is the primary browser. Floor: Firefox 160 (the Firefox release when this
+was set; the quarterly `frontend-audit` run raises it). Anything newer is
+progressive enhancement behind `@supports` or feature detection. `web/vite.config.ts`
+`build.target` carries the same floor (`es2022`, `firefox160`, plus the Chrome and
+Safari versions Baseline Widely available implies).
+
 ## Layout
 
 - `cmd/argosy/` — entrypoint. `internal/server/` wires the HTTP surface.
